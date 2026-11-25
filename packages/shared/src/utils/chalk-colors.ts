@@ -16,13 +16,32 @@ export interface ChalkColors {
 
 export function chalkColors(label: string): ChalkColors {
   const hash = hashLabel(label || "?");
-  const hue = hash % 360;
-  const sat = 35 + (hash % 12);
-  const lift = (hash >> 3) % 10;
+  return chalkFromHue(hash % 360, 35 + (hash % 12), (hash >> 3) % 10);
+}
+
+function chalkFromHue(hue: number, sat: number, lift: number): ChalkColors {
   return {
     background: `hsl(${hue} ${sat}% ${77 + lift}%)`,
     foreground: `hsl(${hue} ${Math.min(sat + 10, 82)}% 27%)`,
     border: `hsl(${hue} ${sat}% ${65 + lift}%)`,
+  };
+}
+
+/**
+ * The chalk colours of a hue the caller picks, in both themes. For a fixed
+ * set of things that must never share a hue (the surfaces on the download
+ * page), where a hashed label could collide. Dark mode keeps the hue and
+ * inverts the lightness, so a tile does not glare on a dark canvas.
+ */
+export function chalkColorsForHue(hue: number): { light: ChalkColors; dark: ChalkColors } {
+  const sat = 40;
+  return {
+    light: chalkFromHue(hue, sat, 4),
+    dark: {
+      background: `hsl(${hue} ${sat - 12}% 17%)`,
+      foreground: `hsl(${hue} ${sat + 20}% 76%)`,
+      border: `hsl(${hue} ${sat - 12}% 26%)`,
+    },
   };
 }
 

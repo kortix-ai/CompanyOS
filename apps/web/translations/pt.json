@@ -26302,7 +26302,15 @@
       "mcpDescription": "Use o Kortix no Claude, Cursor ou Codex.",
       "connect": "Conectar",
       "connectLabel": "Conectar MCP",
-      "copyFailed": "Não foi possível copiar o comando. Tente novamente."
+      "copyFailed": "Não foi possível copiar o comando. Tente novamente.",
+      "guide": "Guia do MCP"
+    },
+    "desktop": {
+      "downloadFor": "Baixar para {os}"
+    },
+    "mobile": {
+      "name": "App móvel",
+      "description": "Comece uma sessão em qualquer lugar e continue de onde parou."
     }
   },
   "sessionDesktop": {

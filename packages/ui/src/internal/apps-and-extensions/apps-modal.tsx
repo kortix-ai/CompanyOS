@@ -1,56 +1,31 @@
 'use client';
 
 /**
- * "Apps and extensions": every way to use Kortix outside this tab, in one
- * dialog. Chrome first, then the computer, then the developer surfaces. Each
- * row opens the dialog that already owns the flow (computer, MCP, Settings →
- * Kortix in Chrome); nothing here pairs or connects by itself.
+ * "Apps and extensions": every way to use Kortix outside this tab, as a
+ * full-window page over the app. Its cards are the `/download` page's
+ * (`GetKortixGrid`), plus the signed-in state: Chrome, This computer and MCP
+ * open the dialogs that already own those flows. Every "Download app" entry
+ * opens this page too.
  *
  * It is mounted once, in the project sidebar, next to its only triggers: the
  * workspace menu row, the sidebar row and `?apps=1`. Outside a project there is
  * no workspace menu and no sidebar, so `?apps=1` there does nothing.
  */
 
-import { useChromeConnections } from '@kortix/sdk/react';
-import {
-  ArrowUpRightIcon,
-  DownloadSimpleIcon,
-  LaptopIcon,
-  MonitorIcon,
-  PlugsConnectedIcon,
-  TerminalWindowIcon,
-  type Icon,
-} from '@phosphor-icons/react';
-import { useEffect, useId, type ReactNode } from 'react';
+import { ArrowLeftIcon } from '@phosphor-icons/react';
+import { useEffect } from 'react';
 
 import { Button } from '../../primitives/button';
 import { Modal, ModalContent, ModalDescription, ModalTitle } from '../../primitives/modal';
-import {
-  ChromeCopyLink,
-  ChromeInstallActions,
-  ChromeOnlineDot,
-  useChromeConnect,
-} from '../chrome/chrome-connect';
-import { BrowserLogoTile } from '../chrome/browser-icon';
-import { ChromeMock } from '../chrome/chrome-mock';
-import { chromeCardState } from '../chrome/chrome-card-state';
-import { chromeCounts } from '../chrome/chrome-names';
-import { SolidCheckIcon } from '../icons/solid-check-icon';
-import { detectPlatform, isMobilePlatform } from '../lib/detect-os';
-import { useOwnsPairedComputer } from '../tunnel/computer-connect';
-import { errorToast } from '../../primitives/toast';
-import { useCopy } from '../hooks/use-copy';
 import { useTranslations } from '../../i18n';
-import { desktopDownloadUrl, isDesktop } from '../lib/desktop';
+import { detectPlatform } from '../lib/detect-os';
 import {
-  useUiHostConfig,
   useUiPathname,
   useUiRouter,
   useUiSearchParams,
 } from '../../providers/ui-provider';
-import { useDeploymentCliInstallCommand } from '../lib/use-deployment-cli-install-command';
 import { useAppsModalStore } from '../stores/apps-modal-store';
-import { useSettingsPanelStore } from '../stores/settings-panel-store';
+import { GetKortixGrid } from './get-kortix-grid';
 
 /** Opens the dialog from `?apps=1` and removes the parameter. */
 export function useAppsDeepLink() {
@@ -79,6 +54,7 @@ export function AppsModal({
   onOpenMcp: () => void;
 }) {
   const t = useTranslations('appsModal');
+  const tCommon = useTranslations('common');
   const open = useAppsModalStore((state) => state.open);
   const setOpen = useAppsModalStore((state) => state.setOpen);
   useAppsDeepLink();
@@ -90,235 +66,49 @@ export function AppsModal({
 
   return (
     <Modal open={open} onOpenChange={setOpen}>
-      <ModalContent className="max-h-[90dvh] space-y-0 overflow-y-auto lg:max-w-2xl">
-        <div className="flex flex-col gap-6 p-5 lg:p-8">
-          <header className="space-y-1.5 pr-10">
-            <ModalTitle className="text-xl font-medium text-balance">{t('title')}</ModalTitle>
-            <ModalDescription className="text-muted-foreground text-sm text-pretty">
+      {/* A page, not a box: six cards with their art need the window's width.
+          It fades only; a zoom on a surface the size of the viewport reads as
+          the whole app lurching. */}
+      <ModalContent
+        side="fullscreen"
+        variant="base"
+        animation="none"
+        showCloseButton={false}
+        overlayClassName="data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 duration-(--duration-moderate)"
+        className="bg-background data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 inset-0 flex h-dvh max-h-none w-screen max-w-none flex-col space-y-0 rounded-none! border-0 p-0 duration-(--duration-moderate) lg:top-0 lg:left-0 lg:h-dvh lg:max-w-none lg:translate-x-0 lg:translate-y-0"
+      >
+        <header className="kx-titlebar-row flex h-12 shrink-0 items-center gap-1 border-b px-3">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label={tCommon('back')}
+            onClick={() => setOpen(false)}
+          >
+            <ArrowLeftIcon className="cn-rtl-flip size-4" />
+          </Button>
+          <ModalTitle className="text-sm font-medium">{t('title')}</ModalTitle>
+        </header>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mx-auto w-full max-w-5xl px-5 py-10 lg:py-14">
+            <ModalDescription className="text-foreground mb-8 text-center text-2xl font-medium text-balance lg:mb-10">
               {t('subtitle')}
             </ModalDescription>
-          </header>
-          {open ? (
-            <>
-              {chrome ? <ChromeSection onManage={() => setOpen(false)} /> : null}
-              <ComputerSection onOpenComputer={hand(onOpenComputer)} />
-              <DevelopersSection onOpenMcp={hand(onOpenMcp)} />
-            </>
-          ) : null}
+            {/* Rendered only while open, so `navigator` is never read on the server. */}
+            {open ? (
+              <GetKortixGrid
+                platform={detectPlatform(navigator.userAgent)}
+                inApp={{
+                  chrome,
+                  onOpenComputer: hand(onOpenComputer),
+                  onOpenMcp: hand(onOpenMcp),
+                  onClose: () => setOpen(false),
+                }}
+              />
+            ) : null}
+          </div>
         </div>
       </ModalContent>
     </Modal>
-  );
-}
-
-/** The hero decides from THIS browser first. Other browsers are one line plus Manage. */
-function ChromeSection({ onManage }: { onManage: () => void }) {
-  const t = useTranslations('appsModal.chrome');
-  const state = useChromeConnect();
-  const { environment, checking, installed, signedIn, connected } = state;
-  const connections = useChromeConnections();
-  const { count, online } = chromeCounts(connections.data ?? []);
-  const cardState = chromeCardState({
-    thisBrowserConnected: Boolean(connected),
-    environment,
-    checking,
-    installed: installed || signedIn,
-  });
-  const manage = (
-    <Button
-      size="sm"
-      variant="secondary"
-      aria-label={t('manageLabel')}
-      onClick={() => {
-        onManage();
-        useSettingsPanelStore.getState().openSettings('chrome');
-      }}
-    >
-      {t('manage')}
-    </Button>
-  );
-
-  return (
-    <section aria-labelledby="apps-modal-browser" className="space-y-3">
-      <h3 id="apps-modal-browser" className="text-muted-foreground text-xs font-medium">
-        {t('group')}
-      </h3>
-      <div className="grid items-center gap-4 sm:grid-cols-2">
-        <div className="flex min-w-0 flex-col gap-4">
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2">
-              <BrowserLogoTile brand="chrome" className="size-7" iconClassName="size-4" />
-              <h4 className="text-base font-medium">{t('name')}</h4>
-            </div>
-            <p className="text-muted-foreground text-sm text-pretty">{t('description')}</p>
-          </div>
-
-          {cardState === 'connected' && connected ? (
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-              {manage}
-              <span className="flex min-w-0 items-center gap-1.5 text-xs">
-                <ChromeOnlineDot online={connected.online} />
-                <span className="truncate">{connected.name}</span>
-                {count > 1 ? (
-                  <span className="text-muted-foreground shrink-0">· {t('summary', { count, online })}</span>
-                ) : null}
-              </span>
-            </div>
-          ) : (
-            <>
-              {cardState === 'unsupported' ? (
-                <div className="space-y-2">
-                  <p className="text-muted-foreground text-xs text-pretty">{t('unsupported')}</p>
-                  <ChromeCopyLink />
-                </div>
-              ) : (
-                <ChromeInstallActions state={state} />
-              )}
-              {count > 0 ? (
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                  <span className="text-muted-foreground text-xs">{t('summary', { count, online })}</span>
-                  {manage}
-                </div>
-              ) : null}
-            </>
-          )}
-        </div>
-        <ChromeMock />
-      </div>
-    </section>
-  );
-}
-
-function ComputerSection({ onOpenComputer }: { onOpenComputer: () => void }) {
-  const t = useTranslations('appsModal.computer');
-  const { owned } = useOwnsPairedComputer();
-  const live = owned.some((machine) => machine.isLive);
-  const inShell = typeof window !== 'undefined' && isDesktop();
-  const platform = typeof navigator === 'undefined' ? null : detectPlatform(navigator.userAgent);
-  const download =
-    platform && !isMobilePlatform(platform) ? desktopDownloadUrl(platform) : desktopDownloadUrl();
-
-  return (
-    <Group title={t('title')}>
-      <AppRow
-        icon={LaptopIcon}
-        name={t('thisComputer')}
-        description={
-          live ? (
-            <span className="flex items-center gap-1.5">
-              <ChromeOnlineDot online />
-              {t('connected')}
-            </span>
-          ) : (
-            t('thisComputerDescription')
-          )
-        }
-        action={
-          <Button
-            size="sm"
-            variant="secondary"
-            aria-label={t(live ? 'manageLabel' : 'connectLabel')}
-            onClick={onOpenComputer}
-          >
-            {live ? t('manage') : t('connect')}
-          </Button>
-        }
-      />
-      <AppRow
-        icon={MonitorIcon}
-        name={t('desktop')}
-        description={inShell ? t('desktopRunning') : t('desktopDescription')}
-        action={
-          inShell ? null : (
-            <Button asChild size="sm" variant="secondary" className="gap-1.5">
-              <a href={download}>
-                <DownloadSimpleIcon className="size-3.5 shrink-0" />
-                {t('download')}
-              </a>
-            </Button>
-          )
-        }
-      />
-    </Group>
-  );
-}
-
-function DevelopersSection({ onOpenMcp }: { onOpenMcp: () => void }) {
-  const t = useTranslations('appsModal.developers');
-  const command = useDeploymentCliInstallCommand(useUiHostConfig().deploymentVersion);
-  const { copy, copied } = useCopy({ toast: false });
-  const copyCommand = async () => {
-    if (!(await copy(command))) errorToast(t('copyFailed'));
-  };
-
-  return (
-    <Group title={t('title')}>
-      <AppRow
-        icon={TerminalWindowIcon}
-        name={t('cli')}
-        description={t('cliDescription')}
-        action={
-          <Button size="sm" variant="secondary" className="gap-1.5" onClick={copyCommand}>
-            {copied ? <SolidCheckIcon className="size-3.5" /> : null}
-            {copied ? t('copied') : t('copy')}
-          </Button>
-        }
-      />
-      <AppRow
-        icon={PlugsConnectedIcon}
-        name={t('mcp')}
-        description={t('mcpDescription')}
-        action={
-          <Button
-            size="sm"
-            variant="secondary"
-            className="gap-1.5"
-            aria-label={t('connectLabel')}
-            onClick={onOpenMcp}
-          >
-            {t('connect')}
-            <ArrowUpRightIcon className="size-3.5 shrink-0" />
-          </Button>
-        }
-      />
-    </Group>
-  );
-}
-
-/** A muted label over plain rows: no card, no border, one rule between rows. */
-function Group({ title, children }: { title: string; children: ReactNode }) {
-  const id = useId();
-  return (
-    <section aria-labelledby={id} className="min-w-0 space-y-1">
-      <h3 id={id} className="text-muted-foreground text-xs font-medium">
-        {title}
-      </h3>
-      <ul className="divide-border divide-y">{children}</ul>
-    </section>
-  );
-}
-
-function AppRow({
-  icon: RowIcon,
-  name,
-  description,
-  action,
-}: {
-  icon: Icon;
-  name: string;
-  description: ReactNode;
-  action: ReactNode;
-}) {
-  return (
-    <li className="flex items-center gap-3 py-3">
-      <span className="bg-muted flex size-9 shrink-0 items-center justify-center rounded-sm">
-        <RowIcon className="size-5" />
-      </span>
-      <div className="min-w-0 flex-1 space-y-0.5">
-        <p className="text-sm font-medium">{name}</p>
-        <div className="text-muted-foreground line-clamp-2 text-xs text-pretty">{description}</div>
-      </div>
-      {action}
-    </li>
   );
 }

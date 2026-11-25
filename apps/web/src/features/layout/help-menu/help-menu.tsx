@@ -199,6 +199,11 @@ export function HelpMenu({ onOpenDownloadApp }: { onOpenDownloadApp?: () => void
     day: 'numeric',
     timeZone: 'UTC',
   });
+  // An unreadable date drops out of the row; it never throws mid-render.
+  const weekLabel = (date: string | undefined) => {
+    const time = date ? Date.parse(date) : Number.NaN;
+    return Number.isNaN(time) ? null : weekDate.format(time);
+  };
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
@@ -279,10 +284,10 @@ export function HelpMenu({ onOpenDownloadApp }: { onOpenDownloadApp?: () => void
                 >
                   <TimelineMark position={timelinePosition(index, stops)} />
                   <span className="min-w-0 flex-1 leading-5">{week.title}</span>
-                  {week.date ? (
+                  {weekLabel(week.date) ? (
                     // Fixed width, so every headline ends on one edge.
                     <span className="text-muted-foreground min-w-12 shrink-0 text-right text-xs leading-5 tabular-nums">
-                      {weekDate.format(new Date(week.date))}
+                      {weekLabel(week.date)}
                     </span>
                   ) : null}
                 </LinkRow>

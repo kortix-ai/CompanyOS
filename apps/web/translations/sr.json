@@ -26302,7 +26302,15 @@
       "mcpDescription": "Користи Kortix из Claude-а, Cursor-а или Codex-а.",
       "connect": "Повежи",
       "connectLabel": "Повежи MCP",
-      "copyFailed": "Команда није копирана. Покушај поново."
+      "copyFailed": "Команда није копирана. Покушај поново.",
+      "guide": "MCP vodič"
+    },
+    "desktop": {
+      "downloadFor": "Preuzmi za {os}"
+    },
+    "mobile": {
+      "name": "Mobilna aplikacija",
+      "description": "Započni sesiju bilo gde i nastavi tamo gde si stao."
     }
   },
   "sessionDesktop": {

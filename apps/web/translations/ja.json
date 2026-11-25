@@ -26302,7 +26302,15 @@
       "mcpDescription": "Claude、Cursor、Codex から Kortix を使えます。",
       "connect": "接続",
       "connectLabel": "MCP を接続",
-      "copyFailed": "コマンドをコピーできませんでした。もう一度お試しください。"
+      "copyFailed": "コマンドをコピーできませんでした。もう一度お試しください。",
+      "guide": "MCP ガイド"
+    },
+    "desktop": {
+      "downloadFor": "{os} 版をダウンロード"
+    },
+    "mobile": {
+      "name": "モバイルアプリ",
+      "description": "どこでもセッションを始めて、中断したところから再開できます。"
     }
   },
   "sessionDesktop": {

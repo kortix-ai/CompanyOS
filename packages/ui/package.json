@@ -237,6 +237,7 @@
     "./internal/account-hub/use-account-hub-access": "./src/internal/account-hub/use-account-hub-access.ts",
     "./internal/account-hub/use-account-members": "./src/internal/account-hub/use-account-members.ts",
     "./internal/account-hub/workspace-settings-route": "./src/internal/account-hub/workspace-settings-route.ts",
+    "./internal/apps-and-extensions/get-kortix-grid": "./src/internal/apps-and-extensions/get-kortix-grid.tsx",
     "./internal/auth/auth-card-shell": "./src/internal/auth/auth-card-shell.tsx",
     "./internal/auth/auth-consent": "./src/internal/auth/auth-consent.tsx",
     "./internal/auth/auth-primitives": "./src/internal/auth/auth-primitives.tsx",
@@ -254,7 +255,6 @@
     "./internal/chrome/use-chrome-offered": "./src/internal/chrome/use-chrome-offered.ts",
     "./internal/components/agent-mark": "./src/internal/components/agent-mark.tsx",
     "./internal/components/hover-prefetch-link": "./src/internal/components/hover-prefetch-link.tsx",
-    "./internal/components/mobile-store-qr": "./src/internal/components/mobile-store-qr.tsx",
     "./internal/components/nav-rail": "./src/internal/components/nav-rail.tsx",
     "./internal/desktop/desktop-back-button": "./src/internal/desktop/desktop-back-button.tsx",
     "./internal/desktop/titlebar-control": "./src/internal/desktop/titlebar-control.ts",
@@ -1432,6 +1432,10 @@
         "types": "./dist/internal/account-hub/workspace-settings-route.d.ts",
         "import": "./dist/internal/account-hub/workspace-settings-route.js"
       },
+      "./internal/apps-and-extensions/get-kortix-grid": {
+        "types": "./dist/internal/apps-and-extensions/get-kortix-grid.d.ts",
+        "import": "./dist/internal/apps-and-extensions/get-kortix-grid.js"
+      },
       "./internal/auth/auth-card-shell": {
         "types": "./dist/internal/auth/auth-card-shell.d.ts",
         "import": "./dist/internal/auth/auth-card-shell.js"
@@ -1499,10 +1503,6 @@
       "./internal/components/hover-prefetch-link": {
         "types": "./dist/internal/components/hover-prefetch-link.d.ts",
         "import": "./dist/internal/components/hover-prefetch-link.js"
-      },
-      "./internal/components/mobile-store-qr": {
-        "types": "./dist/internal/components/mobile-store-qr.d.ts",
-        "import": "./dist/internal/components/mobile-store-qr.js"
       },
       "./internal/components/nav-rail": {
         "types": "./dist/internal/components/nav-rail.d.ts",

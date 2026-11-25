@@ -438,7 +438,7 @@ function SessionContextModalBody({
 
           <section className="space-y-3">
             <span className="text-foreground text-sm font-medium">{t.raw('detailsLabel')}</span>
-            <dl className="divide-border/60 divide-y">
+            <dl className="divide-border divide-y">
               {[
                 { label: t.raw('detailInput'), value: fmt.number(ctx?.input) },
                 { label: t.raw('detailOutput'), value: fmt.number(ctx?.output) },

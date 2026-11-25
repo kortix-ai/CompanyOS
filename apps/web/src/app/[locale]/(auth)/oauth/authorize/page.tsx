@@ -319,7 +319,7 @@ function OAuthConsent() {
               <p className="text-foreground text-sm font-medium">
                 {tI18nComplete.raw('text5b8d75f66840')}
               </p>
-              <ul className="border-border divide-border/60 divide-y rounded-md border">
+              <ul className="border-border divide-border divide-y rounded-md border">
                 {scopes.map((s) => (
                   <li key={s} className="flex items-center gap-2.5 px-3.5 py-2.5 text-sm">
                     <Check className="text-muted-foreground size-4 shrink-0" />

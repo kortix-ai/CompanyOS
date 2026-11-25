@@ -97,11 +97,9 @@
   --text-7xl-line-height: 1;
   --text-8xl: 6rem;
   --text-8xl-line-height: 1;
-  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  --shadow-xs: 0 0 4px 0 rgb(0 0 0 / 0.04);
+  --shadow-sm: 0 18px 47px 0 rgb(0 0 0 / 0.03), 0 7.5px 19px 0 rgb(0 0 0 / 0.02), 0 4px 10.5px 0 rgb(0 0 0 / 0.02), 0 2.3px 5.8px 0 rgb(0 0 0 / 0.01), 0 1.2px 3.1px 0 rgb(0 0 0 / 0.01), 0 0.5px 1.3px 0 rgb(0 0 0 / 0.01);
+  --shadow-md: 0 17.54px 23.39px 0 rgb(0 0 0 / 0.04), 0 9.4px 12.5px 0 rgb(0 0 0 / 0.03), 0 5.25px 7px 0 rgb(0 0 0 / 0.02), 0 2.79px 3.72px -2px rgb(0 0 0 / 0.01), 0 1.16px 1.5px 0 rgb(0 0 0 / 0.01);
   --email-container-width: 640px;
   --email-frame-padding: 16px 24px;
   --email-card-padding: 40px;

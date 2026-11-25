@@ -114,7 +114,7 @@ const PreviewImageContent = React.forwardRef<HTMLDivElement, PreviewImageContent
       <DialogPopup
         ref={ref}
         className={cn(
-          'fixed top-[50%] left-[50%] z-[99999] grid h-full w-full -translate-x-1/2 -translate-y-1/2 items-center justify-center gap-4 shadow-lg duration-moderate sm:rounded-lg',
+          'fixed top-[50%] left-[50%] z-[99999] grid h-full w-full -translate-x-1/2 -translate-y-1/2 items-center justify-center gap-4 shadow-md duration-moderate sm:rounded-lg',
           className,
         )}
         {...props}

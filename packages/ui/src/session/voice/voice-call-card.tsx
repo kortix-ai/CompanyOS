@@ -148,7 +148,7 @@ function Card({
       aria-label={t('title')}
       style={spot ? { left: spot.left, top: spot.top, right: 'auto', bottom: 'auto' } : undefined}
       className={cn(
-        'kx-fade-up bg-background border-border fixed right-4 bottom-4 z-50 flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-3 rounded-xl border p-3 shadow-lg select-none touch-none',
+        'kx-fade-up bg-background border-border fixed right-4 bottom-4 z-50 flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-3 rounded-xl border p-3 shadow-md select-none touch-none',
         dragging ? 'cursor-grabbing' : 'cursor-grab',
       )}
     >

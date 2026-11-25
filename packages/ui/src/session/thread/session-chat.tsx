@@ -4606,7 +4606,7 @@ export function SessionChat({
           <div
             data-print-hide
             role="status"
-            className="bg-popover text-muted-foreground fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-lg border px-4 py-2 text-xs shadow-lg"
+            className="bg-popover text-muted-foreground fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-lg border px-4 py-2 text-xs shadow-md"
           >
             <Loading className="size-3.5 shrink-0" />
             {tHardcodedUi.raw('i18nComplete.text7dac2ca010fe')}

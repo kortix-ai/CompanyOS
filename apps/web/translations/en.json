@@ -27606,5 +27606,15 @@
   "appsList": {
     "search": "Search Apps",
     "noMatch": "No App matches"
+  },
+  "helpMenu": {
+    "trigger": "Help",
+    "shortcuts": "Keyboard shortcuts",
+    "status": "Status",
+    "downloadApps": "Download apps",
+    "preferences": "Preferences",
+    "community": "Discord community",
+    "whatsNew": "What's new",
+    "fullChangelog": "Full changelog"
   }
 }

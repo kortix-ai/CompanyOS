@@ -25,6 +25,7 @@ import { parseSidebarStateCookie } from '@kortix/ui/workspace/layout/sidebar-coo
 import { useDesktopShell } from '@kortix/ui/internal/layout/sidebar-opener';
 import { openCommandPalette } from '@kortix/ui/internal/layout/open-command-palette';
 import { ProjectSidebar } from '@kortix/ui/workspace';
+import { HelpMenu } from '@/features/layout/help-menu/help-menu';
 import { WorkspaceSwitcher } from '@/features/workspace/project-sidebar/workspace-switcher';
 import { DownloadModal } from '@/features/marketing/download/download-modal';
 import { SettingsPanel } from '@/features/workspace/settings/settings-panel';
@@ -265,6 +266,7 @@ export function ProjectShell({ projectId, initialSidebarOpen, children }: Projec
           <ProjectSidebar
             projectId={projectId}
             menu={<WorkspaceSwitcher projectId={projectId} />}
+            help={<HelpMenu onOpenDownloadApp={openDownloadApp} />}
             onOpenSearch={openCommandPalette}
             onOpenDownloadApp={openDownloadApp}
           />

@@ -27602,5 +27602,15 @@
   "appsList": {
     "search": "Pretraži aplikacije",
     "noMatch": "Nijedna aplikacija se ne poklapa"
+  },
+  "helpMenu": {
+    "trigger": "Pomoć",
+    "shortcuts": "Prečice na tastaturi",
+    "status": "Status",
+    "downloadApps": "Preuzmi aplikacije",
+    "preferences": "Podešavanja",
+    "community": "Discord zajednica",
+    "whatsNew": "Šta je novo",
+    "fullChangelog": "Ceo dnevnik izmena"
   }
 }

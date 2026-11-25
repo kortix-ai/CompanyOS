@@ -7,6 +7,7 @@ import { Kbd, KbdGroup } from '../../primitives/kbd';
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarHeader,
   SidebarMenu,
@@ -61,10 +62,16 @@ const FULL_COMPOSER_ROUTE = /\/workspaces\/[^/]+\/(?:c|chat|dm|spaces)(?:\/.*)?$
 export function ProjectSidebar({
   projectId,
   menu,
+  help,
   onOpenSearch,
   onOpenDownloadApp,
 }: {
   projectId: string;
+  /**
+   * The footer's help control (apps/web passes `HelpMenu`: docs, support,
+   * shortcuts, status, what's new). Without it, the sidebar has no footer.
+   */
+  help?: ReactNode;
   /**
    * Opens the host's Download app dialog. Without it, the footer has no
    * Download app row.
@@ -384,6 +391,10 @@ export function ProjectSidebar({
           </SidebarGroup>
         </SidebarDrill>
       </SidebarContent>
+
+      {/* Help sits alone at the foot: a person looks for it at the bottom of
+          the navigation. `pl-2.5` puts its glyph on the rows' icon lane above. */}
+      {help ? <SidebarFooter className="flex-row pt-0 pl-2.5">{help}</SidebarFooter> : null}
 
       <SidebarRail aria-label={t('resize')} title={t('resizeHelp')} />
     </Sidebar>

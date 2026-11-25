@@ -95,7 +95,7 @@ export function AppsModal({
           <ModalTitle className="text-sm font-medium">{t('title')}</ModalTitle>
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-5xl px-5 py-10 lg:py-14">
+          <div className="mx-auto w-full max-w-6xl px-5 py-10 lg:py-14">
             <ModalDescription className="text-foreground mb-8 text-center text-2xl font-medium text-balance lg:mb-10">
               {t('subtitle')}
             </ModalDescription>

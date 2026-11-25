@@ -153,10 +153,10 @@ function SurfaceCard({
       aria-label={name}
       onPointerEnter={() => setHovered(true)}
       onPointerLeave={() => setHovered(false)}
-      // Hover takes the input's focus look in the surface's own chalk hue.
-      style={hovered ? { borderColor: chalk.border, boxShadow: `0 0 0 3px ${chalk.ring}` } : undefined}
+      // The input's focus look, in the surface's own chalk hue, at all times.
+      style={{ borderColor: chalk.border, boxShadow: `0 0 0 3px ${chalk.ring}` }}
       className={cn(
-        'bg-popover relative flex min-w-0 flex-col overflow-hidden rounded-lg border transition-[border-color,box-shadow] duration-(--duration-moderate) ease-out',
+        'bg-popover relative flex min-w-0 flex-col overflow-hidden rounded-lg border',
         wide && 'lg:grid lg:grid-cols-2',
       )}
     >

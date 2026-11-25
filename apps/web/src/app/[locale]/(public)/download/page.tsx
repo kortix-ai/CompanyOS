@@ -25,7 +25,7 @@ export default async function DownloadPage({
   const { hero } = localizedDownloadContent(tI18nComplete);
 
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col justify-center px-6 py-16">
+    <main className="mx-auto flex min-h-dvh w-full max-w-6xl flex-col justify-center px-6 py-16">
       <ConsentGate />
 
       {/* This route renders no nav and no footer, so the X is the way out. */}

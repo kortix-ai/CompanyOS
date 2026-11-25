@@ -53,8 +53,8 @@ const PHONE_SHOTS = [
 ];
 
 /**
- * A surface's chalk edge in this theme, for its card's hover: a 1px border
- * and a 3px ring at 15%, the input's focus look in the surface's own hue.
+ * A surface's chalk edge in this theme, for its card: a 1px border and a
+ * 3px ring at 15%, the input's focus look in the surface's own hue.
  */
 export function useSurfaceChalk(surface: SurfaceId) {
   const isDark = useIsDark();

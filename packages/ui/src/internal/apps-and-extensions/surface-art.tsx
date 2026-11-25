@@ -69,6 +69,9 @@ function toRgb(color: string): string | null {
 /** The shader's backing: clear, so the pane and its glow show through. */
 const SHADER_CLEAR = 'rgba(0, 0, 0, 0)';
 
+/** The dither is texture on the light, not a picture: 20% at full hover. */
+const DITHER_OPACITY = 0.2;
+
 /** Where the light sits: the glow and the dither share this one shape. */
 const LIGHT_SHAPE = '120% 90% at 50% 120%';
 
@@ -108,8 +111,8 @@ export function SurfaceArt({
     <div aria-hidden="true" style={glow} className="dark bg-background text-foreground relative flex flex-col overflow-hidden">
       {ink ? (
         <div
-          className="pointer-events-none absolute inset-0 transition-opacity duration-(--duration-moderate) ease-out"
-          style={{ opacity: hovered ? 1 : 0, maskImage: mask, WebkitMaskImage: mask }}
+          className="pointer-events-none absolute inset-0 transition-opacity duration-(--duration-moderate) ease-in-out"
+          style={{ opacity: hovered ? DITHER_OPACITY : 0, maskImage: mask, WebkitMaskImage: mask }}
         >
           <ShaderSafe>
             <Dithering

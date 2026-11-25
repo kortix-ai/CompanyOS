@@ -65,6 +65,7 @@ const HTML_PAGE: Answer = { status: 200, body: PAGE, type: 'text/html; charset=u
 
 /** Upstream answers by host: the provider, Serper, or the page being read. Records each host and Serper's request. */
 let serperRequest: { key: string | null; body: unknown } | null = null;
+let serperUrl = '';
 function network(provider: Answer, serper: Answer = SERPER_OK, page: Answer = HTML_PAGE) {
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input instanceof Request ? input.url : input);
@@ -72,6 +73,7 @@ function network(provider: Answer, serper: Answer = SERPER_OK, page: Answer = HT
     const answer = url.startsWith('https://google.serper.dev/') ? serper : url.startsWith('https://page.example/') ? page : provider;
     if (answer === serper) {
       serperRequest = { key: new Headers(init?.headers).get('x-api-key'), body: JSON.parse(String(init?.body)) };
+      serperUrl = url;
     }
     return new Response(answer.body, { status: answer.status, headers: { 'Content-Type': answer.type ?? 'application/json' } });
   }) as unknown as typeof fetch;
@@ -124,6 +126,7 @@ describe('web search fallback (KRTX-5162)', () => {
       { title: 'Tray shop', url: 'https://shop.example/tray', content: 'Buy a tray.' },
     ]);
     expect(serperRequest).toEqual({ key: 'serper-managed-key', body: { q: 'desk cable tray', num: 5 } });
+    expect(serperUrl).toBe('https://google.serper.dev/search');
     expect(fetched).toEqual(['api.tavily.com', 'google.serper.dev']);
     expect(refunds).toEqual(['Tool reservation refund after upstream error: tavily']);
   });
@@ -137,6 +140,17 @@ describe('web search fallback (KRTX-5162)', () => {
     expect(response.status).toBe(200);
     expect(body.results.map((r: { url: string }) => r.url)).toEqual(['https://guide.example/tray']);
     expect(fetched).toEqual(['google.serper.dev']);
+  });
+
+  test("topic 'news' asks Serper's news search and reads its news list", async () => {
+    network(PLAN_LIMIT, { status: 200, body: JSON.stringify({ news: [{ title: 'Tray recall', link: 'https://news.example/recall', snippet: 'A recall.', date: '2 hours ago' }] }) });
+
+    const response = await call('tavily', '/search', { query: 'cable tray recall', topic: 'news' });
+    const body = (await response.json()) as Record<string, any>;
+
+    expect(response.status).toBe(200);
+    expect(serperUrl).toBe('https://google.serper.dev/news');
+    expect(body.results).toEqual([{ title: 'Tray recall', url: 'https://news.example/recall', content: 'A recall.', published_date: '2 hours ago' }]);
   });
 
   test('when Serper refuses too, the answer stays 503 tool_unavailable', async () => {

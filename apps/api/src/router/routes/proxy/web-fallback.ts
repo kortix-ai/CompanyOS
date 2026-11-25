@@ -17,8 +17,8 @@ import { safeEgressFetch } from '../../../shared/ssrf-guard';
  *
  * - Search: Google results through Kortix's Serper key (`SERPER_API_KEY`,
  *   already funded for `image_search`; Serper lists $1 per 1,000 queries,
- *   Tavily $8 per 1,000 credits). At most 20 results. No images; an answer
- *   only from Serper's answer box.
+ *   Tavily $8 per 1,000 credits). `topic: 'news'` uses Serper's news search.
+ *   At most 20 results. No images; an answer only from Serper's answer box.
  * - Scrape: one GET through `safeEgressFetch` (private and metadata addresses
  *   refused, every redirect checked again), at most 2 MB, readable text of
  *   the HTML. No JavaScript rendering and no PDF.
@@ -39,21 +39,20 @@ async function search(request: Record<string, unknown>): Promise<Response | null
   if (!query || !config.SERPER_API_KEY) return null;
   const max = Math.max(1, Math.min(Number(request.max_results) || 5, 20));
   const started = Date.now();
-  const upstream = await fetch(`${config.SERPER_API_URL}/search`, {
+  const news = request.topic === 'news';
+  const upstream = await fetch(`${config.SERPER_API_URL}/${news ? 'news' : 'search'}`, {
     method: 'POST',
     headers: { 'X-API-KEY': config.SERPER_API_KEY, 'Content-Type': 'application/json' },
     body: JSON.stringify({ q: query, num: max }),
     signal: AbortSignal.timeout(SEARCH_TIMEOUT_MS),
   });
   if (!upstream.ok) return null;
-  const data = (await upstream.json()) as {
-    answerBox?: { answer?: string; snippet?: string };
-    organic?: Array<{ title?: string; link?: string; snippet?: string; date?: string }>;
-  };
+  type Hit = { title?: string; link?: string; snippet?: string; date?: string };
+  const data = (await upstream.json()) as { answerBox?: { answer?: string; snippet?: string }; organic?: Hit[]; news?: Hit[] };
   return Response.json({
     query,
     answer: data.answerBox?.answer ?? data.answerBox?.snippet ?? '',
-    results: (data.organic ?? []).slice(0, max).map((r) => ({
+    results: ((news ? data.news : data.organic) ?? []).slice(0, max).map((r) => ({
       title: r.title ?? '',
       url: r.link ?? '',
       content: r.snippet ?? '',

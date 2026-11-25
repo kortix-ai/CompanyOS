@@ -16,6 +16,7 @@ const AUDIT_HTTP_ROUTE_KEYS = [
   "POST|internal|gateway|billing",
   "POST|internal|gateway|budget-check",
   "POST|internal|gateway|claude-credentials",
+  "POST|internal|gateway|claude-forbidden",
   "POST|internal|gateway|claude-refused",
   "POST|internal|gateway|idempotency|get",
   "POST|internal|gateway|idempotency|put",

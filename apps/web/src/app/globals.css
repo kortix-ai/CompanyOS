@@ -90,6 +90,10 @@
   --terminal-accent: #0f7f80;
   --radius: 0.625rem;
   --tracking-normal: 0em;
+  --font-weight-normal: 430;
+  --font-weight-medium: 470;
+  --font-weight-semibold: 550;
+  --font-weight-bold: 600;
   --spacing: 0.23rem;
   --duration-fast: 100ms;
   --duration-normal: 150ms;
@@ -392,6 +396,12 @@
   /* ::selection, `* { border-border outline-ring/50 }`, the pointer cursor,
      color-scheme and the body colors live in @kortix/ui/theme.css (one base
      for every host). Themed routes still set --selection per palette. */
+  /* Roobert's ligatures ('liga', 'calt') merge `tt`, `ff`, `fi`, `->` and
+     `<-` into one glyph. In mono that drops cells and breaks alignment; in
+     sans the joined pairs read worse. Off everywhere. */
+  * {
+    font-variant-ligatures: none;
+  }
   html {
     scroll-behavior: smooth;
     text-rendering: optimizeLegibility;
@@ -441,7 +451,7 @@
       var(--font-mono), ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Monaco, Consolas,
       'Liberation Mono', 'Courier New', monospace, 'Noto Sans Mono CJK JP', 'Noto Sans Mono CJK KR',
       'Noto Sans Mono CJK SC', 'Noto Sans Mono CJK TC';
-    font-weight: 500;
+    font-weight: var(--font-weight-medium);
     line-height: 1.2;
     letter-spacing: -0.025em; /* tracking-tight — mono glyphs read cleaner when pulled in */
   }
@@ -620,6 +630,20 @@
     animation-duration: 260ms;
     animation-delay: 0ms;
   }
+}
+
+/* A page that marks an element `data-shadows="none"` (the /workspaces
+   chooser) draws no shadow anywhere, the menus it opens included: they
+   render in a portal outside the page, so the scope is `body:has(...)`.
+   Only Tailwind's shadow layers go to zero; the ring layers stay, so focus
+   rings still show. `!important` beats the `shadow-*` utilities in every
+   layer. */
+body:has([data-shadows='none']) *,
+body:has([data-shadows='none']) *::before,
+body:has([data-shadows='none']) *::after {
+  --tw-shadow: 0 0 #0000 !important;
+  --tw-inset-shadow: 0 0 #0000 !important;
+  --tw-drop-shadow: drop-shadow(0 0 #0000) !important;
 }
 
 /* Marketing button (the "inner stroke" button): `kx-button`, rendered by

@@ -388,7 +388,7 @@ export function WorkspaceSwitcher({ projectId }: { projectId: string }) {
               align="start"
               side="bottom"
               sideOffset={6}
-              className="border-foreground/10 w-[16rem] space-y-0.5 overflow-hidden shadow-lg"
+              className="border-foreground/10 w-[16rem] space-y-0.5 overflow-hidden shadow-md"
             >
               {menuGroups.map((group, index) => (
                 <React.Fragment key={group.join('-')}>

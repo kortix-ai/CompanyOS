@@ -1370,7 +1370,10 @@ export const accountSecretResources = kortixSchema.table('account_secret_resourc
   providerAccount: jsonb('provider_account'),
   /** The last check of a provider API key against its provider, run when the
    *  key is saved or rotated and on request: `verified`, `invalid` (the
-   *  provider refused it) or `unknown` (no clean answer). NULL: never checked. */
+   *  provider refused it) or `unknown` (no clean answer). NULL: never checked.
+   *  A Claude login: `invalid` when Anthropic forbade it (403) on a model call;
+   *  the gateway skips it for 15 min after `verified_at`, and the next answer
+   *  Anthropic gives on it clears all three columns. */
   verifyStatus: varchar('verify_status', { length: 16 }),
   verifiedAt: timestamp('verified_at', { withTimezone: true }),
   /** The provider's words for `invalid`, or why the check had no answer. */

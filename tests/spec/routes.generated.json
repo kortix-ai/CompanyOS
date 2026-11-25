@@ -1,6 +1,6 @@
 {
   "generatedAt": "static",
-  "count": 1827,
+  "count": 1828,
   "aliases": 713,
   "routes": [
     {
@@ -58,6 +58,10 @@
     {
       "method": "POST",
       "path": "/internal/gateway/claude-credentials"
+    },
+    {
+      "method": "POST",
+      "path": "/internal/gateway/claude-forbidden"
     },
     {
       "method": "POST",

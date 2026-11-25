@@ -53,7 +53,7 @@ export function AgentCoverCard({
         aria-describedby={summary ? descriptionId : undefined}
         style={agentMarkVars(slug)}
         className={cn(
-          'group bg-card flex-1 border-border/60 flex flex-col overflow-hidden rounded-md border text-left',
+          'group bg-card flex-1 border-border flex flex-col overflow-hidden rounded-md border text-left',
           'hover:border-border transition-[border-color] duration-(--duration-normal) ease-out',
           'focus-visible:ring-ring/50 focus-visible:ring-2 focus-visible:outline-none',
         )}

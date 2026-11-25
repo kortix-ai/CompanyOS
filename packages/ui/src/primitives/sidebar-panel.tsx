@@ -206,7 +206,7 @@ function Sidebar({
                 // round card, which shows as four corner tabs sticking out
                 // past the arc. Matching the radius clips that paint to the
                 // same shape. No `overflow-hidden` — that would eat the card's
-                // `shadow-xl`.
+                // `shadow-md`.
                 flyout ? 'top-13 bottom-2 left-2 h-auto rounded-lg' : 'inset-y-0 left-0 h-svh',
                 state === 'expanded'
                   ? 'translate-x-0'
@@ -251,7 +251,7 @@ function Sidebar({
             //
             // No transition on the radius/shadow — same corollary as above,
             // they only ever change while the panel is off-screen.
-            flyout && 'border-border overflow-hidden rounded-lg border shadow-xl',
+            flyout && 'border-border overflow-hidden rounded-lg border shadow-md',
           )}
         >
           {children}

@@ -58,6 +58,10 @@
   --terminal-accent: #0f7f80;
   --radius: 0.625rem;
   --tracking-normal: 0em;
+  --font-weight-normal: 430;
+  --font-weight-medium: 470;
+  --font-weight-semibold: 550;
+  --font-weight-bold: 600;
   --spacing: 0.23rem;
   --duration-fast: 100ms;
   --duration-normal: 150ms;

@@ -355,7 +355,7 @@ function SendBackBox({
 }) {
   const t = useTranslations('hardcodedUi.reviewDeck');
   return (
-    <div className="bg-background border-border absolute inset-x-3 bottom-3 z-10 flex flex-col gap-2 rounded-xl border p-3 shadow-lg">
+    <div className="bg-background border-border absolute inset-x-3 bottom-3 z-10 flex flex-col gap-2 rounded-xl border p-3 shadow-md">
       <textarea
         autoFocus
         rows={3}

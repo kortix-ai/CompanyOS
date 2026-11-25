@@ -63,7 +63,10 @@ export function WorkspaceSetupModal({ projectId, onClose }: { projectId: string;
     staleTime: 60_000,
   });
   const { skipped, skip, restore } = useSkippedConnectors(projectId);
-  const open = steps.filter((step) => !step.done && (step.kind !== 'connector' || !skipped.includes(step.connector.slug)));
+  const isSkipped = (step: SetupStep) => step.kind === 'connector' && skipped.includes(step.connector.slug);
+  const open = steps.filter((step) => !step.done && !isSkipped(step));
+  // A skip outlives its connector: one connected or removed since has nothing to restore.
+  const hidesOpenStep = steps.some((step) => !step.done && isSkipped(step));
   const required = open.filter((step) => step.kind !== 'connector');
   const optional = open.filter((step): step is Extract<SetupStep, { kind: 'connector' }> => step.kind === 'connector');
   const finished = steps.filter((step) => step.done);
@@ -172,7 +175,7 @@ export function WorkspaceSetupModal({ projectId, onClose }: { projectId: string;
                   </ul>
                 </StepSection>
               ) : null}
-              {skipped.length > 0 ? <Button variant="ghost" size="sm" onClick={restore}>{t('showSkipped')}</Button> : null}
+              {hidesOpenStep ? <Button variant="ghost" size="sm" onClick={restore}>{t('showSkipped')}</Button> : null}
               {finished.length > 0 ? (
                 // What is already done is one quiet line, not a second list:
                 // the stack shows which, the count says how many.

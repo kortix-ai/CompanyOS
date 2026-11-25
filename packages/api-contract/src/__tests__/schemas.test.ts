@@ -171,6 +171,7 @@ function projectFixture(overrides: Record<string, unknown> = {}) {
       review_swipe: false,
       calendar: false,
       kortix_bot: false,
+      sidebar_rail: false,
     },
     experimental_features: [],
     default_sandbox_provider: null,
@@ -941,6 +942,7 @@ describe('envelopes', () => {
       'calendar',
       'review_swipe',
       'kortix_bot',
+      'sidebar_rail',
     ]);
   });
 

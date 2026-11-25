@@ -16,7 +16,7 @@ import { PersonalOnboardingWelcome } from '@/components/projects/personal-onboar
 import { ProjectPendingScreen } from '@/components/projects/project-pending-screen';
 import { Button } from '@kortix/ui/button';
 import Hint from '@kortix/ui/hint';
-import { useSidebar } from '@kortix/ui/sidebar';
+import { SidebarEdgePeek, useSidebar } from '@kortix/ui/sidebar';
 import { useBrandingScope } from '@kortix/ui/internal/branding/branding-provider';
 import { AppProviders } from '@/features/layout/app-providers';
 import { useAuth } from '@/features/providers/auth-provider';
@@ -388,8 +388,10 @@ const ProjectSheelLayout = ({
       // the window's desktop Back (root layout) steps aside on every project view.
       data-kx-titlebar-owner=""
     >
-      {/* No edge strip: the sidebar's icon rail (ProjectRail) stays on screen
-          and its hover summons the collapsed panel. */}
+      {/* Collapsed: an invisible strip on the viewport's left edge summons
+          the sidebar as a hover flyout; it self-hides while docked open. With
+          the icon rail (`sidebar_rail`), the rail's hover does that instead. */}
+      {rail ? null : <SidebarEdgePeek />}
       {/* Some project views start with content instead of a titlebar row. Give
           those views the same native drag band without covering controls on
           views that already own the band. CSS disables this fallback whenever

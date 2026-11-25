@@ -1,6 +1,6 @@
 'use client';
 
-import { CheckIcon } from '@phosphor-icons/react';
+import { GitPullRequestIcon } from '@phosphor-icons/react';
 
 import { useTranslations } from '../../../i18n';
 import { useReviewNeedsYouCount } from '../../../internal/hooks/use-review-session-summary';
@@ -20,8 +20,11 @@ import { useUiPathname } from '../../../providers/ui-provider';
 export function ProjectReviewNavItem({
   projectId,
   itemClassName,
+  bare = false,
 }: {
   projectId: string;
+  /** The rail's More menu: no count. */
+  bare?: boolean;
   /** Added to the list item's classes (the Spaces list sets Review apart with spacing). */
   itemClassName?: string;
 }) {
@@ -35,9 +38,9 @@ export function ProjectReviewNavItem({
   const active = !!pathname && (pathname === path || pathname.startsWith(`${path}/`));
   return (
     <ProjectNavRow active={active} label={t('spaces.review')} href={href} itemClassName={itemClassName}>
-      <CheckIcon />
+      <GitPullRequestIcon />
       <span className="min-w-0 flex-1 truncate">{t('spaces.review')}</span>
-      {needsYou > 0 ? <CountBadge count={needsYou} tone="waiting" /> : null}
+      {!bare && needsYou > 0 ? <CountBadge count={needsYou} tone="waiting" /> : null}
     </ProjectNavRow>
   );
 }

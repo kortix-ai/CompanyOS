@@ -57,7 +57,6 @@ import {
   PaintBrushIcon as PaintBrush,
   PlugIcon as Plug,
   PlusIcon as Plus,
-  QuestionIcon as QuestionMark,
   ArrowClockwiseIcon as RefreshCw,
   BellIcon as Bell,
   ScrollIcon as ScrollText,
@@ -69,7 +68,7 @@ import {
   CalendarBlankIcon as CalendarBlank,
   TerminalIcon as Terminal,
   TextAlignLeftIcon as TextAlignLeft,
-  TrayIcon as Tray,
+  GitPullRequestIcon as GitPullRequest,
   UserPlusIcon as UserPlus,
   UsersIcon as UsersSolid,
   ImagesSquareIcon as WallpaperIcon,
@@ -853,7 +852,7 @@ export const menuRegistry: MenuItemDef[] = [
     // is pinned (`command-palette.test.tsx`); this row is the capability page.
     id: 'proj-review-inbox',
     label: 'Review',
-    icon: Tray,
+    icon: GitPullRequest,
     group: 'navigation',
     showIn: ['commandPalette'],
     kind: 'navigate',
@@ -1155,19 +1154,6 @@ export const menuRegistry: MenuItemDef[] = [
     kind: 'account',
     accountTab: 'audit',
     keywords: 'audit log logs events history trail compliance',
-  },
-  {
-    id: 'account-help',
-    label: 'Workspace · Permissions help',
-    icon: QuestionMark,
-    group: 'account',
-    showIn: ['commandPalette'],
-    kind: 'account',
-    // The old `PermissionsHelpPopover`, promoted to a linkable pane. It is
-    // reference copy — no data, no mutations — and is the only pane in the
-    // Access rail nothing linked to from outside the page.
-    accountTab: 'help',
-    keywords: 'permissions help what does mean reference explain owner admin member viewer',
   },
   {
     id: 'account-tokens',

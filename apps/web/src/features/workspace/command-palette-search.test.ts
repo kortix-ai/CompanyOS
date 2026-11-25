@@ -499,7 +499,6 @@ describe('genuine synonyms still answer', () => {
     ['change requests', 'nav:review-changes'],
     ['github', 'nav:account-git'],
     ['grants', 'nav:account-access-projects'],
-    ['permissions help', 'nav:account-help'],
   ];
 
   for (const [query, key] of KEPT) {

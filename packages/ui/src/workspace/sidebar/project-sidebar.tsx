@@ -3,6 +3,7 @@
 import { uiRoutes } from '../../lib/routes';
 import { Button } from '../../primitives/button';
 import Hint from '../../primitives/hint';
+import { Tabs, TabsList, TabsTrigger } from '../../primitives/tabs';
 import { Kbd, KbdGroup } from '../../primitives/kbd';
 import {
   Sidebar,
@@ -37,12 +38,18 @@ import { useFeatureFlag } from '@kortix/sdk/react';
 import { AppsModal } from '../../internal/apps-and-extensions/apps-modal';
 import { useAppsModalStore } from '../../internal/stores/apps-modal-store';
 import {
+  ArrowUpRightIcon,
+  GitPullRequestIcon,
   MagnifyingGlassIcon,
   NavigationArrowIcon,
+  PlusIcon,
 } from '@phosphor-icons/react';
-import { UiLink as Link, useUiPathname } from '../../providers/ui-provider';
+import { UiLink as Link, useUiPathname, useUiRouter } from '../../providers/ui-provider';
+import { SpaceFormModal } from '../session-spaces/space-form-modal';
+import { useCapabilityAccess } from '../../internal/layout/project-settings-nav';
+import { reviewHref } from '../../internal/lib/capability-tab-routes';
 import { SettingsReturnTracker, SidebarDrill } from './sidebar-drill';
-import { ProjectRail, type RailSection } from './project-rail';
+import { ProjectRail } from './project-rail';
 import { isProjectAdminPath } from '../../internal/layout/project-capability-nav';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { SidebarBalanceWarning } from './footer/project-balance-warning';
@@ -99,13 +106,38 @@ export function ProjectSidebar({
   const isMobile = useIsMobile();
   const pathname = useUiPathname();
   const sessionsGroupRef = useRef<HTMLDivElement>(null);
-  // Desktop: the rail picks what the panel shows. Workspace settings follow the route.
-  const [section, setSection] = useState<RailSection>('home');
+  // Desktop with `sidebar_rail`: the panel shows the sessions, or workspace settings by the route.
   const settingsOpen = isProjectAdminPath(pathname);
-  const railed = !isMobile;
+  // Behind `sidebar_rail` (desktop only); off, the sidebar is the one without a rail.
+  const railFlag = useFeatureFlag(projectId, 'sidebar_rail').enabled;
+  const railed = !isMobile && railFlag;
+  // Collapsed + hovered on the rail: the hovered item picks the list, not the route.
+  const [peekSection, setPeekSection] = useState<'home' | 'spaces' | 'customize'>('home');
+  const peeking = railed && !isExpanded && peek;
+  const peekOverride = peeking ? peekSection === 'customize' : undefined;
+  const showingSettings = peekOverride ?? settingsOpen;
+  // The rail's Spaces: the panel lists the spaces on a spaces page, or while Spaces is hovered.
+  const spacesHref = uiRoutes().sessionSpaces?.(projectId) ?? null;
+  const spacesOpen = !!spacesHref && !!pathname && (pathname === spacesHref || pathname.startsWith(`${spacesHref}/`));
+  const showingSpaces = railed && !showingSettings && (peeking ? peekSection === 'spaces' : spacesOpen);
   // Mounted outside <Sidebar>: the mobile sheet unmounts its content on close.
   const [computerConnectOpen, setComputerConnectOpen] = useState(false);
   const [connectMcpOpen, setConnectMcpOpen] = useState(false);
+  // New space, from the Spaces title row (`sidebar_rail`).
+  const [newSpaceOpen, setNewSpaceOpen] = useState(false);
+  // Chat on, rail: the panel shows the chats or the sessions.
+  const [chatTab, setChatTab] = useState<'chat' | 'sessions'>('chat');
+  // Review on the Chat tab's title row: for the people who may act on it (the Review row's own rule).
+  const reviewAccess = useCapabilityAccess(projectId);
+  const reviewPage = reviewHref(projectId);
+  const reviewLink =
+    reviewPage && reviewAccess.settled && reviewAccess.tabs.includes('review')
+      ? { href: reviewPage, active: !!pathname?.startsWith(reviewPage.split('?')[0]!) }
+      : null;
+  // The Sessions title row's right edge: the session list draws its view options button there.
+  const [sessionsFilterSlot, setSessionsFilterSlot] = useState<HTMLDivElement | null>(null);
+  const router = useUiRouter();
+  const tGroups = useTranslations('sidebar.sessionGroups');
 
   // Settings drill (`SidebarDrill`): a click there closes the mobile sheet.
   const handleDrilledNavigate = useCallback(() => {
@@ -212,11 +244,10 @@ export function ProjectSidebar({
         railed ? (
           <ProjectRail
             projectId={projectId}
-            section={section}
-            onSection={setSection}
             onOpenSearch={onOpenSearch ? handleOpenSearch : undefined}
             help={help}
             settingsOpen={settingsOpen}
+            onPeek={setPeekSection}
           />
         ) : undefined
       }
@@ -246,17 +277,77 @@ export function ProjectSidebar({
             pointing at. The workspace directory is now a second VIEW of this
             menu, behind "Switch Workspace", which is why there is no footer
             control below any more. */}
-        {railed ? (
+        {railed && showingSettings ? null : railed ? (
           // Desktop: the rail carries search, the toggle and help; the panel names what it shows.
+          // Settings has no name row: its search field leads, and the page's breadcrumb names the section.
           <div
             className={cn(
               'flex w-full items-center gap-1 px-2',
               !peek && 'kx-titlebar-row kx-titlebar-band-height kx-project-sidebar-titlebar',
             )}
           >
-            <span className="text-foreground truncate text-sm font-medium">
-              {settingsOpen ? t('customize') : section === 'more' ? t('more') : chat ? t('spaces.channels') : t('sessions')}
-            </span>
+            {chat && !showingSpaces ? (
+              // Chat on: two views of the panel, the chats and the sessions.
+              <Tabs value={chatTab} onValueChange={(value) => setChatTab(value as 'chat' | 'sessions')} className="min-w-0 flex-1">
+                {/* `-ml-2.5` cancels the first trigger's `px-2.5`: its label starts on the list's label edge (Pinned, Sessions). */}
+                <TabsList variant="secondary" size="sm" className="-ml-2.5">
+                  <TabsTrigger value="chat" className="w-fit flex-none px-2.5">
+                    {t('spaces.chat')}
+                  </TabsTrigger>
+                  <TabsTrigger value="sessions" className="w-fit flex-none px-2.5">
+                    {t('sessions')}
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+            ) : (
+              <span className="text-foreground min-w-0 flex-1 truncate text-sm font-medium">
+                {showingSpaces ? tGroups('heading') : t('sessions')}
+              </span>
+            )}
+            {showingSpaces ? (
+              // Spaces: the Spaces page, then New space, at the row's right edge.
+              <div className="flex shrink-0 items-center gap-0.5">
+                {spacesHref ? (
+                  <Hint label={tGroups('allSpaces')} side="bottom">
+                    <Button asChild variant="ghost" size="icon-xs" className="text-muted-foreground hover:text-foreground">
+                      <Link href={spacesHref} prefetch aria-label={tGroups('allSpaces')}>
+                        <ArrowUpRightIcon className="cn-rtl-flip size-4" />
+                      </Link>
+                    </Button>
+                  </Hint>
+                ) : null}
+                <Hint label={tGroups('newGroup')} side="bottom">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-label={tGroups('newGroup')}
+                    onClick={() => setNewSpaceOpen(true)}
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    <PlusIcon className="size-4" />
+                  </Button>
+                </Hint>
+              </div>
+            ) : chat && chatTab === 'chat' ? (
+              // Review, as an icon at the row's right edge (it was the first row of the list).
+              reviewLink ? (
+                <Hint label={t('spaces.review')} side="bottom">
+                  <Button
+                    asChild
+                    variant="ghost"
+                    size="icon-xs"
+                    className={cn('text-muted-foreground hover:text-foreground', reviewLink.active && 'bg-sidebar-accent text-foreground')}
+                  >
+                    <Link href={reviewLink.href} prefetch aria-label={t('spaces.review')} aria-current={reviewLink.active ? 'page' : undefined}>
+                      <GitPullRequestIcon className="size-4" />
+                    </Link>
+                  </Button>
+                </Hint>
+              ) : null
+            ) : (
+              <div ref={setSessionsFilterSlot} className="flex shrink-0 items-center" />
+            )}
           </div>
         ) : (
         <div
@@ -357,20 +448,10 @@ export function ProjectSidebar({
           (header `p-2` + switcher `px-1` + half of the `size-6` tile). Left
           side only: right padding still clears trailing badges. */}
       <SidebarContent className="relative min-h-0 flex-1 [scrollbar-width:'none'] overflow-hidden [-ms-overflow-style:'none'] [&::-webkit-scrollbar]:hidden [&_[data-sidebar=menu-button]]:pl-2">
-        <SidebarDrill projectId={projectId} onNavigate={handleDrilledNavigate}>
-          {railed && section === 'more' ? (
-            // The rail's More: every page beside the sessions. Each row keeps its own
-            // flag and permission gate; Apps keeps its hover card with the Apps list.
-            <SidebarGroup className="py-0">
-              <SidebarMenu>
-                <ProjectNavItems projectId={projectId} />
-              </SidebarMenu>
-            </SidebarGroup>
-          ) : (
-          <>
+        <SidebarDrill projectId={projectId} onNavigate={handleDrilledNavigate} hideBack={railed} drilledOverride={peekOverride} instant={railed}>
           <SidebarGroup className="py-0">
             <SidebarMenu>
-              {chat ? null : (
+              {chat || showingSpaces ? null : (
                 <SidebarMenuItem>
                   {creatingSession ? (
                     <SidebarMenuButton
@@ -409,17 +490,28 @@ export function ProjectSidebar({
                 {/* Spaces on: Review and the Spaces are the only things up
                     top. Everything else (Customize, Drive, Apps, Artifacts,
                     the session list) waits in "More" at the bottom. */}
-                <div className="min-h-0 flex-1">
-                  <ProjectSpacesNav projectId={projectId} />
-                </div>
-                <SidebarMoreGroup projectId={projectId} footer={<SidebarMenu className="gap-1">{connectRows}</SidebarMenu>} />
+                {railed && chatTab === 'sessions' ? (
+                  <ProjectSessionList projectId={projectId} hideSpaces filterSlot={sessionsFilterSlot} />
+                ) : (
+                  <div className="min-h-0 flex-1">
+                    <ProjectSpacesNav projectId={projectId} review={!railed} />
+                  </div>
+                )}
+                {/* On the rail the panel's tabs pick Chat or Sessions, and the
+                    rail's More menu holds the pages: no More row here. */}
+                {railed ? null : (
+                  <SidebarMoreGroup projectId={projectId} footer={<SidebarMenu className="gap-1">{connectRows}</SidebarMenu>} />
+                )}
               </>
             ) : (
-              <ProjectSessionList projectId={projectId} />
+              <ProjectSessionList
+                projectId={projectId}
+                hideSpaces={railed && !showingSpaces}
+                spacesOnly={showingSpaces}
+                filterSlot={railed ? sessionsFilterSlot : undefined}
+              />
             )}
           </SidebarGroup>
-          </>
-          )}
 
           <SidebarGroup className="mt-auto">
             <SidebarMenu className="gap-1">
@@ -473,6 +565,18 @@ export function ProjectSidebar({
       open={computerConnectOpen}
       onOpenChange={setComputerConnectOpen}
     />
+    {railed ? (
+      <SpaceFormModal
+        projectId={projectId}
+        space={null}
+        open={newSpaceOpen}
+        onOpenChange={setNewSpaceOpen}
+        onSaved={(space) => {
+          const href = uiRoutes().sessionSpace?.(projectId, space.group_id);
+          if (href) router.push(href);
+        }}
+      />
+    ) : null}
     <AppsModal
       chrome={chrome}
       onOpenComputer={() => setComputerConnectOpen(true)}

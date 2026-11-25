@@ -12,6 +12,8 @@ import { useIsMobile } from '../../internal/hooks';
 import { useComposerPrefillStore } from '../../internal/stores/composer-prefill-store';
 import { useUiRouter } from '../../providers/ui-provider';
 import { uiRoutes } from '../../lib/routes';
+import { Button } from '../../primitives/button';
+import Hint from '../../primitives/hint';
 import { SidebarMenuButton, SidebarMenuItem, useSidebar } from '../../primitives/sidebar';
 import { spacePreview } from '../spaces/space-identity';
 
@@ -54,20 +56,44 @@ export function ProjectBotsRows({
   };
   return (
     <>
-      <li className="text-muted-foreground px-2 pt-3 pb-1 text-xs" role="presentation">
-        {t('title')}
-      </li>
+      <ChatSectionHeading label={t('title')} actionLabel={t('newBot')} onAction={newBot} />
       {shown.map((bot) => {
         const href = uiRoutes().dm(projectId, bot.name);
         return <BotRow key={bot.name} projectId={projectId} bot={bot} href={href} active={isAt(pathname, href)} names={names} />;
       })}
-      <SidebarMenuItem>
-        <SidebarMenuButton onClick={newBot} className="text-muted-foreground hover:text-sidebar-foreground">
-          <PlusIcon />
-          <span>{t('newBot')}</span>
-        </SidebarMenuButton>
-      </SidebarMenuItem>
     </>
+  );
+}
+
+/**
+ * A section heading of the chat sidebar (Bots, Channels): its name, and at
+ * the row's right edge a + that adds one (New bot, New channel).
+ */
+export function ChatSectionHeading({
+  label,
+  actionLabel,
+  onAction,
+}: {
+  label: string;
+  actionLabel: string;
+  onAction: () => void;
+}) {
+  return (
+    <li className="text-muted-foreground flex items-center justify-between gap-1 pt-3 pr-1 pb-1 pl-2 text-xs">
+      <span className="truncate">{label}</span>
+      <Hint label={actionLabel} side="top">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          aria-label={actionLabel}
+          onClick={onAction}
+          className="text-muted-foreground hover:text-foreground"
+        >
+          <PlusIcon className="size-3.5" />
+        </Button>
+      </Hint>
+    </li>
   );
 }
 

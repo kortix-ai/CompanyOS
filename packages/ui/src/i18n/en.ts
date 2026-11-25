@@ -871,7 +871,11 @@ const catalog = {
         },
         "kortix_bot": {
           "name": "Kortix bot",
-          "description": "A person messages each of the project's agents as a bot, in one chat per person. The bot answers in plain text, starts work as tasks, and posts each result as a reply under the message that asked for it."
+          "description": "A person messages each of the workspace's agents as a bot, in one chat per person. The bot answers in plain text, starts work as tasks, and posts each result as a reply under the message that asked for it."
+        },
+        "sidebar_rail": {
+          "name": "Sidebar rail",
+          "description": "On desktop, a fixed icon rail sits beside the sidebar: Home, Search and More at the top, Help and the panel toggle at the bottom. More lists every other page. With the panel collapsed, hovering Home or More shows the panel on that section."
         }
       },
       "channelsSwitch": {
@@ -1128,7 +1132,7 @@ const catalog = {
     "openInNewTab": "Open in new tab",
     "delete": "Delete",
     "deleting": "Deleting",
-    "allThreadsLoaded": "All threads loaded",
+    "allThreadsLoaded": "All sessions loaded",
     "myWorkforce": "My Workforce",
     "addTeam": "Add Team",
     "selectAll": "Select all",
@@ -1396,8 +1400,9 @@ const catalog = {
     "searchArtifacts": "Search artifacts",
     "appsNoMatches": "No matches",
     "spaces": {
-      "channels": "Spaces",
-      "addChannel": "New space",
+      "channels": "Channels",
+      "chat": "Chat",
+      "addChannel": "New channel",
       "loadError": "Could not load spaces.",
       "newAgent": "New agent",
       "review": "Review",
@@ -1406,7 +1411,7 @@ const catalog = {
       "private": "Private",
       "noMessages": "No messages yet",
       "more": "More",
-      "title": "Spaces"
+      "title": "Channels"
     },
     "calendar": "Calendar",
     "running": "Running",
@@ -1427,7 +1432,9 @@ const catalog = {
     },
     "home": "Home",
     "more": "More",
-    "rail": "Workspace navigation"
+    "rail": "Workspace navigation",
+    "pinTab": "Show tab",
+    "unpinTab": "Hide tab"
   },
   "sessionPage": {
     "backToProject": "Back to workspace",
@@ -8969,8 +8976,8 @@ const catalog = {
         "openCompany": "Open Company memory · {count, plural, one {# page} other {# pages}}"
       },
       "source": {
-        "thread": "Open the thread “{label}”",
-        "threadGone": "From the thread “{label}”",
+        "thread": "Open the session “{label}”",
+        "threadGone": "From the session “{label}”",
         "outside": "Open {label} in a new tab",
         "outsideText": "From {label}",
         "person": "Added by {label}",
@@ -8978,7 +8985,7 @@ const catalog = {
       },
       "used": {
         "label": "Used {places} memory · {count, plural, one {# page} other {# pages}}",
-        "title": "Pages this thread started with",
+        "title": "Pages this session started with",
         "company": "Company",
         "removed": "Removed"
       },
@@ -8989,7 +8996,7 @@ const catalog = {
       },
       "company": {
         "subtitle": "What every agent in this workspace knows.",
-        "gateDescription": "Company memory comes with Spaces: every agent in this workspace starts each thread with what the team saved here.",
+        "gateDescription": "Company memory comes with channels. Every agent in this workspace starts each session with what the team saved here.",
         "title": "Memory",
         "place": "Company"
       },
@@ -9002,7 +9009,7 @@ const catalog = {
       "updated": "Updated {time} by {author}",
       "updatedAt": "Updated {time}",
       "sourceKind": {
-        "thread": "thread",
+        "thread": "session",
         "person": "message",
         "outside": "link",
         "import": "file"
@@ -9097,7 +9104,7 @@ const catalog = {
     },
     "create": {
       "title": "Create a space",
-      "description": "A space organises one area of work, like Marketing, Hiring or Ops. People and agents work in its threads.",
+      "description": "A channel holds one area of work, like Marketing, Hiring or Ops. People and agents work in its sessions.",
       "nameLabel": "Name",
       "name": "Name",
       "namePlaceholder": "Marketing",
@@ -9128,30 +9135,30 @@ const catalog = {
     },
     "view": {
       "welcomeTitle": "Welcome to #{name}",
-      "welcomeEmpty": "A space organises one area of work. People and agents work here in threads: every message starts one.",
+      "welcomeEmpty": "A channel holds one area of work. Every message starts a session, where people and agents work.",
       "welcomeStart": "This is the start of #{name}.",
       "dmIntro": "Only you and {agent} see this space.",
       "today": "Today",
       "yesterday": "Yesterday",
-      "openThread": "Open thread",
-      "replyInThread": "Reply in thread",
+      "openThread": "Open session",
+      "replyInThread": "Reply in session",
       "lastReply": "Last reply {time}",
       "working": "{agent} is working…",
       "agentFallback": "Agent",
       "authorFallback": "Someone",
-      "loadEarlier": "Load earlier threads",
+      "loadEarlier": "Load earlier sessions",
       "messageChannel": "Message #{name}",
       "messageAgent": "Message {agent}",
-      "threadsEmptyTitle": "No threads yet",
-      "threadsEmpty": "Threads you start will show up here.",
+      "threadsEmptyTitle": "No sessions yet",
+      "threadsEmpty": "Sessions you start show up here.",
       "loadError": "Could not load this space.",
-      "threadsLoadError": "Could not load the threads.",
+      "threadsLoadError": "Could not load the sessions.",
       "retry": "Try again",
       "notFound": "This space doesn't exist.",
       "notFoundHint": "The link may be wrong, or someone renamed the space.",
       "openDefault": "Open #{name}",
       "archivedTitle": "#{name} is archived.",
-      "archivedHint": "Unarchive it to read and start threads here again.",
+      "archivedHint": "Unarchive it to read and start sessions here again.",
       "archivedLocked": "Only its creator or a workspace manager can unarchive it.",
       "unarchive": "Unarchive space",
       "unarchived": "Space unarchived",
@@ -9159,17 +9166,17 @@ const catalog = {
       "dmFailed": "Could not open this conversation.",
       "archive": "Archive space",
       "archiveTitle": "Archive #{name}?",
-      "archiveDescription": "The space leaves the sidebar for every member. Its threads stay, and its creator or a workspace manager can unarchive it.",
+      "archiveDescription": "The channel leaves the sidebar for every member. Its sessions stay, and its creator or a workspace manager can unarchive it.",
       "archived": "Space archived",
       "archiveFailed": "Could not archive the space. Try again.",
-      "threadTitle": "Thread",
-      "closeThread": "Close thread",
-      "sendFailed": "Could not start the thread. Try again.",
+      "threadTitle": "Session",
+      "closeThread": "Close session",
+      "sendFailed": "Could not start the session. Try again.",
       "replies": "{count, plural, one {# reply} other {# replies}}",
       "replyPlaceholder": "Reply…",
       "tab": {
         "chat": "Chat",
-        "threads": "Threads",
+        "threads": "Sessions",
         "files": "Files",
         "memory": "Memory",
         "apps": "Apps",
@@ -9193,11 +9200,11 @@ const catalog = {
         },
         "links": {
           "title": "No links yet",
-          "description": "Links people share in {place} threads show up here. Pin one to give it to every agent in the space."
+          "description": "Links people share in {place} sessions show up here. Pin one to give it to every agent in the channel."
         },
         "triggers": {
           "title": "No triggers yet",
-          "description": "Triggers start a thread in {place} on a schedule or an event.",
+          "description": "Triggers start a session in {place} on a schedule or an event.",
           "action": "New trigger"
         }
       },
@@ -9205,18 +9212,18 @@ const catalog = {
       "roster": "{people} · {agents}",
       "rosterPeople": "{count, plural, one {# person} other {# people}}",
       "rosterAgents": "{count, plural, one {# agent} other {# agents}}",
-      "copyLink": "Copy link to thread",
+      "copyLink": "Copy link to session",
       "linkCopied": "Link copied",
       "notice": {
-        "unreachable": "Lost contact with this thread's computer. Messages you send are queued until it reconnects.",
-        "unreachableMidTurn": "Lost contact with this thread's computer while a turn is still open. Messages you send stay queued until it answers.",
-        "stalled": "Waking this thread's computer is taking longer than usual. Messages you send are queued.",
-        "starting": "Starting this thread's computer. Your message sends automatically.",
-        "idle": "This thread's computer is asleep. Your next message wakes it up and is delivered.",
-        "waking": "Waking this thread's computer. Messages you send are queued and go out automatically."
+        "unreachable": "Lost contact with this session's computer. Messages you send are queued until it reconnects.",
+        "unreachableMidTurn": "Lost contact with this session's computer while a turn is still open. Messages you send stay queued until it answers.",
+        "stalled": "Waking this session's computer is taking longer than usual. Messages you send are queued.",
+        "starting": "Starting this session's computer. Your message sends automatically.",
+        "idle": "This session's computer is asleep. Your next message wakes it up and is delivered.",
+        "waking": "Waking this session's computer. Messages you send are queued and go out automatically."
       },
       "boot": {
-        "restart": "Restart thread"
+        "restart": "Restart session"
       },
       "links": {
         "add": "Add link",
@@ -9251,25 +9258,25 @@ const catalog = {
         "unpinHint": "Unpin it. Agents stop reading it.",
         "copyLink": "Copy link",
         "linkCopied": "Link copied",
-        "openThread": "Open thread",
+        "openThread": "Open session",
         "noMatch": "No links match"
       },
       "appsLoadError": "Could not load the apps.",
       "triggers": {
         "loadError": "Could not load the triggers.",
-        "privateNote": "Triggers can't post into a private space. Ask an agent in a thread to set a loop instead."
+        "privateNote": "Triggers can't post into a private channel. Ask an agent in a session to set a loop instead."
       },
       "reply": "Reply",
       "rosterTitlePeople": "People",
       "rosterTitleAgents": "Agents",
       "viewAllMembers": "View all members",
-      "agentThreads": "{count, plural, one {# thread} other {# threads}}",
+      "agentThreads": "{count, plural, one {# session} other {# sessions}}",
       "threadFilter": {
-        "search": "Search threads",
+        "search": "Search sessions",
         "filter": "Filter",
         "clear": "Clear",
         "clearFilters": "Clear filters",
-        "noMatch": "No threads match",
+        "noMatch": "No sessions match",
         "noMatchHint": "Try another search, or clear the filters.",
         "remove": "Remove filter {facet}: {value}",
         "status": "Status",
@@ -9366,7 +9373,7 @@ const catalog = {
       "created": "Created",
       "editField": "Edit {field}",
       "archiveTitle": "Archive this space",
-      "archiveHint": "It leaves the sidebar for every member. Its threads stay.",
+      "archiveHint": "It leaves the sidebar for every member. Its sessions stay.",
       "archive": "Archive",
       "find": "Find people or agents",
       "search": "Search",
@@ -9397,12 +9404,12 @@ const catalog = {
       "privateNote": "Only members can see #{name}.",
       "makePrivate": "Make private",
       "makePrivateTitle": "Make #{name} private?",
-      "makePrivateWho": "Only members will see #{name}: its threads, files, memory and links. Everyone who started a thread or added a link becomes a member.",
-      "makePrivateLeave": "Everyone else loses access. A member who leaves later loses access too, to their own threads as well.",
+      "makePrivateWho": "Only members will see #{name}: its sessions, files, memory and links. Everyone who started a session or added a link becomes a member.",
+      "makePrivateLeave": "Everyone else loses access. A member who leaves later loses access too, to their own sessions as well.",
       "makePrivateFinal": "You cannot make it public again. Files copied out of it stay where they are.",
       "makePrivateTriggers": "{count, plural, one {# trigger posts here. It stops running.} other {# triggers post here. They stop running.}}",
       "madePrivate": "#{name} is now private",
-      "leaveHintPrivate": "You lose access to its threads, files and memory, your own threads included. A member must add you again.",
+      "leaveHintPrivate": "You lose access to its sessions, files and memory, your own sessions included. A member must add you again.",
       "leavePrivateTitle": "Leave #{name}?",
       "addMembers": "Add members",
       "privateLimits": "Private hides the space from other people. Code changes (git branches) and the agents’ own tools aren’t private.",
@@ -9411,8 +9418,8 @@ const catalog = {
     "folder": {
       "memory": "Memory",
       "loadError": "Couldn't load this folder",
-      "memoryNoteChannel": "What agents in {place} remember. Agents read this at the start of every thread.",
-      "memoryNoteDm": "What {agent} remembers from this space. It reads this at the start of every thread.",
+      "memoryNoteChannel": "What agents in {place} remember. Agents read this at the start of every session.",
+      "memoryNoteDm": "What {agent} remembers from this chat. It reads this at the start of every session.",
       "off": {
         "title": "No Drive here",
         "description": "Files and memory for {place} live in the Drive. This Kortix stores no Drive: it needs Platinum."
@@ -9423,7 +9430,7 @@ const catalog = {
       "intro": {
         "title": "Welcome to Spaces",
         "channels": "Spaces group work by team.",
-        "threads": "Every new message starts a thread.",
+        "threads": "Every new message starts a session.",
         "memory": "Agents remember what each space agrees on.",
         "gotIt": "Got it",
         "tabs": "Every space has its own tabs. Add, rename and reorder them, or ask Kortix to."
@@ -9558,7 +9565,7 @@ const catalog = {
       "connectorsAll": "All connectors",
       "connectorsNone": "No connectors",
       "projectDefault": "Workspace default",
-      "projectDefaultYes": "Answers new threads where no agent is set",
+      "projectDefaultYes": "Answers new sessions where no agent is set",
       "email": "Email",
       "sharedSpaces": "Spaces you share",
       "yourSpaces": "Your spaces",
@@ -10247,7 +10254,6 @@ const catalog = {
         "evals": "Evals",
         "people": "People",
         "billing": "Billing",
-        "support": "Support",
         "advanced": "Advanced",
         "danger": "Danger zone"
       },
@@ -10263,7 +10269,6 @@ const catalog = {
         "roles": "Roles",
         "identity": "Identity",
         "audit": "Audit log",
-        "help": "Help",
         "plan": "Plan",
         "usage": "Usage",
         "agents": "Agents",

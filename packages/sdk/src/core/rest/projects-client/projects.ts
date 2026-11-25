@@ -148,6 +148,8 @@ export type FeatureFlagKey =
   | 'calendar'
   /** Kortix bot: the project's agents appear as bots a person messages in one chat each; results come back as replies. Experimental, off by default. */
   | 'kortix_bot'
+  /** Sidebar rail: a fixed icon rail (Home, Search, More) beside the sidebar panel on desktop. Client-only, off by default. */
+  | 'sidebar_rail'
   /** @deprecated Withdrawn — agents messaging people left the product. The API no longer lists, resolves, or accepts it. Removed in the next major. */
   | 'human_messaging';
 
@@ -214,6 +216,7 @@ export const FEATURE_FLAG_KEYS: readonly FeatureFlagKey[] = [
   'calendar',
   'review_swipe',
   'kortix_bot',
+  'sidebar_rail',
 ] as const;
 
 /**

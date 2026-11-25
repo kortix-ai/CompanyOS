@@ -618,7 +618,7 @@ const FLAGS: readonly FeatureFlagDef[] = [
     key: 'kortix_bot',
     name: 'Kortix bot',
     description:
-      "A person messages each of the project's agents as a bot, in one chat per person. The bot answers in plain text, starts work as tasks, and posts each result as a reply under the message that asked for it.",
+      "A person messages each of the workspace's agents as a bot, in one chat per person. The bot answers in plain text, starts work as tasks, and posts each result as a reply under the message that asked for it.",
     stability: 'experimental',
     wip: true,
     available: () => true,
@@ -628,6 +628,20 @@ const FLAGS: readonly FeatureFlagDef[] = [
       'Off => every surface is unchanged. API: GET /bots answers 403 feature_disabled unless the flag is on (routes/bots.ts). The bot chat is the DM space: `chat` (channels and DMs) is merged into this flag and resolves on with it. ' +
       'WEB and MOBILE: no Bots section, bot chat or bot settings render. A bot is an agent from kortix.yaml; ' +
       'the flag adds no table, so turning it off loses no data.',
+  },
+  {
+    key: 'sidebar_rail',
+    name: 'Sidebar rail',
+    description:
+      "On desktop, a fixed icon rail sits beside the sidebar: Home, Search and More at the top, Help and the panel toggle at the bottom. More lists every other page. With the panel collapsed, hovering Home or More shows the panel on that section.",
+    stability: 'experimental',
+    wip: true,
+    available: () => true,
+    platformDefault: () => false,
+    enforcement: 'ui-only',
+    enforcementNote:
+      'UI-ONLY: the web project sidebar (packages/ui/src/workspace/sidebar/project-sidebar.tsx) mounts ProjectRail on desktop while this is on. ' +
+      'Off, the sidebar is unchanged. Mobile never shows the rail. No route reads it.',
   },
 ];
 

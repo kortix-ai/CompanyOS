@@ -25,8 +25,6 @@ export const WORKSPACE_SETTINGS_GROUPS = [
   { id: 'billing', sections: ['plan', 'usage'] },
   { id: 'advanced', sections: ['feature-flags'] },
   { id: 'danger', sections: ['danger-zone'] },
-  // The rail draws Help in its footer, under the groups.
-  { id: 'support', sections: ['help'] },
 ] as const;
 
 export type WorkspaceSettingsGroup = (typeof WORKSPACE_SETTINGS_GROUPS)[number]['id'];
@@ -58,6 +56,8 @@ export const WORKSPACE_SETTINGS_SECTION_ALIASES: Readonly<Record<string, Workspa
   repository: 'repo',
   agent: 'agents',
   danger: 'danger-zone',
+  // Help left the panel on 2026-11-25 (the app's Help menu covers it): an old link opens General.
+  help: 'general',
 };
 
 /** English labels (the en catalog uses the same words; a web test holds them equal). */
@@ -91,7 +91,6 @@ export const WORKSPACE_SETTINGS_LABELS: Readonly<Record<WorkspaceSettingsSection
   audit: 'Audit log',
   plan: 'Plan',
   usage: 'Usage',
-  help: 'Help',
 };
 
 /** English group labels, in panel order. */
@@ -103,7 +102,6 @@ export const WORKSPACE_SETTINGS_GROUP_LABELS: Readonly<Record<WorkspaceSettingsG
   billing: 'Billing',
   advanced: 'Advanced',
   danger: 'Danger zone',
-  support: 'Support',
 };
 
 const SECTION_SET: ReadonlySet<string> = new Set(WORKSPACE_SETTINGS_SECTIONS);

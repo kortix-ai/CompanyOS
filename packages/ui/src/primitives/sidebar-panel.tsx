@@ -154,7 +154,7 @@ function Sidebar({
       {railed ? (
         // Fixed at the window's left edge, above the panel (z-50 over its z-40)
         // so the panel slides out underneath it.
-        <div data-slot="sidebar-rail-column" className="bg-background fixed inset-y-0 left-0 z-50 hidden w-(--sidebar-rail-width) md:flex">
+        <div data-slot="sidebar-rail-column" className="bg-background border-border fixed inset-y-0 left-0 z-50 hidden w-(--sidebar-rail-width) border-r md:flex">
           {rail}
         </div>
       ) : null}
@@ -236,9 +236,8 @@ function Sidebar({
                 // same shape. No `overflow-hidden` — that would eat the card's
                 // `shadow-md`.
                 railed
-                  ? flyout
-                    ? 'top-2 bottom-2 left-[calc(var(--sidebar-rail-width)+0.25rem)] h-auto rounded-lg'
-                    : 'inset-y-0 left-(--sidebar-rail-width) h-svh'
+                  ? // With a rail the peek is flush beside it, full height, the docked box: no floating card.
+                    'inset-y-0 left-(--sidebar-rail-width) h-svh'
                   : flyout
                     ? 'top-13 bottom-2 left-2 h-auto rounded-lg'
                     : 'inset-y-0 left-0 h-svh',
@@ -285,7 +284,8 @@ function Sidebar({
             //
             // No transition on the radius/shadow — same corollary as above,
             // they only ever change while the panel is off-screen.
-            flyout && 'border-border overflow-hidden rounded-lg border shadow-md',
+            // With a rail the peek is flush: a hairline on its right edge, no card.
+            railed ? flyout && 'border-border border-r' : flyout && 'border-border overflow-hidden rounded-lg border shadow-md',
           )}
         >
           {children}
@@ -477,7 +477,12 @@ function SidebarInset({ className, ...props }: React.ComponentProps<'main'>) {
     <main
       data-slot="sidebar-inset"
       className={cn(
-        'bg-background relative flex w-full flex-1 flex-col overflow-hidden',
+        // `isolate`: the page's own z-indexes (the composer, the session
+        // header and in-page menus are z-50) stay inside the page, so the
+        // sidebar panel (z-10 docked, z-40 collapsed or peeking) and the rail
+        // (z-50) always paint above it. Dialogs, sheets, popovers and
+        // tooltips portal to <body> on their own scale (`lib/z-stack`), above all three.
+        'bg-background relative isolate flex w-full flex-1 flex-col overflow-hidden',
         'md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow-sm md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ml-2',
         className,
       )}

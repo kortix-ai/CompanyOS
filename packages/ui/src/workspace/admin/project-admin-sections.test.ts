@@ -88,7 +88,6 @@ describe('Workspace settings rail — the shared registry', () => {
       ['billing', ['plan', 'usage']],
       ['advanced', ['feature-flags']],
       ['danger', ['danger-zone']],
-      ['support', ['help']],
     ]);
   });
 
@@ -111,6 +110,8 @@ describe('Workspace settings rail — the shared registry', () => {
 
   test('every old account hub tab lands on a workspace section that shows that pane', () => {
     for (const tab of VALID_TABS) {
+      // Help left Workspace settings (2026-11-25): its old tab opens General, which has no account pane.
+      if (tab === 'help') continue;
       const section = SECTION_FOR_ACCOUNT_TAB[tab];
       // Access merged into Members: its per-workspace grants render under the roster.
       const back = tab === 'access-projects' ? 'members' : tab;
@@ -119,6 +120,7 @@ describe('Workspace settings rail — the shared registry', () => {
     expect(SECTION_FOR_ACCOUNT_TAB.settings).toBe('security');
     expect(SECTION_FOR_ACCOUNT_TAB['access-projects']).toBe('members');
     expect(SECTION_FOR_ACCOUNT_TAB.billing).toBe('plan');
+    expect(SECTION_FOR_ACCOUNT_TAB.help).toBe('general');
   });
 
   test('the en catalog holds the registry labels, word for word', () => {

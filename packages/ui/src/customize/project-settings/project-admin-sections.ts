@@ -72,7 +72,7 @@ export type ProjectAdminSettingsKey = Exclude<ProjectSettingsSectionKey, 'review
 /** The sections whose pane is a host pane of the workspace's account (`apps/web`). */
 export type WorkspaceAccountSectionKey = Extract<
   WorkspaceSettingsSection,
-  'security' | 'branding' | 'api-keys' | 'members' | 'groups' | 'roles' | 'identity' | 'audit' | 'help' | 'plan' | 'usage'
+  'security' | 'branding' | 'api-keys' | 'members' | 'groups' | 'roles' | 'identity' | 'audit' | 'plan' | 'usage'
 >;
 
 export type WorkspaceSettingsGroupId = WorkspaceSettingsGroup;
@@ -97,7 +97,6 @@ export const ACCOUNT_TAB_FOR_SECTION: Partial<Record<ProjectAdminSectionKey, Acc
   roles: 'roles',
   identity: 'identity',
   audit: 'audit',
-  help: 'help',
   plan: 'billing',
   usage: 'transactions',
 };
@@ -117,7 +116,8 @@ export const SECTION_FOR_ACCOUNT_TAB: Record<AccountSection, ProjectAdminSection
   roles: 'roles',
   identity: 'identity',
   audit: 'audit',
-  help: 'help',
+  // The Help section left Workspace settings: an old Help link opens General.
+  help: 'general',
   billing: 'plan',
   transactions: 'usage',
 };
@@ -131,7 +131,6 @@ const ACCOUNT_SECTION_KEYS: readonly WorkspaceAccountSectionKey[] = [
   'roles',
   'identity',
   'audit',
-  'help',
   'plan',
   'usage',
 ];

@@ -77,6 +77,7 @@ export const FeatureFlagMapSchema = z.object({
   calendar: z.boolean(),
   review_swipe: z.boolean(),
   kortix_bot: z.boolean(),
+  sidebar_rail: z.boolean(),
 });
 export type FeatureFlagMap = z.infer<typeof FeatureFlagMapSchema>;
 

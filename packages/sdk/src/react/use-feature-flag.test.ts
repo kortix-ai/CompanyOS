@@ -335,6 +335,7 @@ describe('useFeatureFlags', () => {
     'calendar',
     'review_swipe',
     'kortix_bot',
+    'sidebar_rail',
     'volumes',
     'drives',
     'artifacts',

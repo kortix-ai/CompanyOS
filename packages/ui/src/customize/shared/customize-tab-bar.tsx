@@ -31,7 +31,9 @@ import { capabilityTabHref } from '../../internal/lib/capability-tab-routes';
 import { PROJECT_ACTIONS } from '../../internal/lib/project-actions';
 import { useProjectPageCans } from '../../internal/lib/use-project-can';
 import { cn } from '../../internal/lib/utils';
+import { useWorkspaceSettingsRailStore } from '../../internal/stores/workspace-settings-rail-store';
 import { adminPath } from '../../lib/routes';
+import { Button } from '../../primitives/button';
 import { FadedScrollArea } from '../../primitives/faded-scroll-area';
 import { useOptionalSidebar } from '../../primitives/sidebar';
 import { Tabs, TabsList, TabsTrigger } from '../../primitives/tabs';
@@ -63,10 +65,32 @@ export function CustomizeFrame({ projectId, children }: { projectId: string; chi
   );
 }
 
-/** Workspace settings' frame: the title-bar row with the sidebar opener and the panel's name, then the panel. */
+/**
+ * Where the page sits in the settings rail: the group's name and the row's,
+ * as "Library / Agents". Null until the page publishes its rail, and for a
+ * row in a group with no heading (Help): the frame then shows the panel's name.
+ */
+function useSettingsCrumb(): { group: string; groupHref: string; page: string } | null {
+  const rail = useWorkspaceSettingsRailStore((s) => s.rail);
+  const pathname = useUiPathname();
+  // A rail kept from another workspace names nothing here.
+  if (!rail || !pathname?.includes(`/${rail.projectId}/`)) return null;
+  const fromUrl = parseProjectAdminSection(pathname?.match(/\/admin\/([^/?#]+)/)?.[1]);
+  const active = fromUrl ?? rail.active;
+  for (const group of rail.groups) {
+    const row = group.rows.find((r) => r.key === active && !r.linkOut);
+    // The group crumb opens the group's first section.
+    const first = group.rows.find((r) => !r.linkOut);
+    if (row && first && group.label) return { group: group.label, groupHref: first.href, page: row.label };
+  }
+  return null;
+}
+
+/** Workspace settings' frame: the title-bar row with the sidebar opener and where the page sits, then the panel. */
 export function SettingsFrame({ children }: { children: ReactNode }) {
   const tSettings = useTranslations('workspaces.settings');
   const sidebar = useOptionalSidebar();
+  const crumb = useSettingsCrumb();
   return (
     <InCustomizeFrame.Provider value>
       <div
@@ -74,8 +98,29 @@ export function SettingsFrame({ children }: { children: ReactNode }) {
         data-sidebar-collapsed={sidebar?.state === 'collapsed' || undefined}
       >
         <SidebarToggle />
-        {/* The panel's name, not a heading: each section's page header is the page's h1. */}
-        <p className="text-foreground truncate px-2 text-sm font-medium">{tSettings('title')}</p>
+        {/* Where the page sits, not a heading: each section's page header is the page's h1. */}
+        {crumb ? (
+          // The session header's breadcrumb: a ghost crumb, a slash, then the page.
+          <nav aria-label={tSettings('title')} className="flex min-w-0 items-center gap-1">
+            <Button
+              asChild
+              variant="ghost"
+              className="text-muted-foreground hover:text-foreground h-7 shrink-0 rounded-md px-2 py-1 text-sm font-medium"
+            >
+              <Link href={crumb.groupHref} prefetch>
+                {crumb.group}
+              </Link>
+            </Button>
+            <span aria-hidden className="text-muted-foreground shrink-0 text-sm select-none">
+              /
+            </span>
+            <span aria-current="page" className="text-foreground truncate px-1 text-sm font-medium">
+              {crumb.page}
+            </span>
+          </nav>
+        ) : (
+          <p className="text-foreground truncate px-2 text-sm font-medium">{tSettings('title')}</p>
+        )}
       </div>
       {children}
     </InCustomizeFrame.Provider>

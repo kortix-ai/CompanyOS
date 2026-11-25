@@ -718,7 +718,7 @@ export function ModelSelector({
   const searchRight =
     canManageModels && canConnectProvider ? (
     <div className="-mr-0.5 flex shrink-0 items-center gap-0.5">
-      <Hint label={tModel('connectProvider')} side="top" className="z-50">
+      <Hint label={tModel('connectProvider')} side="top">
         <button
           type="button"
           aria-label={tModel('addProvider')}
@@ -728,7 +728,7 @@ export function ModelSelector({
           <Plus className="size-4" />
         </button>
       </Hint>
-      <Hint label={tModel('manageModels')} side="top" className="z-50">
+      <Hint label={tModel('manageModels')} side="top">
         <button
           type="button"
           aria-label={tModel('manageModels')}

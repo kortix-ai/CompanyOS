@@ -1369,7 +1369,11 @@
         },
         "kortix_bot": {
           "name": "Kortix bot",
-          "description": "A person messages each of the project's agents as a bot, in one chat per person. The bot answers in plain text, starts work as tasks, and posts each result as a reply under the message that asked for it."
+          "description": "A person messages each of the workspace's agents as a bot, in one chat per person. The bot answers in plain text, starts work as tasks, and posts each result as a reply under the message that asked for it."
+        },
+        "sidebar_rail": {
+          "name": "Sidebar rail",
+          "description": "On desktop, a fixed icon rail sits beside the sidebar: Home, Search and More at the top, Help and the panel toggle at the bottom. More lists every other page. With the panel collapsed, hovering Home or More shows the panel on that section."
         }
       },
       "channelsSwitch": {
@@ -1926,8 +1930,9 @@
     "searchArtifacts": "Rechercher des artefacts",
     "appsNoMatches": "Aucun résultat",
     "spaces": {
-      "channels": "Espaces",
-      "addChannel": "Nouvel espace",
+      "channels": "Canaux",
+      "chat": "Discussion",
+      "addChannel": "Nouveau canal",
       "loadError": "Impossible de charger les espaces.",
       "newAgent": "Nouvel agent",
       "review": "Vérifier",
@@ -1936,7 +1941,7 @@
       "private": "Privé",
       "noMessages": "Aucun message pour l’instant",
       "more": "Plus",
-      "title": "Spaces"
+      "title": "Canaux"
     },
     "calendar": "Calendrier",
     "running": "En cours",
@@ -1957,7 +1962,9 @@
     },
     "home": "Home",
     "more": "More",
-    "rail": "Workspace navigation"
+    "rail": "Workspace navigation",
+    "pinTab": "Show tab",
+    "unpinTab": "Hide tab"
   },
   "dashboard": {
     "title": "Tableau de bord",
@@ -26892,7 +26899,6 @@
         "evals": "Évals",
         "people": "Personnes",
         "billing": "Facturation",
-        "support": "Assistance",
         "advanced": "Avancé",
         "danger": "Zone de danger"
       },
@@ -26908,7 +26914,6 @@
         "roles": "Rôles",
         "identity": "Identité",
         "audit": "Journal d'audit",
-        "help": "Aide",
         "plan": "Forfait",
         "usage": "Utilisation",
         "agents": "Agents",

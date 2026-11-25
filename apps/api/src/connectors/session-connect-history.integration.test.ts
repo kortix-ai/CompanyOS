@@ -4,10 +4,11 @@ import { eq, sql } from 'drizzle-orm';
 import { AsyncResource } from 'node:async_hooks';
 import { db, withDbTransaction } from '../shared/db';
 
-const outsideTransaction = new AsyncResource('connect-history-stamp');
 import { dbConnectorRouterDeps } from './db-deps';
 import { serializeConnection } from '../projects/lib/connection-view';
 import { composioConnectionMetadata, mergeRequestingSession, takeRequestingSession } from './db-deps-connect';
+
+const outsideTransaction = new AsyncResource('connect-history-stamp');
 
 const accountId = crypto.randomUUID();
 const projectId = crypto.randomUUID();

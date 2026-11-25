@@ -252,6 +252,17 @@ describe('page scrape fallback (KRTX-5162)', () => {
     }
   });
 
+  test('a 2 MB page of & is read in linear time, so it cannot stall the API', async () => {
+    network(PLAN_LIMIT, SERPER_OK, { status: 200, body: `<p>${'&'.repeat(2 * 1024 * 1024 - 8)}</p>`, type: 'text/html' });
+    const started = performance.now();
+
+    const response = await call('firecrawl', '/v2/scrape', { url: 'https://page.example/ampersands' });
+
+    expect(response.status).toBe(200);
+    // Rescanning the body for every & blocked the event loop ~29 s here.
+    expect(performance.now() - started).toBeLessThan(2_000);
+  });
+
   test("a PDF is not read by the fallback: the provider's 503 stays", async () => {
     network(PLAN_LIMIT, SERPER_OK, { status: 200, body: '%PDF-1.7', type: 'application/pdf' });
 

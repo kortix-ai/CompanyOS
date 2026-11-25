@@ -48,10 +48,15 @@ import { useOwnsPairedComputer } from '../tunnel/computer-connect';
 import { ChromeArt, ComputerArt, DesktopArt, McpArt, MobileArt, TerminalArt } from './surface-art';
 
 /** Operating system and device names are product names: never translated. */
-const DESKTOP_ROWS: Record<DesktopOs, { name: string; Mark: Icon }> = {
-  macos: { name: 'macOS', Mark: AppleLogoIcon },
-  windows: { name: 'Windows', Mark: WindowsLogoIcon },
-  linux: { name: 'Linux', Mark: LinuxLogoIcon },
+/**
+ * `meta` says what the installer is. macOS ships one universal build; Linux
+ * ships x86_64 only, so an ARM visitor reads that before downloading a binary
+ * that will not run.
+ */
+const DESKTOP_ROWS: Record<DesktopOs, { name: string; meta: string; Mark: Icon }> = {
+  macos: { name: 'macOS', meta: 'Universal', Mark: AppleLogoIcon },
+  windows: { name: 'Windows', meta: '64-bit', Mark: WindowsLogoIcon },
+  linux: { name: 'Linux', meta: 'AppImage · x86_64', Mark: LinuxLogoIcon },
 };
 
 /** The MCP setup guide, for a visitor who is not signed in. */
@@ -140,11 +145,24 @@ function SurfaceCard({
 }
 
 /** A named row with its mark and one action, divided by hairlines. */
-function ActionRow({ Mark, name, children }: { Mark: Icon; name: string; children: ReactNode }) {
+function ActionRow({
+  Mark,
+  name,
+  meta,
+  children,
+}: {
+  Mark: Icon;
+  name: string;
+  meta?: string;
+  children: ReactNode;
+}) {
   return (
     <li className="flex min-h-12 items-center gap-3 py-2">
       <Mark weight="fill" className="text-foreground size-5 shrink-0" />
-      <span className="text-foreground min-w-0 flex-1 truncate text-sm">{name}</span>
+      <span className="min-w-0 flex-1">
+        <span className="text-foreground block truncate text-sm">{name}</span>
+        {meta ? <span className="text-muted-foreground block truncate text-xs">{meta}</span> : null}
+      </span>
       {children}
     </li>
   );
@@ -168,7 +186,7 @@ function DesktopCard({ platform, inApp }: { platform: Platform; inApp: boolean }
     <SurfaceCard wide name={name} description={description} art={<DesktopArt />}>
       <ul className="divide-border divide-y">
         {DESKTOP_ORDER.map((os) => (
-          <ActionRow key={os} Mark={DESKTOP_ROWS[os].Mark} name={DESKTOP_ROWS[os].name}>
+          <ActionRow key={os} Mark={DESKTOP_ROWS[os].Mark} name={DESKTOP_ROWS[os].name} meta={DESKTOP_ROWS[os].meta}>
             <Button asChild size="sm" variant={os === own ? 'default' : 'secondary'}>
               <a
                 href={desktopDownloadUrl(os)}
@@ -280,7 +298,12 @@ function ChromeLiveCard({ onClose }: { onClose: () => void }) {
     >
       <div className="flex flex-wrap items-center gap-2">
         {cardState === 'unsupported' ? <ChromeCopyLink /> : <ChromeInstallActions state={state} />}
-        {count > 0 ? manage : null}
+        {count > 0 ? (
+          <>
+            {manage}
+            <span className="text-muted-foreground text-xs">{t('summary', { count, online })}</span>
+          </>
+        ) : null}
       </div>
     </SurfaceCard>
   );
@@ -329,9 +352,7 @@ function ComputerLiveCard({ onOpen }: { onOpen: () => void }) {
 }
 
 /**
- * The install command for THIS deployment. The art shows it in full before
- * it is copied: a visitor who cannot read it has no way to know what they
- * pipe into a shell.
+ * The install command for THIS deployment, in full, above its Copy button.
  */
 function TerminalCard() {
   const t = useTranslations('appsModal.developers');
@@ -341,7 +362,10 @@ function TerminalCard() {
     if (!(await copy(command))) errorToast(t('copyFailed'));
   };
   return (
-    <SurfaceCard name={t('cli')} description={t('cliDescription')} art={<TerminalArt command={command} />}>
+    <SurfaceCard name={t('cli')} description={t('cliDescription')} art={<TerminalArt />}>
+      {/* The whole command, wrapped and selectable: the visitor reads every
+          character before piping it into a shell. */}
+      <code className="text-foreground w-full font-mono text-xs break-all select-all">{command}</code>
       <Button size="sm" variant="secondary" className="gap-1.5" onClick={copyCommand}>
         {copied ? <SolidCheckIcon className="size-3.5" /> : null}
         {copied ? t('copied') : t('copy')}

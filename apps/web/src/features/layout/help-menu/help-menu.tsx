@@ -3,8 +3,8 @@
 /**
  * The help button at the foot of the project sidebar, and its menu: the
  * places a person goes to get unstuck (Docs, Support, Keyboard shortcuts,
- * Status), the two app-level actions people look for next to them (Download
- * apps, Preferences), the community, and the newest changelog weeks.
+ * Status), Download apps, the community, and the newest changelog weeks.
+ * Preferences stays in the workspace menu, its one home.
  *
  * Docs and Support come from `HELP_LINKS`, the list the workspace menu's Help
  * submenu reads, so the two entry points cannot drift apart.
@@ -21,7 +21,6 @@ import {
   LaptopIcon,
   PulseIcon,
   QuestionIcon,
-  SlidersHorizontalIcon,
 } from '@phosphor-icons/react';
 import * as React from 'react';
 import { useState } from 'react';
@@ -34,7 +33,6 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from '@kortix/ui/dropdown-menu';
 import Hint from '@kortix/ui/hint';
@@ -47,7 +45,6 @@ import { type SettingsTab } from '@kortix/ui/customize/settings/settings-tabs';
 
 import { HELP_LINKS } from '@/features/layout/user-menu-shared';
 import { getEnv } from '@/lib/env-config';
-import { settingsShortcutLabel } from '@/features/workspace/settings/settings-shortcut';
 import { useLocale, useTranslations } from '@/i18n/use-translations';
 
 import { CHANGELOG_PATH, WHATS_NEW_PATH, parseWhatsNew, type WhatsNew } from './whats-new';
@@ -165,7 +162,7 @@ export function HelpMenu({ onOpenDownloadApp }: { onOpenDownloadApp?: () => void
   );
   const whatsNew = useWhatsNew(cloud);
   const locale = useLocale();
-  // A phone has no keyboard: no shortcuts row and no keycap (KRTX-2005).
+  // A phone has no keyboard: no shortcuts row (KRTX-2005).
   const isMobile = useIsMobile();
   const sidebar = React.useContext(SidebarContext);
 
@@ -186,7 +183,7 @@ export function HelpMenu({ onOpenDownloadApp }: { onOpenDownloadApp?: () => void
     if (isMobile) sidebar?.setOpenMobile(false);
     requestAnimationFrame(() => fn());
   };
-  const openSettings = (tab?: SettingsTab) =>
+  const openSettings = (tab: SettingsTab) =>
     afterClose(() => useSettingsPanelStore.getState().openSettings(tab));
 
   // The changelog rows, then "Full changelog" as the line's last stop.
@@ -251,13 +248,6 @@ export function HelpMenu({ onOpenDownloadApp }: { onOpenDownloadApp?: () => void
               {t('downloadApps')}
             </DropdownMenuItem>
           ) : null}
-          <DropdownMenuItem onSelect={() => openSettings()}>
-            <SlidersHorizontalIcon />
-            {t('preferences')}
-            {isMobile ? null : (
-              <DropdownMenuShortcut>{settingsShortcutLabel()}</DropdownMenuShortcut>
-            )}
-          </DropdownMenuItem>
           <LinkRow href={COMMUNITY_URL} onNavigate={close}>
             <DiscordLogoIcon />
             {t('community')}

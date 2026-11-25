@@ -77,7 +77,12 @@ export function AppsModal({
         overlayClassName="data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 duration-(--duration-moderate)"
         className="bg-background data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 inset-0 flex h-dvh max-h-none w-screen max-w-none flex-col space-y-0 rounded-none! border-0 p-0 duration-(--duration-moderate) lg:top-0 lg:left-0 lg:h-dvh lg:max-w-none lg:translate-x-0 lg:translate-y-0"
       >
-        <header className="kx-titlebar-row flex h-12 shrink-0 items-center gap-1 border-b px-3">
+        {/* The page covers the sidebar, so the desktop app's window controls
+            sit over this row: `data-sidebar-collapsed` takes their indent. */}
+        <header
+          data-sidebar-collapsed=""
+          className="kx-titlebar-row kx-titlebar-band-height flex h-12 shrink-0 items-center gap-1 border-b px-3"
+        >
           <Button
             type="button"
             variant="ghost"

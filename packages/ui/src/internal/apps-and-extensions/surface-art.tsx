@@ -147,14 +147,15 @@ export function ComputerArt() {
   );
 }
 
-/** The install command, typed into a terminal. */
-export function TerminalArt({ command }: { command: string }) {
+/** A terminal at its prompt: the CLI's home. The command itself is in the card. */
+export function TerminalArt() {
   return (
-    <SurfaceArt surface="terminal" className="min-h-32 px-5 pt-5 [&_p]:line-clamp-3">
+    <SurfaceArt surface="terminal" className="min-h-32 px-5 pt-5">
       <WindowFrame className="rounded-b-none border-b-0">
-        <p className="px-3 py-3 font-mono text-xs break-all">
-          <span className="text-muted-foreground">$ </span>
-          {command}
+        <p className="flex items-center gap-1.5 px-3 py-3 font-mono text-xs">
+          <span className="text-muted-foreground">~ $</span>
+          kortix
+          <span className="bg-foreground/70 h-3.5 w-1.5" />
         </p>
       </WindowFrame>
     </SurfaceArt>

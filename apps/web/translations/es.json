@@ -1953,18 +1953,19 @@
     "runningIn": "en {title}",
     "runningFirst": "Se muestran las primeras {count}.",
     "bots": {
-      "title": "Bots",
+      "title": "Agentes",
       "paused": "Paused",
       "off": "Off",
       "noMessages": "No messages yet",
-      "newBot": "New bot",
-      "newBotPrompt": "I want a new bot. Ask me what it should own and how we'll know it's done. Then propose it, and when I say yes, add it to kortix.yaml as an agent with every workspace app (connectors: all)."
+      "newBot": "Nuevo agente",
+      "newBotPrompt": "Quiero un nuevo agente. Pregúntame de qué debe encargarse y cómo sabremos que ha terminado. Luego propónmelo y, cuando diga que sí, añádelo a kortix.yaml como agente con todas las apps del espacio de trabajo (connectors: all)."
     },
     "home": "Home",
     "more": "More",
     "rail": "Workspace navigation",
     "pinTab": "Show tab",
-    "unpinTab": "Hide tab"
+    "unpinTab": "Hide tab",
+    "bot": "Bots"
   },
   "dashboard": {
     "title": "Panel",
@@ -2257,8 +2258,6 @@
     "turn": {
       "autoRetried": "Kortix reintentó el modelo automáticamente {count, plural, one {una vez} other {# veces}} antes de este fallo.",
       "typing": "{name} está escribiendo…",
-      "showWork": "Ver trabajo",
-      "hideWork": "Ocultar trabajo",
       "starting": "Iniciando…",
       "workingFor": "Trabajando · {time}",
       "agentWorking": "está trabajando",
@@ -2282,6 +2281,30 @@
       "finishedCount": "{count} terminadas",
       "running": "En curso",
       "resizePane": "Cambiar el tamaño del panel"
+    },
+    "changeRequest": {
+      "merge": "Fusionar",
+      "merging": "Fusionando…",
+      "moreActions": "Más acciones",
+      "close": "Cerrar solicitud de cambio",
+      "openInReview": "Abrir en Revisión",
+      "resolveConflict": "Resolver conflicto",
+      "open": "Abierta",
+      "merged": "Fusionada",
+      "closed": "Cerrada",
+      "conflicts": "{count, plural, one {# conflicto} other {# conflictos}}",
+      "mergedToast": "Solicitud de cambio #{number} fusionada",
+      "closedToast": "Solicitud de cambio #{number} cerrada",
+      "mergeFailed": "No se pudo fusionar la solicitud de cambio.",
+      "closeFailed": "No se pudo cerrar la solicitud de cambio.",
+      "files": "{count, plural, one {# archivo} other {# archivos}}",
+      "into": "en {branch}",
+      "number": "Solicitud de cambio #{number}",
+      "openedAgo": "Abierta {time}",
+      "mergeInto": "Fusionar en {branch}",
+      "readyToMerge": "lista para fusionar",
+      "mergedInto": "Fusionada en {branch}",
+      "closedNote": "Cerrada sin fusionar"
     }
   },
   "agents": {
@@ -25964,7 +25987,34 @@
           "description": "Se eliminó o cambió de nombre, o no está compartido contigo."
         }
       },
-      "spaceDetails": "Detalles de {name}"
+      "spaceDetails": "Detalles de {name}",
+      "moreActions": "Más acciones",
+      "copyMessage": "Copiar mensaje",
+      "copyMarkdown": "Copiar como Markdown",
+      "deleteMessage": "Eliminar mensaje",
+      "messageCopied": "Mensaje copiado",
+      "memberJoined": "se unió",
+      "jump": {
+        "label": "{day}, saltar a una fecha",
+        "title": "Ir a",
+        "today": "Hoy",
+        "yesterday": "Ayer",
+        "week": "Hace una semana",
+        "month": "Hace un mes",
+        "first": "Primer mensaje",
+        "pick": "Elegir una fecha…"
+      },
+      "findInThread": "Buscar en el hilo",
+      "findPlaceholder": "Buscar",
+      "findCount": "{index} de {count}",
+      "findNone": "Sin resultados",
+      "findPrevious": "Resultado anterior",
+      "findNext": "Siguiente resultado",
+      "closeFind": "Cerrar búsqueda",
+      "openInNewWindow": "Abrir en una ventana nueva",
+      "copyThreadText": "Copiar hilo como texto",
+      "copyJson": "Copiar como JSON",
+      "threadCopied": "Copiado"
     },
     "details": {
       "about": "Información",
@@ -26211,8 +26261,6 @@
       "people": "Personas",
       "addPeople": "Añadir personas",
       "you": "Tú",
-      "tabs": "Pestañas",
-      "addTab": "Añadir pestaña",
       "routines": "Rutinas",
       "addRoutine": "Añadir rutina",
       "routinesPrivate": "Un espacio privado aún no admite rutinas.",
@@ -26223,8 +26271,8 @@
       "proactiveBriefHint": "Un resumen breve a las 9:00 los días con novedades.",
       "proactiveFailed": "No se guardó el ajuste. Inténtalo de nuevo.",
       "allSettings": "Todos los ajustes",
-      "askHint": "También puedes pedirlo en el chat: «añade un agente aquí», «fija el documento del lanzamiento como pestaña».",
-      "noAgentsToAdd": "Todos los agentes del espacio de trabajo ya están en este espacio."
+      "noAgentsToAdd": "Todos los agentes del espacio de trabajo ya están en este espacio.",
+      "members": "Miembros"
     },
     "profile": {
       "viewProfile": "Ver el perfil de {name}",
@@ -26252,7 +26300,14 @@
       "addFailed": "No se pudo añadir el agente. Inténtalo de nuevo.",
       "spacesIn": "Espacios en los que está",
       "spacesInNone": "Aún en ningún espacio",
-      "default": "Predeterminado"
+      "default": "Predeterminado",
+      "paused": "En pausa",
+      "off": "Desactivado",
+      "copyLink": "Copiar enlace",
+      "linkCopied": "Enlace copiado",
+      "roleOwner": "Propietario del workspace",
+      "roleAdmin": "Administrador del workspace",
+      "roleMember": "Miembro del workspace"
     },
     "mentions": {
       "people": "Personas",
@@ -26271,20 +26326,30 @@
       "resume": "Resume",
       "resumeFailed": "Could not resume {name}.",
       "settings": {
-        "title": "Settings",
-        "settingsButton": "Bot settings",
-        "agent": "Agent",
+        "settingsButton": "Ajustes del agente",
         "status": "Status",
         "active": "Active",
         "paused": "Paused",
         "off": "Off",
-        "pauseFailed": "Could not change the bot's status.",
+        "pauseFailed": "No se pudo cambiar el estado del agente.",
         "description": "Description",
         "save": "Save",
         "saveFailed": "Could not save the description.",
         "model": "Model",
-        "apps": "Apps and secrets",
-        "allSettings": "All agent settings"
+        "allSettings": "All agent settings",
+        "general": "General",
+        "appsTab": "Apps",
+        "routines": "Rutinas",
+        "workspaceDefault": "Predeterminado del espacio de trabajo",
+        "modelDefault": "Predeterminado del espacio de trabajo",
+        "modelDefaultNamed": "Predeterminado del espacio de trabajo ({model})",
+        "cancel": "Cancelar",
+        "searchApps": "Buscar apps",
+        "noApps": "Este espacio de trabajo aún no tiene conectores.",
+        "noAppsMatch": "Ninguna app coincide con «{query}».",
+        "appsUnavailable": "Las apps de este agente se configuran en su página de agente.",
+        "appsFailed": "No se pudieron cambiar las apps del agente.",
+        "role": "Rol"
       }
     }
   },
@@ -27655,5 +27720,9 @@
     "community": "Comunidad de Discord",
     "whatsNew": "Novedades",
     "fullChangelog": "Registro de cambios completo"
+  },
+  "botPage": {
+    "title": "Bots",
+    "description": "Un bot trabaja en segundo plano y te trae el resultado. Los bots aún no están disponibles."
   }
 }

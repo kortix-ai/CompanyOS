@@ -1,7 +1,7 @@
 'use client';
 
 import { useFeatureFlag } from '@kortix/sdk/react';
-import { DotsThreeIcon, MagnifyingGlassIcon, PushPinSlashIcon, StackIcon } from '@phosphor-icons/react';
+import { DotsThreeIcon, MagnifyingGlassIcon, PushPinSlashIcon, RobotIcon, StackIcon } from '@phosphor-icons/react';
 import { useState, type MouseEvent, type ReactNode } from 'react';
 
 import { useTranslations } from '../../i18n';
@@ -71,6 +71,10 @@ export function ProjectRail({
   const groupsOn = useFeatureFlag(projectId, 'session_groups').enabled;
   const spacesHref = groupsOn ? (uiRoutes().sessionSpaces?.(projectId) ?? null) : null;
   const onSpaces = !!spacesHref && !!pathname && (pathname === spacesHref || pathname.startsWith(`${spacesHref}/`));
+  // Bots (`kortix_bot`): agents that work in the background and bring back a result. One page, under Home.
+  const botsOn = useFeatureFlag(projectId, 'kortix_bot').enabled;
+  const botHref = botsOn ? `${uiRoutes().project(projectId).replace(/\/$/, '')}/bot` : null;
+  const onBot = !!botHref && !!pathname && (pathname === botHref || pathname.startsWith(`${botHref}/`));
 
   const access = useCapabilityAccess(projectId);
   const customizeHref =
@@ -87,12 +91,17 @@ export function ProjectRail({
       <RailButton
         label={t('home')}
         href={uiRoutes().project(projectId)}
-        current={!settingsOpen && !onSpaces}
+        current={!settingsOpen && !onSpaces && !onBot}
         onPointerEnter={collapsed ? () => { onPeek('home'); peekEnter(); } : undefined}
         onPointerLeave={collapsed ? peekLeave : undefined}
       >
         <Home />
       </RailButton>
+      {botHref ? (
+        <RailButton label={t('bot')} href={botHref} current={onBot}>
+          <RobotIcon />
+        </RailButton>
+      ) : null}
       {onOpenSearch ? (
         <RailButton
           label={

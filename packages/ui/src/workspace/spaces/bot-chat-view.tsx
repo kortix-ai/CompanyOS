@@ -2,47 +2,40 @@
 
 import { useSetWorkspaceBotPaused, useWorkspaceBots } from '@kortix/sdk/react';
 import { GearSixIcon, PauseCircleIcon } from '@phosphor-icons/react';
-import { useState } from 'react';
 
 import { useTranslations } from '../../i18n';
 import { Button } from '../../primitives/button';
 import { errorToast } from '../../primitives/toast';
-import { BotSettingsSheet } from './bot-settings-sheet';
+import { BotSettingsTabs } from './bot-settings-tabs';
 import { SpaceView, type SpaceViewProps } from './space-view';
 
 /**
  * A bot's chat (flag `kortix_bot`): the person's DM space with the agent.
- * The gear at the right of the header opens the bot's settings. While the bot
+ * The gear at the right of the header opens the details panel, where the
+ * bot's settings sit in tabs under its name. While the bot
  * is paused, a bar with Resume takes the composer's place: messages would wait
  * for a bot that starts nothing on its own.
  */
-export function BotChatView({ agentName, ...props }: Omit<SpaceViewProps, 'target' | 'composer' | 'headerActions'> & { agentName: string }) {
+export function BotChatView({ agentName, ...props }: Omit<SpaceViewProps, 'target' | 'composer' | 'headerActions' | 'detailsBody'> & { agentName: string }) {
   const t = useTranslations('spaces.bot.settings');
   const bots = useWorkspaceBots(props.projectId);
   const bot = bots.data?.find((candidate) => candidate.name === agentName);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   return (
-    <>
-      <SpaceView
-        {...props}
-        target={{ kind: 'dm', agentName }}
-        composer={bot?.status === 'paused' ? <BotPausedBar projectId={props.projectId} name={bot.name} label={bot.display_name} /> : undefined}
-        headerActions={
-          bot ? (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label={t('settingsButton')}
-              aria-expanded={settingsOpen}
-              onClick={() => setSettingsOpen(true)}
-            >
-              <GearSixIcon />
-            </Button>
-          ) : null
-        }
-      />
-      {bot ? <BotSettingsSheet projectId={props.projectId} bot={bot} open={settingsOpen} onOpenChange={setSettingsOpen} /> : null}
-    </>
+    <SpaceView
+      {...props}
+      target={{ kind: 'dm', agentName }}
+      composer={bot?.status === 'paused' ? <BotPausedBar projectId={props.projectId} name={bot.name} label={bot.display_name} /> : undefined}
+      headerActions={
+        bot
+          ? (details) => (
+              <Button variant="ghost" size="icon-base" aria-label={t('settingsButton')} aria-expanded={details.open} onClick={details.toggle}>
+                <GearSixIcon />
+              </Button>
+            )
+          : null
+      }
+      detailsBody={bot ? (space) => <BotSettingsTabs projectId={props.projectId} bot={bot} spaceId={space.space_id} /> : undefined}
+    />
   );
 }
 

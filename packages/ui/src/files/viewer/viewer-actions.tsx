@@ -131,7 +131,7 @@ export function ViewerPathPill({
 }) {
   const crumbs = pathCrumbs(path);
   return (
-    <span className="bg-muted flex h-8 min-w-0 flex-1 items-center gap-1 rounded-md px-1">
+    <span className="bg-muted flex min-w-0 flex-1 items-center gap-1 rounded-md p-1  ">
       <span className="flex h-6 min-w-6 shrink-0 items-center justify-center">{icon}</span>
       <span className="flex min-w-0 flex-1 items-center gap-1.5 text-sm" title={path}>
         {crumbs.length > 0 && (
@@ -186,7 +186,7 @@ function PillIconButton({
     <Hint label={done ? 'Copied' : label} side="bottom">
       <Button
         variant="ghost"
-        size="icon-xs"
+        size="icon"
         onClick={onClick}
         disabled={busy}
         aria-label={done ? 'Copied' : label}

@@ -1953,18 +1953,19 @@
     "runningIn": "in {title}",
     "runningFirst": "Showing the first {count}.",
     "bots": {
-      "title": "Bots",
+      "title": "Agents",
       "paused": "Paused",
       "off": "Off",
       "noMessages": "No messages yet",
-      "newBot": "New bot",
-      "newBotPrompt": "I want a new bot. Ask me what it should own and how we'll know it's done. Then propose it, and when I say yes, add it to kortix.yaml as an agent with every workspace app (connectors: all)."
+      "newBot": "New agent",
+      "newBotPrompt": "I want a new agent. Ask me what it should own and how we'll know it's done. Then propose it, and when I say yes, add it to kortix.yaml as an agent with every workspace app (connectors: all)."
     },
     "home": "Home",
     "more": "More",
     "rail": "Workspace navigation",
     "pinTab": "Show tab",
-    "unpinTab": "Hide tab"
+    "unpinTab": "Hide tab",
+    "bot": "Bots"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -2257,8 +2258,6 @@
     "turn": {
       "autoRetried": "Kortix automatically retried the model {count, plural, one {once} other {# times}} before this failure.",
       "typing": "{name} is typing…",
-      "showWork": "Show work",
-      "hideWork": "Hide work",
       "starting": "Starting…",
       "workingFor": "Working · {time}",
       "agentWorking": "is working",
@@ -2282,6 +2281,30 @@
       "finishedCount": "{count} finished",
       "running": "Running",
       "resizePane": "Resize pane"
+    },
+    "changeRequest": {
+      "merge": "Merge",
+      "merging": "Merging…",
+      "moreActions": "More actions",
+      "close": "Close change request",
+      "openInReview": "Open in Review",
+      "resolveConflict": "Resolve conflict",
+      "open": "Open",
+      "merged": "Merged",
+      "closed": "Closed",
+      "conflicts": "{count, plural, one {# conflict} other {# conflicts}}",
+      "mergedToast": "Change request #{number} merged",
+      "closedToast": "Change request #{number} closed",
+      "mergeFailed": "Could not merge the change request.",
+      "closeFailed": "Could not close the change request.",
+      "files": "{count, plural, one {# file} other {# files}}",
+      "into": "into {branch}",
+      "number": "Change request #{number}",
+      "openedAgo": "Opened {time}",
+      "mergeInto": "Merge into {branch}",
+      "readyToMerge": "ready to merge",
+      "mergedInto": "Merged into {branch}",
+      "closedNote": "Closed without merging"
     }
   },
   "agents": {
@@ -25995,7 +26018,34 @@
           "description": "It was deleted or renamed, or it is not shared with you."
         }
       },
-      "spaceDetails": "{name} details"
+      "spaceDetails": "{name} details",
+      "moreActions": "More actions",
+      "copyMessage": "Copy message",
+      "copyMarkdown": "Copy as Markdown",
+      "deleteMessage": "Delete message",
+      "messageCopied": "Message copied",
+      "memberJoined": "joined",
+      "jump": {
+        "label": "{day}, jump to a date",
+        "title": "Jump to",
+        "today": "Today",
+        "yesterday": "Yesterday",
+        "week": "A week ago",
+        "month": "A month ago",
+        "first": "First message",
+        "pick": "Pick a date…"
+      },
+      "findInThread": "Find in thread",
+      "findPlaceholder": "Find",
+      "findCount": "{index} of {count}",
+      "findNone": "No matches",
+      "findPrevious": "Previous match",
+      "findNext": "Next match",
+      "closeFind": "Close find",
+      "openInNewWindow": "Open in new window",
+      "copyThreadText": "Copy thread as text",
+      "copyJson": "Copy as JSON",
+      "threadCopied": "Copied"
     },
     "details": {
       "about": "About",
@@ -26166,8 +26216,6 @@
       "people": "People",
       "addPeople": "Add people",
       "you": "You",
-      "tabs": "Tabs",
-      "addTab": "Add tab",
       "routines": "Routines",
       "addRoutine": "Add routine",
       "routinesPrivate": "A private space takes no routines yet.",
@@ -26178,8 +26226,8 @@
       "proactiveBriefHint": "A short summary at 9:00 on days with news.",
       "proactiveFailed": "The setting was not saved. Try again.",
       "allSettings": "All settings",
-      "askHint": "You can also ask in chat: \"add an agent here\", \"pin the launch doc as a tab\".",
-      "noAgentsToAdd": "Every workspace agent is in this space."
+      "noAgentsToAdd": "Every workspace agent is in this space.",
+      "members": "Members"
     },
     "profile": {
       "viewProfile": "Show the profile of {name}",
@@ -26207,7 +26255,14 @@
       "addFailed": "Could not add the agent. Try again.",
       "spacesIn": "Spaces it is in",
       "spacesInNone": "Not in a space yet",
-      "default": "Default"
+      "default": "Default",
+      "paused": "Paused",
+      "off": "Off",
+      "copyLink": "Copy link",
+      "linkCopied": "Link copied",
+      "roleOwner": "Workspace owner",
+      "roleAdmin": "Workspace admin",
+      "roleMember": "Workspace member"
     },
     "mentions": {
       "people": "People",
@@ -26226,20 +26281,30 @@
       "resume": "Resume",
       "resumeFailed": "Could not resume {name}.",
       "settings": {
-        "title": "Settings",
-        "settingsButton": "Bot settings",
-        "agent": "Agent",
+        "settingsButton": "Agent settings",
         "status": "Status",
         "active": "Active",
         "paused": "Paused",
         "off": "Off",
-        "pauseFailed": "Could not change the bot's status.",
+        "pauseFailed": "Could not change the agent's status.",
         "description": "Description",
         "save": "Save",
         "saveFailed": "Could not save the description.",
         "model": "Model",
-        "apps": "Apps and secrets",
-        "allSettings": "All agent settings"
+        "allSettings": "All agent settings",
+        "general": "General",
+        "appsTab": "Apps",
+        "routines": "Routines",
+        "workspaceDefault": "Workspace default",
+        "modelDefault": "Workspace default",
+        "modelDefaultNamed": "Workspace default ({model})",
+        "cancel": "Cancel",
+        "searchApps": "Search apps",
+        "noApps": "This workspace has no connectors yet.",
+        "noAppsMatch": "No app matches \"{query}\".",
+        "appsUnavailable": "This agent's apps are set on its agent page.",
+        "appsFailed": "Could not change the agent's apps.",
+        "role": "Role"
       }
     }
   },
@@ -27659,5 +27724,9 @@
     "community": "Discord community",
     "whatsNew": "What's new",
     "fullChangelog": "Full changelog"
+  },
+  "botPage": {
+    "title": "Bots",
+    "description": "A bot works in the background and brings you the result. Bots are not built yet."
   }
 }

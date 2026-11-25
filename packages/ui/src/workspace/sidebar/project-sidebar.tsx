@@ -306,10 +306,12 @@ export function ProjectSidebar({
             )}
             {showingSpaces ? (
               // Spaces: the Spaces page, then New space, at the row's right edge.
-              <div className="flex shrink-0 items-center gap-0.5">
+              // `-mr-1.75` cancels the `icon-base` button's inset (29px box, 16px glyph):
+              // the last glyph ends on the row's edge, as the title starts on it.
+              <div className="-mr-1.75 flex shrink-0 items-center gap-0.5">
                 {spacesHref ? (
                   <Hint label={tGroups('allSpaces')} side="bottom">
-                    <Button asChild variant="ghost" size="icon-xs" className="text-muted-foreground hover:text-foreground">
+                    <Button asChild variant="ghost" size="icon-base" className="text-muted-foreground hover:text-foreground">
                       <Link href={spacesHref} prefetch aria-label={tGroups('allSpaces')}>
                         <ArrowUpRightIcon className="cn-rtl-flip size-4" />
                       </Link>
@@ -320,7 +322,7 @@ export function ProjectSidebar({
                   <Button
                     type="button"
                     variant="ghost"
-                    size="icon-xs"
+                    size="icon-base"
                     aria-label={tGroups('newGroup')}
                     onClick={() => setNewSpaceOpen(true)}
                     className="text-muted-foreground hover:text-foreground"
@@ -336,8 +338,8 @@ export function ProjectSidebar({
                   <Button
                     asChild
                     variant="ghost"
-                    size="icon-xs"
-                    className={cn('text-muted-foreground hover:text-foreground', reviewLink.active && 'bg-sidebar-accent text-foreground')}
+                    size="icon-base"
+                    className={cn('text-muted-foreground hover:text-foreground -mr-1.75', reviewLink.active && 'bg-sidebar-accent text-foreground')}
                   >
                     <Link href={reviewLink.href} prefetch aria-label={t('spaces.review')} aria-current={reviewLink.active ? 'page' : undefined}>
                       <GitPullRequestIcon className="size-4" />
@@ -346,7 +348,7 @@ export function ProjectSidebar({
                 </Hint>
               ) : null
             ) : (
-              <div ref={setSessionsFilterSlot} className="flex shrink-0 items-center" />
+              <div ref={setSessionsFilterSlot} className="-mr-1.75 flex shrink-0 items-center" />
             )}
           </div>
         ) : (

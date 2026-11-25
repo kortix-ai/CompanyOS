@@ -16,9 +16,26 @@ import {
   useVisibleAgents,
 } from '@kortix/sdk/react';
 import { isMyKortixAgentName } from '@kortix/shared';
-import { CaretDownIcon, LockSimpleIcon } from '@phosphor-icons/react';
+import {
+  ArrowDownIcon,
+  ArrowSquareOutIcon,
+  ArrowsOutSimpleIcon,
+  ArrowUpIcon,
+  BracketsCurlyIcon,
+  CaretDownIcon,
+  CopyIcon,
+  DotsThreeIcon,
+  LinkSimpleIcon,
+  LockSimpleIcon,
+  MagnifyingGlassIcon,
+  MarkdownLogoIcon,
+} from '@phosphor-icons/react';
+import { clearMatches, findTextRanges, FIND_HIGHLIGHT_CSS, paintMatches } from './thread-find';
+import { type ExportMessage, threadAsJson, threadAsMarkdown, threadAsText, threadEntries } from './thread-export';
+import { useCopy } from '../../internal/hooks/use-copy';
+import { SolidCheckIcon } from '../../internal/icons/solid-check-icon';
 import { useQueryClient } from '@tanstack/react-query';
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useTranslations } from '../../i18n';
 import { Close } from '../../icons/close';
@@ -39,6 +56,15 @@ import Hint from '../../primitives/hint';
 import { useOptionalSidebar } from '../../primitives/sidebar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../primitives/tabs';
 import { errorToast, successToast } from '../../primitives/toast';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '../../primitives/dropdown-menu';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '../../primitives/input-group';
+import { participantLabel } from '../../session/participants/session-participants';
 import { UiLink as Link, useUiPathname, useUiRouter, useUiSearchParams } from '../../providers/ui-provider';
 import { ComposerChatInput, type ComposerOptions } from '../../session/composer/composer-chat-input';
 import { ComposerAutoFocusContext } from '../../session/composer/composer-focus-context';
@@ -65,7 +91,7 @@ import { isPrivateSpace, spaceDisplayName } from './space-identity';
 import { usePersonalSpaceName } from './use-personal-space-name';
 import { JoinChannelButton } from './space-members';
 import { SpaceRosterButton } from './space-roster';
-import { agentLabel, liveReplyCount, replyRole, spaceRoster, threadIsWorking } from './space-timeline';
+import { agentLabel, liveReplyCount, replyRole, spaceRoster, threadIsWorking, threadMessageText } from './space-timeline';
 import { CHAT_TAB, openTabId } from './space-tab-list';
 import { AddTabMenu, type SpaceFile, StoredTabPanel, StoredTabTrigger, useSpaceTabs } from './space-tabs';
 import { SpaceTimeline, useSpaceThreads, type SpaceThreads } from './space-timeline-view';
@@ -99,8 +125,13 @@ export interface SpaceViewProps {
   chat?: boolean;
   /** Replaces the chat composer (a paused bot shows its Resume bar). Absent: the composer. */
   composer?: ReactNode;
-  /** Extra buttons at the right of the header (a bot's settings gear). */
-  headerActions?: ReactNode;
+  /**
+   * Extra buttons at the right of the header (a bot's settings gear). A
+   * function gets the details panel's state, so a button can open it.
+   */
+  headerActions?: ReactNode | ((details: { open: boolean; toggle: () => void }) => ReactNode);
+  /** Replaces the details panel's sections, under its name (a bot's settings tabs). */
+  detailsBody?: (space: ProjectSpace) => ReactNode;
 }
 
 /** What a host's folder view draws for a space. `place` is "#general" or the DM's agent. */
@@ -154,7 +185,7 @@ export function SpaceView(props: SpaceViewProps) {
   );
 }
 
-function SpaceViewBody({ projectId, target, beforeSend, renderFolder, renderFile, composer, headerActions }: SpaceViewProps) {
+function SpaceViewBody({ projectId, target, beforeSend, renderFolder, renderFile, composer, headerActions, detailsBody }: SpaceViewProps) {
   const t = useTranslations('spaces.view');
   const router = useUiRouter();
   const pathname = useUiPathname();
@@ -354,7 +385,11 @@ function SpaceViewBody({ projectId, target, beforeSend, renderFolder, renderFile
       renameOpen={renameOpen}
       setRenameOpen={setRenameOpen}
       onViewAllMembers={() => openDetails('people')}
-      actions={headerActions}
+      actions={
+        typeof headerActions === 'function'
+          ? headerActions({ open: detailsOpen, toggle: () => (detailsOpen ? closeDetails() : openDetails()) })
+          : headerActions
+      }
     />
   );
 
@@ -506,11 +541,10 @@ function SpaceViewBody({ projectId, target, beforeSend, renderFolder, renderFile
               space={space}
               name={title}
               onClose={closeDetails}
-              onOpenTab={setTab}
               onRename={space.kind === 'channel' ? () => setRenameOpen(true) : undefined}
               onOpenSettings={space.kind === 'channel' ? () => setDetails('about') : undefined}
               addOnOpen={detailsParam === 'add'}
-              focusPeople={detailsParam === 'people'}
+              body={detailsBody?.(space)}
             />
           </ResizablePanel>
         </>
@@ -926,9 +960,8 @@ function SpaceComposer({
 function RepliesDivider({ count, className }: { count: number; className?: string }) {
   const t = useTranslations('spaces.view');
   return (
-    // The message rows' grid (`px-5`, the `w-10` avatar column, `gap-2`): the count starts where the text does.
-    <div className={cn('flex gap-2 px-5', className)}>
-      <span aria-hidden className="w-10 shrink-0" />
+    // From the rows' edge (`px-5`, where the avatars start) across the panel: it splits the parent message from its replies.
+    <div className={cn('flex px-5', className)}>
       <div className="flex min-w-0 flex-1 items-center gap-3">
       {/* At 0 the text holds "1 reply"'s width, invisible, so the line starts where it will stay. */}
       <span
@@ -943,6 +976,178 @@ function RepliesDivider({ count, className }: { count: number; className?: strin
       <div className="bg-border h-px flex-1" />
       </div>
     </div>
+  );
+}
+
+const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
+
+/**
+ * Find in the open thread: a field, the match count, previous and next, and
+ * close. Enter goes to the next match, Shift+Enter to the previous, Escape
+ * closes. Matches are painted in the transcript (`thread-find.ts`).
+ */
+function ThreadFindBar({ scope, onClose }: { scope: RefObject<HTMLElement | null>; onClose: () => void }) {
+  const t = useTranslations('spaces.view');
+  const [query, setQuery] = useState('');
+  const [found, setFound] = useState<{ ranges: Range[]; index: number }>({ ranges: [], index: 0 });
+  useEffect(() => clearMatches, []);
+  const search = (value: string, index = 0) => {
+    const ranges = scope.current ? findTextRanges(scope.current, value) : [];
+    const at = ranges.length ? ((index % ranges.length) + ranges.length) % ranges.length : 0;
+    setFound({ ranges, index: at });
+    paintMatches(ranges, at);
+  };
+  // Previous and next search again: the thread may have grown since.
+  const step = (delta: number) => search(query, found.index + delta);
+  const count = found.ranges.length;
+  return (
+    <div className="border-border flex shrink-0 items-center gap-1 border-b px-3 py-2">
+      <style>{FIND_HIGHLIGHT_CSS}</style>
+      <InputGroup className="h-8 flex-1">
+        <InputGroupAddon>
+          <MagnifyingGlassIcon />
+        </InputGroupAddon>
+        <InputGroupInput
+          autoFocus
+          value={query}
+          placeholder={t('findPlaceholder')}
+          aria-label={t('findInThread')}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            search(event.target.value);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              step(event.shiftKey ? -1 : 1);
+            } else if (event.key === 'Escape') {
+              event.preventDefault();
+              onClose();
+            }
+          }}
+        />
+        {query ? (
+          <InputGroupAddon align="inline-end" className="text-muted-foreground text-xs tabular-nums">
+            {count ? t('findCount', { index: found.index + 1, count }) : t('findNone')}
+          </InputGroupAddon>
+        ) : null}
+      </InputGroup>
+      <Hint label={t('findPrevious')} side="bottom">
+        <Button variant="ghost" size="icon-base" aria-label={t('findPrevious')} disabled={count === 0} onClick={() => step(-1)}>
+          <ArrowUpIcon className="size-4" />
+        </Button>
+      </Hint>
+      <Hint label={t('findNext')} side="bottom">
+        <Button variant="ghost" size="icon-base" aria-label={t('findNext')} disabled={count === 0} onClick={() => step(1)}>
+          <ArrowDownIcon className="size-4" />
+        </Button>
+      </Hint>
+      <Hint label={t('closeFind')} side="bottom">
+        <Button variant="ghost" size="icon-base" aria-label={t('closeFind')} onClick={onClose}>
+          <Close />
+        </Button>
+      </Hint>
+    </div>
+  );
+}
+
+/**
+ * The open thread's More menu: open its full session (here, or in a new
+ * window), and copy it as text, Markdown or JSON (`thread-export.ts`), or its link.
+ */
+function ThreadMoreMenu({
+  sessionId,
+  fullHref,
+  title,
+  messages,
+  names,
+}: {
+  sessionId: string;
+  fullHref: string | undefined;
+  title: string;
+  messages: readonly ExportMessage[];
+  names: { person: string; agent: string };
+}) {
+  const t = useTranslations('spaces.view');
+  const { copy } = useCopy({ toast: false });
+  const copied = async (value: string) => {
+    await copy(value);
+    successToast(t('threadCopied'));
+  };
+  const entries = () => threadEntries(messages, names);
+  const threadUrl = () => {
+    const url = new URL(window.location.href);
+    url.search = '';
+    url.searchParams.set('thread', sessionId);
+    return url.toString();
+  };
+  const newWindowUrl = () => (fullHref ? new URL(fullHref, window.location.origin).toString() : threadUrl());
+  return (
+    <DropdownMenu>
+      <Hint label={t('moreActions')} side="bottom">
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon-base" aria-label={t('moreActions')} className="text-muted-foreground hover:text-foreground">
+            <DotsThreeIcon weight="bold" className="size-4" />
+          </Button>
+        </DropdownMenuTrigger>
+      </Hint>
+      <DropdownMenuContent align="end" className="min-w-52">
+        {fullHref ? (
+          <DropdownMenuItem asChild>
+            <Link href={fullHref}>
+              <ArrowsOutSimpleIcon />
+              {t('openFullSession')}
+            </Link>
+          </DropdownMenuItem>
+        ) : null}
+        <DropdownMenuItem onSelect={() => window.open(newWindowUrl(), '_blank', 'noopener')}>
+          <ArrowSquareOutIcon />
+          {t('openInNewWindow')}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => void copied(threadAsText(entries()))}>
+          <CopyIcon />
+          {t('copyThreadText')}
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => void copied(threadAsMarkdown(entries(), title))}>
+          <MarkdownLogoIcon />
+          {t('copyMarkdown')}
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => void copied(threadAsJson(entries(), { sessionId, title }))}>
+          <BracketsCurlyIcon />
+          {t('copyJson')}
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => void copied(threadUrl())}>
+          <LinkSimpleIcon />
+          {t('copyLink')}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/** Copies the open thread's link (the space's URL with `?thread=`), the timeline toolbar's same link. */
+function ThreadLinkButton({ sessionId }: { sessionId: string }) {
+  const t = useTranslations('spaces.view');
+  const { copied, copy } = useCopy({ toast: false });
+  const label = copied ? t('linkCopied') : t('copyLink');
+  return (
+    <Hint label={label} side="bottom">
+      <Button
+        variant="ghost"
+        size="icon-base"
+        aria-label={label}
+        className="text-muted-foreground hover:text-foreground"
+        onClick={() => {
+          const url = new URL(window.location.href);
+          url.search = '';
+          url.searchParams.set('thread', sessionId);
+          void copy(url.toString());
+        }}
+      >
+        {copied ? <SolidCheckIcon className="size-4" /> : <LinkSimpleIcon className="size-4" />}
+      </Button>
+    </Hint>
   );
 }
 
@@ -979,6 +1184,19 @@ function ThreadPanel({
   const t = useTranslations('spaces.view');
   const session = useSession(projectId, sessionId);
   useLiveThreadRow(projectId, sessionId, session);
+  // Find in thread: a bar under the header, opened by its button or Cmd/Ctrl+F.
+  const [findOpen, setFindOpen] = useState(false);
+  const threadBodyRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'f') {
+        event.preventDefault();
+        setFindOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
   const fullHref = useFullSessionHref(projectId, sessionId, thread, fullSessionHref);
   // Null from an older API that does not count replies.
   const replyCount = thread?.reply_count ?? null;
@@ -1054,16 +1272,37 @@ function ThreadPanel({
             </button>
           </div>
         </div>
-        {fullHref ? (
-          <Link href={fullHref} className="text-muted-foreground hover:text-foreground shrink-0 px-2 text-xs">
-            {t('openFullSession')}
-          </Link>
-        ) : null}
+        {/* The thread's tools, the close last: find, More, copy its link. */}
+        <div className="flex items-center gap-px">
+          <Hint label={<span>{t('findInThread')} · {isMac ? '⌘' : 'Ctrl'}F</span>} side="bottom">
+            <Button
+              variant="ghost"
+              size="icon-base"
+              aria-label={t('findInThread')}
+              aria-pressed={findOpen}
+              onClick={() => setFindOpen((open) => !open)}
+              className={cn('text-muted-foreground hover:text-foreground', findOpen && 'bg-hover text-foreground')}
+            >
+              <MagnifyingGlassIcon className="size-4" />
+            </Button>
+          </Hint>
+          <ThreadMoreMenu
+            sessionId={sessionId}
+            fullHref={fullHref}
+            title={thread ? threadMessageText(thread).split('\n')[0]!.slice(0, 80) || context : context}
+            messages={session.messages}
+            names={{
+              person: participantLabel({ name: thread?.owner_name ?? null, email: thread?.owner_email ?? null }) || t('authorFallback'),
+              agent: rows.agent,
+            }}
+          />
+          <ThreadLinkButton sessionId={sessionId} />
         <Hint label={t('closeThread')} side="bottom">
-          <Button variant="ghost" size="icon-md" aria-label={t('closeThread')} onClick={onClose}>
+          <Button variant="ghost" size="icon-base" aria-label={t('closeThread')} onClick={onClose}>
             <Close />
           </Button>
         </Hint>
+        </div>
       </div>
       {/* The parent message, then "N replies", then the replies. While older
           history is not loaded, the first turn on screen is not the parent
@@ -1076,13 +1315,16 @@ function ThreadPanel({
           )}
         </div>
       ) : null}
-      <TranscriptRowsContext.Provider value={rows}>
-        <AfterFirstPromptContext.Provider value={afterFirstPrompt}>
-          <ComposerAutoFocusContext.Provider value={!quietFocus}>
-            <SessionThread session={session} hideHeader composerPlaceholder={t('replyPlaceholder')} className="min-h-0 flex-1" />
-          </ComposerAutoFocusContext.Provider>
-        </AfterFirstPromptContext.Provider>
-      </TranscriptRowsContext.Provider>
+      {findOpen ? <ThreadFindBar scope={threadBodyRef} onClose={() => setFindOpen(false)} /> : null}
+      <div ref={threadBodyRef} className="flex min-h-0 flex-1 flex-col">
+        <TranscriptRowsContext.Provider value={rows}>
+          <AfterFirstPromptContext.Provider value={afterFirstPrompt}>
+            <ComposerAutoFocusContext.Provider value={!quietFocus}>
+              <SessionThread session={session} hideHeader composerPlaceholder={t('replyPlaceholder')} className="min-h-0 flex-1" />
+            </ComposerAutoFocusContext.Provider>
+          </AfterFirstPromptContext.Provider>
+        </TranscriptRowsContext.Provider>
+      </div>
     </aside>
   );
 }

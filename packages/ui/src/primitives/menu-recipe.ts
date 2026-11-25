@@ -40,7 +40,7 @@ export type MenuRowTone = 'default' | 'destructive';
  *   lg  min-h-10  ≈ 37px   touch-first lists
  */
 const MENU_ROW_SIZE: Record<MenuRowSize, string> = {
-  sm: 'min-h-8 py-[0.275rem]',
+  sm: 'min-h-8 py-1',
   md: 'min-h-9 py-1.5',
   lg: 'min-h-10 py-2',
 };
@@ -163,7 +163,7 @@ export const MENU_PANEL = cn(FLOATING_PANEL, 'p-1');
  * The animated `MENU_PANEL` / `FLOATING_PANEL` remain for the context menu and
  * the animated hover card.
  */
-export const MENU_PANEL_STATIC = cn(FLOATING_PANEL_SURFACE, 'p-1 py-[0.25rem]');
+export const MENU_PANEL_STATIC = cn(FLOATING_PANEL_SURFACE, 'p-1');
 
 /** Group label: `px-2` matches every row, so labels and rows share a left edge. */
 export const MENU_LABEL = 'text-muted-foreground px-2 py-1 text-xs font-medium tracking-normal';

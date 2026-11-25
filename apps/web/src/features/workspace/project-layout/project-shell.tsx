@@ -26,8 +26,8 @@ import { useDesktopShell } from '@kortix/ui/internal/layout/sidebar-opener';
 import { openCommandPalette } from '@kortix/ui/internal/layout/open-command-palette';
 import { ProjectSidebar } from '@kortix/ui/workspace';
 import { HelpMenu } from '@/features/layout/help-menu/help-menu';
-import { useAppsModalStore } from '@kortix/ui/internal/stores/apps-modal-store';
 import { WorkspaceSwitcher } from '@/features/workspace/project-sidebar/workspace-switcher';
+import { DownloadModal } from '@/features/marketing/download/download-modal';
 import { SettingsPanel } from '@/features/workspace/settings/settings-panel';
 import {
   isAccountGraduatedSection,
@@ -212,9 +212,8 @@ export function ProjectShell({ projectId, initialSidebarOpen, children }: Projec
 
   // The sidebar's Download app row opens this; a stable callback keeps the
   // sidebar from re-rendering on every shell render.
-  // Every "Download app" entry opens the one "Apps and extensions" dialog,
-  // which holds the installers next to Chrome, the computer, CLI and MCP.
-  const openDownloadApp = useCallback(() => useAppsModalStore.getState().setOpen(true), []);
+  const [downloadOpen, setDownloadOpen] = useState(false);
+  const openDownloadApp = useCallback(() => setDownloadOpen(true), []);
 
   // New-session navigation opens the project composer. The first send creates
   // the durable session.
@@ -282,6 +281,9 @@ export function ProjectShell({ projectId, initialSidebarOpen, children }: Projec
         </div>
 
         <SettingsPanel projectId={projectId} />
+
+        {/* Outside the sidebar: on a phone the sidebar sheet unmounts its rows. */}
+        <DownloadModal open={downloadOpen} onOpenChange={setDownloadOpen} />
 
         {/* Drive uploads report here, on every page of the project, so a batch
             started in one folder still shows its progress after the user moves

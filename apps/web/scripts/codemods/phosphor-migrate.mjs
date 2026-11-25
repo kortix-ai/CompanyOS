@@ -20,6 +20,7 @@ const PHOSPHOR = new Set(Object.keys(phosphorAll));
 const SKIP_FILES = new Set(
   [
     'features/icon/icon.tsx',
+    'components/brand/brand-logos.tsx',
     'lib/utils/icon-utils.ts',
   ]
     .map((p) => join(ROOT, p))

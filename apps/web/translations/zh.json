@@ -26302,15 +26302,7 @@
       "mcpDescription": "在 Claude、Cursor 或 Codex 中使用 Kortix。",
       "connect": "连接",
       "connectLabel": "连接 MCP",
-      "copyFailed": "无法复制命令。请重试。",
-      "guide": "MCP 指南"
-    },
-    "desktop": {
-      "downloadFor": "下载 {os} 版"
-    },
-    "mobile": {
-      "name": "移动应用",
-      "description": "随时随地开始会话，并从上次中断的地方继续。"
+      "copyFailed": "无法复制命令。请重试。"
     }
   },
   "sessionDesktop": {

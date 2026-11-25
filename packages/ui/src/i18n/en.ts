@@ -9624,15 +9624,7 @@ const catalog = {
       "mcpDescription": "Use Kortix from Claude, Cursor or Codex.",
       "connect": "Connect",
       "connectLabel": "Connect MCP",
-      "copyFailed": "Could not copy the command. Try again.",
-      "guide": "MCP guide"
-    },
-    "desktop": {
-      "downloadFor": "Download for {os}"
-    },
-    "mobile": {
-      "name": "Mobile app",
-      "description": "Start a session anywhere and pick up where you left off."
+      "copyFailed": "Could not copy the command. Try again."
     }
   },
   "sessionDesktop": {

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 
+import type { ProxyServiceConfig } from '../../config/proxy-services';
 import { runWithContext } from '../../../lib/request-context';
 
 // KRTX-5162: when Kortix's Tavily or Firecrawl account was over its limit, the
@@ -45,7 +46,15 @@ mock.module('../../../shared/ssrf-guard', () => ({
 
 const { handleProxy } = await import('./handlers');
 
+type SearchBody = {
+  query: string;
+  answer: string;
+  images: unknown[];
+  results: Array<{ title: string; url: string; content: string; published_date?: string }>;
+  error?: string;
+};
 const originalFetch = globalThis.fetch;
+type ScrapeBody = { success: boolean; data: { markdown: string; html?: string; metadata: Record<string, unknown> } };
 
 const SERPER_RESULTS = JSON.stringify({
   answerBox: { answer: 'Under the desk.' },
@@ -67,7 +76,7 @@ const HTML_PAGE: Answer = { status: 200, body: PAGE, type: 'text/html; charset=u
 let serperRequest: { key: string | null; body: unknown } | null = null;
 let serperUrl = '';
 function network(provider: Answer, serper: Answer = SERPER_OK, page: Answer = HTML_PAGE) {
-  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+  const upstream = async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input instanceof Request ? input.url : input);
     fetched.push(new URL(url).host);
     const answer = url.startsWith('https://google.serper.dev/') ? serper : url.startsWith('https://page.example/') ? page : provider;
@@ -76,15 +85,16 @@ function network(provider: Answer, serper: Answer = SERPER_OK, page: Answer = HT
       serperUrl = url;
     }
     return new Response(answer.body, { status: answer.status, headers: { 'Content-Type': answer.type ?? 'application/json' } });
-  }) as unknown as typeof fetch;
+  };
+  globalThis.fetch = Object.assign(upstream, { preconnect: originalFetch.preconnect });
 }
 
-function service(name: 'tavily' | 'firecrawl', key: string) {
+function service(name: 'tavily' | 'firecrawl', key: string): ProxyServiceConfig {
   return {
     name,
     targetBaseUrl: name === 'tavily' ? 'https://api.tavily.com' : 'https://api.firecrawl.dev',
     getKortixApiKey: () => key,
-    keyInjection: { type: 'header' as const, headerName: 'Authorization' },
+    keyInjection: { type: 'header', headerName: 'Authorization' },
     allowedRoutes: [],
     billingToolName: `proxy_${name}`,
   };
@@ -94,7 +104,7 @@ function call(name: 'tavily' | 'firecrawl', path: string, body: Record<string, u
   requestBody = JSON.stringify(body);
   const url = `https://api.example/v1/router/${name}${path}`;
   const context = { req: { url, method: 'POST', header: () => undefined, raw: new Request(url, { method: 'POST', body: requestBody }) } };
-  return runWithContext('POST', `/v1/router/${name}${path}`, () => handleProxy(context, service(name, key) as never, name));
+  return runWithContext('POST', `/v1/router/${name}${path}`, () => handleProxy(context, service(name, key), name));
 }
 
 beforeEach(() => {
@@ -114,7 +124,7 @@ describe('web search fallback (KRTX-5162)', () => {
     network(PLAN_LIMIT);
 
     const response = await call('tavily', '/search', { query: 'desk cable tray', max_results: 5 });
-    const body = (await response.json()) as Record<string, any>;
+    const body = (await response.json()) as SearchBody;
 
     expect(response.status).toBe(200);
     expect(response.headers.get('x-kortix-backend')).toBe('serper');
@@ -135,10 +145,10 @@ describe('web search fallback (KRTX-5162)', () => {
     network(PLAN_LIMIT);
 
     const response = await call('tavily', '/search', { query: 'desk cable tray', max_results: 1 }, '');
-    const body = (await response.json()) as Record<string, any>;
+    const body = (await response.json()) as SearchBody;
 
     expect(response.status).toBe(200);
-    expect(body.results.map((r: { url: string }) => r.url)).toEqual(['https://guide.example/tray']);
+    expect(body.results.map((r) => r.url)).toEqual(['https://guide.example/tray']);
     expect(fetched).toEqual(['google.serper.dev']);
   });
 
@@ -146,7 +156,7 @@ describe('web search fallback (KRTX-5162)', () => {
     network(PLAN_LIMIT, { status: 200, body: JSON.stringify({ news: [{ title: 'Tray recall', link: 'https://news.example/recall', snippet: 'A recall.', date: '2 hours ago' }] }) });
 
     const response = await call('tavily', '/search', { query: 'cable tray recall', topic: 'news' });
-    const body = (await response.json()) as Record<string, any>;
+    const body = (await response.json()) as SearchBody;
 
     expect(response.status).toBe(200);
     expect(serperUrl).toBe('https://google.serper.dev/news');
@@ -157,7 +167,7 @@ describe('web search fallback (KRTX-5162)', () => {
     network(PLAN_LIMIT, { status: 403, body: '{"message":"Not enough credits"}' });
 
     const response = await call('tavily', '/search', { query: 'desk cable tray' });
-    const body = (await response.json()) as Record<string, any>;
+    const body = (await response.json()) as SearchBody;
 
     expect(response.status).toBe(503);
     expect(body.error).toBe('tool_unavailable');
@@ -207,7 +217,7 @@ describe('page scrape fallback (KRTX-5162)', () => {
     network(PLAN_LIMIT);
 
     const response = await call('firecrawl', '/v2/scrape', { url: 'https://page.example/', formats: ['markdown'] });
-    const body = (await response.json()) as Record<string, any>;
+    const body = (await response.json()) as ScrapeBody;
 
     expect(response.status).toBe(200);
     expect(response.headers.get('x-kortix-backend')).toBe('fetch');
@@ -222,7 +232,7 @@ describe('page scrape fallback (KRTX-5162)', () => {
     network(PLAN_LIMIT);
 
     const response = await call('firecrawl', '/v1/scrape', { url: 'https://page.example/', formats: ['markdown', 'html'] }, '');
-    const body = (await response.json()) as Record<string, any>;
+    const body = (await response.json()) as ScrapeBody;
 
     expect(response.status).toBe(200);
     expect(body.data.html).toBe(PAGE);

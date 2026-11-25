@@ -42,6 +42,7 @@ export const AUDIT_ROUTE_LABELS: Readonly<Record<string, AuditRouteLabel | strin
   'POST /internal/gateway/budget-check': { action: 'gateway.internal.budget.check', title: 'Checked LLM gateway budget' },
   'POST /internal/gateway/claude-credentials': { action: 'gateway.internal.claude_account.resolve', title: 'Resolved Claude accounts for a model call' },
   'POST /internal/gateway/claude-refused': { action: 'gateway.internal.claude_account.refuse', title: 'Marked a refused Claude account' },
+  'POST /internal/gateway/claude-forbidden': { action: 'gateway.internal.claude_account.forbid', title: 'Marked a Claude account Anthropic forbade' },
   'POST /internal/gateway/idempotency/get': { action: 'gateway.internal.idempotency.read', title: 'Read LLM gateway idempotent reply' },
   'POST /internal/gateway/idempotency/put': { action: 'gateway.internal.idempotency.record', title: 'Stored LLM gateway idempotent reply' },
   'POST /internal/gateway/models': { action: 'gateway.internal.model.list', title: 'Resolved LLM gateway model catalog' },

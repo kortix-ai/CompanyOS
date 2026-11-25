@@ -3,16 +3,17 @@
  * will use for it: the session's selected accounts, the personal-key owner's
  * own account, or one shared with the project (`claude-subscription/accounts.ts`).
  * Without one, the turn is refused before it reaches the box, with a code the
- * clients turn into a Connect button.
+ * clients turn into a Connect button and a message that says why: no account,
+ * or the connected ones rest, need reconnection, or Anthropic forbids them.
  */
 import { eq } from 'drizzle-orm';
 import { projectSessions } from '@kortix/db';
 import { db } from '../../shared/db';
-import { isClaudeAgentModelRef } from '../../llm-gateway/resolution/claude-agent';
-import { hasClaudeCredential } from '../../claude-subscription/accounts';
+import { CLAUDE_SUBSCRIPTION_REQUIRED_MESSAGE, isClaudeAgentModelRef, type ClaudeSubscriptionMissing } from '../../llm-gateway/resolution/claude-agent';
+import { claudeCredentialProblem } from '../../claude-subscription/accounts';
 import { resolveSessionPersonalOwner } from '../lib/personal-resources';
 
-export { CLAUDE_SUBSCRIPTION_REQUIRED, CLAUDE_SUBSCRIPTION_REQUIRED_MESSAGE, claudeSubscriptionRequiredBody } from '../../llm-gateway/resolution/claude-agent';
+export { CLAUDE_SUBSCRIPTION_REQUIRED, CLAUDE_SUBSCRIPTION_REQUIRED_MESSAGE, claudeSubscriptionRequiredBody, type ClaudeSubscriptionMissing } from '../../llm-gateway/resolution/claude-agent';
 
 /** A prompt body's model as a ref: `{providerID, modelID}` or a plain string. */
 export function promptModelRef(raw: unknown): string | null {
@@ -35,9 +36,9 @@ export async function sessionModelPin(sessionId: string): Promise<string | null>
 }
 
 /**
- * The model ref that makes this turn need a Claude account it cannot use, or
- * null when the turn may go on. `model` is the turn's model: the prompt's,
- * else the session's. `sessionId` absent: a new session private to `userId`.
+ * The model ref that makes this turn need a Claude account it cannot use, and
+ * why, or null when the turn may go on. `model` is the turn's model: the
+ * prompt's, else the session's. `sessionId` absent: a new session private to `userId`.
  */
 export async function missingClaudeSubscription(input: {
   accountId: string;
@@ -45,15 +46,18 @@ export async function missingClaudeSubscription(input: {
   sessionId?: string | null;
   userId: string | null;
   model: string | null;
-}): Promise<string | null> {
+}): Promise<ClaudeSubscriptionMissing | null> {
   if (!input.model || !isClaudeAgentModelRef(input.model)) return null;
-  if (!input.userId) return input.model;
+  if (!input.userId) return { model: input.model, message: CLAUDE_SUBSCRIPTION_REQUIRED_MESSAGE };
   const personalUserId = input.sessionId
     ? await resolveSessionPersonalOwner({ projectId: input.projectId, sessionId: input.sessionId, legacyUserId: input.userId, accountId: input.accountId })
     : input.userId;
-  const usable = await hasClaudeCredential({
+  const problem = await claudeCredentialProblem({
     accountId: input.accountId, projectId: input.projectId, userId: input.userId,
     sessionId: input.sessionId ?? null, personalUserId,
   });
-  return usable ? null : input.model;
+  if (!problem) return null;
+  // No account at all keeps the Connect text; any other reason names the accounts and the fix.
+  const message = problem.code === 'provider_not_connected' ? CLAUDE_SUBSCRIPTION_REQUIRED_MESSAGE : `${problem.message} ${problem.suggestion}`;
+  return { model: input.model, message };
 }

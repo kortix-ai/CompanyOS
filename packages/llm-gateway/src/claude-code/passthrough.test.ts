@@ -1,7 +1,7 @@
 import { describe, expect, setSystemTime, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import type { AuthedPrincipal } from '../domain/principal';
-import { createClaudeCodePassthrough, type ClaudeCodeHooks, type ClaudeCodeRequest } from './passthrough';
+import { createClaudeCodePassthrough, forbiddenMessage, type ClaudeCodeHooks, type ClaudeCodeRequest } from './passthrough';
 
 const PRINCIPAL: AuthedPrincipal = { userId: 'u1', accountId: 'a1', projectId: 'p1', sessionId: 's1' };
 const BODY = '{"model":"claude-sonnet-5-5","stream":true,"messages":[{"role":"user","content":"hi ✓"}]}';
@@ -11,11 +11,13 @@ type Seen = { url: string; headers: Record<string, string>; body: string };
 
 function harness(options: {
   credentials?: Awaited<ReturnType<ClaudeCodeHooks['claudeCredentials']>>;
+  /** The host's answer when it is asked a second time (after a forbidden last account). */
+  credentialsAgain?: Awaited<ReturnType<ClaudeCodeHooks['claudeCredentials']>>;
   upstream?: (attempt: number) => Response;
   principal?: AuthedPrincipal | null;
 }) {
   const seen: Seen[] = [];
-  const calls = { authenticate: [] as string[], credentials: [] as Array<string | null>, rateLimits: [] as Array<[string, number]>, refused: [] as Array<[string, string]>, usage: [] as Array<[string, number | undefined, boolean]> };
+  const calls = { authenticate: [] as string[], credentials: [] as Array<string | null>, rateLimits: [] as Array<[string, number]>, refused: [] as Array<[string, string]>, forbidden: [] as Array<[string, string, string]>, usage: [] as Array<[string, number | undefined, boolean]> };
   const hooks: ClaudeCodeHooks = {
     authenticate: async (token) => {
       calls.authenticate.push(token);
@@ -23,6 +25,7 @@ function harness(options: {
     },
     claudeCredentials: async (_principal, input) => {
       calls.credentials.push(input.model);
+      if (calls.credentials.length > 1 && options.credentialsAgain) return options.credentialsAgain;
       return options.credentials ?? { credentials: [{ secretId: 'acc-1', apiKey: 'sk-ant-oat01-first' }, { secretId: 'acc-2', apiKey: 'sk-ant-oat01-second' }] };
     },
     notePoolRateLimit: async (_principal, secretId, seconds) => {
@@ -33,6 +36,9 @@ function harness(options: {
     },
     claudeRefused: async (_principal, secretId, failedKeySha256) => {
       calls.refused.push([secretId, failedKeySha256]);
+    },
+    claudeForbidden: async (_principal, secretId, failedKeySha256, message) => {
+      calls.forbidden.push([secretId, failedKeySha256, message]);
     },
   };
   const fetchImpl = (async (url: string | URL | Request, init?: RequestInit) => {
@@ -160,6 +166,65 @@ describe('Claude Code passthrough', () => {
     });
     expect((await handle(request())).status).toBe(200);
     expect(calls.refused).toEqual([['acc-1', sha256('sk-ant-oat01-first')]]);
+  });
+
+  const ORG_OFF = '{"type":"error","error":{"type":"permission_error","message":"Your organization has disabled Claude subscription access for Claude Code."}}';
+  const forbidden = () => new Response(ORG_OFF, {
+    status: 403, headers: { 'content-type': 'application/json', 'anthropic-ratelimit-unified-5h-utilization': '0.18' },
+  });
+
+  test('a 403 stores Anthropic\'s reason on that account (by digest) and the request moves to the next one', async () => {
+    const { handle, seen, calls } = harness({ upstream: (attempt) => attempt === 1 ? forbidden() : new Response('{"id":"msg"}') });
+    const res = await handle(request());
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('{"id":"msg"}');
+    expect(calls.forbidden).toEqual([['acc-1', sha256('sk-ant-oat01-first'), 'Your organization has disabled Claude subscription access for Claude Code.']]);
+    expect(calls.refused).toEqual([]);
+    expect(seen.map((entry) => entry.headers.authorization)).toEqual(['Bearer sk-ant-oat01-first', 'Bearer sk-ant-oat01-second']);
+    // The host asks once: the served answer needs no second answer.
+    expect(calls.credentials).toHaveLength(1);
+  });
+
+  test('a 403 reports no plan usage: a usage report means the account served, and clears its reason', async () => {
+    const { handle, calls } = harness({ upstream: (attempt) => attempt === 1 ? forbidden() : new Response('{}', { headers: { 'anthropic-ratelimit-unified-5h-utilization': '0.25' } }) });
+    expect((await handle(request())).status).toBe(200);
+    expect(calls.usage).toEqual([['acc-2', 25, false]]);
+  });
+
+  test('every account forbidden: the host, asked again, names the accounts and the fix', async () => {
+    const { handle, seen, calls } = harness({
+      upstream: () => forbidden(),
+      credentialsAgain: { error: {
+        status: 400, code: 'provider_reauth_required',
+        message: 'Anthropic refuses the Claude account "Team": Your organization has disabled Claude subscription access for Claude Code.',
+        suggestion: 'An admin of its Claude organization must turn Claude Code back on, or share another Claude account with everyone in this workspace.',
+      } },
+    });
+    const res = await handle(request());
+    expect(seen).toHaveLength(2);
+    expect(calls.forbidden.map(([secretId]) => secretId)).toEqual(['acc-1', 'acc-2']);
+    expect(calls.credentials).toHaveLength(2);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ type: 'error', error: { type: 'invalid_request_error', message:
+      'Anthropic refuses the Claude account "Team": Your organization has disabled Claude subscription access for Claude Code. ' +
+      'An admin of its Claude organization must turn Claude Code back on, or share another Claude account with everyone in this workspace.' } });
+  });
+
+  test('the last account forbidden while the host still offers accounts: Anthropic\'s 403 is relayed unchanged', async () => {
+    const { handle } = harness({
+      credentials: { credentials: [{ secretId: 'acc-1', apiKey: 'sk-ant-oat01-first' }] },
+      upstream: () => forbidden(),
+    });
+    const res = await handle(request());
+    expect(res.status).toBe(403);
+    expect(await res.text()).toBe(ORG_OFF);
+  });
+
+  test('a forbidden account\'s reason is Anthropic\'s message on one line, capped, or a plain fallback', () => {
+    expect(forbiddenMessage(ORG_OFF)).toBe('Your organization has disabled Claude subscription access for Claude Code.');
+    expect(forbiddenMessage('<html>\n  Forbidden\n</html>')).toBe('<html> Forbidden </html>');
+    expect(forbiddenMessage('')).toBe('Anthropic answered 403 Forbidden.');
+    expect(forbiddenMessage(JSON.stringify({ error: { message: 'x'.repeat(400) } }))).toHaveLength(300);
   });
 
   test('no account: the host reason in the Anthropic error shape, nothing sent upstream', async () => {

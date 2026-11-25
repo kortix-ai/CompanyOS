@@ -113,7 +113,7 @@ function LinkRow({
 }
 
 /**
- * A "What's new" row. A headline wraps to two lines, so the row aligns to
+ * A "What's new" row. A headline wraps in full, so the row aligns to
  * its first line: every part is one `h-5` line (1.15rem) and the padding is
  * (min-h-8 1.84rem - 1.15rem) / 2 = 0.345rem (`py-1.5`), so a one-line row is still
  * centred and every dot sits 0.92rem (`top-4`) below the row's top.
@@ -278,7 +278,7 @@ export function HelpMenu({ onOpenDownloadApp }: { onOpenDownloadApp?: () => void
                   className={TIMELINE_ROW}
                 >
                   <TimelineMark position={timelinePosition(index, stops)} />
-                  <span className="line-clamp-2 min-w-0 flex-1 leading-5">{week.title}</span>
+                  <span className="min-w-0 flex-1 leading-5">{week.title}</span>
                   {week.date ? (
                     // Fixed width, so every headline ends on one edge.
                     <span className="text-muted-foreground min-w-12 shrink-0 text-right text-xs leading-5 tabular-nums">

@@ -12,18 +12,17 @@ import { Window } from 'happy-dom';
 Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', { value: true, configurable: true });
 
 const win = new Window({ width: 1440, height: 900 });
-const globals = globalThis as Record<string, unknown>;
-globals.window = win;
-globals.document = win.document;
-globals.navigator = win.navigator;
-globals.location = win.location;
-globals.requestAnimationFrame = (cb: () => void) => setTimeout(cb, 0);
-globals.cancelAnimationFrame = (id: number) => clearTimeout(id);
-globals.getComputedStyle = win.getComputedStyle.bind(win);
+Object.assign(globalThis, {
+  window: win,
+  document: win.document,
+  navigator: win.navigator,
+  location: win.location,
+  getComputedStyle: win.getComputedStyle.bind(win),
+});
 for (const key of Object.getOwnPropertyNames(win)) {
   // Base UI dispatches happy-dom's own event classes, not Bun's.
-  if (/^[A-Z]/.test(key) && (!(key in globals) || key.endsWith('Event'))) {
-    globals[key] = Reflect.get(win, key);
+  if (/^[A-Z]/.test(key) && (!(key in globalThis) || key.endsWith('Event'))) {
+    Object.assign(globalThis, { [key]: Reflect.get(win, key) });
   }
 }
 
@@ -107,12 +106,14 @@ function modal(open: boolean) {
 async function mount() {
   const host = document.createElement('div');
   document.body.appendChild(host);
-  root = createRoot(host as unknown as Element);
-  await act(async () => root!.render(modal(true)));
+  const view = createRoot(host);
+  root = view;
+  await act(async () => view.render(modal(true)));
   // Let the connections list resolve so the Connect button enables.
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
+  return view;
 }
 
 function connectButton(): HTMLButtonElement {
@@ -120,7 +121,7 @@ function connectButton(): HTMLButtonElement {
     node.textContent?.includes('Connect Synthetic CRM'),
   );
   if (!button) throw new Error(`no Connect button in: ${document.body.textContent}`);
-  return button as unknown as HTMLButtonElement;
+  return button;
 }
 
 async function clickConnect() {
@@ -196,11 +197,11 @@ test('closing the dialog before finalize answers reports nothing', async () => {
         answer = resolve;
       }),
   );
-  await mount();
+  const view = await mount();
   await clickConnect();
   expect(finalize).toHaveBeenCalledTimes(1);
 
-  await act(async () => root!.render(modal(false)));
+  await act(async () => view.render(modal(false)));
   await act(async () => {
     answer({ connected: true, connected_as: null });
     await new Promise((resolve) => setTimeout(resolve, 0));

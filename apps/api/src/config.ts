@@ -708,6 +708,12 @@ const envSchema = z.object({
   // mounts, with the folders synced in by the box's daemon.
   KORTIX_DRIVES_SESSION_MOUNT: optStr,
   KORTIX_DRIVES_SYNC: optStr,
+  // Shared (live) drive volumes for NEW drives. Off (the default): a new drive
+  // gets a block volume, whose commits give memory page history and Files →
+  // Versions. On: a new drive gets a shared volume when storage serves them;
+  // a shared volume has no commits, so it has no version history. A drive that
+  // is already shared stays shared either way.
+  KORTIX_SHARED_DRIVES: optBoolFalse,
   // Stateless sandboxes kill switch. `off` (or 0/false/no): no new session gets
   // a /workspace volume. Unset, `on` or anything else: every new Platinum
   // session gets one (the default since 2026-11-23). A session that already
@@ -1674,6 +1680,7 @@ export const config = {
   KORTIX_SNAPSHOT_REAP_PREDECESSOR: env.KORTIX_SNAPSHOT_REAP_PREDECESSOR,
   KORTIX_DRIVES_SESSION_MOUNT: env.KORTIX_DRIVES_SESSION_MOUNT,
   KORTIX_DRIVES_SYNC: env.KORTIX_DRIVES_SYNC,
+  KORTIX_SHARED_DRIVES: env.KORTIX_SHARED_DRIVES,
   KORTIX_WORKSPACE_VOLUMES: env.KORTIX_WORKSPACE_VOLUMES,
   KORTIX_PLATINUM_US_REGION_DEFAULT: env.KORTIX_PLATINUM_US_REGION_DEFAULT,
   KORTIX_PROJECT_SNAPSHOT_MODE: env.KORTIX_PROJECT_SNAPSHOT_MODE,

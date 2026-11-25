@@ -239,12 +239,12 @@ export async function ensureProjectDrive(accountId: string, projectId: string): 
 /**
  * Open (create when missing) the drive's volume in its region and return the
  * volume every storage call uses. A drive that never had a volume gets a
- * shared one when storage serves shared volumes, else a block volume as
- * before (drives/volumes.ts openDriveVolume).
+ * shared one when KORTIX_SHARED_DRIVES is on and storage serves shared
+ * volumes, else a block volume as before (drives/volumes.ts openDriveVolume).
  */
 export async function openVolumeFor(drive: DriveRow, signal?: AbortSignal): Promise<DriveVolume> {
   const volume = driveVolume(drive);
-  const vol = await openDriveVolume(volume, signal, { preferShared: !drive.platinumVolumeId });
+  const vol = await openDriveVolume(volume, signal, { preferShared: config.KORTIX_SHARED_DRIVES && !drive.platinumVolumeId });
   if (drive.platinumVolumeId !== vol.id) {
     // Only while the row still names this volume: a row read before a region
     // move swapped it must not put an old volume's id on the moved row.

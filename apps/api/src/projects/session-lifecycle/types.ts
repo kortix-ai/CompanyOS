@@ -49,6 +49,8 @@ export type SessionInvocationSource =
    * person gets (their Drive and memory). The workspace is empty and theirs.
    */
   | 'eval:trial'
+  /** A QualiLoop test conversation (`qualiloop/`): one session per QualiLoop conversation. */
+  | 'system:qualiloop'
   /** A person's reply on a calendar item an agent session created (`projects/calendar/`, flag `calendar`). */
   | 'system:calendar'
   | 'admin';

@@ -1,6 +1,6 @@
 {
   "generatedAt": "static",
-  "count": 1826,
+  "count": 1827,
   "aliases": 713,
   "routes": [
     {
@@ -5086,6 +5086,10 @@
     {
       "method": "GET",
       "path": "/v1/public/responses/:token"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/qualiloop/chat"
     },
     {
       "method": "POST",

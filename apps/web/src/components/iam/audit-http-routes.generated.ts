@@ -1095,6 +1095,7 @@ const AUDIT_HTTP_ROUTE_KEYS = [
   "POST|v1|projects|suna-migration|start",
   "GET|v1|projects|suna-migration|status",
   "GET|v1|public|responses|:token",
+  "POST|v1|qualiloop|chat",
   "POST|v1|router|chat|completions",
   "ALL|v1|router|context7",
   "ALL|v1|router|context7|*",

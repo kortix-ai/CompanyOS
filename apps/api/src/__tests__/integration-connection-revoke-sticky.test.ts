@@ -246,3 +246,26 @@ describe('a connector connection revoke is sticky', () => {
     expect(await state(conn.connectionId)).toEqual({ status: 'active', credentials: 0 });
   });
 });
+
+
+describe('abandoned authorization only revokes pending accounts', () => {
+  test('preserves an already authorized provider account', async () => {
+    const conn = await seedConnection('abandon-authorized', 'active');
+    await db.update(connectorConnections).set({ metadata: { connected_account_id: 'synthetic-provider-account' } })
+      .where(eq(connectorConnections.connectionId, conn.connectionId));
+    await revokeConnections(eq(connectorConnections.connectionId, conn.connectionId), { pendingOnly: true });
+    expect((await state(conn.connectionId)).status).toBe('active');
+  });
+  test('revokes a pending account and refuses a late finalize', async () => {
+    const conn = await seedConnection('abandon-pending', 'active');
+    await revokeConnections(eq(connectorConnections.connectionId, conn.connectionId), { pendingOnly: true });
+    expect((await state(conn.connectionId)).status).toBe('revoked');
+    expect(await completeConnection(conn.connectionId, null)).toBe(false);
+  });
+  test('preserves an account with a stored credential', async () => {
+    const conn = await seedConnection('abandon-credential', 'active');
+    await upsertConnectionCredential({ ...conn, value: 'synthetic-secret', connectNow: true });
+    await revokeConnections(eq(connectorConnections.connectionId, conn.connectionId), { pendingOnly: true });
+    expect(await state(conn.connectionId)).toEqual({ status: 'active', credentials: 1 });
+  });
+});

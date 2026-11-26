@@ -8,6 +8,7 @@
  */
 
 import {
+  listConnections,
   connectorConnect,
   connectorFinalize,
   createConnector,
@@ -22,7 +23,7 @@ import {
   proposeConnectorConnectionSlug,
   randomConnectorSlugSuffix,
 } from '../../../customize/sections/connector-connection-form';
-import { runConnectLinkFlow } from '../../../internal/hooks/connectors/use-connect-link';
+import { runConnectLinkFlow, type ConnectLinkFlowOptions } from '../../../internal/hooks/connectors/use-connect-link';
 import { toolConnectSteps } from '../../../internal/hooks/connectors/use-tool-connect';
 
 export interface CatalogApp {
@@ -35,9 +36,11 @@ export interface ConnectAppDeps {
   create: (projectId: string, draft: ConnectorDraftInput) => Promise<unknown>;
   start: () => Promise<ConnectorConnectResult>;
   finalize: () => Promise<ConnectorFinalizeResult>;
+  abandon?: () => Promise<void>;
   runFlow: (
     start: () => Promise<ConnectorConnectResult>,
     finalize: () => Promise<ConnectorFinalizeResult>,
+    options?: ConnectLinkFlowOptions,
   ) => Promise<{ connected: true }>;
 }
 
@@ -53,6 +56,7 @@ export function connectionSlugFor(
 
 export function sdkConnectAppDeps(projectId: string, connectorSlug: string): ConnectAppDeps {
   const steps = toolConnectSteps(projectId, connectorSlug, {
+    list: listConnections,
     connectProject: connectorConnect,
     finalizeProject: connectorFinalize,
   });
@@ -60,6 +64,7 @@ export function sdkConnectAppDeps(projectId: string, connectorSlug: string): Con
     create: createConnector,
     start: steps.start,
     finalize: steps.finalize,
+    abandon: steps.abandon,
     runFlow: runConnectLinkFlow,
   };
 }
@@ -87,5 +92,5 @@ export async function connectApp(
       onCreated?.();
     }
     return deps.start();
-  }, deps.finalize);
+  }, deps.finalize, { abandon: deps.abandon });
 }

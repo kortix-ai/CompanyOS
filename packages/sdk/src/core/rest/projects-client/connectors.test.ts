@@ -1864,3 +1864,9 @@ test('installDiscoverConnector passes as_new_profile and reads an existing profi
   expect(last().body).toEqual({ id: 'kortix:deepwiki', as_new_profile: true });
   expect(result.existing).toBe(true);
 });
+
+
+test('abandoned OAuth revokes only a still-pending account', async () => {
+  await revokeConnection('P1', 'pending-account', { pendingOnly: true });
+  expect(last()).toMatchObject({ method: 'PUT', body: { pending_only: true } });
+});

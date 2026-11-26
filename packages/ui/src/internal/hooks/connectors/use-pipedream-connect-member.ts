@@ -9,7 +9,9 @@ import { runConnectLinkFlow } from './use-connect-link';
 import {
   pipedreamConnectConnection,
   pipedreamFinalizeConnection,
+  listConnections,
   reconcileMemberConnection,
+  revokeConnection,
 } from '@kortix/sdk';
 
 /**
@@ -25,19 +27,29 @@ export function usePipedreamConnectMember(
   return useMutation({
     mutationFn: async (input?: { label?: string }) => {
       let connectionId: string | null = null;
+      let wasAuthorized = false;
       const result = await runConnectLinkFlow(
         async () => {
+          const { connections } = await listConnections(projectId);
           const connection = await reconcileMemberConnection(projectId, {
             connector_alias: slug,
             label: input?.label?.trim() || 'Private connection',
           });
           connectionId = connection.connection_id;
+          wasAuthorized = connections.some((row) => row.connection_id === connectionId && row.authorized !== false);
+
           return pipedreamConnectConnection(projectId, connection.connection_id);
         },
         () => {
           if (!connectionId) throw new Error('The private connection was not created.');
           return pipedreamFinalizeConnection(projectId, connectionId);
         },
+        { abandon: async () => {
+          if (connectionId && !wasAuthorized) {
+            await revokeConnection(projectId, connectionId, { pendingOnly: true });
+            await invalidateConnections(queryClient, projectId);
+          }
+        } },
       );
       // The account just created, so a caller can finalize exactly that one.
       return { ...result, connectionId };
@@ -48,8 +60,7 @@ export function usePipedreamConnectMember(
       onConnected();
     },
     onError: (err: Error) => errorToast(err.message),
-    // Settled either way: a window closed before the provider answered still
-    // left the account row, and every list must show it without a reload.
+    // Refresh both a completed account and an abandoned account's cleanup.
     onSettled: () => invalidateConnections(queryClient, projectId),
   });
 }

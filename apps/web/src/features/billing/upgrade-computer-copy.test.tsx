@@ -35,7 +35,7 @@ describe('open pricing dialog computer explanation', () => {
     ['topup-first', { reason: 'insufficient_credits' }],
     ['payment-failed', { billingState: 'payment_failed' as const }],
   ] as const) {
-    test(`${name} keeps purchase choices free of the repeated computer explanation`, () => {
+    test(`${name} discloses connector compute while keeping purchase choices reachable`, () => {
       const html = renderToStaticMarkup(
         <QueryClientProvider client={new QueryClient()}>
           <UpgradePlansModal open onOpenChange={() => {}} {...props} />
@@ -43,9 +43,9 @@ describe('open pricing dialog computer explanation', () => {
       )
         .replace(/<[^>]+>/g, ' ')
         .replace(/\s+/g, ' ');
-      expect(html).not.toContain('Each session runs a computer');
-      expect(html).not.toContain('How billing works');
-      expect(html).not.toContain('including idle time');
+      expect(html).toContain('Each session, including connector tasks, runs a cloud computer.');
+      expect(html).toContain('Default size. Models and storage billed separately.');
+      expect(html).toContain('How billing works');
       if (name === 'plans') expect(html).toContain('Continue on Free');
       if (name === 'payment-failed') expect(html).toContain('Update payment method');
     });

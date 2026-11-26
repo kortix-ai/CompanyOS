@@ -66,6 +66,7 @@ import {
 } from '@phosphor-icons/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
+import { ComputeBillingDetails } from './compute-billing-explainer';
 
 export interface UpgradePlansModalProps {
   open: boolean;
@@ -160,6 +161,9 @@ export function UpgradePlansModal({
             {t('description')}
           </ModalDescription>
         </ModalHeader>
+        <div className="px-6 pb-4">
+          <ComputerUsageNotice />
+        </div>
 
         {/* The /pricing plans band: hairlines top and bottom, one between the columns. */}
         <ModalBody className="p-0">
@@ -401,6 +405,9 @@ function CreditTopUpModal({
           <ModalTitle className="pr-8 text-lg font-medium tracking-tight">{copy.title}</ModalTitle>
           <ModalDescription className="text-sm text-pretty">{line}</ModalDescription>
         </ModalHeader>
+        <div className="px-6 pb-4">
+          <ComputerUsageNotice />
+        </div>
 
         {!accountState && accountLoading ? (
           // Who is looking decides the view (member, payment failed, slider).
@@ -636,5 +643,17 @@ function GlobalUpgradeModalContent() {
         accountLoading={accountLoading}
       />
     </BillingAccountProvider>
+  );
+}
+
+function ComputerUsageNotice() {
+  const t = useTranslations('billing.pricing.computer');
+  return (
+    <div className="text-muted-foreground space-y-2 text-xs">
+      <p>
+        {t('session')} {t('separate')}
+      </p>
+      <ComputeBillingDetails />
+    </div>
   );
 }

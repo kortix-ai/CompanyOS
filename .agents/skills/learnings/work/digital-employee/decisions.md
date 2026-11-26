@@ -41,3 +41,26 @@
   do.
 - **2026-11-26** The parity checklist in `README.md` is the definition of
   done. Each row becomes an agent eval task.
+
+## Decided: identity and billing (2026-11-26)
+
+- **2026-11-26 (Marko)** The unit is the employee identity. Each employee you
+  create holds its self, its memory, its accounts, its model access and its
+  authorisations. Everything an employee can do or spend hangs off it.
+- **2026-11-26 (Marko)** Customers connect what they already pay for: a
+  Claude plan, a ChatGPT/Codex plan, or API keys of any provider. Kortix
+  keeps its usage billing: compute is metered, tokens carry a percentage fee.
+  Today's rules: managed models at cost + 5.5% (`LLM_PLATFORM_FEE_PERCENT`,
+  `apps/api/src/billing/services/tiers.ts`); own API keys free up to 1,000 a
+  month, then 5% (`apps/api/src/billing/services/byok-fee.ts`); ChatGPT and
+  OpenCode Go plans exempt.
+- **2026-11-26** Model access is bound to the employee, not to the person
+  who talks to it. A plan connected by one person serves only the work that
+  person asks for. A shared employee runs on workspace API keys or managed
+  models. Reason: a personal Claude plan used by a whole team is account
+  sharing, and storing and forwarding Claude logins needs a terms review.
+
+## Open
+
+- **D2** Legal review of Claude plan passthrough against Anthropic's terms
+  before it is sold as an employee feature.

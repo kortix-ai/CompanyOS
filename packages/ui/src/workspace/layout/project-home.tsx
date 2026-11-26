@@ -3,6 +3,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ACCOUNT_PANEL_PARAM, hubTarget } from '../../internal/stores/account-panel-store';
 import { SplitNoticeBanner } from '../settings/split-notice-banner';
+import { SetupBanner } from '../setup/setup-banner';
 import { useTranslations } from '../../i18n';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -46,6 +47,7 @@ import { SandboxPicker } from '../home/sandbox-picker';
 import { ProjectHomeWallpaper, ProjectHomeWelcomeBody } from '../home/welcome-body';
 import { useProjectHomeCall } from './use-project-home-call';
 import { useProjectHomeSend } from './use-project-home-send';
+import { SpacePicker } from '../session-spaces/space-picker';
 
 // This path is this view's public surface — the instant session shell and the
 // IAM tests already import from here, so the moved pieces keep their address.
@@ -128,7 +130,11 @@ function ProjectHomeView({
   beforeSend,
   onboarding: onboardingEnabled = false,
 }: ProjectHomeProps) {
-  const defaultSend = useProjectHomeSend(projectId, { beforeSend });
+  const searchParams = useUiSearchParams();
+  // The space a new session is filed in (flag `session_groups`). A space's
+  // page links here with `?space=<group_id>` to start with it picked.
+  const [selectedSpace, setSelectedSpace] = useState<string | null>(() => searchParams?.get('space') || null);
+  const defaultSend = useProjectHomeSend(projectId, { beforeSend, groupId: selectedSpace });
   const { HomeAnnouncement } = useUiComponents();
   const send = onSend ?? defaultSend.send;
   const creating = onSend ? !!busy : defaultSend.sending;
@@ -137,7 +143,6 @@ function ProjectHomeView({
   // The first chat never ends, but it opens only when asked for
   // (`firstChatHref`: the sidebar row or the onboarding exit). Plain project
   // home, which "New session" opens, stays the normal home.
-  const searchParams = useUiSearchParams();
   const firstChatPending = useFirstChatPending(projectId);
   const firstChatRequested = isFirstChatRequested(searchParams);
   const router = useUiRouter();
@@ -151,6 +156,7 @@ function ProjectHomeView({
     submit?: boolean | 'when-ready';
     files?: AttachedFile[];
     options?: SessionPromptOverrides;
+    restoreDraft?: boolean;
   } | null>(null);
 
   // The sandbox TEMPLATE catalog, not live sandbox health (that is
@@ -367,13 +373,18 @@ function ProjectHomeView({
 
   useEffect(() => {
     if (!pendingPrefill) return;
-    consumePrefill(projectId);
+    // Apply what `consume` returns, never the render-time snapshot: the
+    // typing buffer may have dropped the entry since this render (another
+    // account signed in on the tab), and a dropped entry must not land.
+    const taken = consumePrefill(projectId);
+    if (!taken) return;
     setPrefill({
-      text: pendingPrefill.text,
+      text: taken.text,
       id: Date.now(),
-      submit: pendingPrefill.submit,
-      files: pendingPrefill.files,
-      options: pendingPrefill.options,
+      submit: taken.submit,
+      files: taken.files,
+      options: taken.options,
+      restoreDraft: taken.restoreDraft,
     });
   }, [pendingPrefill, projectId, consumePrefill]);
 
@@ -422,11 +433,12 @@ function ProjectHomeView({
       projectId={projectId}
       draftScope={draftScope}
       draftHandoffScope={onSend ? undefined : defaultSend.draftHandoffScope}
-      // Keep accepting keystrokes while creation runs. A second Enter is
-      // recovered as a draft and handed to the same session on navigation.
+      // While the create runs, the sent message stays in the composer, locked,
+      // with the spinner in the send slot. The session page then draws it as
+      // the first turn. A refused send unlocks the same text for a retry.
       isSending={creating}
-      disabled={onSend ? creating : false}
-      clearOnSend={onSend ? false : 'text-only'}
+      disabled={creating}
+      clearOnSend={false}
       autoFocus
       // Desktop: a hero composer floating mid-page has no column for a second
       // rail to align to, so the attach/agent/context controls ride on the
@@ -450,6 +462,12 @@ function ProjectHomeView({
       onAgentSelectionChange={setSelectedAgent}
       sandboxSlot={sandboxSlot}
       call={call}
+      // A host's own `onSend` decides where a session goes; the first chat is the onboarding.
+      toolbarSlot={
+        onSend || firstChat ? undefined : (
+          <SpacePicker projectId={projectId} value={selectedSpace} onChange={setSelectedSpace} />
+        )
+      }
     />
   );
 
@@ -476,8 +494,15 @@ function ProjectHomeView({
       {firstChatPending || !onboarded || noAgent || !HomeAnnouncement ? null : <HomeAnnouncement />}
 
       {/* What changed when a legacy account's workspaces became their own (C9). */}
-      <div className="relative z-10 mx-auto w-full max-w-2xl px-4 pt-14 empty:hidden">
+      <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-col gap-2 px-4 pt-14 empty:hidden">
         <SplitNoticeBanner workspaceId={projectId} />
+      </div>
+
+      {/* The way back to the setup page while a step is open: it floats at the
+          bottom of the page, out of the composer's flow. Keyed: switching
+          workspaces reuses this view, and each workspace counts its own steps. */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-6 z-20 flex justify-center px-4 empty:hidden">
+        <SetupBanner key={projectId} projectId={projectId} className="pointer-events-auto w-full max-w-xl" />
       </div>
 
       {/* No bubble or "Thinking" row is painted here on send. The page stays
@@ -490,6 +515,7 @@ function ProjectHomeView({
           reason={noAgentReason}
           repoUrl={projectRowQuery.data?.repo_url}
           branch={projectRowQuery.data?.default_branch}
+          dashboardUrl={projectRowQuery.data?.dashboard_url}
         />
       ) : firstChat ? (
         <FirstChat projectId={projectId} composer={composer} />

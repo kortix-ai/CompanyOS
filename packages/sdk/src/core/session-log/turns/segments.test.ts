@@ -210,7 +210,21 @@ describe('sessionLogShowGroupCall', () => {
     const live = sessionLogShowGroupCall([one, call('show3', 'show', { type: 'image', path: '/3.png' }, { status: 'running', result: undefined })]);
     expect(live.status).toBe('running');
     const failed = sessionLogShowGroupCall([one, call('show4', 'show', { title: 'Chart' }, { status: 'error', result: { content: [{ type: 'text', text: 'gone' }], is_error: true, error: { message: 'gone' } } })]);
-    expect((failed.input as { items: unknown[] }).items.at(-1)).toEqual({ status: 'error', type: 'error', title: 'Chart', content: 'gone' });
+    expect((failed.input as { items: unknown[] }).items).toEqual([{ status: 'ready', type: 'image', path: '/1.png' }]);
+  });
+
+  test('a failed call and its retry: only the retry is shown, and "Open" targets it', () => {
+    // The 2026-11-16 incident: `show` without `type` failed, the retry with `type: 'url'` succeeded.
+    const url = 'https://example.test/workspaces/synthetic/artifacts/synthetic';
+    const missingType = "'type' is required.";
+    const failed = call('show1', 'show', { action: 'show', url, title: 'Catalog' }, { status: 'error', result: { content: [{ type: 'text', text: missingType }], is_error: true, error: { message: missingType } } });
+    const retried = call('show2', 'show', { action: 'show', type: 'url', url, title: 'Catalog' });
+    const merged = sessionLogShowGroupCall([failed, retried]);
+    expect(merged).toMatchObject({ id: 'show1', call_id: 'call_show2', status: 'complete' });
+    expect((merged.input as { items: unknown[] }).items).toEqual([{ status: 'ready', type: 'url', url, title: 'Catalog' }]);
+    // The transcript never draws the failed call: the turn's segments hold only the retry.
+    expect(sessionLogTurnSegments([failed, retried]).map((s) => [s.kind, 'block' in s ? s.block.id : s.blocks.map((b) => b.id)])).toEqual([['standalone', 'show2']]);
+    expect(sessionLogTurnSegments([failed])).toEqual([]);
   });
 
   test('each item keeps the sha256 its own call\'s output gives its file (R38)', () => {
@@ -318,6 +332,18 @@ describe('a codemode script\'s nested call on v2 (a pi `nested_part` block)', ()
     expect((sessionLogTurnSegments(turn.blocks).find((s) => s.kind === 'standalone') as { block: ToolCallBlock }).block).toBe(standalone[0]!);
     // It is a deliverable: the settled turn hoists it out of the fold.
     expect(splitSessionLogTurnWork(segments, { working: false })!.hoisted.map((s) => (s as { block: ToolCallBlock }).block.name)).toEqual(['image_gen']);
+  });
+
+  test('a nested platform call draws only in its script row, at rest as live (KRTX-4877)', () => {
+    const usage = nested(2, 'kortix_usage', { action: 'summary', days: 30 }, '{"ok":true,"tool":"kortix_usage","action":"summary","card":{"title":"1 credits"}}');
+    const turn = turnOf([call('code', 'codemode', { code: 'x' }), image, usage, { type: 'text', id: 't1', text: 'Done.' }]);
+    expect(shape(sessionLogTurnSegments(turn.blocks))).toEqual([['burst', ['code']], ['standalone', ['n1']], ['text', ['t1']]]);
+  });
+
+  test('a nested connector sign-in keeps its own row, where its Connect card draws (KRTX-4877)', () => {
+    const connect = nested(3, 'kortix_connectors', { action: 'connect', slug: 'linear' }, '{"ok":true,"tool":"kortix_connectors","action":"connect","card":{"title":"Connect Linear"}}');
+    const turn = turnOf([call('code', 'codemode', { code: 'x' }), connect, { type: 'text', id: 't1', text: 'Click Connect.' }]);
+    expect(shape(sessionLogTurnSegments(turn.blocks))).toEqual([['burst', ['code']], ['standalone', ['n3']], ['text', ['t1']]]);
   });
 
   test('a nested_part still running stays an open call while its message streams', () => {

@@ -168,7 +168,7 @@ API serves permanently.
 
 | Module | Callback |
 | --- | --- |
-| `shared/turn-relay.ts` | `POST /workspaces/:id/turn-stream` (initial-turn claim, `turn_accepted`, `turn_abandoned`, `runtime_session` pin, `turn_begin`, `end`, `steer_read`, memory-guard end), `/turn-question`, `/turn-permission` |
+| `shared/turn-relay.ts` | `POST /workspaces/:id/turn-stream` (initial-turn claim, `turn_accepted`, `turn_abandoned`, `runtime_session` pin, `turn_begin`, `end`, `steer_read`, `steer_dropped`, memory-guard end), `/turn-question`, `/turn-permission` |
 | `shared/projection-relay.ts` | `POST /platform/runtime-projection`; the adapter registers its state reader |
 | `shared/audit-relay.ts` | `POST /workspaces/:id/sessions/:id/audit/events`: sanitize, batch, spool; batches carry `source: 'runtime'` and the harness id. pi feeds it every frame it publishes (`PiRuntimeHooks.onFrame`), so pi sessions have a tool audit trail |
 | `shared/boot-timeline-relay.ts` | `POST /platform/boot-timeline` |
@@ -777,7 +777,12 @@ Under `/kortix/runtime`, in session-log terms (bodies and answers:
 ### The box's log reads (`runtime.log.v1`)
 
 `RUNTIME_LOG_CAPABILITY` says the box's own log reads can stand in for the
-API's copy of the session log:
+API's copy of the session log. Clients read it through the API: `GET
+/v1/workspaces/:p/sessions/:s/log?live=1` (apps/api `projects/session-log-live.ts`)
+relays the box's newest page with `source: 'box'`, and answers the stored log
+(`source: 'store'`) when the box is not running, does not answer within 2 s, or
+answers an older generation. The web, desktop and mobile apps never read it
+themselves.
 
 - `GET /log` answers a whole `SessionLogPage`: the session record without
   threads, the generation, the thread heads and one page of a thread. The seqs
@@ -833,12 +838,13 @@ needs through `HarnessBootContext` (`serve` starts the HTTP server).
 
 `POST /kortix/runtime/sessions/:id/prompt` (`routes/kortix/runtime.ts`
 `parseRuntimePromptBody`) takes `{ message_id?, parts, agent?, model:
-"provider/model"?, variant?, directory?, no_reply?, system? }`
+"provider/model"?, variant?, directory?, no_reply?, system?, author? }`
 and answers `400 { error }` for a malformed one.
 
 | Field | What the turn does with it |
 | --- | --- |
 | `system` | A string of 16,000 characters at most (`MAX_TURN_SYSTEM_CHARS`), trimmed; blank is none. Added to this turn's system prompt only: pi sets it through the hidden `kortix-turn` extension (`before_agent_start`). apps/api sends the thread's memory file list here (`chat`): titles and paths of the Drive Memory folders the thread mounts; the agent reads and writes those files with its file tools. For a My Kortix session it sends the session owner's `kortix_memory` index instead, with Files on and `chat` on or off. A prompt without it runs without it; a daemon that predates the field ignores it. `/steer` drops it ("Steering"). |
+| `author` | `{ name }`: the person who wrote the prompt (KRTX-5121). apps/api sets it for a person's prompt and steer, and its proxy drops a client's value. Only the Kortix verbs read it (`harness/pi/turns.ts`); the OpenCode-shaped `prompt_async` route ignores it. The model reads `[From: "<name>"]` above the message (`harness/pi/prompt-author.ts`), and the root's system prompt says what the line means. The wire part keeps the person's words; the session log keeps the line as `model_text`, so a restore replays it. No line for a `synthetic` prompt or a `/` prompt (pi matches a command, a skill or a template at the start of the text). A malformed value is dropped, never a 400. A prompt without it (a trigger, a channel relay, another session) goes as it is; a daemon that predates the field ignores it. `/steer` keeps it. |
 
 ## Steering
 
@@ -864,7 +870,10 @@ end.
 - **Leftovers.** A turn that ends on its own with unread steered messages
   starts the next turn with them, in the same queue slot: the first is its
   prompt, the rest are read before its first model call. A stopped turn (Stop,
-  Quick Queue, the no-progress watchdog) drops them.
+  the no-progress watchdog, an abandoned stop) drops them and relays
+  `steer_dropped` once per id before its `end`; apps/api puts each prompt back
+  on its queue for the next turn. A steer the API's Stop settle withdrew first
+  is not reported.
 - **Gaps.** A steered message keeps the turn's model, agent and variant. It
   does not run extension `input` handlers, `/skill:` or prompt-template
   expansion (a prompt does). Unread steered messages live in memory: a daemon
@@ -949,6 +958,19 @@ its images, or queued behind the running work, is in flight for the probe.
 `reconfigure()` runs on the same serial queue, so a prompt admitted during
 it runs on the whole new config.
 
+**A run an extension starts.** An extension can start a pi run that kortixd
+never admitted: `sendUserMessage`, or `sendMessage` with `triggerTurn`,
+after a turn settled (for example a heartbeat posted from an async
+`agent_settled` handler). pi refuses a prompt while that run or a compaction
+is going ("Agent is already processing"). The next turn waits for pi to be
+idle before it begins (`PiRuntime.piIdle`). It stays queued while it waits,
+so the reaper's probe reads it in flight, and a steer finds no turn to join
+and is queued as a prompt. When such a run starts between that wait and the
+prompt, pi refuses the prompt before any model call; the turn waits and
+sends it again, at most 3 times (`promptWhenIdle`). A runtime stop also
+stops that run. prod 2026-11-14: a pinned 5-minute cron trigger failed 299
+of ~1,200 runs this way. `busy()` does not count such a run yet.
+
 **Stop is bounded.** `abort()` waits up to `KORTIX_PI_STOP_SETTLE_MS`
 (10 s) for the turn to settle. A tool that ignores its abort signal no longer
 holds Stop, the memory guard or a restart: a runtime stop that times out
@@ -960,6 +982,27 @@ supervisor restarts it.
 **A failed start at boot.** Boot tries the start 3 times (2 s, then 10 s
 apart, `startRuntimeAtBoot`). After the last failure readiness reports
 `runtime_start_failed` with the message, not `pi_not_ready`.
+
+### How agents write (`HOW_YOU_WRITE`)
+
+Every agent's system prompt, root and subagent, carries a `## How you write`
+section (`HOW_YOU_WRITE`, `pi/runtime.ts`), placed after `## Runtime
+capabilities` and before `## Act before you ask`. Only the watcher prompt
+leaves it out. It asks for direct, concise, warm and professional answers:
+the answer first, plain words, specific numbers, formatting only when it
+helps, and no filler openers, closing offers or common AI tics such as em
+dashes. Its last rule gives way: the agent's own instructions, a loaded skill
+or the person set a different voice, length or format. My Kortix keeps its
+"Your voice" section (brand decision D31). A brand-voice skill keeps its
+rules. Claude subscription models get it too, appended to the Claude Code
+preset (`pi/claude/sessions.ts`).
+
+It also forbids writing the result of a step the agent did not run. An A/B
+run on 2026-11-24 (`deepseek-v4.1-flash`, `glm-5.3-flash`, 8 prompts) showed
+why. Without that rule, "lead with the result" made glm invent a check's
+output in 1 to 2 of 9 answers, against 0 without the section. With the rule,
+each arm had 1 such answer in about 77. The section cut answer length by 25
+to 44 %, em dashes from 45 to 0, 64 to 9 and 45 to 9, and bold by about 70 %.
 
 ### kortix.yaml
 
@@ -981,7 +1024,9 @@ session. Every rule below holds for the working tree and for a config release.
 - **Skills.** The managed `kortix-*` skills, then exactly the folders in
   `compiled.skills`, under the config root: the active release root, else
   `/workspace` (`resolvePiSkillDirectories`). The image default has no
-  project skill. pi scans no `skills/` folder. The agent's
+  project skill. A session without repository access gets a release that
+  holds the folders of the skills its agents are granted, beside the project
+  tool modules they may call (apps/api `toolsRelease`). pi scans no `skills/` folder. The agent's
   `permission.skill` allowlist still hides every skill it does not grant.
 - **Subagents.** A kortix.yaml set has no built-in `general` or `explore`. The `agent` tool offers
   only declared, enabled agents with `mode` `subagent` or `all` that the
@@ -1031,6 +1076,12 @@ and project tools that governance registers, the `./` pi packages, and the
 root `AGENTS.md` (else `CLAUDE.md`). A descriptor's `config_dir` (an older
 API's) is ignored: the release manifest records `config_dir: null`.
 
+- **Retention.** Materialized release directories and manifests stay for the
+  session sandbox lifetime. Earlier system prompts and bootstrap symlinks can
+  still name them after convergence or daemon restart. Cleanup removes staging
+  entries, not historical releases. Retention does not authorize a fallback:
+  boot still requires a proven pointer and verifies release content. Releases
+  already removed by an older daemon are not restored by this retention rule.
 - **Boot.** The box never checks out the project repository. `/workspace`
   starts empty, and an agent that needs the files runs `kortix workspaces
   clone`. `lifecycle.start()` waits for the config only: the desired release
@@ -1104,8 +1155,19 @@ reads each `$(…)`, backtick, `<(…)`, `>(…)` and `( … )` body as commands
 own, and the strictest answer wins (`deny`, then `ask`, then `allow`). So
 `bash: { '*': deny, 'kortix connectors call x get *': allow }` runs that call
 and refuses `kortix connectors call x get a; env`. A line whose quotes or
-brackets do not balance is decided as a call with no subject: a restriction
-asks.
+brackets do not balance is decided as a call with no subject: a restricted
+pattern asks when its first word is a word of the line, else `*` decides.
+
+**A heredoc body is data when nothing on its line can run it.** Every command
+on the heredoc's line must be in `NEVER_RUNS_STDIN`: a data reader (`cat`,
+`tee`, `jq`, `git commit -F -`, `gh … --body-file -`) or a command that ignores
+stdin (`cd`, `mkdir`, `echo`). So `cd /tmp; cat > body.md <<'EOF'` keeps its
+markdown out of the check. The body is read as commands when the line has any
+other program (`sh <<EOF`, `cat <<EOF | bash`, a function defined on the
+line), when the line ends in a pipe (bash continues the pipeline after the
+body), or when an unquoted body runs `$(…)` or a backtick. Prod 2026-11-17: an
+agent with `kortix` rules asked a person to approve a change-request body,
+because `cd /tmp;` was not in the list.
 
 **Precedence:** the most specific matching rule wins, whatever
 order the keys are written in (`@kortix/api-contract/permission-rules`). The
@@ -1409,7 +1471,7 @@ document (its box died mid-run) leaves nothing to reuse, and the resume says
 so. The parent's record then names the new runner. A runner that still works
 refuses the resume. A structured agent whose
 answer never validates resolves to `{ schema_error, text }` (`strict: true`
-throws). Saved workflows are `.kortix/workflows/<name>.js`: the checkout's
+throws). Saved workflows are `workflows/<name>.js` at the repository root: the checkout's
 working tree, or the API's project files on a box without one.
 
 **Tool concurrency.** The root agent runs `toolExecution: 'parallel'`. Every

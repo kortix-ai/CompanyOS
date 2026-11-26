@@ -46,7 +46,11 @@ import { Button } from '../../primitives/button';
 import { EmptyState } from '../../primitives/empty-state';
 import { ErrorState } from '../../primitives/error-state';
 import { FadedScrollArea } from '../../primitives/faded-scroll-area';
-import { SettingsSectionHeader } from '../../primitives/settings-section-header';
+import {
+  SETTINGS_PAGE_COLUMN_CLASS,
+  SettingsPageHeader,
+  SettingsPageTitleProvider,
+} from '../../primitives/settings-section-header';
 import { Skeleton } from '../../primitives/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '../../primitives/tabs';
 import { UiLink as Link, useUiRouter, useUiSearchParams } from '../../providers/ui-provider';
@@ -57,13 +61,8 @@ import { AccountHubSheetProvider } from '../../internal/account-hub/hub-sheet';
 import { useAccountHubAccess } from '../../internal/account-hub/use-account-hub-access';
 import { useAccountsList } from '../../internal/hooks/account/use-accounts-list';
 import { useIsMobile } from '../../internal/hooks';
-import {
-  RAIL_HORIZONTAL_ROW_CLASS,
-  RAIL_ROW_CLASS,
-  RailGroup,
-  SETTINGS_SIDEBAR_WIDTH_PX,
-} from '../../internal/components/nav-rail';
-import { capabilityAccess } from '../../internal/layout/project-settings-nav';
+import { RAIL_HORIZONTAL_ROW_CLASS } from '../../internal/components/nav-rail';
+import { adminResourceRowOpen, capabilityAccess } from '../../internal/layout/project-settings-nav';
 import { SettingsNavProvider } from '../../internal/layout/settings-nav-context';
 import { withStaleChunkRecovery } from '../../internal/lib/chunk-reload';
 import {
@@ -171,6 +170,10 @@ const RESOURCE_PAGES: Partial<Record<ProjectAdminResourceKey, SectionPage>> = {
   skills: lazyPage(() => import('../../customize/skills/skills-page'), (m) => m.SkillsPage),
   drives: lazyPage(() => import('../../customize/agents/agent-drives-section'), (m) => m.AgentDrivesSection),
   triggers: lazyPage(() => import('../../customize/triggers/triggers-page'), (m) => m.TriggersPage),
+  evals: lazyPage(() => import('../../customize/evals/evals-page'), (m) => m.EvalsPage),
+  'eval-datasets': lazyPage(() => import('../../customize/evals/eval-datasets-page'), (m) => m.EvalDatasetsPage),
+  'eval-tasks': lazyPage(() => import('../../customize/evals/eval-tasks-page'), (m) => m.EvalTasksPage),
+  'eval-jobs': lazyPage(() => import('../../customize/evals/eval-jobs-page'), (m) => m.EvalJobsPage),
   models: lazyPage(() => import('../../customize/models/models-page'), (m) => m.ModelsPage),
   secrets: lazyPage(() => import('../../customize/secrets/secrets-page'), (m) => m.SecretsPage),
   repo: lazyPage(() => import('../layout/project-files-view'), (m) => m.ProjectFilesView),
@@ -206,10 +209,9 @@ const SETTINGS_PAGES: Record<ProjectAdminSettingsKey, SectionPage> = {
       const tI18nComplete = useI18nTranslations('hardcodedUi.i18nComplete');
       return (
         <div className="mx-auto w-full max-w-2xl space-y-8">
-          <SettingsSectionHeader
+          <SettingsPageHeader
             title={tI18nComplete.raw('text95ddc9c4dfd3')}
             description={tI18nComplete.raw('texte0d7209f4c07')}
-            className="pb-1"
           />
           <GitView projectId={projectId} />
         </div>
@@ -302,6 +304,7 @@ export function ProjectAdminDashboard({
   const canAdmin = pageCans[PROJECT_ACTIONS.PROJECT_SETTINGS_WRITE];
   const projectRowsOpen = canAdmin?.allowed === true;
   const drives = useFeatureFlag(projectId, 'drives');
+  const evals = useFeatureFlag(projectId, 'evals');
 
   // The account rows: the account hub's own rule, for a member of the
   // workspace's account. A project shared into an account the caller does not
@@ -329,6 +332,7 @@ export function ProjectAdminDashboard({
     resources.settled &&
     settingsAnswered &&
     !drives.isLoading &&
+    !evals.isLoading &&
     // Members needs the account id: wait for the project so it never pops in.
     project.isFetched &&
     accountsQuery.isFetched &&
@@ -337,6 +341,7 @@ export function ProjectAdminDashboard({
   // `resources.tabs` is a fresh array each render; its contents are the key.
   const allowedTabs = resources.tabs.join(',');
   const drivesOn = drives.enabled;
+  const evalsOn = evals.enabled;
   const visibleSections = hub.sectionVisible;
   const groups = useMemo<RailGroupRows[]>(() => {
     const allowed = new Set(allowedTabs.split(','));
@@ -362,10 +367,10 @@ export function ProjectAdminDashboard({
       }
       if (isProjectAdminResource(key)) {
         const resource = PROJECT_ADMIN_RESOURCES.find((r) => r.key === key);
-        if (!resource || (!projectRowsOpen && !resource.memberOpen)) return null;
+        if (!resource || !adminResourceRowOpen(resource, projectRowsOpen, allowed)) return null;
         if (resource.host && !hostSections[resource.key as 'apps']) return null;
-        if (resource.capability && !allowed.has(resource.capability)) return null;
         if (resource.flag === 'drives' && !drivesOn) return null;
+        if (resource.flag === 'evals' && !evalsOn) return null;
         return {
           key,
           label: label(key),
@@ -410,6 +415,7 @@ export function ProjectAdminDashboard({
     projectRowsOpen,
     hostSections,
     drivesOn,
+    evalsOn,
     settingsCans,
     settingsProbeFailed,
     tI18nComplete,
@@ -417,9 +423,6 @@ export function ProjectAdminDashboard({
     captureOn,
     accountId,
   ]);
-
-  // The rail's footer: the Support group (Help), drawn under the groups.
-  const footerRows = groups.find((group) => group.id === RAIL_FOOTER_GROUP)?.rows ?? [];
 
   // The sections of this page; a link-out row (Capture) is never active.
   const rows = groups.flatMap((group) => group.rows).filter((row) => !row.href);
@@ -475,9 +478,9 @@ export function ProjectAdminDashboard({
   }, [isMobile, settled, active]);
 
   // Publish the rail: the project sidebar drills into it (Back, then these
-  // groups), so on the desktop the rail lives there and not in this page.
+  // groups). On the desktop the rail lives only there, open or closed with
+  // the sidebar: the page never draws a second one.
   const setRail = useWorkspaceSettingsRailStore((s) => s.setRail);
-  const railInSidebar = useWorkspaceSettingsRailStore((s) => s.sidebarDocked) && !isMobile;
   const accessCheckFailed = canAdmin?.isError === true;
   useEffect(() => {
     // The gate probe failed: publish no rows, so the sidebar shows Back
@@ -567,23 +570,17 @@ export function ProjectAdminDashboard({
 
   return (
     <SettingsNavProvider value={settingsNav}>
-      <div
-        className={cn('min-h-0 flex-1 overflow-hidden', isMobile || railInSidebar ? 'flex flex-col' : 'grid')}
-        // The Settings page's rail width, so the two settings surfaces are one shape.
-        style={
-          isMobile || railInSidebar ? undefined : { gridTemplateColumns: `${SETTINGS_SIDEBAR_WIDTH_PX}px 1fr` }
-        }
-      >
-        {railInSidebar ? null : isMobile ? (
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {isMobile ? (
           // The frame's title bar names the panel; this row is the rail only.
-          <nav aria-label={title} className="border-border/60 bg-background flex shrink-0 flex-col border-b">
+          <nav aria-label={title} className="border-border bg-background flex shrink-0 flex-col border-b">
             <FadedScrollArea ref={stripRef} orientation="horizontal" fadeColor="from-background" className="min-w-0 flex-1 py-2">
               {settled ? (
                 <div className="flex w-fit items-center gap-2">
                   <Tabs value={active} className="w-fit">
                     <TabsList orientation="horizontal" className="w-fit">
                       {groups.flatMap((group) => group.rows).map((row) => (
-                        <RailTrigger key={row.key} projectId={projectId} row={row} horizontal />
+                        <RailTrigger key={row.key} projectId={projectId} row={row} />
                       ))}
                     </TabsList>
                   </Tabs>
@@ -593,90 +590,61 @@ export function ProjectAdminDashboard({
               )}
             </FadedScrollArea>
           </nav>
-        ) : (
-          <aside className="flex min-h-0 flex-col border-r bg-inherit">
-            <nav
-              aria-label={title}
-              className="flex min-h-0 flex-1 [scrollbar-width:none] flex-col gap-4 overflow-y-auto px-2 pt-4 pb-2 [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
-            >
-              {settled ? (
-                <Tabs value={active} orientation="vertical" className="gap-4">
-                  {groups
-                    .filter((group) => group.id !== RAIL_FOOTER_GROUP)
-                    .map((group) => (
-                      <RailGroup key={group.id} label={tSettings(`groups.${group.id}`)}>
-                        {group.rows.map((row) => (
-                          <RailTrigger key={row.key} projectId={projectId} row={row} />
-                        ))}
-                      </RailGroup>
-                    ))}
-                </Tabs>
-              ) : (
-                <RailSkeleton />
-              )}
-            </nav>
-            {/* Help sits under the groups, outside the scrolling list: it is
-                where a person goes when the rest of the rail did not help. */}
-            {settled && footerRows.length > 0 ? (
-              <div className="border-border/60 shrink-0 border-t px-2 py-2">
-                <Tabs value={active} orientation="vertical">
-                  <RailGroup>
-                    {footerRows.map((row) => (
-                      <RailTrigger key={row.key} projectId={projectId} row={row} />
-                    ))}
-                  </RailGroup>
-                </Tabs>
-              </div>
-            ) : null}
-          </aside>
-        )}
+        ) : null}
 
         <main ref={mainRef} className="bg-background flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           {settled && active && activeRow && (ProjectPage || AccountPage) ? (
-            <Suspense key={active} fallback={<CapabilitiesSkeleton />}>
-              {isProjectAdminResource(active) && ProjectPage ? (
-                <div
-                  className={cn(
-                    'flex min-h-0 flex-1 flex-col overflow-hidden',
-                    active === 'apps' && HOST_PANE_CLASS,
-                  )}
-                >
-                  {content ?? <ProjectPage projectId={projectId} />}
-                </div>
-              ) : (
-                // Bounded, not scrolling: the account panes' split sheet
-                // (Invite, New key) splits this column, and the page and the
-                // sheet each scroll inside their own half.
-                <div className="min-h-0 flex-1">
-                  <AccountHubSheetProvider>
-                    {activeRow.project && ProjectPage ? (
-                      <div className="mx-auto flex min-h-0 w-full flex-1 flex-col space-y-6 px-4 py-10 pb-20 lg:py-14">
-                        {/* General places the account half before its
-                            Danger zone; every other section appends it. */}
-                        {active === 'general' ? (
-                          <ProjectPage projectId={projectId} slot={companionPane} />
-                        ) : (
-                          <>
-                            <ProjectPage projectId={projectId} />
-                            {companionPane}
-                          </>
-                        )}
-                      </div>
-                    ) : AccountPage && accountTab && accountId ? (
-                      <EmbeddedAccountHubProvider value={{ accountId, tab: accountTab }}>
-                        <AccountPage
-                          projectId={projectId}
-                          accountId={accountId}
-                          tab={accountTab}
-                          companion={false}
-                          title={isWorkspaceAccountSection(active) ? undefined : activeRow.label}
-                        />
-                      </EmbeddedAccountHubProvider>
-                    ) : null}
-                  </AccountHubSheetProvider>
-                </div>
-              )}
-            </Suspense>
+            // Every page header in the pane reads its title from the rail row,
+            // so the page is named exactly like the row that opened it. A page
+            // below a section (a connector) names itself.
+            <SettingsPageTitleProvider value={content ? null : activeRow.label}>
+              <Suspense key={active} fallback={<CapabilitiesSkeleton />}>
+                {isProjectAdminResource(active) && ProjectPage ? (
+                  <div
+                    className={cn(
+                      'flex min-h-0 flex-1 flex-col overflow-hidden',
+                      active === 'apps' && HOST_PANE_CLASS,
+                    )}
+                  >
+                    {content ?? <ProjectPage projectId={projectId} />}
+                  </div>
+                ) : (
+                  // Bounded, not scrolling: the account panes' split sheet
+                  // (Invite, New key) splits this column, and the page and the
+                  // sheet each scroll inside their own half.
+                  <div className="min-h-0 flex-1">
+                    <AccountHubSheetProvider>
+                      {activeRow.project && ProjectPage ? (
+                        <div className={SETTINGS_PAGE_COLUMN_CLASS}>
+                          <div className="flex w-full max-w-2xl flex-col space-y-6">
+                            {/* General places the account half before its
+                                Danger zone; every other section appends it. */}
+                            {active === 'general' ? (
+                              <ProjectPage projectId={projectId} slot={companionPane} />
+                            ) : (
+                              <>
+                                <ProjectPage projectId={projectId} />
+                                {companionPane}
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      ) : AccountPage && accountTab && accountId ? (
+                        <EmbeddedAccountHubProvider value={{ accountId, tab: accountTab }}>
+                          <AccountPage
+                            projectId={projectId}
+                            accountId={accountId}
+                            tab={accountTab}
+                            companion={false}
+                            title={isWorkspaceAccountSection(active) ? undefined : activeRow.label}
+                          />
+                        </EmbeddedAccountHubProvider>
+                      ) : null}
+                    </AccountHubSheetProvider>
+                  </div>
+                )}
+              </Suspense>
+            </SettingsPageTitleProvider>
           ) : (
             <CapabilitiesSkeleton />
           )}
@@ -692,52 +660,18 @@ export function ProjectAdminDashboard({
 function RailTrigger({
   projectId,
   row,
-  horizontal = false,
 }: {
   projectId: string;
   row: RailRow;
-  horizontal?: boolean;
 }) {
   const Glyph = row.icon;
   return (
-    <TabsTrigger
-      value={row.key}
-      asChild
-      size={horizontal ? undefined : 'md'}
-      className={horizontal ? RAIL_HORIZONTAL_ROW_CLASS : RAIL_ROW_CLASS}
-    >
+    <TabsTrigger value={row.key} asChild className={RAIL_HORIZONTAL_ROW_CLASS}>
       <Link href={row.href ?? projectAdminHref(projectId, row.key)} prefetch>
         <Glyph className="size-4 shrink-0" />
-        <span className={cn(!horizontal && 'truncate')}>{row.label}</span>
+        <span>{row.label}</span>
       </Link>
     </TabsTrigger>
-  );
-}
-
-/** The loaded rail's shape: five labelled groups of icon + label rows. */
-const RAIL_SKELETON_GROUPS = [
-  ['w-16', 'w-16', 'w-20', 'w-10', 'w-16', 'w-20', 'w-16'],
-  ['w-20', 'w-14', 'w-12', 'w-12', 'w-16', 'w-14', 'w-20'],
-  ['w-16', 'w-14', 'w-12', 'w-16', 'w-16'],
-  ['w-10', 'w-12'],
-  ['w-10'],
-];
-
-function RailSkeleton() {
-  return (
-    <div className="space-y-4" aria-hidden>
-      {RAIL_SKELETON_GROUPS.map((group, g) => (
-        <div key={g} className="space-y-1">
-          <Skeleton className="mx-2.5 my-2 h-3 w-20 rounded-sm" />
-          {group.map((width, i) => (
-            <div key={i} className="flex h-8 items-center gap-2 px-2.5">
-              <Skeleton className="size-4 shrink-0 rounded-sm" />
-              <Skeleton className={cn('h-3.5 rounded-sm', width)} />
-            </div>
-          ))}
-        </div>
-      ))}
-    </div>
   );
 }
 

@@ -7,6 +7,7 @@
  * carry `auth`; `unit-openapi-public-operations` fails on an unlisted one.
  */
 export const PUBLIC_OPERATIONS: ReadonlySet<string> = new Set([
+  'post /v1/qualiloop/chat', // External evaluation protocol; verifies X-Agent-Secret, not a bearer token.
   'get /health',
   'get /v1/health',
   'get /v1/clients/mobile',
@@ -45,11 +46,6 @@ export const PUBLIC_OPERATIONS: ReadonlySet<string> = new Set([
   'get /v1/platform/github-app/oauth/callback',
   'get /v1/projects/{projectId}/.well-known/openid-configuration',
   'get /v1/projects/{projectId}/jwks.json',
-  'get /v1/marketplace/items',
-  'get /v1/marketplace/marketplaces',
-  'get /v1/marketplace/marketplaces/featured',
-  'get /v1/marketplace/items/{id}',
-  'get /v1/marketplace/items/{id}/file',
   'post /v1/connectors/webhook/pipedream',
   'post /v1/webhooks/projects/{projectId}/{slug}',
   'post /v1/webhooks/events/{provider}',

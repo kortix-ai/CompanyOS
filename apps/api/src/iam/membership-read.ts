@@ -9,6 +9,7 @@ import { type SQL, and, asc, count, eq, gt, inArray, isNull, or, sql } from 'dri
 import { db } from '../shared/db';
 import { isUuid } from '../shared/validate';
 import { accountsView } from '../workspaces/rows';
+import { accountScopedNoJoin } from './workspace-scope';
 
 /** The accounts a user belongs to, with the fields the account switcher shows. */
 export function userAccountRows(userId: string) {
@@ -94,6 +95,14 @@ export function anyAccountMembershipOf(userId: string) {
 export function accountMembersAmong(accountId: string, userIds: string[]) {
   return db
     .select({ userId: accountMembers.userId })
+    .from(accountMembers)
+    .where(and(eq(accountMembers.accountId, accountId), inArray(accountMembers.userId, userIds)));
+}
+
+/** Each listed member's account role: the people rows of a session group. */
+export function accountMemberRolesAmong(accountId: string, userIds: string[]) {
+  return db
+    .select({ userId: accountMembers.userId, accountRole: accountMembers.accountRole })
     .from(accountMembers)
     .where(and(eq(accountMembers.accountId, accountId), inArray(accountMembers.userId, userIds)));
 }
@@ -224,7 +233,7 @@ export function accountOwnersByJoinDate(accountIds: string[]) {
         eq(roleAssignments.accountId, accountMembers.accountId),
         eq(roleAssignments.principalType, 'user'),
         eq(roleAssignments.principalId, accountMembers.userId),
-        eq(roleAssignments.scopeType, 'account'),
+        accountScopedNoJoin(),
       ),
     )
     .innerJoin(

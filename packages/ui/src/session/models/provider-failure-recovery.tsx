@@ -29,7 +29,7 @@ export function ProviderFailureRecovery({
   return (
     <div className="flex w-full max-w-md flex-col items-center gap-3">
       {pendingPrompt ? (
-        <div className="border-border/60 bg-muted/40 w-full rounded-md border px-3 py-2.5 text-left">
+        <div className="border-border bg-muted/40 w-full rounded-md border px-3 py-2.5 text-left">
           <p className="text-muted-foreground mb-1 text-xs font-medium">{t('savedPrompt')}</p>
           {pendingPrompt.text ? (
             <p className="text-foreground max-h-40 overflow-y-auto text-xs leading-relaxed wrap-break-word whitespace-pre-wrap">
@@ -39,18 +39,18 @@ export function ProviderFailureRecovery({
             <p className="text-muted-foreground text-xs">{t('noText')}</p>
           )}
           {attachmentNames.length > 0 ? (
-            <div className="border-border/60 mt-2 border-t pt-2">
+            <div className="border-border mt-2 border-t pt-2">
               <p className="text-muted-foreground mb-1 text-xs font-medium">
                 {t('attachments', { count: attachmentNames.length })}
               </p>
-              <ul className="text-muted-foreground/70 space-y-0.5 text-xs">
+              <ul className="text-muted-foreground space-y-0.5 text-xs">
                 {attachmentNames.map((name, index) => (
                   <li key={`${name}-${index}`} className="break-all">
                     {name}
                   </li>
                 ))}
               </ul>
-              <p className="text-muted-foreground/70 mt-1 text-xs">{t('reattach')}</p>
+              <p className="text-muted-foreground mt-1 text-xs">{t('reattach')}</p>
             </div>
           ) : null}
         </div>

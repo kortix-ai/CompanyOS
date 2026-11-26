@@ -103,7 +103,7 @@ Kortix-specific: 39 files, built on top of `components/ui/`. **There is no
 | `page-header.tsx` | Unified top header (hamburger / title / "···" more button) for every page. |
 | `page-content.tsx` | Content area under `PageHeader` — no card framing, consistent top spacing. |
 | `composer.tsx` | The chat input of the project home and of a thread (`SessionChatInput` wraps it): one card with the text field on top and a 36pt row of add · agent chip · send `Button`s below (`icon-md` icon buttons, `sm` agent chip — `ghost`, `secondary` for "Connect model" — that opens the agent and model sheet). Page colour (`bg-background`) in both themes, hairline `border-border` in both themes, no shadow. No animated placeholder. Thread-only slots: `header` (queue, staged command), `accessory` (AutoContinue), `busy` (Stop, only with `onStop`: in a shared session a member who may not stop the running turn — `useSession().canStop` false — gets no Stop, and Send queues). See design.md → Project home. |
-| `dictation-waveform.tsx` | `DictationWaveform` — the composer's listening indicator: one bar per recogniser volume sample, newest on the right. Runs on the UI thread from a shared value. See `design.md` → Dictation. |
+| `dictation-waveform.tsx` | `DictationWaveform` — the composer's listening indicator: one bar per microphone metering sample, newest on the right. Runs on the UI thread from a shared value. See `design.md` → Dictation. |
 | `pinned-bar.tsx` | `PinnedBar` + `usePinnedBarInset`. Inside a bottom sheet, wrap the body in `SheetFill` (`sheet.tsx`) first: gorhom's content box is taller than the visible sheet, so `bottom: 0` alone lands off-screen (in the iOS native sheet the content view is the visible sheet and `SheetFill` is a plain `flex: 1` view). Inside `SheetFill` the bar follows the visible edge by `translateY` (`PinnedBarShiftContext`) while the sheet moves. The bar holds controls pinned to the bottom of a scrolling region, floating over a fade of the surface (clear → 85% at 45% → solid), 16pt above the safe area; the content scrolls under it and pads its end by the inset. The project drawer's bottom bar as a component (Jay, 2026-09-22); used by the session file preview sheet (Download · Add to chat). Never a solid footer under a separate fade strip. **A new control added to any header or chrome row prefers this gradient-fade backdrop over a flat one** (Jay, 2026-09-22) — see design.md's "New header controls" row. |
 | `animated-toggle-icon.tsx` | Cross-fade + rotate between an icon and its "X" close state, used by `PageHeader`. |
 | `kortix-loader.tsx` | Lottie brand loading spinner. |
@@ -553,11 +553,11 @@ that drops props silently breaks the screens that still pass them.
    `isDark ? a : b` pairs in this codebase had their branches swapped — the
    "dark" branch held the lighter value. Check both literals' actual
    lightness before converting a ternary to a token.
-8. `THEME.accent.{blue,yellow,orange,green,purple,red}` is theme-invariant
-   brand color — same value in both themes. `THEME.light.*` / `THEME.dark.*`
-   is semantic and flips per theme. Don't confuse the two `accent` things:
-   `THEME.accent.*` (brand) vs. `THEME.light.accent` / `THEME.dark.accent`
-   (the semantic `--accent` token, which does invert).
+8. `THEME.accent[tone].{blue,yellow,orange,green,purple,red}` is brand
+   color with a light and a dark value (J-7): read it with `useTone()` (or the
+   component's `isDark`), never one theme's value in both. Don't confuse the
+   two `accent` things: `THEME.accent[tone].*` (brand) vs.
+   `THEME.light.accent` / `THEME.dark.accent` (the semantic `--accent` token).
 
 ## Known unmigrated state (not a TODO — don't convert without owning it)
 

@@ -57,6 +57,8 @@ export interface ResolvedTemplate {
   provider: string;
   image: string | null;
   dockerfilePath: string | null;
+  /** A Dockerfile's text (an eval task's image from outside the repository). Absent: none. */
+  dockerfileInline?: string | null;
   entrypoint: string | null;
   cpu: number;
   memoryGb: number;
@@ -262,6 +264,8 @@ export interface CreateTemplateInput {
   name?: string;
   image?: string;
   dockerfilePath?: string;
+  /** A Dockerfile's text, built without a build context. Only the eval runner sets it. */
+  dockerfile?: string;
   entrypoint?: string;
   cpu?: number;
   memoryGb?: number;
@@ -285,6 +289,7 @@ export async function createTemplate(input: CreateTemplateInput): Promise<DbSand
       provider: config.getDefaultProvider(),
       image: input.image ?? null,
       dockerfilePath: input.dockerfilePath ?? null,
+      dockerfileInline: input.dockerfile ?? null,
       entrypoint: input.entrypoint ?? null,
       cpu: clamp(input.cpu, SANDBOX_SPEC_LIMITS.cpu),
       memoryGb: clamp(input.memoryGb, SANDBOX_SPEC_LIMITS.memory),
@@ -423,7 +428,11 @@ export async function projectImageRegion(projectId: string): Promise<string | un
 export async function computeTemplateIdentity(
   project: GitBackedProject,
   template: ResolvedTemplate,
-  deps: { imageRegion?: (projectId: string) => Promise<string | undefined> } = {},
+  deps: {
+    imageRegion?: (projectId: string) => Promise<string | undefined>;
+    /** Read-only views may use the request's bounded stale mirror policy. */
+    freshness?: false | 'tip-proof';
+  } = {},
 ): Promise<{
   snapshotName: string;
   contentHash: string;
@@ -454,7 +463,7 @@ export async function computeTemplateIdentity(
     );
   }
   const runtimeFingerprint = await currentRuntimeArtifactFingerprint();
-  const { dockerfile: userDockerfile, commit } = await resolveUserDockerfile(project, template);
+  const { dockerfile: userDockerfile, commit } = await resolveUserDockerfile(project, template, deps.freshness);
   const region = template.isShared
     ? undefined
     : await (deps.imageRegion ?? projectImageRegion)(project.projectId);
@@ -505,6 +514,7 @@ export async function computeTemplateIdentity(
 export async function resolveUserDockerfile(
   project: GitBackedProject,
   template: ResolvedTemplate,
+  freshness: false | 'tip-proof' = 'tip-proof',
 ): Promise<{ dockerfile: string; commit: string | null }> {
   if (template.isShared) return { dockerfile: PLATFORM_DEFAULT_USER_DOCKERFILE, commit: null };
   if (template.dockerfilePath) {
@@ -514,13 +524,16 @@ export async function resolveUserDockerfile(
     // as one. So a project with its own Dockerfile paid a full fetch on nearly
     // every new session, in front of the provider create. One branch at most
     // now, and the proof the env build shares makes it none.
-    const commitSha = await resolveCommitSha(project, project.defaultBranch, 'tip-proof');
+    const commitSha = await resolveCommitSha(project, project.defaultBranch, freshness);
     const bytes = await readRepoFile(project, template.dockerfilePath, commitSha);
     const normalized = normalizeUserDockerfileForSnapshot(bytes);
     if (!normalized.trim()) {
       throw new Error(`Sandbox template "${template.slug}": Dockerfile ${template.dockerfilePath} is empty`);
     }
     return { dockerfile: normalized, commit: commitSha };
+  }
+  if (template.dockerfileInline?.trim()) {
+    return { dockerfile: normalizeUserDockerfileForSnapshot(template.dockerfileInline), commit: null };
   }
   if (template.image) {
     return { dockerfile: `FROM ${template.image}\n`, commit: null };
@@ -724,6 +737,7 @@ function synthesizedDefault(): ResolvedTemplate {
     provider: config.getDefaultProvider(),
     image: null,
     dockerfilePath: null,
+    dockerfileInline: null,
     entrypoint: null,
     cpu: DEFAULT_CPU,
     memoryGb: DEFAULT_MEMORY_GB,
@@ -750,6 +764,7 @@ function rowToResolved(row: DbSandboxTemplate): ResolvedTemplate {
     provider: row.provider ?? 'daytona',
     image: row.image,
     dockerfilePath: row.dockerfilePath,
+    dockerfileInline: row.dockerfileInline ?? null,
     entrypoint: row.entrypoint,
     cpu: row.cpu ?? DEFAULT_CPU,
     memoryGb: row.memoryGb ?? DEFAULT_MEMORY_GB,
@@ -863,13 +878,9 @@ function clamp(
   return n;
 }
 
-function validateTemplateMutation(args: { image?: unknown; dockerfilePath?: unknown }): void {
-  const image = typeof args.image === 'string' && args.image.trim() ? args.image.trim() : null;
-  const dockerfilePath =
-    typeof args.dockerfilePath === 'string' && args.dockerfilePath.trim()
-      ? args.dockerfilePath.trim()
-      : null;
-  if (image && dockerfilePath) {
+function validateTemplateMutation(args: { image?: unknown; dockerfilePath?: unknown; dockerfile?: unknown }): void {
+  const set = (value: unknown) => typeof value === 'string' && value.trim() !== '';
+  if ([args.image, args.dockerfilePath, args.dockerfile].filter(set).length > 1) {
     throw new Error('Set exactly one of `image` or `dockerfile_path` (not both).');
   }
 }

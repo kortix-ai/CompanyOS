@@ -652,6 +652,7 @@ function SessionChatInputImpl({
             (design.md §2). It is the gap above the keyboard while typing. */}
         <View className="px-4 pb-3 pt-1">
           <Composer
+            projectId={projectId}
             inputRef={inputRef}
             autoFocus={autoFocus}
             inputNativeID={inputNativeID}
@@ -682,6 +683,7 @@ function SessionChatInputImpl({
                 : composerChip({
                     connectModel: modelUnavailable,
                     agentName: agent?.name,
+                    agentTitle: agent?.title,
                     pendingAgentName,
                     agentsLoading,
                     modelName: model ? pickerModelName(model) : undefined,

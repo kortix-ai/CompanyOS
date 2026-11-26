@@ -10,6 +10,7 @@ import { ClaudeConnectionSlot, claudeConnectionAction } from '../models/claude-c
 import { AskOwnerForCreditsButton } from '../models/ask-owner-for-credits-button';
 import { providerKeyFix } from '../models/provider-key-action';
 import { ProviderKeySlot } from '../models/provider-key-slot';
+import { PROVIDER_LABELS } from '../../internal/lib/provider-branding';
 
 import { Button } from '../../primitives/button';
 import { ChainOfThoughtStep } from '../../primitives/chain-of-thought';
@@ -450,27 +451,29 @@ function TurnErrorCheckpoint({
   const canOpen = describeTurnErrorRow({ text, gateway, raw }).expandable;
 
   const row = (
-    <div className="flex w-full items-center gap-3 text-left text-sm">
-      <WarningCircleIcon className="text-kortix-red size-4 flex-none" />
-      <span className="text-foreground flex-none font-medium">
-        {tI18nComplete.raw('text1a4f630ac1b6')}
-      </span>
-      <span
+    <div className="w-full text-left text-sm">
+      <div className="flex items-center gap-3">
+        <WarningCircleIcon className="text-kortix-red size-4 flex-none" />
+        <span className="text-foreground flex-none font-medium">
+          {tI18nComplete.raw('text1a4f630ac1b6')}
+        </span>
+        {canOpen ? (
+          <CaretRightIcon
+            className={cn(
+              'text-muted-foreground size-3.5 flex-none',
+              'transition-transform group-data-[state=open]/step:rotate-90',
+            )}
+          />
+        ) : null}
+      </div>
+      <p
         className={cn(
-          'text-muted-foreground min-w-0 wrap-anywhere',
+          'text-muted-foreground mt-1 pl-7 wrap-anywhere',
           canOpen && 'group-hover/trigger:text-foreground duration-fast transition-colors',
         )}
       >
         {text}
-      </span>
-      {canOpen ? (
-        <CaretRightIcon
-          className={cn(
-            'text-muted-foreground size-3.5 flex-none',
-            'transition-transform group-data-[state=open]/step:rotate-90',
-          )}
-        />
-      ) : null}
+      </p>
     </div>
   );
 
@@ -585,6 +588,7 @@ export function TurnErrorDisplay({
   modelOptions,
   className,
 }: TurnErrorDisplayProps) {
+  const tKeys = useTranslations('pooledSecrets');
   const text = error ? error.message : errorText;
   if (!text) return null;
   // `error.gateway` (send-failure path) wins over the `errorDetails` prop
@@ -641,12 +645,16 @@ export function TurnErrorDisplay({
   // The same for the member's own Claude subscription (Claude models run on it).
   const claude = chatGpt ? null : claudeConnectionAction(text);
 
+  // A refused key reads as the key, not the provider's own words ("User not
+  // found."); those stay in the fold.
+  const keyRejected = providerFix?.code === 'provider_key_rejected';
+
   // Real errors → a checkpoint row in the activity lane, not a boxed alert.
   return (
     <TurnErrorCheckpoint
-      text={text}
+      text={keyRejected ? tKeys('keyRejected', { provider: PROVIDER_LABELS[providerFix.providerId] ?? providerFix.providerId }) : text}
       gateway={gateway}
-      raw={errorRaw}
+      raw={keyRejected ? (errorRaw ?? text) : errorRaw}
       defaultOpen={defaultDetailsOpen}
       action={chatGpt ? <ChatGptConnectionSlot action={chatGpt} /> : claude ? <ClaudeConnectionSlot action={claude} />
         : providerFix ? <ProviderKeySlot providerId={providerFix.providerId} /> : undefined}

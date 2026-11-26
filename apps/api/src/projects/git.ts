@@ -42,6 +42,7 @@ export {
 } from './git/mirror';
 
 export {
+  listRepoDirectory,
   listRepoFiles,
   searchRepoFileNames,
   grepRepoFiles,
@@ -82,6 +83,7 @@ export {
   getBranchDiff,
   getDiffBetweenShas,
   previewMerge,
+  HeadMovedError,
   MergeConflictError,
   mergeBranches,
   headRefsLandedIn,

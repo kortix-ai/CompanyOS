@@ -92,6 +92,7 @@ import {
 import { listCatalog, listConnectors } from './db-deps-catalog';
 import {
   composioConnectionMetadata,
+  composioMetadataWrite,
   composioStableUserId,
   connectLinkEligibility,
   connectLinkNeedsManagedProvider,
@@ -101,9 +102,11 @@ import {
   loadPipedreamConnector,
   mergeRequestingSession,
   readRequestingSessionId,
+  takeRequestingSession,
 } from './db-deps-connect';
 import { makeDbGatewayDeps } from './db-deps-gateway';
 import {
+  resolveAccountHolder,
   resolveAdmin,
   resolveConnectionsManager,
   resolvePrincipal,
@@ -111,6 +114,7 @@ import {
   resolveReader,
   resolveSecretBindingAdmin,
   resolveSecretReader,
+  sessionVisibleTo,
 } from './db-deps-principal';
 import { authOf, connectorConnected, type ConnectorRow } from './db-deps-rows';
 import { accountKeyOfWorkspace } from '../workspaces/rows';
@@ -141,6 +145,8 @@ export const dbConnectorRouterDeps: ConnectorRouterDeps = {
   discordAvailable: discordConfigured,
   resolveAdmin,
   resolveConnectionsManager,
+  resolveAccountHolder,
+  sessionVisibleTo,
   resolveReader,
   resolveSecretReader,
   listConnectors,
@@ -351,7 +357,8 @@ export const dbConnectorRouterDeps: ConnectorRouterDeps = {
       .where(
         and(
           eq(connectorConnections.projectId, projectId),
-          sql`${connectorConnections.metadata}->>'requesting_session_id' = ${sessionId}`,
+          sql`(${connectorConnections.metadata}->>'requesting_session_id' = ${sessionId}
+            or ${connectorConnections.metadata}->'connect_session_ids' ? ${sessionId})`,
         ),
       );
     const out: SessionConnectRequestRow[] = [];
@@ -531,12 +538,12 @@ export const dbConnectorRouterDeps: ConnectorRouterDeps = {
       // Pending rows stay active because the DB enum has no needs_auth
       // value. The gateway still fails closed on missing auth metadata.
       await connectConnection(connectionId, {
-        metadata: {
+        metadata: composioMetadataWrite({
           ...rowMetadata(previous),
           provider: 'composio',
           toolkit: conn.app,
           requesting_session_id: requestingSessionId ?? readRequestingSessionId(previous),
-        },
+        }, false, !requestingSessionId),
         updatedAt: sql`now()`,
       });
       const stableUserId = composioStableUserId(connectionId);
@@ -580,7 +587,7 @@ export const dbConnectorRouterDeps: ConnectorRouterDeps = {
         });
       }
       await connectConnection(connectionId, {
-        metadata: composioConnectionMetadata({
+        metadata: composioMetadataWrite(composioConnectionMetadata({
           toolkit: conn.app,
           stableUserId,
           sessionId: result.sessionId,
@@ -596,7 +603,7 @@ export const dbConnectorRouterDeps: ConnectorRouterDeps = {
             result.connectedAccountId === previous.connected_account_id
               ? connectedAsOf(previous)
               : null,
-        }),
+        }), result.connected, !requestingSessionId),
       });
       return {
         provider: 'composio',
@@ -732,7 +739,7 @@ export const dbConnectorRouterDeps: ConnectorRouterDeps = {
       // state: the gateway derives it from metadata and rejects execution
       // until an account id exists or the toolkit is explicitly no-auth.
       const live = await completeConnection(connection.connectionId, null, {
-        metadata: composioConnectionMetadata({
+        metadata: composioMetadataWrite(composioConnectionMetadata({
           toolkit: conn.app,
           stableUserId,
           sessionId: result.sessionId,
@@ -742,7 +749,7 @@ export const dbConnectorRouterDeps: ConnectorRouterDeps = {
           requestingSessionId,
           previous: metadata,
           connectedAs,
-        }),
+        }), result.connected, true),
       });
       if (!live) return { provider: 'composio', connected: false };
       // The agent that minted the link is blocked waiting on this. Tell it the
@@ -798,16 +805,7 @@ export const dbConnectorRouterDeps: ConnectorRouterDeps = {
       const connected = (await oauth2ConnectionStatus(connection.connectionId)).status === 'active';
       if (connected) {
         // Told once: only the call that clears the waiting session notifies it.
-        const rows = (await db.execute(sql`
-          update kortix.connector_connections c
-             set metadata = c.metadata - 'requesting_session_id'
-            from (select connection_id, metadata->>'requesting_session_id' as waiting
-                    from kortix.connector_connections
-                   where connection_id = ${connection.connectionId}
-                     for update) old
-           where c.connection_id = old.connection_id and old.waiting is not null
-          returning old.waiting as waiting`)) as unknown as Array<{ waiting: string }>;
-        const waiting = rows[0]?.waiting;
+        const waiting = await takeRequestingSession(connection.connectionId);
         if (waiting) void notifyConnectorSession(waiting, projectId, _userId ?? null, slug, mcpAppForUrl(mcp.url)?.slug ?? slug);
       }
       return { provider: 'mcp', connected, connectionId: connection.connectionId };

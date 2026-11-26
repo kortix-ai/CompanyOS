@@ -11,6 +11,7 @@ import { TrieRouter } from 'hono/router/trie-router';
 import { HTTPException } from 'hono/http-exception';
 import { OpenAPIHono } from '@hono/zod-openapi';
 import { isManifestSyntaxError } from '@kortix/manifest-schema';
+import { boundedIssues } from './openapi';
 import { ManifestWriteRefusedError } from './projects/surface';
 import { BillingError } from './errors';
 import { logger as appLogger } from './lib/logger';
@@ -56,6 +57,7 @@ import {
 import {
   isPlatinumSandboxNotRunningError,
   PlatinumExecOutcomeUnknownError,
+  PlatinumExecOutputTooLargeError,
 } from './shared/platinum';
 
 // The typed branch handlers keep every ladder branch verbatim (comment,
@@ -533,7 +535,7 @@ function handleDatabaseOrUnknownError(
     if (
       databaseError.pgCode === '57014'
       && method === 'GET'
-      && /^\/v1\/projects\/[^/]+\/gateway\/(overview|series|breakdown|sessions)\/?$/.test(asLegacyWorkspaceRoute(path))
+      && /^\/v1\/projects\/[^/]+\/gateway\/(overview|series|breakdown|sessions|usage)\/?$/.test(asLegacyWorkspaceRoute(path))
     ) {
       appLogger.warn(`${method} ${path} -> 503 [gateway-analytics-timeout]`, {
         method, path, pgCode: databaseError.pgCode,
@@ -745,7 +747,7 @@ function handleUnhandledError(err: Error, c: Context): Response {
   const abort = handleSandboxProxyAbort(err, c, errName, path);
   if (abort) return abort;
   if (err instanceof ManifestWriteRefusedError) {
-    return c.json({ error: err.message, code: err.code }, 409);
+    return c.json({ error: err.message, code: err.code, ...(err.issues.length > 0 ? boundedIssues(err.issues) : {}) }, 409);
   }
   if (isManifestSyntaxError(err)) {
     // kortix.yaml is not YAML: a repository state the caller can fix, never a
@@ -757,6 +759,13 @@ function handleUnhandledError(err: Error, c: Context): Response {
       errorType: 'manifest_invalid',
     });
     return c.json({ error: `kortix.yaml is not valid YAML (${err.message}).`, code: 'manifest_invalid' }, 409);
+  }
+  if (err instanceof PlatinumExecOutputTooLargeError) {
+    appLogger.warn('Sandbox exec output exceeded provider response limit', { method, path, status: 413 });
+    return c.json(
+      { error: true, code: 'sandbox_exec_output_too_large', message: err.message, status: 413 },
+      413,
+    );
   }
   if (err instanceof PlatinumExecOutcomeUnknownError) {
     // Preserve ambiguity without a retry hint: the provider may have executed the write.
@@ -789,7 +798,10 @@ function handleUnhandledError(err: Error, c: Context): Response {
   const undecryptable = handleSecretUndecryptable(err, c, method, path);
   if (undecryptable) return undecryptable;
   if (err instanceof BillingError) {
-    appLogger.error(`${method} ${path} -> ${err.statusCode} [BillingError]`, {
+    // A 4xx refusal (tier cannot buy, invalid amount, insufficient credits) is the
+    // caller's to fix, not a server fault: warn. Only a 5xx stays an error.
+    const log = err.statusCode >= 500 ? appLogger.error : appLogger.warn;
+    log(`${method} ${path} -> ${err.statusCode} [BillingError]`, {
       statusCode: err.statusCode,
       message: err.message,
       path,

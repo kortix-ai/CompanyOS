@@ -114,9 +114,9 @@ describe('useFeatureFlag', () => {
   });
 
   test('one flag never reads another flag`s slot', () => {
-    withDetail({ marketplace: true, reminders: false });
+    withDetail({ shared_drives: true, reminders: false });
 
-    expect(useFeatureFlag('p', 'marketplace').enabled).toBe(true);
+    expect(useFeatureFlag('p', 'shared_drives').enabled).toBe(true);
     expect(useFeatureFlag('p', 'reminders').enabled).toBe(false);
   });
 
@@ -147,16 +147,6 @@ describe('useFeatureFlag', () => {
     expect(useFeatureFlag('p', 'agent_tunnel').enabled).toBe(true);
 
     expect(useFeatureFlag(null, 'agent_tunnel').enabled).toBe(true);
-  });
-
-  test('session_transcript_history graduated: saved history is on for every project', () => {
-    withDetail({ session_transcript_history: false });
-    expect(useFeatureFlag('p', 'session_transcript_history').enabled).toBe(true);
-
-    withDetail(undefined);
-    expect(useFeatureFlag('p', 'session_transcript_history').enabled).toBe(true);
-
-    expect(useFeatureFlag(null, 'session_transcript_history').enabled).toBe(true);
   });
 
   test('teams graduated: Microsoft Teams is on for every project', () => {
@@ -238,6 +228,17 @@ describe('useFeatureFlag', () => {
     expect(useFeatureFlag('p', 'agentmail_email').enabled).toBe(true);
   });
 
+  test('secrets_egress graduated: enforced exposure is offered in every project', () => {
+    // 2026-11-23. A stored `secrets_egress: false` from the flag era is inert.
+    withDetail({ secrets_egress: false });
+    expect(useFeatureFlag('p', 'secrets_egress').enabled).toBe(true);
+
+    withDetail(undefined);
+    expect(useFeatureFlag('p', 'secrets_egress').enabled).toBe(true);
+
+    expect(useFeatureFlag(null, 'secrets_egress').enabled).toBe(true);
+  });
+
   test('pooled_provider_secrets graduated: provider keys and key selection are on for every project', () => {
     // 2026-11-12. A stored `pooled_provider_secrets: false` from the flag era is inert.
     withDetail({ pooled_provider_secrets: false });
@@ -287,6 +288,18 @@ describe('resolveFeatureFlag', () => {
     expect(resolveFeatureFlag(undefined, 'reminders')).toBe(false);
   });
 
+  test('workspace_volume reads the row: the API sends whether new sessions are stateless (Platinum), not a constant', () => {
+    expect(resolveFeatureFlag({ workspace_volume: true }, 'workspace_volume')).toBe(true);
+    expect(resolveFeatureFlag({ workspace_volume: false }, 'workspace_volume')).toBe(false);
+    expect(resolveFeatureFlag(undefined, 'workspace_volume')).toBe(false);
+  });
+
+  test('chrome reads the row: the API sends whether it serves Kortix in Chrome, not a constant', () => {
+    expect(resolveFeatureFlag({ chrome: true }, 'chrome')).toBe(true);
+    expect(resolveFeatureFlag({ chrome: false }, 'chrome')).toBe(false);
+    expect(resolveFeatureFlag(undefined, 'chrome')).toBe(false);
+  });
+
   test('graduated keys are on for every project, even against a contrary row', () => {
     expect(resolveFeatureFlag({ review_center: false }, 'review_center')).toBe(true);
     expect(resolveFeatureFlag({ agent_tunnel: false }, 'agent_tunnel')).toBe(true);
@@ -303,26 +316,32 @@ describe('resolveFeatureFlag', () => {
 describe('useFeatureFlags', () => {
   /** The keys the map carries: FEATURE_FLAG_KEYS plus the graduated keys the API still resolves per project. */
   const SERVED_MAP_KEYS = [
-    'marketplace',
     'reminders',
-    'secrets_egress',
     'us_region',
     'event_triggers',
+    'channels',
     'chat',
     'shared_drives',
     'goals',
-    'workspace_volume',
     'email_channel',
     'session_groups',
-    'chrome',
     'agent_teams',
     'voice_call',
     'chat_input',
     'chat_front',
     'spaces_proactive',
+    'program_agents',
+    'evals',
+    'desktop_tabs',
+    'calendar',
+    'review_swipe',
+    'platinum_cache',
+    'sidebar_rail',
     'volumes',
     'drives',
     'artifacts',
+    'workspace_volume',
+    'chrome',
     'session_log',
   ] as const;
 
@@ -353,7 +372,7 @@ describe('useFeatureFlags', () => {
   test('resolves each served key fail-closed from the row', () => {
     // Only `=== true` may resolve, identical to `useFeatureFlag`.
     withDetail({
-      marketplace: true,
+      shared_drives: true,
       event_triggers: 'true' as unknown as boolean,
       artifacts: true,
       session_log: true,
@@ -361,13 +380,13 @@ describe('useFeatureFlags', () => {
     });
     const { flags } = useFeatureFlags('p');
 
-    expect(flags.marketplace).toBe(true);
+    expect(flags.shared_drives).toBe(true);
     expect(flags.event_triggers).toBe(false);
     expect(flags.artifacts).toBe(true);
     expect(flags.session_log).toBe(true);
     expect(flags.volumes).toBe(false);
     for (const key of SERVED_MAP_KEYS) {
-      if (['marketplace', 'event_triggers', 'artifacts', 'session_log', 'volumes'].includes(key)) continue;
+      if (['shared_drives', 'event_triggers', 'artifacts', 'session_log', 'volumes'].includes(key)) continue;
       expect(flags[key]).toBe(false);
     }
   });
@@ -385,11 +404,11 @@ describe('useFeatureFlags', () => {
     nextResult = { data: undefined, isLoading: true };
     const loading = useFeatureFlags('p');
     expect(loading.isLoading).toBe(true);
-    expect(loading.flags.marketplace).toBe(false);
+    expect(loading.flags.shared_drives).toBe(false);
 
-    nextResult = { data: { experimental: { marketplace: true } }, isLoading: false };
+    nextResult = { data: { experimental: { shared_drives: true } }, isLoading: false };
     const ready = useFeatureFlags('p');
     expect(ready.isLoading).toBe(false);
-    expect(ready.flags.marketplace).toBe(true);
+    expect(ready.flags.shared_drives).toBe(true);
   });
 });

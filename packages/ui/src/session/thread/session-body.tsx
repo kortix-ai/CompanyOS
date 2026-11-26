@@ -65,8 +65,12 @@ export function SessionBodyRow({
   transient?: boolean;
 }) {
   return (
-    <div className="flex min-h-0 flex-1 overflow-hidden">
-      <div className="relative flex min-w-0 flex-1 flex-col">{children}</div>
+    // `@container/session-body`: the action panel caps its width at half of
+    // this row (`50cqw`), so the chat always keeps the other half.
+    <div className="@container/session-body flex min-h-0 flex-1 overflow-hidden">
+      <div className="relative flex min-w-0 flex-1 flex-col">
+        {children}
+      </div>
       {actionPanel && <SessionActionPanelColumn hotkey={!transient} />}
     </div>
   );

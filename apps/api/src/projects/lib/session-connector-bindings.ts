@@ -12,7 +12,8 @@ import {
   serviceAccounts,
 } from '@kortix/db';
 import { and, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
-import { mapLimit } from '@kortix/registry';
+import { isChannelPlatform } from '@kortix/shared/channel-descriptors';
+import { mapWithConcurrency } from '../../shared/map-with-concurrency';
 import {
   canonicalConnectorAlias,
   publicConnectorAlias,
@@ -38,6 +39,7 @@ import {
   connectionRowIsReachable,
 } from './connection-access';
 import { audiencePersonId, loadConnectionAudience } from './connection-audience';
+import { connectorJoin } from './connection-mutation';
 import { sessionAgentId } from './secret-audience';
 import { projectSecretIsConfiguredForConsumer } from '../secrets';
 import { invalidateRequestMemo, requestMemo } from '../../lib/request-context';
@@ -259,6 +261,29 @@ export async function loadEmailInstallConnectionId(
 }
 
 /**
+ * Whether `alias` is the channel connector of the platform that creates the
+ * session (`metadata.source`, which only the server sets). A channel session
+ * exists to answer on its channel, so the agent's `connectors:` grant does not
+ * gate that connector: the call gate already allows it (connectors/principal-access.ts).
+ */
+export async function isSessionChannelConnector(projectId: string, alias: string, source: unknown): Promise<boolean> {
+  if (typeof source !== 'string' || !isChannelPlatform(source)) return false;
+  const [row] = await db
+    .select({ config: connectors.config })
+    .from(connectors)
+    .where(
+      and(
+        eq(connectors.projectId, projectId),
+        eq(connectors.slug, canonicalConnectorAlias(alias)),
+        eq(connectors.providerType, 'channel'),
+        eq(connectors.enabled, true),
+      ),
+    )
+    .limit(1);
+  return (row?.config as { platform?: unknown } | null)?.platform === source;
+}
+
+/**
  * Bind a session to its inbox's account, once. `bound`: the session uses the
  * inbox's active account. `stale`: it is bound to an account of the inbox that
  * was revoked (the inbox was removed and added again), so it can never answer.
@@ -376,14 +401,7 @@ export async function validateSessionConnectorBindings(input: {
         connectorConfig: connectors.config,
       })
       .from(connectorConnections)
-      .innerJoin(
-        connectors,
-        and(
-          eq(connectors.connectorId, connectorConnections.connectorId),
-          eq(connectors.accountId, connectorConnections.accountId),
-          eq(connectors.projectId, connectorConnections.projectId),
-        ),
-      )
+      .innerJoin(connectors, connectorJoin())
       .where(
         and(
           eq(connectorConnections.connectionId, binding.connection_id),
@@ -532,7 +550,7 @@ export async function sessionHasPersonalConnectorBinding(input: {
 }
 
 const liveConnectionGrant = sql`
-  ra.scope_type = 'project'
+  ra.scope_type in ('project', 'workspace')
   and ra.scope_id = ${connectorConnections.projectId}
   and ra.object_type = 'connection'
   and ra.object_id = ${connectorConnections.connectionId}::text
@@ -1684,7 +1702,7 @@ export async function resolveEffectiveSessionConnectorBindings(input: {
       agentId: await sessionAgentId(input.sessionId),
     });
     const RESOLVE_CONCURRENCY = 8;
-    await mapLimit(boundRows, RESOLVE_CONCURRENCY, async (bound) => {
+    await mapWithConcurrency(boundRows, RESOLVE_CONCURRENCY, async (bound) => {
       const connector: ConnectorRequirementRow = {
         connectorId: bound.connectorId,
         projectId: input.projectId,

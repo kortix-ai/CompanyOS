@@ -298,7 +298,10 @@ export function createGateway(rawHooks: GatewayHooks, deps: GatewayDeps = {}) {
     ? createClaudeCodePassthrough({
       authenticate: hooks.authenticate,
       claudeCredentials,
+      recordUsage: hooks.recordUsage,
+      recordTrace: hooks.recordTrace,
       claudeRefused: hooks.claudeRefused,
+      claudeForbidden: hooks.claudeForbidden,
       notePoolRateLimit: hooks.notePoolRateLimit,
       notePoolUsage: hooks.notePoolUsage,
     }, { upstream: deps.claudeCodeUpstream, logger })

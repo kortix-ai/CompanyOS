@@ -145,6 +145,7 @@ async function readRuntimeLogMessages(
 ): Promise<SessionLogMessage[] | null> {
   const pages: SessionLogMessage[][] = [];
   let beforeSeq: number | null = null;
+  let more = false;
   for (let page = 0; page < KORTIX_FULL_READ_MAX_PAGES; page++) {
     const limit = Math.min(opts.limit ?? KORTIX_MESSAGE_PAGE_MAX, KORTIX_MESSAGE_PAGE_MAX);
     const res = await sessionRuntimeFetch(session.endpoint, 'GET', runtimeVerbPaths.log({ limit, beforeSeq }), {}, opts.timeoutMs);
@@ -154,9 +155,12 @@ async function readRuntimeLogMessages(
     const messages = body.messages as SessionLogMessage[];
     pages.unshift(messages);
     const first = messages[0]?.seq;
-    if (opts.limit !== undefined || body.has_more !== true || typeof first !== 'number') break;
+    more = opts.limit === undefined && body.has_more === true && typeof first === 'number';
+    if (!more) break;
     beforeSeq = first;
   }
+  // A full read the page cap cut short is not the whole transcript: absence in it proves nothing.
+  if (more) return null;
   return pages.flat();
 }
 
@@ -491,6 +495,13 @@ export async function postPrompt(
     /** Hand the message to the RUNNING turn (`POST .../steer`) instead of
      *  starting one. Kortix route only; throws {@link SteerNotTaken}. */
     steer?: boolean;
+    /**
+     * The name of the person who wrote this prompt (`promptAuthorName`,
+     * KRTX-5121): the box puts it above the message for the model. A steer
+     * carries it in its body (it goes to the box directly); a prompt hands it
+     * to the proxy (`promptAuthor`), which drops a client's `author`.
+     */
+    author?: string | null;
   },
 ): Promise<'accepted' | 'deduplicated' | 'failed' | 'unreachable'> {
   const parts: PromptPartWire[] =
@@ -556,6 +567,7 @@ export async function postPrompt(
         ...(overrides?.variant ? { variant: overrides.variant } : {}),
         directory,
         ...(prompt?.noReply ? { no_reply: true } : {}),
+        ...(prompt?.steer && prompt.author ? { author: { name: prompt.author } } : {}),
       }),
     );
     prompt?.onBodyBytes?.(body.byteLength);
@@ -597,7 +609,7 @@ export async function postPrompt(
       config.KORTIX_URL ?? '',
       undefined,
       undefined,
-      { record: prompt?.sandboxRecord, promptSource: prompt?.source },
+      { record: prompt?.sandboxRecord, promptSource: prompt?.source, promptAuthor: prompt?.author ?? null },
     );
   };
   try {

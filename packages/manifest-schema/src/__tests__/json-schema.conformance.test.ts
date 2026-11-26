@@ -136,10 +136,22 @@ const FIXTURES: Fixture[] = [
 
   // ─── shared sections: connectors.auth ──────────────────────────────────
   {
-    name: 'connectors.auth.secret is forbidden outright (credentials live in the platform)',
-    valid: false,
+    name: 'connectors.auth.secret names a project secret (the value lives in the platform)',
+    valid: true,
     input:
       'connectors:\n  - slug: x\n    provider: openapi\n    spec: https://x/y.json\n    auth:\n      type: bearer\n      secret: TOK\n',
+  },
+  {
+    name: 'connectors.auth.secret that is not a project-secret name is rejected',
+    valid: false,
+    input:
+      'connectors:\n  - slug: x\n    provider: openapi\n    spec: https://x/y.json\n    auth:\n      type: bearer\n      secret: not-a-name\n',
+  },
+  {
+    name: 'connectors.auth.secret with surrounding whitespace is not an exact project-secret name',
+    valid: false,
+    input:
+      'connectors:\n  - slug: x\n    provider: openapi\n    spec: https://x/y.json\n    auth:\n      type: bearer\n      secret: " TOK "\n',
   },
   {
     name: 'connectors.auth.type must be one of the known enum values',
@@ -414,11 +426,6 @@ const FIXTURES: Fixture[] = [
     name: 'on/run: type with on is rejected',
     valid: false,
     input: 'triggers:\n  - slug: t\n    type: cron\n    on: { every: 5m }\n    run: { prompt: go }\n',
-  },
-  {
-    name: 'on/run: run needs a prompt or an app',
-    valid: false,
-    input: 'triggers:\n  - slug: t\n    on: { every: 5m }\n    run: { agent: default }\n',
   },
   {
     name: 'on/run: a webhook needs its secret',
@@ -1288,6 +1295,16 @@ describe('Known divergence: cross-field rules only the imperative validator enfo
     const yaml = 'default_agent: ghost\nagents:\n  w: {}\n';
     expect(validateManifest(yaml).valid).toBe(false);
     expect(validateCombined(parseYaml(yaml))).toBe(true);
+  });
+
+  // `prompt` may be omitted when the trigger's agent is a program agent (`run`): which agents have `run` is another section.
+  test('a run with no prompt and no app: imperative rejects for a model agent, accepts for a program agent; schema accepts both', () => {
+    const model = 'triggers:\n  - slug: t\n    on: { every: 5m }\n    run: { agent: default }\n';
+    const program = 'agents:\n  j:\n    run: node j.js\ntriggers:\n  - slug: t\n    on: { every: 5m }\n    run: { agent: j }\n';
+    expect(validateManifest(model).valid).toBe(false);
+    expect(validateCombined(parseYaml(model))).toBe(true);
+    expect(validateManifest(program).valid).toBe(true);
+    expect(validateCombined(parseYaml(program))).toBe(true);
   });
 
   test("a trigger's agent naming an undeclared agent: imperative rejects, schema accepts", () => {

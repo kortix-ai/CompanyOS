@@ -2,7 +2,6 @@
  * Project triggers — manage-gated CRUD. Maps to spec §17 (TRG-1..5).
  * Trigger create commits the project manifest (a real git commit).
  */
-import { createHmac } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -11,9 +10,9 @@ import { TriggerListSchema } from '@kortix/api-contract';
 import { flow } from '../core/flow';
 import { waitFor } from '../core/poll';
 import { CliSandbox, throwIfCliInfraFailure } from '../fixtures/cli';
-import { createDatabaseSession } from '../fixtures/database-project';
+import { bindDatabaseSessionCredential, createDatabaseSession } from '../fixtures/database-project';
 import { enableEnterpriseDemo } from '../fixtures/enterprise-access';
-import { withDb } from '../fixtures/chat';
+import { signedWebhookHeaders, webhookSignature, withDb } from '../fixtures/chat';
 
 type TriggerRow = { slug: string; model: string | null };
 
@@ -172,6 +171,22 @@ flow(
       for (const needle of ['on:', 'cron:', 'run:', 'model: anthropic/claude-sonnet-4-6', 'do nightly work']) {
         if (!text.includes(needle)) throw new Error(`kortix.yaml lacks "${needle}":\n${text}`);
       }
+    });
+    await ctx.step('an undeclared agent → 400 and no manifest commit', async () => {
+      const owner = ctx.client.as(ctx.P.OWNER);
+      const file = () => owner.get('/v1/workspaces/:projectId/files/content', { params: { projectId: p.id }, query: { path: 'kortix.yaml' } });
+      const before = (await file()).status(200).json<{ content: string }>().content;
+      const response = await owner.post('/v1/workspaces/:projectId/triggers', {
+        name: 'Unknown agent', slug: 'unknown-agent', type: 'cron', cron: '0 0 3 * * *', agent: 'ghost', prompt_template: 'Go.',
+      }, { params: { projectId: p.id } });
+      response.status(400);
+      if (!response.json<{ error: string }>().error.includes('triggers[1].run.agent')) throw new Error('missing nested agent error');
+      const after = (await file()).status(200).json<{ content: string }>().content;
+      if (after !== before) throw new Error('rejected trigger changed the manifest');
+      const patched = await owner.patch('/v1/workspaces/:projectId/triggers/:slug', { agent: 'ghost' }, { params: { projectId: p.id, slug: 'nightly' } });
+      patched.status(400);
+      if (!patched.json<{ error: string }>().error.includes('triggers[0].run.agent')) throw new Error('missing PATCH agent error');
+      if ((await file()).status(200).json<{ content: string }>().content !== before) throw new Error('rejected PATCH changed the manifest');
     });
     await ctx.step('duplicate slug → 409', async () => {
       const r = await ctx.client
@@ -1530,12 +1545,7 @@ flow(
             ctx.client.as(ctx.P.ANON).post('/v1/webhooks/projects/:projectId/:slug', rawBody, {
               params: { projectId: p.id, slug: 'bp-hook' },
               raw: true,
-              headers: {
-                'content-type': 'application/json',
-                'x-kortix-timestamp': String(ts),
-                'x-kortix-signature': `sha256=${createHmac('sha256', secret).update(`${ts}.${rawBody}`).digest('hex')}`,
-                'x-kortix-delivery-id': deliveryId,
-              },
+              headers: { ...signedWebhookHeaders(secret, rawBody, ts), 'x-kortix-delivery-id': deliveryId },
             });
           const first = await deliver();
           first.status(202).body().has('$.status', 'queued').has('$.reason', 'project provisioning backpressure').has('$.deduped', false);
@@ -1671,11 +1681,10 @@ flow(
     const params = { projectId: p.id };
     const secret = `ke2e-hook-${crypto.randomUUID()}`;
     const rawBody = JSON.stringify({ action: 'opened' });
-    const sign = (payload: string, key = secret) => `sha256=${createHmac('sha256', key).update(payload).digest('hex')}`;
     // KRTX-4098: signature auth requires X-Kortix-Timestamp and signs `<ts>.<body>`.
     const signed = (ts = Math.floor(Date.now() / 1000)) => ({
       'x-kortix-timestamp': String(ts),
-      'x-kortix-signature': sign(`${ts}.${rawBody}`),
+      'x-kortix-signature': webhookSignature(secret, `${ts}.${rawBody}`),
     });
     // The URL Kortix shows names the workspace; the project path answers the same, permanently.
     const deliverAt = (route: '/v1/webhooks/workspaces/:projectId/:slug' | '/v1/webhooks/projects/:projectId/:slug') =>
@@ -1742,13 +1751,13 @@ flow(
       await rejected({});
       await rejected(signed(), 'no-such-hook');
       const ts = String(Math.floor(Date.now() / 1000));
-      await rejected({ 'x-kortix-timestamp': ts, 'x-kortix-signature': sign(`${ts}.${rawBody}`, 'wrong-secret') });
+      await rejected({ 'x-kortix-timestamp': ts, 'x-kortix-signature': webhookSignature('wrong-secret', `${ts}.${rawBody}`) });
     });
 
     await ctx.step('a valid X-Kortix-Signature or X-Hub-Signature-256 with its timestamp authenticates → 200 skipped (paused)', async () => {
       const ts = Math.floor(Date.now() / 1000);
       await accepted(signed(ts));
-      await accepted({ 'x-kortix-timestamp': String(ts), 'x-hub-signature-256': sign(`${ts}.${rawBody}`) });
+      await accepted({ 'x-kortix-timestamp': String(ts), 'x-hub-signature-256': webhookSignature(secret, `${ts}.${rawBody}`) });
     });
 
     await ctx.step('the older /v1/webhooks/projects path: a valid signature → the same 200 skipped, a wrong one → the same 401', async () => {
@@ -1758,20 +1767,35 @@ flow(
 
     await ctx.step('X-Kortix-Timestamp signs <timestamp>.<body>: 1 h stale or 1 h ahead → 401, current → 200', async () => {
       const now = Math.floor(Date.now() / 1000);
-      const stamped = (ts: number) => ({ 'x-kortix-timestamp': String(ts), 'x-kortix-signature': sign(`${ts}.${rawBody}`) });
-      await rejected(stamped(now - 3600));
-      await rejected(stamped(now + 3600));
-      await accepted(stamped(now));
+      await rejected(signed(now - 3600));
+      await rejected(signed(now + 3600));
+      await accepted(signed(now));
     });
 
     await ctx.step('KRTX-4098: a captured signed delivery cannot replay — no timestamp → 401, and the old body-only signature → 401', async () => {
       // Without a timestamp the sender's old body-only HMAC is refused outright,
       // so a captured delivery must be re-stamped inside the window to run again.
-      await rejected({ 'x-kortix-signature': sign(rawBody) });
-      await rejected({ 'x-kortix-signature': sign(rawBody, 'wrong-secret') });
+      await rejected({ 'x-kortix-signature': webhookSignature(secret, rawBody) });
+      await rejected({ 'x-kortix-signature': webhookSignature('wrong-secret', rawBody) });
       const ts = Math.floor(Date.now() / 1000);
-      await rejected({ 'x-kortix-timestamp': String(ts), 'x-kortix-signature': sign(rawBody) });
+      await rejected({ 'x-kortix-timestamp': String(ts), 'x-kortix-signature': webhookSignature(secret, rawBody) });
       await accepted(signed(ts));
+    });
+
+    await ctx.step('a GitHub repository webhook (body-signed X-Hub-Signature-256, X-GitHub-Event, X-GitHub-Delivery, no timestamp) → 200; a wrong secret or no X-GitHub-Event → 401', async () => {
+      // GitHub signs the raw body alone: `sha256=<hex HMAC of the body>`.
+      const sign = (body: string, key = secret) => webhookSignature(key, body);
+      const github = (signature: string, extra: Record<string, string> = {}) => ({
+        'x-github-event': 'issues',
+        'x-github-delivery': crypto.randomUUID(),
+        'x-hub-signature-256': signature,
+        ...extra,
+      });
+      await accepted(github(sign(rawBody)));
+      await rejected(github(sign(rawBody, 'wrong-secret')));
+      await rejected({ 'x-github-delivery': crypto.randomUUID(), 'x-hub-signature-256': sign(rawBody) });
+      // A Kortix signing header turns the GitHub scheme off: the timestamp rule applies again.
+      await rejected(github(sign(rawBody), { 'x-kortix-signature': sign(rawBody) }));
     });
 
     await ctx.step('static token: a wrong X-Kortix-Token → 401; the secret as X-Kortix-Token or Bearer → 200', async () => {
@@ -2358,7 +2382,7 @@ flow(
     const secret = `ke2e-hook-${crypto.randomUUID()}`;
     const rawBody = JSON.stringify({ action: 'opened', api_key: 'synthetic-not-a-key' });
     const timestamp = String(Math.floor(Date.now() / 1000));
-    const signature = `sha256=${createHmac('sha256', secret).update(`${timestamp}.${rawBody}`).digest('hex')}`;
+    const signature = webhookSignature(secret, `${timestamp}.${rawBody}`);
     const addSecret = async () =>
       (await owner.post('/v1/workspaces/:projectId/secrets', { name: 'HOOK_SECRET', value: secret, strategy: 'broker', consumer: 'connector' }, { params })).status(200);
     const runs = async (slug = 'hook') =>
@@ -2459,7 +2483,7 @@ flow(
     await ctx.step('three refused deliveries in one second (bad signature, no timestamp, a timestamp 1 h old) → 401 each, and each is a rejected run with its own reason', async () => {
       (await owner.post('/v1/workspaces/:projectId/triggers', { name: 'hook2', slug: 'hook2', type: 'webhook', secret_env: 'HOOK_SECRET', prompt_template: 'x' }, { params })).status(201);
       const now = Math.floor(Date.now() / 1000);
-      const sign = (ts: number) => `sha256=${createHmac('sha256', secret).update(`${ts}.${rawBody}`).digest('hex')}`;
+      const sign = (ts: number) => webhookSignature(secret, `${ts}.${rawBody}`);
       const deliveries: Record<string, string>[] = [
         { 'x-kortix-timestamp': String(now), 'x-kortix-signature': `sha256=${'0'.repeat(64)}` },
         { 'x-kortix-signature': sign(now) },
@@ -2766,16 +2790,10 @@ flow(
         ),
       );
       const rawBody = JSON.stringify({ action: 'opened' });
-      const ts = Math.floor(Date.now() / 1000);
       const r = await ctx.client.as(ctx.P.ANON).post('/v1/webhooks/projects/:projectId/:slug', rawBody, {
         params: { ...params, slug: 'capped' },
         raw: true,
-        headers: {
-          'content-type': 'application/json',
-          'x-kortix-timestamp': String(ts),
-          'x-kortix-signature': `sha256=${createHmac('sha256', secret).update(`${ts}.${rawBody}`).digest('hex')}`,
-          'x-kortix-delivery-id': crypto.randomUUID(),
-        },
+        headers: signedWebhookHeaders(secret, rawBody),
       });
       r.status(200).body().has('$.status', 'skipped').has('$.reason', throttled);
       const runs = (await owner.get('/v1/workspaces/:projectId/triggers/:slug/runs', { params: { ...params, slug: 'capped' } })).status(200).json<RunList>().runs;
@@ -2857,16 +2875,10 @@ flow(
     type Status = { paused: boolean; paused_at: string | null; paused_by: string | null; can_change: boolean };
     const deliver = async () => {
       const rawBody = JSON.stringify({ action: 'opened' });
-      const ts = Math.floor(Date.now() / 1000);
       return ctx.client.as(ctx.P.ANON).post('/v1/webhooks/projects/:projectId/:slug', rawBody, {
         params: { ...params, slug: 'hook' },
         raw: true,
-        headers: {
-          'content-type': 'application/json',
-          'x-kortix-timestamp': String(ts),
-          'x-kortix-signature': `sha256=${createHmac('sha256', secret).update(`${ts}.${rawBody}`).digest('hex')}`,
-          'x-kortix-delivery-id': crypto.randomUUID(),
-        },
+        headers: signedWebhookHeaders(secret, rawBody),
       });
     };
     const listingPaused = async () =>
@@ -2956,16 +2968,10 @@ flow(
     };
     const deliver = async (body: Record<string, unknown>) => {
       const rawBody = JSON.stringify(body);
-      const ts = Math.floor(Date.now() / 1000);
       return ctx.client.as(ctx.P.ANON).post('/v1/webhooks/projects/:projectId/:slug', rawBody, {
         params: slugParams,
         raw: true,
-        headers: {
-          'content-type': 'application/json',
-          'x-kortix-timestamp': String(ts),
-          'x-kortix-signature': `sha256=${createHmac('sha256', secret).update(`${ts}.${rawBody}`).digest('hex')}`,
-          'x-kortix-delivery-id': crypto.randomUUID(),
-        },
+        headers: signedWebhookHeaders(secret, rawBody),
       });
     };
     const push = (ref: string, login: string) => ({ ref, sender: { login } });
@@ -3071,16 +3077,10 @@ flow(
     };
     const deliver = async () => {
       const rawBody = JSON.stringify({ action: 'opened' });
-      const ts = Math.floor(Date.now() / 1000);
       return ctx.client.as(ctx.P.ANON).post('/v1/webhooks/projects/:projectId/:slug', rawBody, {
         params: slugParams,
         raw: true,
-        headers: {
-          'content-type': 'application/json',
-          'x-kortix-timestamp': String(ts),
-          'x-kortix-signature': `sha256=${createHmac('sha256', secret).update(`${ts}.${rawBody}`).digest('hex')}`,
-          'x-kortix-delivery-id': crypto.randomUUID(),
-        },
+        headers: signedWebhookHeaders(secret, rawBody),
       });
     };
 
@@ -3178,16 +3178,10 @@ flow(
     };
     const deliver = async () => {
       const rawBody = JSON.stringify({ action: 'opened' });
-      const ts = Math.floor(Date.now() / 1000);
       return ctx.client.as(ctx.P.ANON).post('/v1/webhooks/projects/:projectId/:slug', rawBody, {
         params: slugParams,
         raw: true,
-        headers: {
-          'content-type': 'application/json',
-          'x-kortix-timestamp': String(ts),
-          'x-kortix-signature': `sha256=${createHmac('sha256', secret).update(`${ts}.${rawBody}`).digest('hex')}`,
-          'x-kortix-delivery-id': crypto.randomUUID(),
-        },
+        headers: signedWebhookHeaders(secret, rawBody),
       });
     };
 
@@ -3450,3 +3444,126 @@ flow(
     }
   },
 );
+
+// Hard caps reserve attempts before dispatch, including manual fires of disabled schedules.
+flow('TRG-46', {
+  domain: 'triggers', requires: ['database'],
+  routes: ['POST /v1/workspaces/:projectId/triggers', 'POST /v1/workspaces/:projectId/triggers/:slug/fire', 'GET /v1/workspaces/:projectId/triggers/:slug/runs'],
+}, async (ctx) => {
+  if (ctx.env.target !== 'local') return;
+  const p = await ctx.fixtures.project({ managedGit: true });
+  const owner = ctx.client.as(ctx.P.OWNER);
+  const params = { projectId: p.id, slug: 'hard-worker' };
+  await ctx.step('save a disabled keyed worker with hard limits and preserve them on read-back', async () => {
+    const response = await owner.post('/v1/workspaces/:projectId/triggers', {
+      name: 'Hard worker', type: 'cron', cron: '0 0 9 * * *', enabled: false,
+      prompt_template: 'Draft', session_key: '{{ body.thread_id }}',
+      filter: { 'body.thread_id': { prefix: 'th_' } },
+      hard_run_caps: true, max_runs_per_hour: 5, max_runs_per_day: 20,
+    }, { params });
+    response.status(201);
+    if (!response.text().includes('"hard_run_caps":true')) throw new Error('hard cap policy lost on read-back');
+  });
+  await ctx.step('invalid and missing keys start nothing and do not consume admission', async () => {
+    for (const payload of [{ body: { thread_id: 'x' } }, {}]) {
+      (await owner.post('/v1/workspaces/:projectId/triggers/:slug/fire', { payload }, { params })).status(429);
+    }
+    await withDb(ctx, async (db) => {
+      const result = await db.query('select count(*)::int as n from kortix.project_trigger_admissions where project_id = $1', [p.id]);
+      if (result.rows[0]?.n !== 0) throw new Error('invalid payload consumed admission');
+    });
+  });
+  await ctx.step('concurrent manual fires admit five; the sixth is refused with persisted history', async () => {
+    const results = await Promise.all(Array.from({ length: 6 }, () => owner.post('/v1/workspaces/:projectId/triggers/:slug/fire', {
+      payload: { body: { thread_id: 'th_synthetic' } },
+    }, { params })));
+    // The deterministic local account has no model. Admitted attempts fail 402,
+    // but still spend a reservation: retries cannot evade a hard attempt budget.
+    if (results.filter((r) => r.statusCode === 402).length !== 5 || results.filter((r) => r.statusCode === 429).length !== 1) {
+      throw new Error(`unexpected dispatch statuses: ${results.map((r) => r.statusCode).join(',')}`);
+    }
+    const history = await owner.get('/v1/workspaces/:projectId/triggers/:slug/runs', { params });
+    history.status(200);
+    if (!history.text().includes('hard max_runs_per_hour 5')) throw new Error('hard-cap refusal missing from history');
+  });
+});
+
+flow('TRG-47', {
+  domain: 'triggers', requires: ['database'],
+  routes: ['POST /v1/workspaces/:projectId/triggers', 'POST /v1/workspaces/:projectId/cli-token', 'POST /v1/workspaces/:projectId/triggers/:slug/fire', 'GET /v1/workspaces/:projectId/sessions/:sessionId', 'GET /v1/workspaces/:projectId/triggers/:slug/runs'],
+}, async (ctx) => {
+  if (ctx.env.target !== 'local') return;
+  const p = await ctx.fixtures.project({ managedGit: true });
+  const owner = ctx.client.as(ctx.P.OWNER);
+  const params = { projectId: p.id, slug: 'draft-worker' };
+  let secret = '';
+  let worker = '';
+  await ctx.step('seed a dispatcher and its private keyed draft worker with a session-bound credential', async () => {
+    (await owner.post('/v1/workspaces/:projectId/triggers', {
+      name: 'Draft worker', type: 'cron', cron: '0 0 9 * * *', enabled: false,
+      prompt_template: 'Draft only', session_key: '{{ body.thread_id }}',
+    }, { params })).status(201);
+    const dispatcher = await createDatabaseSession(ctx.env, { projectId: p.id, accountId: p.accountId!, userId: ctx.P.OWNER.userId!, visibility: 'private' });
+    worker = await createDatabaseSession(ctx.env, {
+      projectId: p.id, accountId: p.accountId!, userId: ctx.P.OWNER.userId!, visibility: 'private', parentSessionId: dispatcher,
+      metadata: { trigger_kind: 'git', trigger_slug: 'draft-worker', trigger_session_key: 'th_synthetic' },
+    });
+    await withDb(ctx, (db) => db.query("update kortix.project_sessions set status = 'stopped' where project_id = $1", [p.id]));
+    const minted = await owner.post('/v1/workspaces/:projectId/cli-token', { name: ctx.fixtures.name('dispatcher') }, { params });
+    minted.status(201);
+    const token = minted.json<{ token_id: string; secret_key: string }>();
+    secret = token.secret_key;
+    await bindDatabaseSessionCredential(ctx.env, { tokenId: token.token_id, commandId: crypto.randomUUID(), sessionId: dispatcher, accountId: p.accountId!, projectId: p.id });
+  });
+  await ctx.step('the bound dispatcher fires the disabled schedule twice, reads its worker, and sees exactly one persisted row per fire', async () => {
+    const box = ctx.client.as({ label: 'synthetic-dispatcher', auth: { mode: 'bearer', token: secret } });
+    for (let n = 1; n <= 2; n += 1) {
+      const result = await box.post('/v1/workspaces/:projectId/triggers/:slug/fire', { payload: { body: { thread_id: 'th_synthetic' } } }, { params });
+      result.status(202).body().has('$.session_id', worker);
+      (await box.get('/v1/workspaces/:projectId/sessions/:sessionId', { params: { ...params, sessionId: worker } })).status(200);
+      const history = await box.get('/v1/workspaces/:projectId/triggers/:slug/runs', { params });
+      history.status(200);
+      const runs = history.json<{ runs: Array<{ session_id: string }> }>().runs;
+      if (runs.length !== n || runs.some((run) => run.session_id !== worker)) throw new Error('dispatcher run history lost or duplicated');
+    }
+    const cli = new CliSandbox('keyed-draft');
+    try {
+      const result = await cli.run(['triggers', 'runs', 'draft-worker', '--json'], { env: { KORTIX_TOKEN: secret, KORTIX_PROJECT_ID: p.id } });
+      if (result.exitCode !== 0 || !result.stdout.includes(worker)) throw new Error(`CLI run history failed: ${result.all}`);
+    } finally { cli.dispose(); }
+  });
+});
+
+flow('TRG-44', {
+  domain: 'triggers',
+  routes: [
+    'GET /v1/workspaces/:projectId/sessions/:sessionId',
+    'GET /v1/workspaces/:projectId/sessions',
+    'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
+    'POST /v1/workspaces/:projectId/sessions/:sessionId/prompts',
+    'GET /v1/workspaces/:projectId/triggers/:slug/runs',
+  ],
+}, async (ctx) => {
+  const team = await ctx.fixtures.team({ enterprise: true });
+  const project = await team.project();
+  const member = await team.addMember('member');
+  if (!member.userId) throw new Error('reader fixture needs a member');
+  await team.grantProjectRole(project.id, member.userId, 'member');
+  const ownerId = ctx.P.OWNER.userId;
+  if (!ownerId) throw new Error('reader fixture needs an owner');
+  const sessionId = await createDatabaseSession(ctx.env, {
+    projectId: project.id, accountId: team.id, userId: ownerId, visibility: 'private',
+    metadata: { source: 'trigger:cron', trigger_kind: 'git', trigger_slug: 'reader-proof', trigger_session_readers: { humans: 'members', agents: [] } },
+  });
+  const client = ctx.client.as(member);
+  await ctx.step('a non-owner member reads the trigger session and finds it in the list', async () => {
+    (await client.get('/v1/workspaces/:projectId/sessions/:sessionId', { params: { projectId: project.id, sessionId } })).status(200).body().has('$.session_id', sessionId);
+    const list = await client.get('/v1/workspaces/:projectId/sessions', { params: { projectId: project.id } });
+    list.status(200);
+    if (!JSON.stringify(list.json()).includes(sessionId)) throw new Error('reader session missing from inventory');
+  });
+  await ctx.step('the same reader cannot start or prompt that session', async () => {
+    (await client.post('/v1/workspaces/:projectId/sessions/:sessionId/start', {}, { params: { projectId: project.id, sessionId } })).status(404);
+    (await client.post('/v1/workspaces/:projectId/sessions/:sessionId/prompts', { client_message_id: 'reader-denied', parts: [{ type: 'text', text: 'Do not run.' }] }, { params: { projectId: project.id, sessionId } })).status(404);
+  });
+});

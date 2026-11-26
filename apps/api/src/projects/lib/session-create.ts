@@ -36,7 +36,12 @@ import { selectProvider } from '../../platform/services/provider-balancer';
 import { ProvisionTimeline } from '../../platform/services/provision-timeline';
 import { provisionSessionSandbox } from '../../platform/services/session-sandbox';
 import { resolveSessionPlacement } from '../../platform/services/sandbox-region';
-import { startWorkspaceVolume, WORKSPACE_VOLUME_SESSION_KEY, type WorkspaceVolume } from '../../platform/services/workspace-volume';
+import {
+  startWorkspaceVolume,
+  WORKSPACE_VOLUME_SESSION_KEY,
+  workspaceCacheNamespace,
+  type WorkspaceVolume,
+} from '../../platform/services/workspace-volume';
 
 
 import { db } from '../../shared/db';
@@ -70,6 +75,7 @@ import { normalizeJsonObject } from '../../shared/json';
 import { isUuid } from '../../shared/validate';
 import {
   canonicalConnectorAlias,
+  isSessionChannelConnector,
   parseSessionConnectorBindings,
   sessionConnectorBindingsRequirePrivateVisibility,
   validateSessionConnectorBindings,
@@ -92,12 +98,16 @@ import { projectSessionMetadataMerge } from './session-metadata-merge';
 import { transitionSession } from '../session-lifecycle/status-transitions';
 import { mergeSessionSandboxEnv, parseSessionRuntimeContext, reservedRuntimeContextRefusal } from './session-runtime-context';
 import { resolveFeatureFlag } from '../../feature-flags/registry';
+import { AGENT_CHAT_CONTEXT_KEY, startsAgentChat } from './agent-directory';
 import { FRONT_THREAD_CONTEXT_KEY, FRONT_THREAD_METADATA_KEY, sessionIsFrontThread, sessionSpaceAgents, spaceRosterAllows, startsFrontThread } from './front-thread';
 import { SPACE_WATCHER_SOURCE, WATCHER_CONTEXT_KEY } from './space-watch/keys';
 import { resolveMyKortixSandbox } from './my-kortix-agent';
 import { spaceAccessFor } from '../../shared/space-access';
 import { FIRST_PROMPT_MAX_CHARS, SPACE_NOT_FOUND, ensureDefaultSpace, findForkSourceSpace, forkSourceVisibility, findLiveChannel, findSessionSpace, inheritedPrivateSpace, spaceSessionVisibility } from './project-spaces';
 import { liveTriggerSpace, triggerRunSpace } from './trigger-space';
+import { findSessionGroup } from './session-groups';
+import { canSeeGroup, groupMemberIds } from '../../shared/session-group-access';
+import { groupViewerFor } from './session-group-viewer';
 
 import {
 } from '../../git-proxy/project-snapshot';
@@ -373,6 +383,46 @@ export async function resolveRequestedSessionSpace(input: CreateProjectSessionIn
     ? await forkSourceVisibility(project.projectId, body.fork_from_session_id)
     : null;
   return { filed: true, spaceId: space.spaceId, visibility: spaceSessionVisibility(space.kind, sourceVisibility) };
+}
+
+/**
+ * `session_groups` on: the space (session group) a person's own top-level
+ * create names (`group_id`), checked; a fork with none named keeps its
+ * source's space only when the caller sees that space. A session another
+ * session starts is never filed: it reads its parent's space
+ * (`sessionGroupOf`). Flag off, or `null`: no space. An id that is not a group
+ * of this project, or one the caller does not see: 404 `group_not_found`.
+ */
+export async function resolveRequestedSessionGroup(input: CreateProjectSessionInput): Promise<SessionCreateStep<{ groupId: string | null }>> {
+  const { project, body } = input;
+  if (!resolveFeatureFlag(project.metadata, 'session_groups')) return { groupId: null };
+  if (input.callerSessionId || (typeof body.parent_session_id === 'string' && body.parent_session_id.length > 0)) return { groupId: null };
+  if (body.group_id === null) return { groupId: null };
+  if (body.group_id === undefined) {
+    if (typeof body.fork_from_session_id !== 'string') return { groupId: null };
+    const [source] = await db
+      .select({ groupId: projectSessions.groupId })
+      .from(projectSessions)
+      .where(and(eq(projectSessions.projectId, project.projectId), eq(projectSessions.sessionId, body.fork_from_session_id)))
+      .limit(1);
+    // A space shares its Files folder read-write with every session in it. A
+    // fork of a session someone shared with you, from a space that is not
+    // shared with you, lands outside that space.
+    return { groupId: source?.groupId ? await visibleGroupId(input, source.groupId) : null };
+  }
+  const groupId = typeof body.group_id === 'string' && isUuid(body.group_id) ? await visibleGroupId(input, body.group_id) : null;
+  // A private group says nothing to someone it is not shared with: the same 404.
+  if (!groupId) return { error: { status: 404, body: { error: 'No such space in this workspace.', code: 'group_not_found' } } };
+  return { groupId };
+}
+
+/** The group's id when it is a group of this project that the caller sees; else null. */
+async function visibleGroupId(input: CreateProjectSessionInput, groupId: string): Promise<string | null> {
+  const { project } = input;
+  const group = await findSessionGroup(project.projectId, groupId);
+  if (!group || !input.userId) return null;
+  const members = (await groupMemberIds([group.groupId])).get(group.groupId) ?? [];
+  return canSeeGroup(group, members, await groupViewerFor(input.userId, project.accountId)) ? group.groupId : null;
 }
 
 /** The session's sharing: explicit, or inherited from the spawning session. */
@@ -660,7 +710,7 @@ async function resolveSessionAgent(params: {
         error: {
           status: 400,
           body: {
-            error: `"${agentName}" is not an agent of this space. Pick one of: ${check.roster.join(', ')}.`,
+            error: `"${agentName}" is not an agent of this channel. Pick one of: ${check.roster.join(', ')}.`,
             code: 'AGENT_NOT_IN_SPACE',
             roster: check.roster,
           },
@@ -1034,8 +1084,10 @@ async function validateSessionConnectorsForAgent(params: {
   const { input, accountId, projectId, agentName, loadedAgents, parsedConnectorBindings, visibility } = params;
   const { userId } = input;
   // Every connector this session binds explicitly must be granted to the
-  // session's agent. Nothing is required any more: an unconnected connector no
-  // longer refuses the create, it denies at the call with a connect link.
+  // session's agent, except the connector of the channel that creates it (an
+  // email thread binds its inbox): an agent with `connectors: none` still
+  // answers on its channel. Nothing is required any more: an unconnected
+  // connector no longer refuses the create, it denies at the call with a connect link.
   const grantCheckAliases = new Set<string>(
     parsedConnectorBindings.bindings ? Object.keys(parsedConnectorBindings.bindings) : [],
   );
@@ -1043,7 +1095,10 @@ async function validateSessionConnectorsForAgent(params: {
   if (grantCheckAliases.size > 0) {
     loadedAgentGrant = grantFromLoadedAgents(agentName, loadedAgents);
     for (const alias of grantCheckAliases) {
-      if (!agentMayUseConnector(loadedAgentGrant, canonicalConnectorAlias(alias))) {
+      if (
+        !agentMayUseConnector(loadedAgentGrant, canonicalConnectorAlias(alias)) &&
+        !(await isSessionChannelConnector(projectId, alias, input.metadata?.source))
+      ) {
         return {
           error: {
             status: 403,
@@ -1471,6 +1526,7 @@ async function insertSessionAndBindings(
     pendingPromptConversion: PendingPromptConversion | null;
     inheritedGrants: SecretGrant[];
     spaceId: string | null;
+    groupId: string | null;
     /** A person's allow of this colleague's access, used once here (colleague-access.ts). */
     colleagueAccessAllowId: string | null;
   },
@@ -1497,6 +1553,7 @@ async function insertSessionAndBindings(
     pendingPromptConversion,
     inheritedGrants,
     spaceId,
+    groupId,
     colleagueAccessAllowId,
   } = params;
   const { userId, body } = input;
@@ -1522,6 +1579,7 @@ async function insertSessionAndBindings(
       origin,
       parentSessionId: parentSession?.sessionId ?? SessionCreateInputSchema.shape.parent_session_id.parse(body.parent_session_id) ?? null,
       spaceId,
+      groupId,
       initiatorType: initiator.type,
       initiatorId: initiator.id,
       secretsAllowlist,
@@ -1854,11 +1912,14 @@ export async function createProjectSession(input: {
   const sandboxRegion = await resolveSessionPlacement(projectId, project.metadata);
   const workspaceVolume = startWorkspaceVolume({
     sessionId: identity.sessionId,
-    projectMetadata: project.metadata,
     location: sandboxRegion.location,
+    // Flag `platinum_cache`: the volume starts as the project's newest saved workspace.
+    cacheNamespace: resolveFeatureFlag(project.metadata, 'platinum_cache') ? workspaceCacheNamespace(projectId) : undefined,
   });
   const requestedSpace = await resolveRequestedSessionSpace(input);
   if (requestedSpace.error) return { error: requestedSpace.error };
+  const requestedGroup = await resolveRequestedSessionGroup(input);
+  if (requestedGroup.error) return { error: requestedGroup.error };
   // A space decides the sharing unless the caller set it explicitly; a private one (a DM, a fork of a private session) always does.
   const { parentSession, visibility, inheritedGrants } = await resolveSessionSharing(
     requestedSpace.visibility && (input.visibility === undefined || requestedSpace.visibility === 'private')
@@ -2071,11 +2132,23 @@ export async function createProjectSession(input: {
   const sessionMetadata = front ? { ...metadata, [FRONT_THREAD_METADATA_KEY]: true } : metadata;
   // A space's watcher (flag `spaces_proactive`, space-watch/): only the API's own create sets this source.
   const watcher = (input.metadata as Record<string, unknown> | undefined)?.source === SPACE_WATCHER_SOURCE;
+  // A thread of a person's chat with an agent (`channels`): server-side state alone marks it.
+  const agentChat = !front && !watcher
+    ? await startsAgentChat({
+        projectMetadata: project.metadata,
+        spaceId,
+        agentName,
+        callerSessionId: input.callerSessionId,
+        parentSessionId: typeof body.parent_session_id === 'string' ? body.parent_session_id : null,
+      })
+    : false;
   const runtimeContext = front
     ? { ...parsedRuntimeContext.context, [FRONT_THREAD_CONTEXT_KEY]: true }
     : watcher
       ? { ...parsedRuntimeContext.context, [WATCHER_CONTEXT_KEY]: true }
-      : parsedRuntimeContext.context;
+      : agentChat
+        ? { ...parsedRuntimeContext.context, [AGENT_CHAT_CONTEXT_KEY]: true }
+        : parsedRuntimeContext.context;
 
   let sessionRow: ProjectSessionRow | null = null;
   try {
@@ -2100,6 +2173,7 @@ export async function createProjectSession(input: {
         pendingPromptConversion,
         inheritedGrants,
         spaceId,
+        groupId: requestedGroup.groupId,
         colleagueAccessAllowId,
       },
       runtimeContext,

@@ -52,6 +52,15 @@ export const uncoveredAllow: AllowEntry[] = [
     path: "/v1/system/confirmed-signups",
     reason: "sales reconciliation export behind its own token; covered by sales-outbox.integration.test.ts",
   },
+  // QualiLoop's test endpoint: a machine route behind its own secret
+  // (QUALILOOP_AGENT_SECRET), off (404) unless that and QUALILOOP_KORTIX_PROJECT_ID
+  // are set. Every turn runs a real agent in a cloud sandbox, which the local
+  // profile excludes.
+  {
+    method: "POST",
+    path: "/v1/qualiloop/chat",
+    reason: "QualiLoop test endpoint behind its own secret, off unless configured; each turn needs a cloud sandbox. Verified against dev with `qualiloop connect check` (.agents/skills/qualiloop)",
+  },
   // Routes of this cycle proven over real HTTP + PostgreSQL in apps/api's
   // integration suites rather than a flow: the subscription ones read a
   // connected ChatGPT/Claude plan (an external login the local profile has
@@ -249,6 +258,11 @@ export const uncoveredAllow: AllowEntry[] = [
       reason: "retired provider passthrough: a 410 stub (apps/api/src/routes/retired.ts). No flow can declare ALL; RET-1 calls one and unit-retired-routes.test.ts covers every row",
     })),
   ),
+  ...["/v1/marketplace", "/v1/marketplace/*"].map((path) => ({
+    method: "ALL",
+    path,
+    reason: "the removed marketplace (2026-11-20): a 410 stub (apps/api/src/routes/retired.ts). No flow can declare ALL; RET-1 calls the catalog and sources paths and unit-retired-routes.test.ts covers every row",
+  })),
 { method: "POST", path: "/v1/projects/:*/transfer", reason: "project transfer between accounts (KRTX-1747): an end-user settings action, not a browser journey — covered against the real route table by apps/api/src/projects/routes/project-transfer.test.ts (gate order, error mapping), by the real-PostgreSQL movement suite apps/api/src/projects/lib/project-transfer.integration.test.ts (movement, role re-pointing, real-engine non-member deny, classification completeness), and exercised live in the PR sandbox" },
 ];
 

@@ -31,13 +31,15 @@ import { useTranslations } from '../../../i18n';
  * the whole surface — nothing else in the panel referenced it.
  */
 
-import { Badge } from '../../../primitives/badge';
 import { Button } from '../../../primitives/button';
 import { FaviconAvatar } from '../../../primitives/favicon-avatar';
 import { getFileIcon } from '../../../files/project/components/file-icon';
+import { ContextMeter } from './context-meter';
+import type { ContextUsage } from '../../composer/context-usage';
 import { cn } from '../../../lib/utils';
 import {
-  CaretRightIcon as ChevronRight,
+  CaretRightIcon,
+  ChatsTeardropIcon,
   FileTextIcon as FileText,
   GlobeIcon as Globe,
   PlusIcon as Plus,
@@ -48,7 +50,9 @@ import { familyForTool, narrateFailedStep, narrateStep } from '@kortix/sdk';
 import type { Detail } from './detail-view';
 import { safeHttpUrl } from '@kortix/shared';
 import { ToolParts } from './detail-view';
-import { PanelCard } from './panel-card';
+import { multiAgentTool } from '../../tool/tools/kortix-tool-card';
+import { PANEL_ROW, PANEL_ROW_ICON, PanelCard } from './panel-card';
+import { STATUS_DOT } from '../../../primitives/status';
 import { StepIcon } from './step-icon';
 
 /** One row = one group of things the agent consulted. */
@@ -59,6 +63,8 @@ interface ContextGroup {
   icon: React.ReactNode;
   /** What the detail view shows when this row is opened. */
   body: React.ReactNode;
+  /** One of its calls failed: the row carries a red dot. */
+  failed?: boolean;
 }
 
 export function ContextCard({
@@ -69,7 +75,11 @@ export function ContextCard({
   onOpenDetail,
   onOpenFile,
   onAddContext,
+  usage,
 }: {
+  /** How full the model's context window is (`useSessionContextUsage`). Drawn
+   *  as the meter on top; null before the first reply. */
+  usage?: ContextUsage | null;
   files: ContextItem[];
   web: ContextItem[];
   tools: ContextItem[];
@@ -93,7 +103,7 @@ export function ContextCard({
       id: 'web',
       label: tI18nComplete.raw('text033c214ae9a3'),
       count: web.length,
-      icon: <Globe className="text-muted-foreground size-3.5 shrink-0" />,
+      icon: <Globe className="text-foreground size-4 shrink-0" />,
       body: <WebSourceList items={web} />,
     });
   }
@@ -103,7 +113,7 @@ export function ContextCard({
       id: 'files',
       label: tI18nComplete.raw('text83480f565627'),
       count: files.length,
-      icon: <FileText className="text-muted-foreground size-3.5 shrink-0" />,
+      icon: <FileText className="text-foreground size-4 shrink-0" />,
       body: <FileList items={files} onOpenFile={onOpenFile} />,
     });
   }
@@ -133,7 +143,14 @@ export function ContextCard({
       id: tool.callID,
       label: tool.label,
       count: tool.calls?.length ?? 1,
-      icon: <StepIcon family={family} status={failed ? 'error' : 'done'} />,
+      failed,
+      // A message to another agent is a conversation, not a settings change: its own glyph.
+      icon:
+        multiAgentTool(tool.calls?.[0]?.name ?? '') === 'send_message' ? (
+          <ChatsTeardropIcon className={cn('size-4 shrink-0', failed ? 'text-kortix-red' : 'text-foreground')} />
+        ) : (
+          <StepIcon family={family} status={failed ? 'error' : 'done'} tone="foreground" />
+        ),
       body: <ToolParts calls={tool.calls ?? []} sessionId={sessionId} summary={summary} />,
     });
   }
@@ -141,9 +158,7 @@ export function ContextCard({
   return (
     <PanelCard
       title={tI18nComplete.raw('texta6e600a10fed')}
-      count={files.length + web.length + tools.length}
-      isEmpty={groups.length === 0}
-      emptyArt={<ContextArt />}
+      isEmpty={groups.length === 0 && !usage}
       emptyText={tI18nComplete.raw('textc63adab9bd56')}
       emptyActions={
         <Button variant="outline" size="sm" className="gap-1.5" onClick={onAddContext}>
@@ -151,30 +166,27 @@ export function ContextCard({
           {tI18nComplete.raw('text0f01d14cacf0')}
         </Button>
       }
-      // The same dense gutter Outputs uses. Rows carry their own inset, so the
-      // body only has to keep them off the card's edge — a full `p-4` frame
-      // belonged to free-floating pills, not to a list.
-      contentClassName="border-border border-t px-2 py-2"
     >
-      <ul className="flex flex-col gap-0">
+      {usage && <ContextMeter usage={usage} />}
+      {/* What the agent brought into the conversation, under the meter: one
+          row per source, each opening what it did. The caret leads, the count
+          trails, on the same label edge as the meter's legend. */}
+      <ul className={cn('flex flex-col', usage && groups.length > 0 && 'mt-2')}>
         {groups.map((g) => (
-          <li key={g.id} className="flex items-center">
+          <li key={g.id} className="flex">
             <button
               type="button"
-              onClick={() =>
-                onOpenDetail({ key: g.id, title: g.label, icon: g.icon, body: g.body })
-              }
-              className="hover:bg-accent -mx-0.5 flex min-h-10 w-full cursor-pointer items-center gap-2.5 rounded-sm px-1 py-1.5 text-left transition-[background-color,transform] active:scale-[0.98]"
+              onClick={() => onOpenDetail({ key: g.id, title: g.label, icon: g.icon, body: g.body })}
+              className={cn(PANEL_ROW, 'text-muted-foreground hover:text-foreground cursor-pointer')}
             >
-              {/* A fixed leading box rather than the bare glyph: the group icons
-                  are not one size (`size-3.5` here, `size-4` from `StepIcon`),
-                  so without it every row's label would start at its own x. */}
-              <span className="flex size-7 shrink-0 items-center justify-center">{g.icon}</span>
-              <span className="text-foreground min-w-0 flex-1 truncate text-sm">{g.label}</span>
-              <Badge variant="secondary" size="sm" className="tabular-nums">
-                {g.count}
-              </Badge>
-              <ChevronRight className="text-muted-foreground size-3.5 shrink-0" />
+              <span className={PANEL_ROW_ICON}>
+                <CaretRightIcon className="size-3.5!" />
+              </span>
+              <span className="min-w-0 flex-1 truncate">{g.label}</span>
+              {g.failed && (
+                <span className={cn('size-1.5 shrink-0 rounded-full', STATUS_DOT.destructive)} aria-hidden />
+              )}
+              <span className="tabular-nums">{g.count}</span>
             </button>
           </li>
         ))}
@@ -251,7 +263,7 @@ function FileList({
               onClick={() => onOpenFile(it.path as string, allPaths)}
               className={cn(
                 ROW,
-                'hover:bg-muted cursor-pointer transition-[background-color,transform] active:scale-[0.98]',
+                'hover:bg-muted cursor-pointer transition-[background-color,transform] active:scale-[0.998]',
               )}
             >
               {/* `rounded-sm` (6px) inside the row's `rounded-md` (8px): a
@@ -290,25 +302,3 @@ function prettyUrl(url: string): string {
   return url.replace(/^https?:\/\//, '').replace(/\/$/, '');
 }
 
-/**
- * Soft placeholder art — overlapping note cards, matching the reference.
- *
- * The hairlines are `border-border` at full alpha, not `border-border/60`.
- * Dark's `--border` (oklch 0.2686) already sits only 0.077 L above the card it
- * draws on (`--card`, oklch 0.1913) — that IS the theme's hairline contrast —
- * so taking 60% of it left the whole illustration effectively unrendered on
- * dark. The fills are the same story: `bg-muted/30` over dark's card resolves
- * to ~0.201 L against a 0.1913 ground, a 0.01 difference. `/50` and `/70` keep
- * the two-card depth order while landing where the eye can find them. Light is
- * unaffected in kind — `--border` is that theme's hairline too — and the fills
- * stay soft there because `--muted` is only 0.024 L off `--card`.
- */
-function ContextArt() {
-  return (
-    <div aria-hidden className="relative h-16 w-24">
-      <span className="border-border bg-muted/50 absolute top-3 left-0 h-10 w-8 rounded-sm border" />
-      <span className="border-border bg-muted/70 absolute top-1.5 left-6 h-12 w-9 rounded-sm border" />
-      <span className="border-border absolute top-3 left-14 h-10 w-8 rounded-sm border border-dashed bg-transparent" />
-    </div>
-  );
-}

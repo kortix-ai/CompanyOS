@@ -47,7 +47,7 @@ import { db } from '../shared/db';
 import { registerSessionFailureNotifier } from '../shared/session-failure-notifier';
 import { registerTurnLostNotifier } from '../shared/turn-lost-notifier';
 import type { ProjectSessionRow } from './lib/serializers';
-import { buildSessionTranscriptDigest, lastAssistantAnswer } from './lib/session-transcript';
+import { readLastTurnAnswer } from './lib/session-last-answer';
 import { readSessionsWorking } from './lib/session-working-read';
 import { enqueueSessionNotice } from './session-notice-batch';
 import { ABORT_END_ERROR_NAMES } from './session-turn-ledger';
@@ -239,13 +239,7 @@ async function stillWorking(childId: string): Promise<boolean> {
  */
 async function readReport(child: ProjectSessionRow): Promise<{ text: string; error?: string }> {
   try {
-    const transcript = await buildSessionTranscriptDigest({
-      session: child,
-      limit: READ_BACK_MESSAGES,
-      maxChars: 700,
-      full: true,
-    });
-    const answer = lastAssistantAnswer(transcript);
+    const answer = await readLastTurnAnswer(child.sessionId, { limit: READ_BACK_MESSAGES, maxChars: 700, full: true });
     const error = answer?.error ? [answer.error.name, answer.error.message].filter(Boolean).join(': ') || 'the last turn failed' : undefined;
     return { text: answer?.text ?? '', ...(error ? { error } : {}) };
   } catch (err) {

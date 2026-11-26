@@ -48,7 +48,8 @@ const View = z.object({
   /** Can the server decrypt the stored value? Never carries the value. */
   status: SecretValueStatusSchema,
   /** The last check of a provider API key against its provider (on save, on
-   *  rotate, or on request); null for a login and for a key never checked. */
+   *  rotate, or on request); null for a key never checked. A Claude login:
+   *  `invalid` with Anthropic's words while Anthropic forbids it (403), else null. */
   verification: KeyVerificationSchema.nullable(),
 });
 const Create = z.object({
@@ -179,7 +180,9 @@ export function registerSecretResourceRoutes() {
     }
     const row = await loadSecret(accountId, secretId);
     if (!row || !row.providerId || !SUBSCRIPTION_PROVIDERS.has(row.providerId)) return c.json({ error: 'Not found' }, 404);
-    if (!(await view(row, userId, projectId)).can_use) return c.json({ error: 'Forbidden' }, 403);
+    // Usage is management metadata, not permission to spend the login's credentials.
+    // Match secret-resources usage: account managers may refresh every listed login.
+    if (!(await mayWriteAccount(c, accountId)) && !(await view(row, userId, projectId)).can_use) return c.json({ error: 'Forbidden' }, 403);
     const usage = await refreshSubscriptionUsage(row);
     const current = await loadSecret(accountId, secretId);
     return c.json({ usage, provider_account: current ? subscriptionAccount(current) : null }, 200);

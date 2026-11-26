@@ -20,6 +20,7 @@ raw color allowed).
 | `radio-group` | single-select, few options | `#comp-radio` | use |
 | `slider`, `slider-native` | a range | `#comp-slider` | use |
 | `kbd` | a keyboard shortcut | `#comp-kbd` | use |
+| `action-bar` | the floating bar of a temporary mode: a selection, unsaved edits, a pending paste. Title, description, actions with `kbd`, close. `ActionBarDock` places it | `#comp-action-bar` | use |
 | `count-badge` | a count beside a label, tone by meaning | | use |
 | `back-pill` | the back control of a nested view | | use |
 | `confirm-dialog`, `type-to-confirm-dialog` | mandatory before any destructive mutation | `#comp-alert-dialog` (pattern) | use |
@@ -58,7 +59,7 @@ raw color allowed).
 | `settings-row`, `settings-section-header`, `settings-subsection-header` | settings screens | | use |
 | `stepper` | a numbered flow | | use |
 | `section-card` | a second panel system beside `Card` | `#pat-banned` | legacy: `Card` or `bg-popover rounded-md border px-4 py-5` |
-| `list` | `List` / `ListRow`, a divider-separated list | `#pat-banned` | legacy: `<ul className="space-y-2">` + entity row classes |
+| `list` | `List` / `ListRow`, a divider-separated list | `#pat-banned` | legacy: hairline rows ("Recipe: list rows with groups" in SKILL.md) |
 
 ## Overlays
 
@@ -118,7 +119,7 @@ raw color allowed).
 | `mermaid-renderer` | a Mermaid diagram | | use |
 | `preview-image` | an image with a loading state | | use |
 | `file-tree` | a file tree | | use |
-| `wallpaper-shaders`, `paper-wallpaper-shaders`, `shader-safe` | WebGL wallpapers with a static fallback | `#wallpapers` | art |
+| `wallpaper-shaders`, `gradient-wallpaper`, `paper-wallpaper-shaders`, `shader-safe` | WebGL wallpapers with a static fallback | `#wallpapers` | art |
 | `dot-matrix/` | `SessionDotMatrix`, the session busy mark | | use |
 | `menu-recipe` | `menuRow()`, `MENU_PANEL_STATIC`, `FLOATING_PANEL(_SURFACE)` | | internal |
 | `trigger-variants` | shared trigger styles | | internal |

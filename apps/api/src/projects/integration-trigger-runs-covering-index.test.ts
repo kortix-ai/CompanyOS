@@ -1,7 +1,7 @@
 /**
  * DB suite: the trigger-runs list (`GET /v1/projects/:id/trigger-runs`) pays
- * a correlated LLM-spend aggregate over `kortix.gateway_request_logs` once per
- * listed run (`triggerRunsPageQuery`). That read must be INDEX-ONLY on a
+ * an LLM-spend aggregate over `kortix.gateway_request_logs` once per
+ * returned run (`triggerRunCostsQuery`). That read must be INDEX-ONLY on a
  * covering index — never the wide heap rows (each carries the request/response
  * jsonb payloads) — and a mass UPDATE over the table degrades it to heap
  * fetches until VACUUM restores the visibility map. The planner serves the
@@ -40,7 +40,7 @@ import { accounts, gatewayRequestLogs, projectSessions, projectTriggerExecutions
 import { eq, inArray, sql } from 'drizzle-orm';
 
 import { db } from '../shared/db';
-import { triggerRunsPageQuery } from './trigger-runs';
+import { triggerRunCostsQuery, triggerRunsPageQuery } from './trigger-runs';
 
 const accountId = crypto.randomUUID();
 const projectId = crypto.randomUUID();
@@ -142,9 +142,15 @@ afterAll(async () => {
   await db.delete(accounts).where(inArray(accounts.accountId, [accountId, ...siblings]));
 });
 
+/** The 25 newest runs, the id set one full page of the route reads spend for. */
+async function newestRunIds(): Promise<string[]> {
+  const page = await triggerRunsPageQuery({ projectId, cursor: null, limit: 25 });
+  return page.slice(0, 25).map((r) => r.row.executionId);
+}
+
 /** The plan text of one EXPLAIN (ANALYZE) with every heap-reading scan demoted. */
-function explainAnalyzed(): Promise<string> {
-  const query = triggerRunsPageQuery({ projectId, cursor: null, limit: 25 });
+async function explainAnalyzed(): Promise<string> {
+  const query = triggerRunCostsQuery(projectId, await newestRunIds());
   return db.transaction(async (tx) => {
     await tx.execute(sql`set local enable_seqscan = off`);
     await tx.execute(sql`set local enable_bitmapscan = off`);
@@ -179,10 +185,25 @@ async function vacuumUntilClean(): Promise<string> {
   return plan;
 }
 
+test('the runs page query reads no spend, so a hidden row costs no aggregate (KRTX-4854)', () => {
+  const { sql: text } = triggerRunsPageQuery({ projectId, cursor: null, limit: 25 }).toSQL();
+  expect(text).toContain('project_trigger_executions');
+  expect(text).not.toContain('gateway_request_logs');
+});
+
+test('the spend read prices exactly the runs it is given', async () => {
+  const ids = (await newestRunIds()).slice(0, 3);
+  const costs = await triggerRunCostsQuery(projectId, ids);
+  expect(costs.map((c) => c.executionId).sort()).toEqual([...ids].sort());
+  // 30 pinned log rows of $0.01 fall inside each run's window.
+  for (const c of costs) expect(Number(c.costUsd)).toBeCloseTo(0.3, 5);
+  expect(await triggerRunCostsQuery(projectId, [])).toEqual([]);
+});
+
 test('the trigger-runs correlated spend read is index-only with zero heap fetches', async () => {
   const plan = await explainAnalyzed();
-  // The outer scan reads the full executions row, so every Index Only Scan
-  // node in this plan is the gateway-log spend subquery.
+  // The spend query reads only the gateway-log index, so every Index Only Scan
+  // node in this plan is the spend aggregate.
   expect(plan).toContain('Index Only Scan');
   expect(plan).toContain('on gateway_request_logs');
   expect(heapFetches(plan), `the visibility map is clean, the read must not touch the heap:\n${plan}`).toBe(0);

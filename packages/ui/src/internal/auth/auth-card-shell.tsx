@@ -11,21 +11,19 @@ import { useTranslations } from '../../i18n';
  */
 
 import { CaretLeftIcon as ChevronLeft } from '@phosphor-icons/react';
-import { m, useReducedMotion } from 'motion/react';
 import { UiLink as Link } from '../../providers/ui-provider';
 
 import { useDesktopBackTarget } from '../desktop/desktop-back-button';
-import { KortixLogo } from '../../primitives/kortix-logo';
-import { AuthMobileLogo } from './auth-primitives';
+import { AuthArt } from './auth-art';
+import { AuthFrameContext, AuthMobileLogo, Rise, StepHeader } from './auth-primitives';
 import { openExternalRoute } from '../lib/desktop';
+import { cn } from '../lib/utils';
 
-const EASE = [0.23, 1, 0.32, 1] as const;
+// The phone-verification page builds its own frame around a sign-out control.
+export { AuthArt };
 
-/** Which sentence the legal line uses. */
-export type AuthLegalFooterVariant = 'default' | 'signup' | 'continue';
-
-/** Tiny legal line pinned to the bottom of every auth surface. */
-export function AuthLegalFooter({ variant = 'default' }: { variant?: AuthLegalFooterVariant }) {
+/** Tiny legal line pinned to the bottom of every auth surface: one sentence on every page. */
+export function AuthLegalFooter({ centered = false }: { centered?: boolean } = {}) {
   const t = useTranslations('auth');
   const onLegalClick = (event: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     if (openExternalRoute(href)) event.preventDefault();
@@ -34,7 +32,7 @@ export function AuthLegalFooter({ variant = 'default' }: { variant?: AuthLegalFo
     <Link
       href="/legal/terms"
       onClick={(event) => onLegalClick(event, '/legal/terms')}
-      className="hover:text-foreground transition-colors"
+      className="hover:text-foreground decoration-border whitespace-nowrap underline underline-offset-2 transition-colors"
     >
       {t('termsOfService')}
     </Link>
@@ -43,28 +41,26 @@ export function AuthLegalFooter({ variant = 'default' }: { variant?: AuthLegalFo
     <Link
       href="/legal?tab=privacy"
       onClick={(event) => onLegalClick(event, '/legal?tab=privacy')}
-      className="hover:text-foreground transition-colors"
+      className="hover:text-foreground decoration-border whitespace-nowrap underline underline-offset-2 transition-colors"
     >
       {t('privacyPolicy')}
     </Link>
   );
 
   return (
-    <footer className="text-muted-foreground mx-auto max-w-[380px] px-6 pb-10 text-center text-sm text-balance">
-      {variant === 'continue'
-        ? t.rich('byContinuingYouAgree', {
-            termsOfService: () => terms,
-            privacyPolicy: () => privacy,
-          })
-        : variant === 'signup'
-          ? t.rich('unified.legal.signup', {
-              termsOfService: () => terms,
-              privacyPolicy: () => privacy,
-            })
-          : t.rich('unified.legal.default', {
-              termsOfService: () => terms,
-              privacyPolicy: () => privacy,
-            })}
+    // The same 380px column as the form, so the legal line shares its left
+    // edge. A link never breaks inside its name.
+    <footer
+      className={cn(
+        'text-muted-foreground mx-auto w-full max-w-[380px] pb-8 text-xs text-balance',
+        // 12px, one step under the 13px floor: the product owner asked for a quieter legal line on /auth.
+        centered && 'text-center text-[0.75rem]', // audit:allow owner-requested 12px legal line
+      )}
+    >
+      {t.rich('byContinuingYouAgree', {
+        termsOfService: () => terms,
+        privacyPolicy: () => privacy,
+      })}
     </footer>
   );
 }
@@ -79,14 +75,35 @@ export function AuthFrame({
   children,
   footerVariant = 'default',
   backHref,
+  // Off for now: the pane comes back by passing `art`.
+  art = false,
+  aside,
+  centered = false,
+  mark,
 }: {
   children: React.ReactNode;
+  /**
+   * A pane left of the form on wide screens (`lg` and up), half the width.
+   * The host supplies it: the Kortix sign-in page passes its story pane, a
+   * branded or self-hosted frame passes nothing. Hidden below `lg`.
+   */
+  aside?: React.ReactNode;
+  /** Centers the column: every step header, quiet-link row and the legal footer. */
+  centered?: boolean;
+  /** The mark every step header shows by default (the Kortix symbol on /auth). */
+  mark?: React.ReactNode;
+  /**
+   * The dither pane beside the form on wide screens. Auth and consent screens
+   * keep it; an in-app gate that only borrows this frame (a checkout, a
+   * deleted-project notice, an approval card) passes `false`.
+   */
+  art?: boolean;
   /**
    * `none` drops the legal line. Reserve it for frames whose resolved screen is
    * not an auth surface — on a real auth flow the footer stays pinned so the
    * page does not jump when the column above it swaps.
    */
-  footerVariant?: AuthLegalFooterVariant | 'none';
+  footerVariant?: 'default' | 'none';
   /**
    * Where Back goes, when the page knows where its flow started. Without it,
    * Back returns to the previous in-app page, else the app home.
@@ -95,12 +112,29 @@ export function AuthFrame({
 }) {
   useDesktopBackTarget(backHref);
   return (
-    <div className="bg-background relative flex min-h-svh flex-col">
-      <AuthMobileLogo />
-      <main className="flex flex-1 flex-col items-center justify-center px-6 py-24">
-        <div className="w-full max-w-[380px]">{children}</div>
-      </main>
-      {footerVariant === 'none' ? null : <AuthLegalFooter variant={footerVariant} />}
+    <div className="bg-background flex min-h-svh">
+      {/* The pane stays put while a long form scrolls beside it. */}
+      {aside ? <div className="sticky top-0 hidden h-svh w-1/2 shrink-0 lg:block">{aside}</div> : null}
+      <div className="relative flex min-h-svh flex-1 flex-col px-6">
+        <AuthMobileLogo />
+        <main className="flex flex-1 flex-col items-center justify-center py-24">
+          {/* The centered sign-in column is 340px wide. */}
+          <div className={cn('w-full', centered ? 'max-w-[340px]' : 'max-w-[380px]')}>
+            <AuthFrameContext.Provider value={{ centered, mark }}>{children}</AuthFrameContext.Provider>
+          </div>
+        </main>
+        {footerVariant === 'none' ? null : centered ? (
+          // Out of flow, so the form centres on the full height, level with
+          // the story pane's headline. main's bottom padding clears it.
+          <div className="absolute inset-x-0 bottom-0 px-6">
+            <AuthLegalFooter centered />
+          </div>
+        ) : (
+          <AuthLegalFooter />
+        )}
+      </div>
+      {/* The art stays put while a long form scrolls beside it. */}
+      {art ? <AuthArt className="sticky top-0 hidden h-svh w-1/2 shrink-0 lg:block" /> : null}
     </div>
   );
 }
@@ -110,36 +144,48 @@ export function AuthCardShell({
   description,
   children,
   footer,
+  frame,
 }: {
   title: string;
-  description: string;
-  children: React.ReactNode;
+  description: React.ReactNode;
+  children?: React.ReactNode;
   /** Optional footer below the content (e.g. a "Back to sign in" link). */
   footer?: React.ReactNode;
+  /**
+   * The host's sign-in frame (story pane, centered column, app tile), so a
+   * sub-flow matches the page it came from. A centered frame holds still.
+   */
+  frame?: {
+    aside?: React.ReactNode;
+    centered?: boolean;
+    mark?: React.ReactNode;
+  };
 }) {
-  const prefersReducedMotion = useReducedMotion();
-  const rise = (delay = 0) => ({
-    initial: { opacity: 0, y: prefersReducedMotion ? 0 : 8 },
-    animate: { opacity: 1, y: 0 },
-    transition: { duration: 0.3, delay, ease: EASE },
-  });
-
+  const body = (
+    <>
+      {children}
+      {footer ? <div className={cn('mt-6', frame?.centered && 'text-center')}>{footer}</div> : null}
+    </>
+  );
   return (
-    <AuthFrame>
-      <m.div {...rise(0)}>
-        <div className="mb-10">
-          <KortixLogo variant="icon" size={22} className="text-foreground hidden md:block" />
-          <h1 className="text-foreground text-2xl font-medium tracking-tight text-balance md:mt-6">
-            {title}
-          </h1>
-          <p className="text-muted-foreground mt-2 text-sm text-pretty">{description}</p>
-        </div>
-      </m.div>
-
-      <m.div {...rise(0.06)}>
-        {children}
-        {footer ? <div className="mt-8">{footer}</div> : null}
-      </m.div>
+    <AuthFrame
+      aside={frame?.aside}
+      centered={frame?.centered}
+      mark={frame?.mark}
+    >
+      {frame?.centered ? (
+        <>
+          <StepHeader title={title} description={description} />
+          {body}
+        </>
+      ) : (
+        <>
+          <Rise>
+            <StepHeader title={title} description={description} />
+          </Rise>
+          <Rise delay={0.06}>{body}</Rise>
+        </>
+      )}
     </AuthFrame>
   );
 }

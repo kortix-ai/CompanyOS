@@ -32,7 +32,7 @@ function FilmHero() {
 
   return (
     <div className="mx-auto mt-12 w-full max-w-6xl px-6">
-      <div className="border-border bg-background aspect-video overflow-hidden rounded-2xl border shadow-2xl">
+      <div className="border-border bg-background aspect-video overflow-hidden rounded-2xl border shadow-md">
         <FilmPlayer ref={player} film={launchFilm} autoPlay loop onFrame={onFrame} />
       </div>
       <ol className="mt-4 flex gap-1 overflow-x-auto pb-2">

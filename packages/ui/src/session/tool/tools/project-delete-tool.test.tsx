@@ -55,7 +55,7 @@ describe('ProjectDeleteTool joins the shared BasicTool shell', () => {
     expect(html).toContain('Workspace delete disabled');
     expect(html).toContain('kortix-web');
     expect(html).not.toContain(
-      'text-muted-foreground/40 flex items-center gap-2 px-2.5 py-1 text-xs',
+      'text-muted-foreground flex items-center gap-2 px-2.5 py-1 text-xs',
     );
   });
 
@@ -75,7 +75,6 @@ describe('ProjectDeleteTool joins the shared BasicTool shell', () => {
 
     expect(html).not.toContain('sticky');
     expect(html).toContain('bg-popover border-border overflow-hidden rounded-md border');
-    expect(html).toContain('text-sm font-medium');
     expect(html).toContain('Workspace');
     expect(html).toContain('Workspace delete disabled');
 

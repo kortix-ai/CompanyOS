@@ -1,3 +1,4 @@
+import { configCommitMessage } from '../lib/config-commit-message';
 // Agent-config CRUD — the dashboard "agent builder" surface.
 //
 // One kortix.yaml block per agent holds its behavior keys and grants, plus the
@@ -18,6 +19,7 @@
 import { createRoute, z } from '@hono/zod-openapi';
 import { ignoredAgentSettings } from '@kortix/api-contract/runtime-relay';
 import {
+  AGENT_TITLE_MAX_LENGTH,
   EVERY_GRANT,
   type ManifestIssue,
   isManifestSyntaxError,
@@ -113,6 +115,12 @@ const AgentBlockSchema = z
     commands: GrantSetSchema.optional(),
     extensions: ExcludableGrantSetSchema.optional(),
     codemode: z.enum(['on', 'only', 'off']).optional(),
+    // The agent's display name (`agents.<name>.title`). The key stays its id.
+    title: z.string().trim().min(1).max(AGENT_TITLE_MAX_LENGTH).optional(),
+    // A program agent's command (`agents.<name>.run`): each turn runs it in place of a model.
+    run: z.string().trim().min(1).max(4096).optional(),
+    // A program agent's run limit, a duration (`30m`). The manifest validator checks its range.
+    timeout: z.string().trim().min(1).max(32).optional(),
     // What a full context does: `record` (default) resets onto the searchable record; `summary` compacts.
     context: z.enum(['record', 'summary']).optional(),
     // Deprecated request alias of kortix_permissions. The handler normalizes it
@@ -337,7 +345,7 @@ export function registerAgentConfigRoutes(): void {
           files: writes.files,
           deletes: writes.deletes,
           alsoExpect: writes.alsoExpect,
-          message: `chore: set default agent to ${agentName}`,
+          message: configCommitMessage(`chore: set default agent to ${agentName}`),
           branch: loaded.row.defaultBranch,
           expectedFileRevision:
             manifest.revision === undefined
@@ -516,8 +524,7 @@ export function registerAgentConfigRoutes(): void {
       // single-file commits would let the second write fail AFTER the first
       // landed, stranding kortix.yaml and the agent's prompt file out of sync —
       // commitMultipleFilesToBranch (git/branches.ts) commits every file in one
-      // tree/commit, same helper the marketplace install/uninstall paths use
-      // for their own atomic multi-file writes (marketplace-install-session.ts).
+      // tree/commit.
       const writes = manifestWrites(manifest, manifestPath);
       // The edited prompt file wins over its healed copy (a legacy manifest's first write).
       const files = [...writes.files.filter((file) => file.path !== edit.extraWrite?.path), ...(edit.extraWrite ? [edit.extraWrite] : [])];
@@ -531,7 +538,7 @@ export function registerAgentConfigRoutes(): void {
           files,
           deletes: writes.deletes,
           alsoExpect: writes.alsoExpect,
-          message,
+          message: configCommitMessage(message),
           branch: loaded.row.defaultBranch,
           expectedFileRevision:
             manifest.revision === undefined

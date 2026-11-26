@@ -36,6 +36,20 @@ export { runSpaceWatcherTick } from './lib/space-watch/wake';
 export { runGoalReconcilerTick } from './goals/reconcile';
 export { sessionSpaceAgents } from './lib/front-thread';
 
+// The eval runner's tick (consumed by worker/jobs/eval-runner). Loaded on the
+// first tick, not at import: the runner reaches provisioning and account
+// deletion, and a static re-export put that whole graph into every module that
+// loads this surface (the sandbox-proxy boot order, session-sandbox).
+export async function runWorkspaceCacheBuilderTick(now?: Date): Promise<number> {
+  const { runWorkspaceCacheBuilderTick: tick } = await import('./workspace-cache/builder');
+  return tick(now);
+}
+
+export async function runEvalRunnerTick(now?: Date): Promise<number> {
+  const { runEvalRunnerTick: tick } = await import('./evals/runner');
+  return tick(now);
+}
+
 // A person's pins and archive (consumed by account erasure and offboarding).
 export { deleteMemberSessionStates, deleteUserSessionStates } from './lib/session-user-state';
 
@@ -100,6 +114,7 @@ export { approvalTargetSession, expireDueApprovals } from './lib/connector-appro
 export { projectsApp } from './lib/app';
 export { decryptProjectSecret, encryptProjectSecret } from './secrets/envelope';
 export { listProjectSecretNamesForConsumer, listResolvedProjectSecrets, resolveProjectSecretForConsumer } from './secrets';
+export { browserLoginSavedPrompt, saveBrowserLoginsFromLink } from './lib/browser-logins';
 // App events (`type: app` triggers): apps/event-routes.ts appends through these.
 export {
   APP_EVENT_LOG_STATUSES,
@@ -182,9 +197,6 @@ export {
   resolvePendingQuestion,
 } from './lib/pending-questions';
 export { releaseRuntimeQuestion } from './session-lifecycle/release-runtime-question';
-
-// The stored transcript (`toV1` of the session log), consumed by the public share route.
-export { readStoredTranscriptWindow } from './session-log-read';
 
 // Abort a session's running turn (consumed by chrome/, on a user's Stop in Chrome, and by
 // channels/core/commands.ts, on a chat's /stop and /new).
@@ -270,3 +282,11 @@ export {
 // domain that counts or stops live sessions).
 export { settleLiveSessionsOfAccounts, transitionSandbox, transitionSession } from './session-lifecycle/status-transitions';
 export { ACTIVE_SESSION_STATUSES, PROVISIONING_SESSION_STATUSES } from './lib/session-status';
+// Spaces (session groups): whether a Space the caller sees shares a session (the preview proxy's gate injects it).
+export { sessionSharedThroughSpace } from './lib/session-group-viewer';
+
+export { type ConnectorPolicyAction, type ConnectorPolicySpec, extractConnectors } from './connectors';
+export { type DefaultMode, type ProjectPolicySpec, extractProjectPolicies, projectPoliciesToManifestEntries, projectPolicySettingsToManifest } from './policies';
+
+// One QualiLoop test turn against the real agent (consumed by ../qualiloop).
+export { runQualiloopTurn, QualiloopTurnError } from './qualiloop/turn';

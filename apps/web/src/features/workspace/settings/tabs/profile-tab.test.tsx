@@ -2,13 +2,16 @@ import { describe, expect, mock, test } from 'bun:test';
 import type { ReactNode } from 'react';
 import messages from '../../../../../translations/en.json';
 import { renderToStaticMarkup } from 'react-dom/server';
+import * as realModal from '@kortix/ui/modal';
 
 // The app's Bun tests have no DOM and the dialog portal renders nothing under
 // `renderToStaticMarkup`; the dialog-content tests below need that markup, so
 // the portal-based `Modal` is replaced by a flat stand-in — the same handling
 // as `legacy-subagent-chat.test.tsx`. The real modal behavior
-// is exercised by the browser journeys.
+// is exercised by the browser journeys. The real exports stay, so a new one
+// (ModalClose, …) never breaks the mock.
 const uiModalMock = () => ({
+  ...realModal,
   Modal: ({ open, children }: { open: boolean; children: ReactNode }) =>
     open ? <div>{children}</div> : null,
   ModalBody: ({ children }: { children: ReactNode }) => <div>{children}</div>,
@@ -191,21 +194,47 @@ describe('ProfileTabView — no security section', () => {
 });
 
 describe('ProfileTabView — a person with no workspace', () => {
-  test('offers "Delete my login", never the scheduled account deletion', () => {
-    const html = renderToStaticMarkup(
+  // KRTX-4849: the same Delete-account dialog as everyone else, never a
+  // "Delete my login" variant; the grace period is disabled with its reason.
+  test('renders the Delete account dialog and says why there is no grace period', () => {
+    const out = renderToStaticMarkup(
+      <ProfileTabView noWorkspace showDeleteDialog deletionType="immediate" />,
+    );
+    expect(out).toContain('>Delete account</button>');
+    expect(out).toContain('Delete your account?');
+    expect(out).toContain('Grace period');
+    expect(out).toContain('Delete immediately');
+    expect(out).toContain('You belong to no workspace, so there is no grace period');
+    expect(out).toContain('There is no grace period and no way to undo it.');
+    expect(out).not.toMatch(/\blogin\b/i);
+  });
+
+  test('the empty deletion plan names no login', () => {
+    const out = renderToStaticMarkup(
       <ProfileTabView
-        accountDeletionSupported
-        isDeletionStatusError={false}
-        loginOnly={{
-          label: 'Delete my login',
-          description: 'Deletes your Kortix login. You belong to no workspace, so nothing else is deleted.',
-          title: 'Delete your login?',
-          warning: 'This deletes your login right away. This cannot be undone.',
-        }}
+        noWorkspace
+        showDeleteDialog
+        deletionType="immediate"
+        deletionPlan={{ deleteNames: [], leaveNames: [], blockers: [] }}
       />,
     );
-    expect(html).toContain('Delete my login');
-    expect(html).toContain('You belong to no workspace');
-    expect(html).not.toContain('Delete account');
+    expect(out).toContain('No workspace is deleted or left with your account.');
+    expect(out).not.toMatch(/\blogin\b/i);
+  });
+});
+
+
+describe('ProfileTabView — injected deletion plan compatibility', () => {
+  test('names deleted, left and blocked workspaces and disables confirmation', () => {
+    const out = renderToStaticMarkup(<ProfileTabView showDeleteDialog deleteConfirmText="delete"
+      deletionPlan={{ deleteNames: ['Synthetic Solo'], leaveNames: ['Synthetic Member'], blockers: [{ name: 'Synthetic Shared', memberCount: 3 }] }} />);
+    for (const text of ['Synthetic Solo', 'Synthetic Member', 'Synthetic Shared', '3 members', 'Hand these over first']) expect(out).toContain(text);
+    expect(out).toMatch(/<button[^>]*disabled[^>]*>Delete account<\/button>/);
+    expect(out).not.toContain('Your billing records');
+  });
+  test('an absent plan retains the generic deletion consequences', () => {
+    const out = renderToStaticMarkup(<ProfileTabView showDeleteDialog />);
+    expect(out).toContain('Every agent you own is deleted');
+    expect(out).toContain('Your billing records are kept as long as the law requires');
   });
 });

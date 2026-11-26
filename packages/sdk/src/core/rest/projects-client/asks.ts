@@ -1,4 +1,5 @@
 import { backendApi } from '../../http/api-client';
+import { querySuffix } from '../../http/url';
 import { unwrap } from './shared';
 
 /** What an ask waits on a person for. */
@@ -21,6 +22,8 @@ export interface SessionAsk {
   surface_session_id: string;
   /** The title of `surface_session_id`, when it has one. */
   session_title: string | null;
+  /** The agent of `surface_session_id`: the agent that asks. Null when unknown; absent from an older API. */
+  agent_name?: string | null;
   /** The runtime's request id; for an approval, the execution id `resolveApproval` takes. */
   request_id: string;
   /** One line: the question, the command, the connector action. */
@@ -79,8 +82,7 @@ export async function listSessionAsks(
   const query = new URLSearchParams();
   if (options.surfaceSessionId) query.set('surface_session_id', options.surfaceSessionId);
   if (options.limit) query.set('limit', String(options.limit));
-  const suffix = query.size ? `?${query.toString()}` : '';
-  return unwrap(await backendApi.get<SessionAsksResponse>(`/workspaces/${projectId}/asks${suffix}`));
+  return unwrap(await backendApi.get<SessionAsksResponse>(`/workspaces/${projectId}/asks${querySuffix(query)}`));
 }
 
 /** Answer a question, or decide a permission or colleague access ask. Throws on a refusal, including an ask already decided (409). */

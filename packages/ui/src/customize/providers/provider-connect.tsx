@@ -389,6 +389,32 @@ export function useManagedProvider(projectId: string | null): LlmProviderEntry {
   }, [pickerCatalog, tAccess]);
 }
 
+/**
+ * Every provider id with a usable credential: the project's own connections
+ * plus the usable pooled (account-level) ones. Ids stay raw, so a ChatGPT
+ * login is `codex` here and `connectedVia` can still say "signIn".
+ */
+export function providerConnectionIds(
+  connectedIds: Iterable<string | null | undefined>,
+  pooledProviderIds: Iterable<string | null | undefined>,
+): ReadonlySet<string> {
+  const ids = new Set<string>();
+  for (const id of [...connectedIds, ...pooledProviderIds]) if (id) ids.add(id);
+  return ids;
+}
+
+/**
+ * True when a provider ROW is connected. A subscription login connects the
+ * row it belongs to under its own id (`codex` → OpenAI, `claude-agent` →
+ * Anthropic, `SUBSCRIPTION_ROW`), whether the project holds it or the
+ * account shares it. The usage meter maps through the same table.
+ */
+export function providerRowConnected(rowId: string, ids: ReadonlySet<string>): boolean {
+  if (ids.has(rowId)) return true;
+  for (const id of ids) if (SUBSCRIPTION_ROW[id] === rowId) return true;
+  return false;
+}
+
 /** Provider ids that hold a usable pooled (account-level) key for this project. */
 export function usePooledProviderIds(projectId: string, enabled: boolean) {
   const project = useQuery({
@@ -483,6 +509,7 @@ export function ProviderConnect({
   ], [access.data?.enforced, managedProvider, catalogRevision]);
 
   const { inUse, available } = useMemo(() => {
+    const ids = providerConnectionIds(connectedIds, pooled.pooledProviderIds);
     const ordered = orderProviderRows({
       providers: searchable,
       firstClassIds: ['kortix', ...FIRST_CLASS_PROVIDER_IDS],
@@ -503,13 +530,10 @@ export function ProviderConnect({
         status:
           method === 'included'
             ? entry.models.length > 0 ? 'included' : 'none'
-            : connectedIds.has(entry.id) ||
-                pooled.pooledProviderIds.has(entry.id) ||
-                // A ChatGPT sign-in connects OpenAI as provider `codex`.
-                (entry.id === 'openai' && connectedIds.has('codex'))
+            : providerRowConnected(entry.id, ids)
               ? 'connected'
               : 'none',
-        via: connectedVia(entry.id, connectedIds),
+        via: connectedVia(entry.id, ids),
         disabled: disabledProviders.has(entry.id),
         usage: usageByRow.get(entry.id) ?? null,
       };

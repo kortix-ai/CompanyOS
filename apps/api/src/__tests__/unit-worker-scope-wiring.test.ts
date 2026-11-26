@@ -53,9 +53,12 @@ const WORKERS: Record<string, string> = {
   'iam-grant-expiry': 'worker/jobs/grant-expiry.ts',
   'approval-expiry': 'worker/jobs/approval-expiry.ts',
   'oauth-sweep': 'worker/jobs/oauth-sweep.ts',
+  'gateway-replay-sweep': 'worker/jobs/replay-sweep.ts',
   'session-model-fallback': 'worker/jobs/session-model-fallback.ts',
   'space-watcher': 'worker/jobs/space-watcher.ts',
   'goal-reconciler': 'worker/jobs/goal-reconciler.ts',
+  'eval-runner': 'worker/jobs/eval-runner.ts',
+  'workspace-cache-builder': 'worker/jobs/workspace-cache-builder.ts',
   'session-lifecycle': 'projects/session-lifecycle/drain.ts',
   'tunnel-cleanup': 'worker/jobs/tunnel-cleanup.ts',
   'tunnel-forward-expiry': 'worker/jobs/tunnel-forward-expiry.ts',
@@ -104,6 +107,7 @@ const PER_PROCESS: Record<string, string> = {
 
 /** Files with a `setInterval` that is not a background job over tenant state. */
 const NOT_WORKERS: Record<string, string> = {
+  'qualiloop/index.ts': 'keepalive whitespace for one open QualiLoop response; cleared when that turn settles',
   'apps/public-proxy-handler.ts': 'stamps app activity while one proxied request streams; runs inside that request',
   'apps/ws-proxy.ts': 'stamps app activity for one open WebSocket; runs inside that connection',
   'channels/discord/gateway.ts': 'heartbeat of the one Discord Gateway WebSocket the leader holds; runs inside that connection',
@@ -111,11 +115,13 @@ const NOT_WORKERS: Record<string, string> = {
   'llm-gateway/models/runtime-catalog.ts': 'refreshes the in-memory models.dev catalog',
   'projects/lib/session-control-reconciler.ts': 'read-only reconcile of one open session stream',
   'projects/provider-transition/provider-transition-service.ts': 'renews a lease inside the provider-transition tick',
-  'projects/routes/session-stream.ts': 'heartbeat on one open session stream',
+  'projects/lib/session-event-stream.ts': 'heartbeat on one open session stream',
   'projects/session-lifecycle/command-lease.ts':
     'renews the lock of one claimed command while its drain lane or inline create runs',
   'router/config/model-pricing.ts': 'refreshes the in-memory model pricing',
   'sandbox-proxy/ws-proxy.ts': 'keepalive ping on one open preview WebSocket',
+  'sandbox-proxy/preview-bridge.ts':
+    "the setInterval is in the script injected into a preview page; it runs in the user's browser, never in the API",
   'shared/stream-access-recheck.ts': 're-checks access for one open session stream; runs inside that stream',
   'replica/access-control-cache.ts': 'refreshes the in-memory access-control cache',
   'replica/event-loop-lag.ts': 'measures event-loop lag',

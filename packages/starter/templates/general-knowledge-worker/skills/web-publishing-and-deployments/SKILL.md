@@ -1,6 +1,6 @@
 ---
 name: web-publishing-and-deployments
-description: "Publish a website or web app from the sandbox to a public URL, and deploy to cloud providers — get a live link to share, ship a static site or SPA, put a built site online, or deploy a framework app / container. Use when the user says 'publish this', 'deploy it', 'put it online', 'give me a live URL', 'host this', 'share a preview link', or wants to make a site/app they (or you) just built reachable on the web. Covers the zero-account instant path (Cloudflare) and permanent hosting (Vercel, incl. any Dockerfile). Also owns the publish GUARDRAILS: never publish unprompted, how to honestly take a site down, the runtime-dependency and data-persistence checks, and the mandatory pre-publish security review. Prefers Kortix Apps (a stable Kortix URL behind Kortix sign-in) when the project has Apps on. Points at kortix-marketplace for other providers and deeper provider-specific skills."
+description: "Publish a website or web app from the sandbox to a public URL, and deploy to cloud providers — get a live link to share, ship a static site or SPA, put a built site online, or deploy a framework app / container. Use when the user says 'publish this', 'deploy it', 'put it online', 'give me a live URL', 'host this', 'share a preview link', or wants to make a site/app they (or you) just built reachable on the web. Covers the zero-account instant path (Cloudflare) and permanent hosting (Vercel, incl. any Dockerfile). Also owns the publish GUARDRAILS: never publish unprompted, how to honestly take a site down, the runtime-dependency and data-persistence checks, and the mandatory pre-publish security review. Prefers Kortix Apps (a stable Kortix URL behind Kortix sign-in) when the project has Apps on."
 defaultProjectInstall: true
 ---
 
@@ -186,22 +186,9 @@ Vercel account/token. Full detail: **`references/vercel.md`**.
    public URL** — anything you deploy this way is world-readable. Treat a public
    URL as public.
 
-## Other providers & going deeper (`kortix-marketplace`)
+## Other providers
 
-This skill covers the two fast paths (Cloudflare + Vercel) inline. For anything
-beyond that — **a different provider** (Netlify, Render, Fly.io, AWS, Deno
-Deploy, GitHub Pages, Railway, …) or a **deeper, provider-specific skill** for
-Vercel or Cloudflare (full framework configs, edge functions, DNS/domains, CI) —
-use the **`kortix-marketplace`** skill to search the catalog and import a
-battle-tested one:
-
-```bash
-kortix marketplace search "netlify deploy" --json
-kortix marketplace search "cloudflare workers" --json
-kortix marketplace search "fly.io deploy docker" --json
-```
-
-Reach for `kortix-marketplace` whenever the user names a provider this skill
-doesn't cover, or wants richer, dedicated Vercel/Cloudflare tooling than the
-quickstarts here — import and use the specialized skill rather than
-hand-rolling it.
+This skill covers the two fast paths (Cloudflare + Vercel) inline. For a
+different provider (Netlify, Render, Fly.io, AWS, Deno Deploy, GitHub Pages,
+Railway, …), use that provider's official CLI and its current documentation.
+The guardrails above apply to every provider.

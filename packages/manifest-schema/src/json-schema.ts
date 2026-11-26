@@ -51,6 +51,7 @@ import {
   CONNECTOR_POLICY_ACTIONS,
   CONNECTOR_PROVIDERS,
   ENV_NAME_RE,
+  SECRET_NAME_RE,
   DEPRECATED_KORTIX_PERMISSION_ALIASES,
   GRANTABLE_KORTIX_PERMISSIONS,
   GRANTABLE_KORTIX_WORKSPACE_PERMISSIONS,
@@ -84,6 +85,7 @@ import {
   REGISTRY_NAME_MAX,
   REGISTRY_NAME_RE,
   V2_RUNTIME_VALUES,
+  AGENT_TITLE_MAX_LENGTH,
 } from './constants';
 import {
   CONNECTOR_HEADER_NAME_MAX_LENGTH,
@@ -529,6 +531,13 @@ function triggerFilterSchema(): JsonSchemaFragment {
  * One trigger in the `on:` / `run:` shape (trigger-shape.ts): what fires it,
  * and what a fire runs. `type` is implied by `on`, so it may not appear.
  */
+function triggerReadersSchema(): JsonSchemaFragment {
+  return { type: 'object', additionalProperties: false, properties: {
+    humans: { type: 'string', enum: ['none', 'members'], description: 'Current human account members may read newly created trigger sessions. No mutation rights. Default: none.' },
+    agents: { type: 'array', items: { type: 'string', pattern: '^[a-z0-9][a-z0-9_-]{0,127}$' }, description: 'Explicit named monitoring agents. Read only; no implicit agent access. Default: [].' },
+  } };
+}
+
 function onRunTriggerSchema(): JsonSchemaFragment {
   const durationSchema: JsonSchemaFragment = { type: 'string', pattern: DURATION_RE.source };
   const appSlug: JsonSchemaFragment = { type: 'string', pattern: '^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$' };
@@ -540,6 +549,7 @@ function onRunTriggerSchema(): JsonSchemaFragment {
     type: 'object',
     required: ['slug', 'on', 'run'],
     properties: {
+      session_readers: { ...triggerReadersSchema(), description: 'Additive read-only policy for new sessions; overrides trigger_session_readers in full.' },
       slug: { ...SLUG_SCHEMA, description: 'Unique. Lowercase letters, digits, `-` and `_`, at most 128 characters.' },
       name: { type: 'string', description: 'The label in the dashboard. Default: the slug.' },
       type: false,
@@ -549,6 +559,7 @@ function onRunTriggerSchema(): JsonSchemaFragment {
         description:
           'Payload path → a value (equals), or one operator: `not`, `in`, `exists`, `prefix`, `not_prefix`. A fire runs only when every path matches.',
       },
+      hard_run_caps: { type: 'boolean', description: 'Atomically cap every fire, including manual fires. No implicit manual override.' },
       max_runs_per_hour: { type: 'integer', minimum: 1, default: 60, description: 'Runs the trigger starts in any 60 minutes.' },
       max_runs_per_day: { type: 'integer', minimum: 1, description: 'Runs the trigger starts in a UTC day.' },
       max_lateness: { ...durationSchema, description: 'Schedules only, `60s` or more. A missed fire later than this does not run.' },
@@ -596,12 +607,15 @@ function onRunTriggerSchema(): JsonSchemaFragment {
       },
       run: {
         type: 'object',
-        description: 'What a fire runs: an agent turn, or a call to an App.',
+        description: 'What a fire runs: an agent turn, or a call to an App. `prompt` is required unless `app` is set or the agent is a program agent (`agents.<name>.run`), whose input defaults to the payload.',
         additionalProperties: false,
-        anyOf: [{ required: ['prompt'] }, { required: ['app'] }],
         properties: {
-          agent: { ...NON_BLANK_STRING, description: 'A declared agent. Default: `default_agent`.' },
-          prompt: { ...NON_BLANK_STRING, description: 'The first message of the run. Required unless `run.app` is set.' },
+          agent: { ...NON_BLANK_STRING, description: 'A declared agent. Default: `default_agent`. A program agent (`agents.<name>.run`) runs its command with the prompt as input.' },
+          prompt: {
+            ...NON_BLANK_STRING,
+            description:
+              'The first message of the run, as a template over the fire payload. `{{ body.order.id }}` is one value (an object renders as JSON); `{{ payload }}` is the whole payload as JSON. Roots: `trigger` and `fired_at` always; `body` and `headers` for a webhook; `event` for an event or App trigger; `change_request` for a change request; `source`, `actor` and `message` for a manual fire. A program agent reads the rendered prompt on stdin; omitted, it reads the whole payload as JSON. Required unless `run.app` is set or the agent is a program agent.',
+          },
           session: {
             ...normalizedEnumSchema(['fresh', 'reuse', 'pinned', 'keyed']),
             default: 'fresh',
@@ -617,7 +631,11 @@ function onRunTriggerSchema(): JsonSchemaFragment {
           app: { ...appSlug, description: 'The fire calls this App instead of an agent.' },
           path: { type: 'string', pattern: '^/', description: 'With `run.app`: the request path. Starts with `/`.' },
           method: { type: 'string', enum: ['POST', 'GET'], description: 'With `run.app`: the request method.' },
-          payload: { type: 'object', description: 'With `run.app`: the request body.' },
+          payload: {
+            type: 'object',
+            description:
+              'With `run.app`: the request body. With an agent: static input merged under each fire\'s payload (the fire\'s own keys win), so `{{ payload }}` and a program agent\'s stdin carry it. At most 64 KiB.',
+          },
         },
       },
     },
@@ -631,6 +649,7 @@ function triggerSchema(): JsonSchemaFragment {
     type: 'object',
     required: ['slug', 'type'],
     properties: {
+      session_readers: { ...triggerReadersSchema(), description: 'Additive read-only policy for new sessions; overrides trigger_session_readers in full.' },
       slug: SLUG_SCHEMA,
       type: { type: 'string', enum: [...TRIGGER_TYPES], description: 'Required in the flat form: the trigger without `on` and `run`. `type` next to `on` is an error.' },
       name: { type: 'string' },
@@ -661,6 +680,7 @@ function triggerSchema(): JsonSchemaFragment {
       expect_event_within: durationSchema,
       // Any trigger type: runs started in any 60 minutes (60 when unset) and
       // in a UTC day (KRTX-1721).
+      hard_run_caps: { type: 'boolean', description: 'Atomically cap every fire, including manual fires. No implicit manual override.' },
       max_runs_per_hour: { type: 'integer', minimum: 1 },
       max_runs_per_day: { type: 'integer', minimum: 1 },
       // skip holds a fire while the previous run is active, or its prompt still waits (KRTX-1721).
@@ -858,7 +878,7 @@ function connectorSchema(): JsonSchemaFragment {
             ...normalizedEnumSchema(CONNECTOR_AUTH_TYPES),
             description: '`oauth1` works on `openapi`, `postman` and `http` only.',
           },
-          secret: false,
+          secret: { type: 'string', pattern: SECRET_NAME_RE.source, description: 'The name of the project secret Kortix sends as the credential. Its value lives in Secrets, never in this file.' },
           in: { default: 'header', description: 'Where the credential goes.' },
           name: { description: 'The header, query or cookie name. Required for `custom` and `api_key`.' },
           prefix: { description: 'Text before the credential value, such as `Bearer`.' },
@@ -1173,6 +1193,7 @@ function appsV2Schema(): JsonSchemaFragment {
  *  top-level section keeps its v1 shape" except `agents`/`channels`). */
 function sharedSectionProperties(): JsonSchemaFragment {
   return {
+    trigger_session_readers: { ...triggerReadersSchema(), description: 'Shared additive reader default for newly created trigger sessions. Existing sharing and IAM are unchanged. No implicit backfill.' },
     project: projectSchema(),
     env: envSchema(),
     sandbox: sandboxSchema(),
@@ -1247,14 +1268,32 @@ function agentBlockV3Schema(): JsonSchemaFragment {
   return {
     type: 'object',
     properties: {
+      title: {
+        type: 'string',
+        pattern: '\\S',
+        maxLength: AGENT_TITLE_MAX_LENGTH,
+        description: 'The agent\'s name as people read it, e.g. "GitHub PR reviewer". The key under `agents` stays its id: sessions, triggers and @-mentions use the key. Default: the key in sentence case.',
+      },
       ...behavior,
       permission: {
         ...permission,
         default: 'allow',
         description: 'Which tool calls run, ask a person, or never run: `allow`, `ask` or `deny` (`"*"` and `all` also mean `allow`). `skill` and `task` belong to `skills` and `subagents`.',
       },
-      prompt: { ...NON_BLANK_STRING, description: 'The system prompt. Set `prompt` or `prompt_file`, not both.' },
+      prompt: { ...NON_BLANK_STRING, description: 'The system prompt. Set `prompt` or `prompt_file`, not both. Not with `run`.' },
       prompt_file: { type: 'string', pattern: AGENT_FILE_PATTERN, description: 'A repository path to a `.md` file. The file is the system prompt. A leading `---` frontmatter block is dropped, so an agent file another tool reads (`.claude/agents/<name>.md`) works as is.' },
+      run: {
+        ...NON_BLANK_STRING,
+        maxLength: 4096,
+        description:
+          "A program agent: the shell command (`bash -c`) each turn runs instead of a model, once, in the session's sandbox. It runs in the first `workspace.repos` path (else `/workspace`), after `workspace.setup` is done, with the agent's secrets, `KORTIX_TOKEN` and `KORTIX_API_URL` (pass them to `createKortix` from `@kortix/sdk` to act as the agent). Input: the message on stdin, and `{ version, session_id, agent, prompt }` as JSON in the file `$KORTIX_EVENT_PATH`. A trigger that omits `prompt` sends its whole payload as JSON, with its `run.payload` merged in. Reply: stdout, rendered as Markdown (first 256 KiB). A non-zero exit fails the turn with the end of stderr, and the run is not retried. A run past `timeout` (default `30m`) is stopped. Stop ends the command's process group. Excludes `model`, `prompt` and `prompt_file`; model keys have no effect. Needs the `program_agents` feature.",
+      },
+      timeout: {
+        type: 'string',
+        default: '30m',
+        description:
+          'A program agent\'s run limit, a duration from `1s` to `6h` (`"30m"`, `"2h"`). A run that is still going is stopped (SIGTERM, then SIGKILL after 5 s) and the turn fails. Only with `run`.',
+      },
       enabled: { type: 'boolean', default: true, description: '`false`: no session starts with the agent, and no agent starts it as a subagent.' },
       codemode: {
         type: 'string',
@@ -1512,6 +1551,7 @@ export function buildManifestSchema(): JsonSchemaFragment {
         },
         additionalProperties: false,
       },
+      evals: evalsSchema(),
       spaces: {
         type: ['object', 'null'],
         description: 'Spaces: channels with configured tabs. Agents join one with `agents.<name>.space`.',
@@ -1603,4 +1643,118 @@ export const KORTIX_JSON_SCHEMA: JsonSchemaFragment = buildManifestSchema();
 /** The manifest JSON Schema (`kortix schema`, `/schema/kortix.schema.json`, the kortix-system skill). */
 export function manifestJsonSchema(): JsonSchemaFragment {
   return KORTIX_JSON_SCHEMA;
+}
+
+/** A `tasks` / `datasets` value of an eval suite: one path, or a list of paths and `{ path }` / `{ name, version }` tables. */
+function evalSourcesSchema(description: string): JsonSchemaFragment {
+  return {
+    description,
+    anyOf: [
+      { type: 'string' },
+      {
+        type: 'array',
+        items: {
+          anyOf: [
+            { type: 'string' },
+            {
+              type: 'object',
+              properties: {
+                path: { type: 'string', description: 'A repository path: one task folder (it holds `task.toml`) or a folder of task folders.' },
+                name: {
+                  type: 'string',
+                  description:
+                    'A Harbor Hub package `org/name` (under `tasks` a task, under `datasets` a dataset), optionally `@ref`; or a dataset of the legacy Harbor registry, such as `terminal-bench`.',
+                },
+                git_url: { type: 'string', description: 'A public git repository (https). `path` is inside it.' },
+                git_commit_id: { type: 'string', description: 'The commit, branch or tag of `git_url`. Default: its default branch.' },
+                version: { type: ['string', 'number'], description: 'The legacy registry dataset version, such as `2.0`, or a Harbor Hub ref.' },
+                ref: { type: 'string', description: 'A Harbor Hub ref: a tag (`latest`), a revision (`3`) or `sha256:<digest>`. Default: `latest`.' },
+                task_names: { type: 'array', items: { type: 'string' }, description: 'Glob patterns of task names to keep.' },
+                exclude_task_names: { type: 'array', items: { type: 'string' }, description: 'Glob patterns of task names to leave out.' },
+                n_tasks: { type: 'integer', minimum: 1, description: 'Keep at most this many tasks, in name order.' },
+              },
+            },
+          ],
+        },
+      },
+    ],
+  };
+}
+
+/** `evals`: suite name → a job config in Harbor's job config field names (`./evals.ts`). */
+function evalsSchema(): JsonSchemaFragment {
+  return {
+    type: ['object', 'null'],
+    description:
+      'Eval suites. Each suite runs agents on Harbor-format tasks (an instruction, a sandbox and `tests/test.sh`, which writes the reward) and scores them. A suite is a job config in the field names of a Harbor job config, or `config: <path>` to a Harbor job config file. Start one with `kortix evals run <suite>`. Needs the `evals` feature.',
+    additionalProperties: {
+      type: 'object',
+      properties: {
+        config: { type: 'string', description: 'A repository path to a Harbor job config (`.yaml`, `.yml` or `.json`). The other keys of the suite override its fields.' },
+        tasks: evalSourcesSchema('The tasks to run: a repository path, or a list of them.'),
+        datasets: evalSourcesSchema('Folders of tasks, Harbor Hub datasets (`{ name: terminal-bench/terminal-bench-2-1 }`), or datasets of the legacy Harbor registry (`{ name: terminal-bench, version: "2.0" }`).'),
+        agents: {
+          description: 'The agents to score. Default: `oracle`, which runs each task\'s `solution/solve.sh` and proves the task is solvable.',
+          type: 'array',
+          items: {
+            anyOf: [
+              { type: 'string' },
+              {
+                type: 'object',
+                required: ['name'],
+                properties: {
+                  name: { type: 'string', description: 'An agent of this project, `oracle` (runs `solution/solve.sh`) or `nop` (does nothing).' },
+                  model_name: { type: 'string', description: 'A `provider/model` id. Absent: the agent\'s own model.' },
+                  override_timeout_sec: { type: 'number', exclusiveMinimum: 0, description: 'Replaces each task\'s `agent.timeout_sec`.' },
+                  max_timeout_sec: { type: 'number', exclusiveMinimum: 0, description: 'Caps each task\'s `agent.timeout_sec`.' },
+                },
+              },
+            ],
+          },
+        },
+        job_name: { type: 'string', description: 'The name of each job of the suite. Default: `<suite>-<timestamp>`.' },
+        n_attempts: { type: 'integer', minimum: 1, maximum: 100, default: 1, description: 'Trials per task and agent.' },
+        n_concurrent_trials: { type: 'integer', minimum: 1, maximum: 32, default: 4, description: 'Trials running at once.' },
+        timeout_multiplier: { type: 'number', exclusiveMinimum: 0, default: 1, description: 'Multiplies every task timeout.' },
+        agent_timeout_multiplier: { type: 'number', exclusiveMinimum: 0, description: 'Multiplies the agent timeout. Wins over `timeout_multiplier`.' },
+        verifier_timeout_multiplier: { type: 'number', exclusiveMinimum: 0, description: 'Multiplies the verifier timeout. Wins over `timeout_multiplier`.' },
+        retry: {
+          type: 'object',
+          description: 'Run a trial again after an error the error policy marks as retryable.',
+          properties: {
+            max_retries: { type: 'integer', minimum: 0, maximum: 10, default: 0 },
+            include_exceptions: { type: 'array', items: { type: 'string' } },
+            exclude_exceptions: { type: 'array', items: { type: 'string' } },
+          },
+        },
+        override_error_policy: {
+          type: 'object',
+          description: 'Exception type → `{ should_retry, should_grade, has_valid_reward }`.',
+          additionalProperties: {
+            type: 'object',
+            properties: { should_retry: { type: 'boolean' }, should_grade: { type: 'boolean' }, has_valid_reward: { type: 'boolean' } },
+          },
+        },
+        metrics: {
+          type: 'array',
+          description: 'How rewards aggregate across trials. Default: `mean`.',
+          items: { anyOf: [{ type: 'string', enum: ['mean', 'sum', 'min', 'max'] }, { type: 'object', properties: { type: { type: 'string', enum: ['mean', 'sum', 'min', 'max'] } } }] },
+        },
+        environment: {
+          type: 'object',
+          properties: {
+            sandbox: { type: 'string', description: 'A `sandbox.templates` slug every trial boots. Absent: each agent\'s own sandbox.' },
+            delete: { type: 'boolean', default: true, description: 'Stop each trial\'s sandbox when the trial ends.' },
+          },
+        },
+        verifier: {
+          type: 'object',
+          properties: {
+            disable: { type: 'boolean', default: false, description: 'Run no verifier: trials end with no reward.' },
+            env: { type: 'object', additionalProperties: { type: 'string' }, description: 'Variables added to every task\'s `[verifier.env]`.' },
+          },
+        },
+      },
+    },
+  };
 }

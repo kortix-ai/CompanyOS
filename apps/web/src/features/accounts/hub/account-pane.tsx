@@ -6,8 +6,9 @@
  *
  * A centred column (`max-w-2xl` by default) whose first block is the page
  * title and its one-line description, followed by the section's own panels.
- * The column is the same on every route so switching sections never moves
- * the title.
+ * Every Workspace settings page shares the gutter and the title rung
+ * (`SettingsPageHeader`). Inside Workspace settings the title is the rail
+ * row's label.
  *
  * Below `md` the sidebar is a sheet, so the pane also carries a 48px row with
  * the one "back" link; on desktop the sidebar answers that question and the
@@ -19,6 +20,7 @@ import { ArrowLeftIcon } from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
 
 import { Button } from '@kortix/ui/button';
+import { SettingsPageHeader } from '@kortix/ui/settings-section-header';
 import { Skeleton } from '@kortix/ui/skeleton';
 import { cn } from '@kortix/ui';
 
@@ -102,17 +104,7 @@ export function AccountPane({
             WIDTH_CLASS[width],
           )}
         >
-          {title ? (
-            <header className="flex flex-wrap items-start justify-between gap-4">
-              <div className="min-w-0 space-y-1">
-                <h1 className="text-foreground text-2xl font-medium tracking-tight text-balance">{title}</h1>
-                {description ? (
-                  <p className="text-muted-foreground text-sm text-pretty">{description}</p>
-                ) : null}
-              </div>
-              {action ? <div className="shrink-0">{action}</div> : null}
-            </header>
-          ) : null}
+          {title ? <SettingsPageHeader title={title} description={description} action={action} /> : null}
           {children}
         </div>
       </div>

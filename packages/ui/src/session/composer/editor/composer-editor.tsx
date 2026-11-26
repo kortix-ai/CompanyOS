@@ -13,6 +13,7 @@ import { textToParagraphs } from '../composer-logic';
 import { COMPOSER_TEXT_METRICS } from '../composer-text-metrics';
 import { useLatestRef } from '../hooks/use-latest-ref';
 import type { SpaceMentionSource } from '../menus/space-mentions';
+import type { DriveMentionSource } from '../menus/mention-menu';
 import { createMentionSuggestion } from '../menus/mention-controller';
 import type { SlashAction } from '../menus/slash-actions';
 import { localizedSlashActions } from '../menus/slash-actions';
@@ -158,6 +159,8 @@ export interface ComposerEditorProps {
   currentSessionId?: string;
   /** Inside a space: the `@` menu lists the space's people and agents only. */
   spaceMentions?: SpaceMentionSource | null;
+  /** The project's Drive files in the `@` menu; null where Drive is off. */
+  driveMentions?: DriveMentionSource | null;
 
   /** `/` menu data + the two things a row selection can produce — see `menus/slash-controller.ts`. */
   commands?: Command[];
@@ -406,6 +409,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
       sessions,
       currentSessionId,
       spaceMentions,
+      driveMentions,
       commands,
       onSelectCommand,
       onSelectAction,
@@ -445,6 +449,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
     const agentsRef = useLatestRef(agents ?? []);
     const sessionsRef = useLatestRef(sessions ?? []);
     const spaceMentionsRef = useLatestRef(spaceMentions ?? null);
+    const driveMentionsRef = useLatestRef(driveMentions ?? null);
     const currentSessionIdRef = useLatestRef(currentSessionId);
     const commandsRef = useLatestRef(commands ?? []);
 
@@ -578,6 +583,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
             getSessions: () => sessionsRef.current,
             getCurrentSessionId: () => currentSessionIdRef.current,
             getSpaceMentions: () => spaceMentionsRef.current,
+            getDriveMentions: () => driveMentionsRef.current,
             onOwnsEnterChange: (ownsEnter) => {
               mentionOwnsEnterRef.current = ownsEnter;
             },
@@ -618,6 +624,9 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
           role: 'textbox',
           'aria-multiline': 'true',
           'aria-label': t('messageInput'),
+          // A locale-free hook for code outside the composer that must know
+          // the editor exists (`use-home-typing-buffer.ts` in apps/web).
+          'data-composer-editor': '',
           /**
            * `min-h-[3.5em]` — taller than one line by design. History: was
            * `1.5em` (exactly one line) on the reasoning that a taller floor
@@ -665,10 +674,9 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
        * dev.kortix.com: clear at T, phantom write at T+406ms, and the next
        * visit to project home restored "Hi" into the composer.
        *
-       * That composer clears now (`clearOnSend="text-only"`), so its phantom
-       * write would carry an empty document. The guard stays: it is about
-       * `setEditable`, and every composer that flips `disabled` mid-send is one
-       * debounce away from the same bug.
+       * Project home keeps the sent text in the locked box again, so this
+       * guard is what keeps the message out of the saved draft. Every composer
+       * that flips `disabled` mid-send is one debounce away from the same bug.
        *
        * The view still refreshes — `setOptions` calls `view.updateState`
        * whether or not the event is emitted.

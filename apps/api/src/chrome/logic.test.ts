@@ -131,11 +131,10 @@ describe('errors', () => {
     expect(status('chrome_denied')).toBe(403);
     expect(status('chrome_consent_timeout')).toBe(408);
   });
-  test('before launch the body names the code and no connect page', () => {
+  test('the body names the code and the page that connects a browser', () => {
     const body = chromeErrorBody('chrome_offline', 'https://kortix.com/');
     expect(body.code).toBe('chrome_offline');
-    // The web app has no /settings/chrome page until CHROME_LAUNCHED (#11436).
-    expect('connectUrl' in body).toBe(false);
+    expect(body.connectUrl).toBe('https://kortix.com/settings/chrome');
     expect(body.error.length).toBeGreaterThan(10);
   });
 });

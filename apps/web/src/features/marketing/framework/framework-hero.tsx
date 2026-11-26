@@ -6,6 +6,7 @@ import { localizeUiCatalog } from '@kortix/ui/i18n';
 import Link from '@/components/site-link';
 import { YamlLine } from '@/features/marketing/code-panel';
 import { MarketingButton } from '@/features/marketing/kit/marketing-button';
+import { Github } from '@kortix/ui/internal/icons/github';
 import { HeroBand, PageHero } from '@/features/marketing/kit/page-frame';
 import { useWalkthrough, WalkPanel, WalkTabs } from '@/features/marketing/kit/walkthrough';
 import { cn } from '@kortix/ui';
@@ -362,6 +363,7 @@ export function FrameworkHero() {
           <>
             <MarketingButton variant="secondary" size="md" className="hit-area-y-1" asChild>
               <a href="https://github.com/kortix-ai/CompanyOS" target="_blank" rel="noreferrer">
+                <span data-slot="icon" aria-hidden="true" className="inline-flex"><Github /></span>
                 {tMarketing('text20672423d716')}
               </a>
             </MarketingButton>

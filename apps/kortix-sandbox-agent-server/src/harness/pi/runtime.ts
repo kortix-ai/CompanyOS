@@ -31,7 +31,7 @@ import { kortixEventBus, sessionLogEventBus } from '@/services/event-bus/kortix-
 import { logger } from '@/lib/log/logger'
 import { resolveKortixRuntimeStateDirectory } from '@/lib/config/runtime-state-dir'
 import { SECRET_CAPABILITIES_INSTRUCTION_PATH } from '@/services/sandbox-env/secret-capabilities'
-import { WORKSPACE_SETUP_NOTE_PATH } from '../shared/workspace-setup'
+import { WORKSPACE_SETUP_NOTE_PATH, parseWorkspaceSetup } from '../shared/workspace-setup'
 import { withheldManagedSkills } from '@/services/skills/managed-skills'
 import { loadTools } from '@/services/tools/host'
 import { compiledAgentConfigFromEnv } from '@/services/config-provider/compiled-agent-config'
@@ -41,26 +41,31 @@ import type { PiConfigReleases } from './config-release'
 import type { ExtensionStatus, InlineExtension, PiSession, RunnerRef } from './extensions/host'
 import { CODEMODE_TOOL, type CodemodeMode } from './codemode'
 import { SUBAGENT_SPEC_REQUIRED, TASK_STOP_TOOL, type KortixHost, type SpawnSessionInput, type SpawnSessionResult } from './extensions/subagents'
+import { AGENT_CHAT_NOTE } from './agent-chat'
 import { FRONT_AGENTS_TTL_MS, FRONT_PROMPT, FRONT_TOOLS, FRONT_WORKER_NOTE, fetchFrontAgents, frontAgentsSection, frontThreadFilesFrom, type FrontAgent, type FrontThreadFiles } from './front'
 import { WATCHER_PROMPT } from './watcher'
 import { frontSpaceAgentsFrom, frontSpaceRoster, frontSpaceRosterSection } from './front-space'
 import { cloudChildReport, cloudChildToolDetails, cloudSpawnSession, cloudStopChild, cloudSubagentApiFrom, routeSubagent, subagentContextFrom, type CloudSubagentApi, type SubagentContext } from './cloud-subagent'
-import type { ControlPlane } from './extensions/control-plane'
+import { callApi, sessionPath, type ControlPlane } from './extensions/control-plane'
 import { messaging, MESSAGING_TOOLS } from './extensions/messaging'
 import { TEAM_TASK_TOOLS, teamTasks } from './extensions/team-tasks'
 import { VOICE_CALL_FLAG, voice } from './extensions/voice'
+import { LOOPS_FLAG, followThrough } from './extensions/follow-through'
+import { GOAL_MODE_BOX_FLAG, goalMode, type ChatGoal } from './extensions/goal-mode'
 import { BUNDLED_WORKFLOWS } from './extensions/bundled-workflows'
 import { isWorkflowRunner, WORKFLOW_TOOL, WorkflowRuns, type WorkflowControlAnswer } from './extensions/workflow'
 import { contextRecord } from './extensions/context-record'
 import { listCheckout } from './extensions/workflow-store'
-import { promptOrigin, ULTRACODE_SYSTEM_LINE, ultracodeRequested, type PromptOrigin } from './prompt-origin'
+import { promptOrigin, TRIGGER_EVENT_TAG, ULTRACODE_SYSTEM_LINE, ultracodeRequested, type PromptOrigin } from './prompt-origin'
+import { modelPromptText, PROMPT_AUTHOR_SECTION, type PromptAuthor } from './prompt-author'
 import { enabledFeatureFlags } from '@/lib/config/feature-flags'
+import { PROGRAM_AGENTS_FLAG, PROGRAM_PROVIDER_ID, programStep, type ProgramRun } from './program'
 import type { WorkflowRunMetadata } from '@kortix/api-contract/kortix-tool-card'
 import type { WorkflowControlBody } from '@kortix/api-contract/multi-agent'
 import type { RuntimeCapability } from '@kortix/api-contract/runtime-relay'
 import { PARKED, PermissionBroker, QuestionBroker, compilePermissionPolicy, type AskRelayAnswer, resolvePolicyRule, skillGranted, type PermissionPolicy, type PermissionRule, type SessionPermissionRule } from './interactions'
 import type { CatalogModel, PiModels, SelectedModel } from './model'
-import { IMAGE_RESIZE, KORTIX_PROVIDER_ID, compactionSettings, nativeModelId, promptModelId, selectId } from './model'
+import { IMAGE_RESIZE, KORTIX_PROVIDER_ID, compactionSettings, createPiModels, nativeModelId, promptModelId, selectId } from './model'
 import { claudeSessions } from './claude/provider'
 import { CLAUDE_AGENT_PROVIDER_ID } from '@kortix/api-contract/claude-agent'
 import { TranscriptStore, type RuntimeFrame } from './transcript'
@@ -135,6 +140,30 @@ export class CommandNotEnabled extends Error {
 export const DEFAULT_SYSTEM_PROMPT = [
   'You are a coding agent working inside a Kortix sandbox. The working directory starts empty: the project repository is not checked out. Run `kortix workspaces clone` to work on its files.',
   'Use the tools to read, search and change files and to run commands. Prefer small, verifiable steps. Report what you did and what remains.',
+].join('\n')
+
+/**
+ * How every agent writes, root and subagent: direct, concise, warm and professional, with no filler.
+ * Before it, Worker, custom workspace agents and subagents had no writing guidance and answered in
+ * generic assistant prose. An agent's own instructions, a skill or the person win over it, so My Kortix
+ * keeps its own voice (brand decision D31) and a brand-voice skill keeps its rules.
+ */
+export const HOW_YOU_WRITE = [
+  '## How you write',
+  'A person reads what you write. Make it easy to understand on the first read.',
+  '- Lead with the answer, the result or the decision. Add the reason or the detail after it, only when it helps. When the answer needs a check first, run the check before you write.',
+  '- Fit the length to the question. A simple question gets one to three sentences. A larger one gets more, and every sentence earns its place.',
+  '- Be direct and concise: short sentences, one idea each, active voice. Cut any sentence that adds nothing.',
+  '- Be warm and professional, like a capable colleague: friendly, calm and respectful. Never stiff, never gushing. When the news is bad or the person is stuck, acknowledge it in a few words, then help.',
+  '- Use plain words. Match the reader: technical with a technical person, plain with everyone else. Explain a term they may not know, or replace it.',
+  '- Be specific: names, numbers, dates and links. "3 of 5 checks pass", not "most checks pass".',
+  '- Report only what you did or saw. Never write the result of a step you did not run, and never present a guess as a fact. Say plainly what you are not sure of. Own a mistake in one sentence: what went wrong and what you did about it.',
+  '- When something is left, end with the next step or the one thing you need from the person.',
+  '- Format only when it helps the reader: a short list for steps or options, a table to compare, a code block for code, headings only in a long document. A short answer is plain sentences, with no headings and no bold.',
+  '- No filler. Do not open with "Great question", "Sure!", "Certainly" or "I\'d be happy to". Do not restate the question or recap what you just said. Do not close with "Let me know if you need anything else" or "I hope this helps".',
+  '- No AI tics: no em dashes, no "It\'s not X, it\'s Y", no lists of three adjectives, no "delve", "seamless", "robust", "leverage", "elevate" or "game-changer".',
+  '- Write in the language the person writes in.',
+  '- Your own instructions, a skill you loaded, or the person can set a different voice, length or format. Follow them over this section.',
 ].join('\n')
 
 /**
@@ -234,6 +263,13 @@ export interface PromptInput {
    * prompt's context part rides along a real prompt).
    */
   synthetic?: boolean
+  /**
+   * The person who wrote the prompt (`author`, KRTX-5121): the model reads
+   * their name above it (prompt-author.ts). Only the Kortix turn verbs set it
+   * (`turns.ts`): apps/api's proxy rewrites `author` on that route alone, so
+   * the OpenCode-shaped `prompt_async` body never carries one.
+   */
+  author?: PromptAuthor
 }
 
 export class PromptRejected extends Error {}
@@ -336,6 +372,15 @@ const PARALLEL_TOOLS: readonly string[] = ['image_gen']
  * these two messages). Exact strings: a pi bump that rewords them fails the pi-harness tests.
  */
 const PI_COMPACTION_REFUSALS = new Set(['Compaction failed: Nothing to compact (session too small)', 'Compaction failed: Already compacted'])
+/**
+ * How `AgentSession.prompt()` refuses while pi runs work of its own (pi 1.4.0 gives no code): a
+ * run an extension started, or a compaction. Both throw before any model call. A pi bump that
+ * rewords them fails the "pi runs an extension starts" pi-harness test.
+ */
+const PI_BUSY_REFUSALS = ['Agent is already processing', 'Cannot submit a prompt while compaction is in progress']
+/** Prompt attempts a turn makes when pi starts work of its own between its idle check and the prompt. */
+const PI_BUSY_PROMPT_ATTEMPTS = 3
+const piRefusedBusy = (err: unknown) => err instanceof Error && PI_BUSY_REFUSALS.some((text) => err.message.startsWith(text))
 
 export interface TurnEnd {
   messageId: string
@@ -370,6 +415,8 @@ export interface PiRuntimeHooks {
   onFrame?: (frame: RuntimeFrame) => void
   /** A turn read a steered message: it is on the wire and in the model's context. */
   onSteerRead?: (read: { rootId: string; messageId: string }) => void
+  /** A stopped turn dropped a steered message it never read: apps/api sends it again as the next turn. */
+  onSteerDropped?: (drop: { rootId: string; messageId: string }) => void
 }
 
 export interface PiRuntimeOptions {
@@ -617,6 +664,8 @@ export class PiRuntime {
   private summarizeMarker: string | null = null
   /** Each Stop counts here; a `/summarize` queued before a Stop does not run. */
   private stops = 0
+  /** Each forced abandon ({@link abandonWork}) counts here; a turn that waited on pi across one does not run. */
+  private abandons = 0
   private resetProgressWatchdog: (() => void) | null = null
   /**
    * The Kortix message id of each pi message object (root and children): pi
@@ -783,8 +832,7 @@ export class PiRuntime {
       this.bindRoot()
     }
     try {
-      const [{ createPiModels }, { createWorkspaceTools, createQuestionTool }, core, coding, host, { subagents }, { workflow }, { codemodeExtensions }, prebuiltRoot] = await Promise.all([
-        import('./model'),
+      const [{ createWorkspaceTools, createQuestionTool }, core, coding, host, { subagents }, { workflow }, { codemodeExtensions }, prebuiltRoot] = await Promise.all([
         import('./tools'),
         import('@earendil-works/pi-agent-core'),
         import('@earendil-works/pi-coding-agent'),
@@ -803,12 +851,7 @@ export class PiRuntime {
       // A restart keeps the list it has; the first start takes the one fetched since construction.
       const catalog = this.models?.live ? this.models.catalog : await this.prefetchCatalog()
       this.catalogFetch = null
-      this.models = await createPiModels({
-        env: this.env,
-        defaultModelRef: this.env.KORTIX_MODEL ?? this.compiledAgent()?.model ?? this.compiled?.model ?? null,
-        catalog,
-        claude: this.claudeOptions(),
-      })
+      this.models = await this.buildModels(catalog)
       this.selected = this.models.select(nativeModelId(this.env.KORTIX_MODEL) ?? nativeModelId(this.compiledAgent()?.model ?? this.compiled?.model))
       // `KORTIX_PI_CODEMODE` (the API sends the session agent's), else the session agent's compiled
       // `codemode`, else `on`. Extensions load once, so a later agent switch or config push keeps it.
@@ -817,7 +860,7 @@ export class PiRuntime {
         sessionID: this.rootId,
         mintMessageId: () => this.clock.mint(this.now()),
         parentMessageId: () => this.turnParent,
-        model: () => ({ providerID: this.selected!.providerID, modelID: this.selected!.modelID }),
+        model: () => (this.programRun(this.agentName) ? { providerID: PROGRAM_PROVIDER_ID, modelID: this.agentName } : { providerID: this.selected!.providerID, modelID: this.selected!.modelID }),
         agent: () => this.agentName,
         workspace: this.workspace,
         now: this.now,
@@ -848,7 +891,11 @@ export class PiRuntime {
         // `sessionId` names the thread, so a Claude subscription model keeps one Claude session per thread.
         streamFn: withMessageIdentity(
           withAgentSampling(
-            (model, context, options) => this.models!.models.streamSimple(model, context, { ...options, sessionId: this.rootId }),
+            (model, context, options) => {
+              // A program agent (`run`): its command takes the model's place (program.ts).
+              const program = this.programRun(this.agentName)
+              return program ? programStep(program, context, options) : this.models!.models.streamSimple(model, context, { ...options, sessionId: this.rootId })
+            },
             () => this.sampling(this.compiledAgent(), this.selected!, this.turnParent ?? undefined),
           ),
           { reserveMessageId: () => this.adapter!.reserveMessageId(), turnId: () => this.turnParent },
@@ -892,7 +939,7 @@ export class PiRuntime {
         prebuilt: project.prebuilt,
         baseTools: this.baseTools,
         // The nested-call gate is first: pi runs `tool_call` handlers in load order and stops at the first block.
-        extensions: [this.nestedCallGate(), this.presentationExtension(), this.turnExtension(), ...this.contextExtensions(), subagents(this.kortixHost()), workflow(this.kortixHost()), ...this.voiceExtensions(), ...this.multiAgentExtensions(), ...codemodeExtensions(this.codemodeMode, coding.createCodemodeExtension), ...local, ...project.extensions],
+        extensions: [this.nestedCallGate(), this.presentationExtension(), this.turnExtension(), ...this.contextExtensions(), subagents(this.kortixHost()), workflow(this.kortixHost()), ...this.voiceExtensions(), ...this.multiAgentExtensions(), ...this.goalModeExtensions(), ...this.followThroughExtensions(), ...codemodeExtensions(this.codemodeMode, coding.createCodemodeExtension), ...local, ...project.extensions],
         systemPrompt: () => this.systemPrompt(),
         skillAllowed: (name) => skillGranted(this.policy, name),
         // Every provider a turn may switch to: the gateway, and Claude subscription models.
@@ -935,6 +982,8 @@ export class PiRuntime {
   async stop(): Promise<void> {
     if (this.state === 'down') return
     await this.abort()
+    // A run an extension started is no turn `abort` stops; a turn queued behind it waits for it.
+    if (this.pi && !this.pi.session.isIdle) this.stopPi()
     if (!(await settlesWithin(this.queue.catch(() => {}), this.cfg.piStopSettleMs))) this.abandonWork()
     const runner = this.runner.current
     if (runner?.hasHandlers('session_shutdown')) await runner.emit({ type: 'session_shutdown', reason: 'quit' }).catch(() => {})
@@ -970,16 +1019,11 @@ export class PiRuntime {
   private async applyReconfigure(): Promise<{ changed: boolean }> {
     this.reconfigurePending = false
     if (!this.agent || !this.models) return { changed: false }
-    const { createPiModels } = await import('./model')
     const before = `${this.selected?.modelID}|${this.agentName}|${this.env.KORTIX_COMPILED_AGENT_CONFIG_ETAG ?? ''}`
     this.compiled = parseCompiledAgentConfig(compiledAgentConfigFromEnv(this.env))
     this.sessionAgentName = this.agentName = this.resolveAgentName()
     // The list it has: an env push never waits for the gateway. The refresh below picks up a newly connected provider.
-    this.models = await createPiModels({
-      env: this.env,
-      defaultModelRef: this.env.KORTIX_MODEL ?? this.compiledAgent()?.model ?? this.compiled?.model ?? null,
-      catalog: this.models.live ? this.models.catalog : null,
-    })
+    this.models = await this.buildModels(this.models.live ? this.models.catalog : null)
     this.refreshModelsSoon()
     this.selected = this.models.select(nativeModelId(this.env.KORTIX_MODEL) ?? nativeModelId(this.compiledAgent()?.model ?? this.compiled?.model))
     this.policy = compilePermissionPolicy(this.compiledAgent()?.permission)
@@ -1010,12 +1054,7 @@ export class PiRuntime {
 
   private async reloadModels(): Promise<void> {
     if (!this.agent || !this.models) return
-    const { createPiModels } = await import('./model')
-    this.models = await createPiModels({
-      env: this.env,
-      defaultModelRef: this.env.KORTIX_MODEL ?? this.compiledAgent()?.model ?? this.compiled?.model ?? null,
-      claude: this.claudeOptions(),
-    })
+    this.models = await this.buildModels()
     this.selected = this.models.select(this.selected ? selectId(this.selected.providerID, this.selected.modelID) : null)
     this.agent.state.model = this.selected.model
     // A model whose limits the catalog now reports differently compacts at a different threshold.
@@ -1088,7 +1127,8 @@ export class PiRuntime {
         const images = await this.images(input)
         if (slot.retracted) return
         const session = this.pi!.session
-        const message = { role: 'user' as const, content: images.length ? [{ type: 'text' as const, text: input.text }, ...images] : input.text, timestamp: this.now() }
+        const text = modelPromptText(input.text, input)
+        const message = { role: 'user' as const, content: images.length ? [{ type: 'text' as const, text }, ...images] : text, timestamp: this.now() }
         this.nativeIds.set(message, messageId)
         const entryId = session.sessionManager.appendMessage(message)
         this.unreadNoReply.set(messageId, entryId)
@@ -1147,7 +1187,7 @@ export class PiRuntime {
       this.clock.observe(messageId)
       const message: AgentMessage = {
         role: 'user',
-        content: [{ type: 'text', text: input.text || '(attachment)' }, ...images],
+        content: [{ type: 'text', text: modelPromptText(input.text || '(attachment)', input) }, ...images],
         timestamp: this.now(),
       }
       this.steered.push({ messageId, input, message })
@@ -1268,7 +1308,7 @@ export class PiRuntime {
    * in a session.
    * A command shadows a skill of the same name. Then the workflows this
    * session can run by name (`source: 'workflow'`, listed as a template): the
-   * project checkout's saved `.kortix/workflows/<name>.js` and the bundled
+   * project checkout's saved `workflows/<name>.js` and the bundled
    * ones, as Claude Code lists saved and bundled workflows as `/name`.
    */
   commandList(): Array<{ name: string; description: string; source: 'command' | 'skill' | 'workflow'; template: string; hints: string[]; agents?: string[] }> {
@@ -1398,10 +1438,12 @@ export class PiRuntime {
    */
   private abandonWork(): void {
     logger.warn('[pi] work did not settle after Stop; the runtime abandons it', { messageId: this.active?.messageId ?? null, queued: this.work.size })
+    this.abandons += 1
     const turn = this.active
     if (turn) {
       this.clearActiveTurn()
       this.completedTurns.set(turn.messageId, 'idle')
+      this.dropUnreadSteers()
       this.hooks.onTurnEnd?.({ rootId: this.rootId, messageId: turn.messageId, status: 'idle' })
     }
     for (const item of [turn, ...this.work]) (item as Turn | null)?.resolve?.('aborted')
@@ -1421,7 +1463,61 @@ export class PiRuntime {
     this.pi?.session.abort().catch((err) => logger.warn('[pi] abort failed', { err: err instanceof Error ? err.message : String(err) }))
   }
 
+  /**
+   * Wait until pi runs nothing of its own. An extension can start a run that kortixd never
+   * admitted: `sendUserMessage`, or `sendMessage` with `triggerTurn`, after a turn settled. pi
+   * refuses a prompt while it runs ("Agent is already processing"; prod 2026-11-14: 299 of
+   * ~1,200 cron runs of one pinned trigger failed so), and refuses one during a compaction.
+   */
+  private async piIdle(): Promise<void> {
+    const session = this.pi?.session
+    if (session && !session.isIdle) await session.waitForIdle()
+  }
+
+  /**
+   * The turn's prompt. When pi started work of its own between {@link runTurn}'s idle wait and
+   * here, it refuses before any model call: wait for that work and send again, a bounded number
+   * of times. A turn stopped while it waited sends nothing.
+   */
+  private async promptWhenIdle(turn: Turn, text: string, options: Parameters<PiSession['session']['prompt']>[1]): Promise<void> {
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        await this.pi!.session.prompt(text, options)
+        return
+      } catch (err) {
+        if (attempt >= PI_BUSY_PROMPT_ATTEMPTS || !piRefusedBusy(err)) throw err
+        logger.warn('[pi] pi runs work of its own; the turn waits for it', { messageId: turn.messageId, attempt })
+        await this.piIdle()
+        if (turn.stopRequested || !this.pi) return
+      }
+    }
+  }
+
+  /**
+   * A stopped turn's end: every steered message it did not read is dropped and
+   * reported (`onSteerDropped`), before the turn's end is. The steer was
+   * accepted (202), so apps/api holds its row as forwarded; without the report
+   * nothing ever sends it. A steer the API's Stop settle withdrew first
+   * (`withdrawSteer`) is no longer listed.
+   */
+  private dropUnreadSteers(): void {
+    const dropped = this.steered
+    this.steered = []
+    this.agent?.clearSteeringQueue()
+    for (const entry of dropped) this.hooks.onSteerDropped?.({ rootId: this.rootId, messageId: entry.messageId })
+  }
+
   private async runTurn(turn: Turn): Promise<void> {
+    // Still queued while pi runs work of its own: the reaper's probe reads the turn in flight,
+    // a retract or a Stop takes it back, and a steer finds no turn and is queued as a prompt
+    // instead of joining the extension's run.
+    const abandons = this.abandons
+    if (this.pi && !this.pi.session.isIdle) logger.info('[pi] the turn waits for a run pi started on its own', { messageId: turn.messageId })
+    await this.piIdle()
+    if (this.abandons !== abandons || !this.pi) {
+      turn.resolve('aborted')
+      return
+    }
     if (this.waiting.get(turn.messageId) === turn) this.waiting.delete(turn.messageId)
     if (turn.retracted) {
       turn.resolve('aborted')
@@ -1484,7 +1580,7 @@ export class PiRuntime {
       const images = await this.images(turn.input)
       // A transient model error continues the turn at the settle boundary (`turnExtension`).
       armWatchdog()
-      await this.pi!.session.prompt(turn.input.text || '(attachment)', { source: 'rpc', ...(images.length ? { images } : {}) })
+      await this.promptWhenIdle(turn, modelPromptText(turn.input.text || '(attachment)', turn.input), { source: 'rpc', ...(images.length ? { images } : {}) })
       for (const frame of this.adapter!.settleRetry()) this.publish(frame)
       if (timedOut) {
         outcome = 'error'
@@ -1532,6 +1628,7 @@ export class PiRuntime {
       if (!abandoned) claudeSessions()?.settle(this.rootId)
       // `abandonWork` already reported the abandoned turn's end.
       const finalText = outcome === 'completed' ? assistantFinalText(this.turnAssistant) : ''
+      if (!abandoned && turn.stopRequested) this.dropUnreadSteers()
       if (!abandoned)
         this.hooks.onTurnEnd?.({
           rootId: this.rootId,
@@ -1544,11 +1641,11 @@ export class PiRuntime {
     if (abandoned) return
     // Started while the live model list was down: fetch it again, so the next turn runs on real limits.
     if (this.models?.live === false) this.refreshModelsSoon()
-    // Steered messages the turn did not read. A stopped turn drops them (the
-    // API's Stop path owns them). Otherwise they start the next turn: the first
-    // is its prompt, the rest are read before its first model call. Same queue
-    // slot, so no prompt admitted meanwhile runs before them.
-    const [next, ...rest] = turn.stopRequested ? [] : this.steered
+    // Steered messages the turn did not read. A stopped turn dropped and
+    // reported them above (`dropUnreadSteers`). Otherwise they start the next
+    // turn: the first is its prompt, the rest are read before its first model
+    // call. Same queue slot, so no prompt admitted meanwhile runs before them.
+    const [next, ...rest] = this.steered
     this.steered = rest
     agent.clearSteeringQueue()
     if (!next) return
@@ -1958,6 +2055,59 @@ export class PiRuntime {
     return [voice(session, this.agentName)]
   }
 
+  /**
+   * Goal mode (`extensions/goal-mode.ts`): a top-level chat that owns a goal
+   * keeps working it until the verifier passes it. The box lists `goal_mode`
+   * wherever a Drive can hold a goal (apps/api feature-flag-env.ts).
+   */
+  private goalModeExtensions(): InlineExtension[] {
+    const plane = this.controlPlane()
+    const flags = enabledFeatureFlags(this.env)
+    if (!plane || this.subagentContext.depth !== 0 || !(flags.has(GOAL_MODE_BOX_FLAG) || flags.has('goals'))) return []
+    return [
+      goalMode({
+        sessionId: plane.sessionId,
+        applies: () => promptOrigin(this.active?.input.text ?? '') !== 'peer',
+        turnText: () => this.active?.input.text ?? '',
+        listGoals: async () => {
+          const answer = await callApi(plane, 'GET', `/workspaces/${encodeURIComponent(plane.projectId)}/goals`)
+          const goals = (answer.body as { goals?: ChatGoal[] } | null)?.goals
+          return answer.status === 200 && Array.isArray(goals) ? goals : null
+        },
+        onNudge: (goal, nudges) => logger.info('[pi] goal-mode nudge', { rootId: this.rootId, goalId: goal.goal_id, nudges }),
+      }),
+    ]
+  }
+
+  /**
+   * Follow-through (`extensions/follow-through.ts`): a top-level session with
+   * Loops on never ends a turn with a wait it set no wake-up for. Not for a
+   * peer message or a trigger-started session: nobody waits on those turns.
+   */
+  private followThroughExtensions(): InlineExtension[] {
+    const plane = this.controlPlane()
+    if (!plane || this.subagentContext.depth !== 0 || !enabledFeatureFlags(this.env).has(LOOPS_FLAG)) return []
+    return [
+      followThrough({
+        applies: () => {
+          const text = this.active?.input.text ?? ''
+          return promptOrigin(text) !== 'peer' && !text.includes(TRIGGER_EVENT_TAG)
+        },
+        hasWakeUp: async () => {
+          try {
+            const answer = await callApi(plane, 'GET', sessionPath(plane.projectId, plane.sessionId, '/reminders'))
+            const rows = (answer.body as { reminders?: { state?: string }[] } | null)?.reminders
+            // An unreadable list counts as a wake-up: the guard never nudges on a guess.
+            return answer.status !== 200 || !Array.isArray(rows) || rows.some((row) => row.state === 'active')
+          } catch {
+            return true
+          }
+        },
+        onNudge: (wait) => logger.info('[pi] follow-through nudge', { rootId: this.rootId, kind: wait.kind, actions: wait.kind === 'acted' ? wait.actions : undefined }),
+      }),
+    ]
+  }
+
   /** The lead whose task list this session uses: itself at depth 0, its lead as a teammate; null without agent teams. */
   private teamListLead(): string | null {
     const plane = this.controlPlane()
@@ -1996,7 +2146,7 @@ export class PiRuntime {
 
   /** Where the running turn's prompt came from; a steered message never changes it. */
   private turnOrigin(): PromptOrigin {
-    return this.active ? promptOrigin(this.active.input.text) : 'human'
+    return this.active ? promptOrigin(this.active.input.text, { synthetic: this.active.input.synthetic }) : 'human'
   }
 
   /** The running turn's prompt is the session's first user message (`KortixHost.turnIsFirstPrompt`). */
@@ -2334,7 +2484,10 @@ export class PiRuntime {
     const agent = new core.Agent({
       streamFn: withMessageIdentity(
         withAgentSampling(
-          (m, context, options) => this.models!.models.streamSimple(m, context, { ...options, sessionId: child.id }),
+          (m, context, options) => {
+            const program = this.programRun(input.agent, child.id)
+            return program ? programStep(program, context, options) : this.models!.models.streamSimple(m, context, { ...options, sessionId: child.id })
+          },
           () => this.sampling(this.compiled?.agent?.[input.agent], selected, messageId),
         ),
         { reserveMessageId: () => adapter.reserveMessageId(), turnId: () => messageId, threadId: child.id },
@@ -2547,6 +2700,22 @@ export class PiRuntime {
     return this.compiled?.agent?.[this.agentName]
   }
 
+  /** The run of `agent` when it is a program agent (`run`); null for a model agent. */
+  private programRun(agent: string, sessionId: string = this.sessionId): ProgramRun | null {
+    const command = this.compiled?.agent?.[agent]?.run?.trim()
+    if (!command) return null
+    const repo = parseWorkspaceSetup(this.env.KORTIX_WORKSPACE_SETUP)?.repos[0]?.path
+    return {
+      command,
+      agent,
+      sessionId,
+      enabled: enabledFeatureFlags(this.env).has(PROGRAM_AGENTS_FLAG),
+      cwd: repo && existsSync(repo) ? repo : this.workspace,
+      env: this.env,
+      ...(this.compiled?.agent?.[agent]?.timeout ? { timeoutMs: this.compiled.agent[agent]!.timeout! * 1000 } : {}),
+    }
+  }
+
   /**
    * A compiled set from kortix.yaml carries `schema: 3` (the wire marker): only
    * its declared agents run, no built-in subagent. Any other set (My Kortix's,
@@ -2622,7 +2791,9 @@ export class PiRuntime {
       for (const diagnostic of diagnostics) if (diagnostic.type !== 'collision') logger.warn('[pi] skill diagnostic', diagnostic)
       // A flagged managed skill exists only while the project's flag is on.
       const withheld = await withheldManagedSkills(this.env)
-      return skills.filter((skill) => !withheld.includes(skill.name))
+      // By name: pi lists a folder in readdir order, which differs from one machine to the next,
+      // so the same agent's system prompt listed its skills in another order in every session.
+      return skills.filter((skill) => !withheld.includes(skill.name)).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
     } catch (err) {
       logger.warn('[pi] skill load failed', { err: (err as Error).message })
       return []
@@ -2698,8 +2869,12 @@ export class PiRuntime {
         ...(child ? [] : ['Use question to collect answers through the interactive question UI.']),
       ].join('\n'),
     )
+    parts.push(HOW_YOU_WRITE)
     parts.push(ACT_BEFORE_YOU_ASK)
+    // People write to the root; a subagent's task comes from its parent agent.
+    if (!child) parts.push(PROMPT_AUTHOR_SECTION)
     if (!child && this.subagentContext.frontThread) parts.push(FRONT_WORKER_NOTE)
+    if (!child && this.subagentContext.agentChat) parts.push(AGENT_CHAT_NOTE)
     return parts.join('\n\n')
   }
 
@@ -2752,9 +2927,20 @@ export class PiRuntime {
 
   // ── projections ──────────────────────────────────────────────────────────
 
-  /** Where Claude subscription models run: the workspace, with their state beside pi's. */
-  private claudeOptions() {
-    return { stateDir: this.cfg.piStateDir, cwd: this.workspace, env: this.env }
+  /**
+   * The served models: the gateway's and the Claude subscription's. Every path that rebuilds the
+   * list goes through here. A rebuild without the Claude provider sent a `claude-agent/<id>` turn
+   * to the gateway's chat completions, which refuse it (400 `model_not_found`).
+   * `catalog` undefined fetches the live list; null means it did not answer. Claude subscription
+   * models run in the workspace, with their state beside pi's.
+   */
+  private buildModels(catalog?: Record<string, CatalogModel> | null): Promise<PiModels> {
+    return createPiModels({
+      env: this.env,
+      defaultModelRef: this.env.KORTIX_MODEL ?? this.compiledAgent()?.model ?? this.compiled?.model ?? null,
+      catalog,
+      claude: { stateDir: this.cfg.piStateDir, cwd: this.workspace, env: this.env },
+    })
   }
 
   selectedModel(): SelectedModel | null {
@@ -2835,8 +3021,10 @@ export class PiRuntime {
       color: agent?.color ?? null,
       variant: agent?.variant ?? null,
       source: 'config',
-      model:
-        name === this.agentName && selected
+      // A program agent's replies name provider `program` (program.ts): so does its listing, and pickers hide the model.
+      model: agent?.run?.trim()
+        ? { providerID: PROGRAM_PROVIDER_ID, modelID: name }
+        : name === this.agentName && selected
           ? { providerID: selected.providerID, modelID: selected.modelID }
           : agent?.model && nativeModelId(agent.model)
             ? agentModelRef(nativeModelId(agent.model)!)

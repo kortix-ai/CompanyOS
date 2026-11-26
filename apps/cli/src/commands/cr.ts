@@ -19,6 +19,7 @@ import {
 } from '../command-helpers.ts';
 import { C, help, pad, status } from '../style.ts';
 import {
+  changeRequestWebUrl,
   crDiff,
   crVersionDiff,
   displayBranch,
@@ -46,7 +47,11 @@ Subcommands:
   diff <cr> [--no-color] [--json]        Show the CR's unified diff.
   open --head <ver> [--base <ver>]       Open a new CR.
        --title "<text>" [--description "<text>"]
-  merge <cr> [--message "<text>"]        Merge an open CR into its base.
+  merge <cr> [--message "<text>"]        Merge an open CR into its base. A merge
+        [--allow-secrets]                that adds what looks like a key or token
+                                         is refused (409, file:line and rule);
+                                         --allow-secrets merges anyway after a
+                                         person checked it. Agent sessions get 403.
   merge-preview <cr> [--json]            Can it merge? Lists any conflicts.
   request-changes <cr> --message "<t>"   Ask the agent that opened it to revise.
   close <cr>                             Close an open CR without merging.
@@ -65,7 +70,7 @@ Global options:
   --host <name>      Operate against a non-default Kortix host.
   -h, --help         Show this help.
 
-One principal: a workspace the CLI config supplies (.kortix/link.json in cwd or
+One principal: a workspace the CLI config supplies (the checkout's link or
 the active host's default workspace) is always paired with THAT host's login —
 never with the sandbox's ambient session token, which cannot act on it. When
 that host is not logged in here, the command stops and asks for
@@ -260,6 +265,7 @@ async function crShow(ref: string | undefined, opts: CtxOpts, json = false): Pro
   const cr = await resolveCr(ctx, ref);
   if (!cr) return 1;
 
+  const url = await changeRequestWebUrl(ctx, cr.cr_id);
   if (json) {
     let merge_preview: ChangeRequestMergePreview | null = null;
     if (cr.status === 'open') {
@@ -271,7 +277,7 @@ async function crShow(ref: string | undefined, opts: CtxOpts, json = false): Pro
         merge_preview = null;
       }
     }
-    emitJson({ change_request: cr, merge_preview });
+    emitJson({ change_request: cr, merge_preview, url });
     return 0;
   }
 
@@ -289,6 +295,7 @@ async function crShow(ref: string | undefined, opts: CtxOpts, json = false): Pro
   );
   process.stdout.write(`  ${C.dim}Base ${C.reset}${base}\n`);
   process.stdout.write(`  ${C.dim}Opened ${C.reset}${relativeTime(cr.created_at)}\n`);
+  process.stdout.write(`  ${C.dim}URL ${C.reset}${url}\n`);
   if (cr.merged_at) {
     const m = cr.merge_commit_sha?.slice(0, 7);
     process.stdout.write(
@@ -369,6 +376,8 @@ async function crOpen(argv: string[], opts: CtxOpts): Promise<number> {
     `  ${C.dim}${displayBranch(created.head_ref)} → ${displayBranch(created.base_ref)}${C.reset}\n\n`,
   );
 
+  process.stdout.write(`  ${await changeRequestWebUrl(ctx, created.cr_id)}\n\n`);
+
   // A CR whose head tip equals base shows "No changes detected" in the
   // dashboard and can't be applied — by far the most common cause is a
   // committed-but-never-pushed session branch. Catch it here, at open time,
@@ -393,8 +402,10 @@ async function crOpen(argv: string[], opts: CtxOpts): Promise<number> {
 
 async function crMerge(argv: string[], opts: CtxOpts): Promise<number> {
   let message: string | undefined;
+  let allowSecrets = false;
   try {
     message = takeFlagValue(argv, ['--message', '-m']);
+    allowSecrets = takeFlagBool(argv, ['--allow-secrets']);
   } catch (err) {
     return fail((err as Error).message);
   }
@@ -407,7 +418,7 @@ async function crMerge(argv: string[], opts: CtxOpts): Promise<number> {
   try {
     result = await ctx.client.post<ChangeRequestMergeResponse>(
       `/workspaces/${ctx.projectId}/change-requests/${cr.cr_id}/merge`,
-      message ? { message } : {},
+      { ...(message ? { message } : {}), ...(allowSecrets ? { allow_secrets: true } : {}) },
     );
   } catch (err) {
     return surfaceApiError(err);

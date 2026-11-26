@@ -77,10 +77,16 @@ export interface GatewayHooks {
   claudeCredentials?: ClaudeCodeHooks['claudeCredentials'];
   /** Anthropic refused a Claude account's token (401): mark it for reconnection. */
   claudeRefused?: ClaudeCodeHooks['claudeRefused'];
+  /** Anthropic forbade a Claude account (403): store its reason and skip the account for a while. */
+  claudeForbidden?: ClaudeCodeHooks['claudeForbidden'];
   // Resolves (or throws) once the account's billing state is checked. May
   // return a `holdUsd` when it took an atomic admission hold against the
   // wallet — the handler attaches it to the principal so settle() can
   // reconcile it to the real cost (see AuthedPrincipal.billingHold).
+  // A refusal throws an error whose `reason` is the 402 code
+  // (`subscription_required`, `insufficient_credits`, ...). Any other error
+  // means the check got no answer: the request is a retryable
+  // `503 admission_unavailable` (pipeline/simple-handler.ts `billingRefusal`).
   assertBillingActive: (accountId: string) => Promise<{ holdUsd?: number } | void>;
   assertBudget?: (principal: AuthedPrincipal) => Promise<void>;
   recordUsage: (event: UsageEvent) => Promise<void>;

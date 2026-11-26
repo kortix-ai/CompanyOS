@@ -174,6 +174,7 @@ export function buildServer(
       refreshCredential: api.refreshCredential,
       claudeCredentials: api.claudeCredentials,
       claudeRefused: api.claudeRefused,
+      claudeForbidden: api.claudeForbidden,
       assertBillingActive: api.assertBillingActive,
       assertBudget: api.assertBudget,
       recordUsage: api.recordUsage,
@@ -227,7 +228,7 @@ export function buildServer(
     } catch {
       return false;
     }
-  });
+  }, { get: api.getReplay, put: api.putReplay });
   // Register fallbacks after the handlers so supported methods keep their behavior.
   const methodsByPath = new Map<string, Set<string>>();
   for (const { path, method } of app.routes) {

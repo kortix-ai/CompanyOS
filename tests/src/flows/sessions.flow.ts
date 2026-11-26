@@ -12,7 +12,6 @@ import {
   SessionDeleteResultSchema,
   SessionPromptListSchema,
   SessionStartResultSchema,
-  SessionTranscriptSyncEnvelopeSchema,
   SessionTurnStatusSchema,
 } from '@kortix/api-contract';
 import { flow } from '../core/flow';
@@ -1022,7 +1021,6 @@ flow(
       'POST /v1/workspaces/:projectId/sessions/:sessionId/restore',
       'GET /v1/workspaces/:projectId/sessions',
       'GET /v1/workspaces/:projectId/sessions/:sessionId',
-      'GET /v1/workspaces/:projectId/sessions/:sessionId/transcript',
       'GET /v1/workspaces/:projectId/sessions/:sessionId/message-authors',
       'GET /v1/workspaces/:projectId/sessions/:sessionId/model-usage',
       'GET /v1/workspaces/:projectId/sessions/:sessionId/prompts',
@@ -1206,7 +1204,7 @@ flow(
 
     await ctx.step('its content reads → 404 for the owner and a member, as the read of it (KRTX-2275); a prompt → 409 Session is deleted', async () => {
       for (const who of [owner, ctx.client.as(member)]) {
-        (await who.get(`${sessionRoute}/transcript`, { params, query: { shape: 'sync', history: 'true' } })).status(404);
+        (await who.get(`${sessionRoute}/log`, { params })).status(404);
         (await who.get(`${sessionRoute}/message-authors`, { params })).status(404);
         (await who.get(`${sessionRoute}/model-usage`, { params })).status(404);
         (await who.get(`${sessionRoute}/prompts`, { params })).status(404);
@@ -1291,13 +1289,8 @@ flow(
       }
     });
 
-    await ctx.step('the saved transcript and the stored file read back intact', async () => {
-      (await owner.get(`${sessionRoute}/transcript`, { params, query: { shape: 'sync', history: 'true' } }))
-        .status(200)
-        .body()
-        .has('$.source', 'mirror')
-        .has('$.message_count', 2)
-        .schema(SessionTranscriptSyncEnvelopeSchema);
+    await ctx.step('the stored log and the stored file read back intact', async () => {
+      (await owner.get(`${sessionRoute}/log`, { params })).status(200).body().has('$.messages.length', 2);
       const file = (await owner.get(download, { params: { ...params, attachmentId } })).status(200);
       if (file.text() !== contents) throw new Error('the restored file bytes differ');
     });
@@ -1450,7 +1443,8 @@ flow(
 /**
  * SESS-54 — a person pins a session to the top of their list or archives it
  * out of the list (KRTX-2418). Per person: a pin or an archive changes only the
- * caller's own list, and neither moves the session's `updated_at`. Local
+ * caller's own list, and neither moves the session's `updated_at`. The pinned
+ * view lists in pin order, so opening a session does not reorder it. Local
  * profile: database sessions.
  */
 flow(
@@ -1582,6 +1576,21 @@ flow(
       expectIds((await list()).rows, [s4, s3, s2, s1], 'the restored list');
     });
 
+    await ctx.step('pinned=only lists in pin order, newest pin first; a write to an older pin (an open bumps updated_at) does not reorder it; the cursor pages the same order', async () => {
+      (await pin(s1, true)).status(200);
+      (await pin(s3, true)).status(200);
+      expectIds((await list({ pinned: 'only' })).rows, [s3, s1], 'pinned=only');
+      // The rename bumps s1's updated_at past s3's, as opening it does.
+      (await owner.patch('/v1/workspaces/:projectId/sessions/:sessionId', { name: 'Opened again' }, { params: params(s1) })).status(200);
+      expectIds((await list({ pinned: 'only' })).rows, [s3, s1], 'pinned=only after s1 was written');
+      const first = await list({ pinned: 'only', limit: '1' });
+      expectIds(first.rows, [s3], 'pinned=only page 1');
+      if (!first.cursor) throw new Error('pinned=only page 1 has no cursor');
+      expectIds((await list({ pinned: 'only', limit: '1', cursor: first.cursor })).rows, [s1], 'pinned=only page 2');
+      (await pin(s3, false)).status(200);
+      (await pin(s1, false)).status(200);
+    });
+
     await ctx.step('pinned=only with archived=only → 400; a body without the flag → 400', async () => {
       (await owner.get('/v1/workspaces/:projectId/sessions', { params: { projectId: project.id }, query: { pinned: 'only', archived: 'only' } })).status(400);
       (await owner.put('/v1/workspaces/:projectId/sessions/:sessionId/pin', {}, { params: params(s1) })).status(400);
@@ -1667,7 +1676,7 @@ flow(
     requires: ['database'],
     routes: [
       'POST /v1/workspaces/:projectId/sessions/:sessionId/recover',
-      'GET /v1/workspaces/:projectId/sessions/:sessionId/transcript',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/log',
       'DELETE /v1/workspaces/:projectId/sessions/:sessionId',
       'POST /v1/accounts/tokens',
     ],
@@ -1737,13 +1746,14 @@ flow(
     };
     const recover = (id: string, who = owner) =>
       who.post('/v1/workspaces/:projectId/sessions/:sessionId/recover', {}, { params: { projectId: project.id, sessionId: id } });
-    const transcriptMessages = async (id: string) =>
-      (await owner.get('/v1/workspaces/:projectId/sessions/:sessionId/transcript', {
+    const transcriptMessages = async (id: string) => {
+      const r = await owner.get('/v1/workspaces/:projectId/sessions/:sessionId/log', {
         params: { projectId: project.id, sessionId: id },
-        query: { shape: 'sync', history: 'true' },
-      }))
-        .status(200)
-        .json<{ messages?: unknown[] }>().messages?.length ?? 0;
+      });
+      // A session with nothing stored has no log (`session_log_missing`): no messages.
+      if (r.statusCode === 404) return 0;
+      return r.status(200).json<{ messages?: unknown[] }>().messages?.length ?? 0;
+    };
 
     const fromLog = await lostSession('log');
     await ctx.step('a lost session with a session log → 200; the row is retired and the session restores from its log', async () => {
@@ -3513,8 +3523,7 @@ flow(
         const without = (await owner.put(shareRoute, { include_prompt: false }, { params: turn })).status(200);
         const b = without.json<{ share: { token: string; include_prompt: boolean } }>().share;
         if (b.token !== token || b.include_prompt !== false) throw new Error(`bad share ${JSON.stringify(b)}`);
-        const res = (await anon.get(publicRoute, { params: { token } })).status(200).body().has('$.response.prompt', null);
-        void res;
+        (await anon.get(publicRoute, { params: { token } })).status(200).body().has('$.response.prompt', null);
       });
 
       await ctx.step('the response token opens no sandbox proxy and is not in the preview/file share list', async () => {

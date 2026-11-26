@@ -208,7 +208,7 @@ describe('legacySectionRedirect', () => {
         opensOverlay: false,
       });
     }
-    expect(legacySectionRedirect('p1', 'review')).toBe('/workspaces/p1/inbox?view=review');
+    expect(legacySectionRedirect('p1', 'review')).toBe('/workspaces/p1/review');
     expect(resolveSettingsOverlayHref('/workspaces/p1/review')).toEqual({ opensOverlay: false });
   });
 
@@ -236,10 +236,6 @@ describe('legacySectionRedirect', () => {
         opensOverlay: false,
       });
     }
-  });
-
-  test('marketplace redirects to the Customize index — the product removed it, it did not move', () => {
-    expect(legacySectionRedirect('p1', 'marketplace')).toBe('/workspaces/p1/customize');
   });
 
   test('graduated capability pages still leave the overlay', () => {

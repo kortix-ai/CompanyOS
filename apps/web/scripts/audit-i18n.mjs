@@ -158,6 +158,12 @@ const ignoredPathParts = [
   '/src/app/[locale]/presentations/film/',
   '/src/features/marketing/launch/',
   '/src/app/[locale]/(public)/(marketing)/launch/',
+  // Unannounced Loopmaxxing landing behind KORTIX_PUBLIC_LOOPMAXXING_ENABLED
+  // (#12644): the copy is still being cut for the launch. Remove these entries
+  // and move the copy into i18n keys when the flag turns on.
+  '/src/app/[locale]/(public)/loopmaxxing/',
+  '/src/features/marketing/one-prompt/',
+  '/src/features/marketing/kit/announcement-bar.tsx',
   // Legal texts are English only by design: one authoritative version, like
   // the Terms of Service PDF (#8315). Their page chrome still uses i18n keys.
   '/src/app/[locale]/(public)/(seo)/legal/',
@@ -978,8 +984,6 @@ function scanFile(file) {
         catalogRoot === 'SHADOW_SCALE' &&
         /^shadow-/.test(node.text);
       const coveredLocalizedSourceCatalog =
-        (file === path.join(srcDir, 'features/marketplace/marketplace-meta.tsx') &&
-          ['TYPE_META', 'TYPE_FILTERS'].includes(catalogRoot)) ||
         (file === path.join(uiSrcDir, 'session/composer/menus/slash-actions.ts') &&
           catalogRoot === 'SLASH_ACTIONS') ||
         (file === path.join(uiSrcDir, 'session/actions/session-label.ts') &&

@@ -108,10 +108,10 @@ Every `Project*`/`Account*` name stays permanently; exact equivalents carry `@de
 | commit + push | `POST .../sessions/:sid/commit-push` |
 | sharing (project) | `GET/PUT .../sessions/:sid/sharing` |
 | finalized LLM + compute cost | `GET /v1/usage/session-costs/:sid?project_id=:id` → `projects-client/session-costs.ts`, facade `session(pid,sid).cost()` ✅ |
-| transcript | `GET .../sessions/:sid/transcript` → `projects-client/sessions.ts`'s `getSessionTranscript` ✅, facade `session(pid,sid).transcript()` ✅ (previously listed ✅ here with no client fn behind it — that was false; now genuinely wired) |
+| session log (the saved transcript) | `GET .../sessions/:sid/log?thread=&before_seq=&limit=` → `projects-client/sessions.ts`'s `getSessionLogPage` ✅, facade `session(pid,sid).log(query)` ✅. The v1 `GET .../transcript` and its `getSessionTranscript` / `getSessionTranscriptSync` / `transcript()` / `transcriptSync()` were removed in the session-log major |
 | preview candidates (live ports) | `GET .../sessions/:sid/previews` |
 | public shares | `GET/POST/DELETE .../sessions/:sid/public-shares[/:id]` |
-| public transcript share (`{ transcript: true }`, one live link per session; `findActiveTranscriptShare`) + anonymous read (`getPublicSessionShare`, `getPublicSessionShareMessages`, by `share_id` or `kps_` token) | `POST .../sessions/:sid/public-shares` · `GET /v1/public/session-shares/:ref[/messages]` |
+| public transcript share | Removed. The API removed public transcript sharing (KRTX-2358); the SDK removed `findActiveTranscriptShare`, `getPublicSessionShare` and `getPublicSessionShareMessages` in the session-log major |
 
 ### 5b. Token minting (CLI PATs) — Kortix-as-a-Backend-critical  ✅
 | op | REST | SDK |
@@ -216,22 +216,10 @@ Client fns in SDK (`git-history.ts`, `change-requests.ts`), **hooks partial** (`
 ### 13. Triggers / scheduled tasks  🟡
 `projects-client/triggers.ts` ✅ (client) ; `useProjectTriggers` now in `@kortix/sdk/react` ✅ (list + create/update/remove/fire, invalidation-wired); the web app's own `hooks/scheduled-tasks` hook hasn't migrated onto it yet.
 
-### 13b. Marketplace install (project-scoped)  ✅
-A project installs a catalog item through a session: `createMarketplaceInstallSession(projectId, itemId)` → `POST /v1/projects/:id/marketplace/install-session` starts a session whose agent merges the item into the project and opens a change request; it resolves `{ session_id }` (`projects-client/marketplace-catalog.ts`). The project handle has no marketplace member. Browsing the catalog is §13c.
-
-### 13c. Marketplace catalog browse (public) + sources  ✅
-Previously OUT OF SCOPE ("Marketplace catalog browsing"). Now wrapped
-end-to-end: client fns in `projects-client/marketplace-catalog.ts` are on the
-facade as `kortix.marketplace.{items, item, itemFile, marketplaces, featured,
-sources: {list, add, remove}}` (top-level; install is §13b):
-| op | REST |
-|---|---|
-| browse catalog items (query/type/source filter) | `GET /v1/marketplace/items` |
-| distinct marketplaces + item counts | `GET /v1/marketplace/marketplaces` |
-| curated featured marketplaces | `GET /v1/marketplace/marketplaces/featured` |
-| item detail | `GET /v1/marketplace/items/:id` |
-| item file content | `GET /v1/marketplace/items/:id/file?path=` |
-| sources CRUD (authed, platform-global "Add a marketplace") | `GET/POST /v1/marketplace/sources`, `DELETE /v1/marketplace/sources/:id` |
+### 13b/13c. Marketplace  ⛔ removed
+The marketplace was removed (2026-11-20). Its routes answer `410 ENDPOINT_RETIRED`.
+`projects-client/marketplace-catalog.ts` and `kortix.marketplace.*` stay exported,
+marked `@deprecated`, until the next major.
 
 ### 13d. Agent-minted setup links  ✅
 Short-lived links the in-sandbox agent mints so a human can enter a secret
@@ -367,8 +355,7 @@ Map exists, but these belong to the platform app, not the agent SDK:
 | Models, Agents, Commands, Tools, PTY | ✅ complete |
 | **Workspace files (read/write/status/search)** | ✅ full client in the SDK root; hooks in `@kortix/ui` |
 | Token minting (account + project-scoped CLI PATs) | ✅ complete — `projects-client/tokens.ts`, facade `kortix.accounts.tokens.*` / `project(id).tokens.*` |
-| Marketplace install (project-scoped) | ✅ complete — `createMarketplaceInstallSession` (`projects-client/marketplace-catalog.ts`); no project-handle member |
-| Public marketplace catalog browse + sources | ✅ complete — `projects-client/marketplace-catalog.ts`, facade `kortix.marketplace.*` |
+| Marketplace | ⛔ removed 2026-11-20 — `kortix.marketplace.*` deprecated, answers `410` |
 | Billing mutations (checkout/subscription/credits) | ✅ complete — `projects-client/billing.ts`, facade `kortix.billing.{checkout, subscription, credits}` |
 | Unified session costs | ✅ complete — `projects-client/session-costs.ts`, facade `kortix.billing.sessionCosts.{list,get}` / `session(pid,sid).cost()` |
 | Setup links, manifest validate, git token | ✅ complete — facade `project(id).{setupLinks, validateManifest, gitToken}` |

@@ -33,8 +33,6 @@ import { seedProjectDefaultModelOnConnect } from '../../llm-gateway/models/seed-
 import { verifyAndRecordAccountKey } from '../../llm-gateway/provider-verify';
 import { deleteWorkspaceProviderKeys, writeWorkspaceProviderKey } from '../../secrets/llm-credential-move';
 import { createRoute, z } from '@hono/zod-openapi';
-import { featureDisabledBody } from '../../feature-flags/gate';
-import { resolveFeatureFlag } from '../../feature-flags/registry';
 import { projectSecrets } from '@kortix/db';
 import { and, eq, isNull } from 'drizzle-orm';
 import {
@@ -370,22 +368,23 @@ export function registerSecretsRoutes(): void {
       if (moved.created) {
         capturePersonEvent(c, loaded, projectId, 'provider_configured', { provider: moved.providerId, method: 'api_key' });
       }
-      // The same check the Models panel's save runs, off the response path:
-      // this route's older clients read no verification. The default-model
-      // seed waits for it, as on the Models panel path.
-      void verifyAndRecordAccountKey({
+      // The same check the Models panel's save runs, answered with the save:
+      // a key the provider refuses is saved, and the caller says so.
+      const verification = await verifyAndRecordAccountKey({
         secretId: moved.secretId, accountId: loaded.row.accountId, projectId, providerId: moved.providerId, name,
-      }, loaded.userId)
-        .then((verification) => seedProjectDefaultModelOnConnect({
-          projectId, accountId: loaded.row.accountId, userId: loaded.userId, secretName: name,
-          ...(verification ? { keyCheck: verification.status } : {}),
-        }))
-        .catch(() => undefined);
+      }, loaded.userId);
+      void seedProjectDefaultModelOnConnect({
+        projectId, accountId: loaded.row.accountId, userId: loaded.userId, secretName: name,
+        ...(verification ? { keyCheck: verification.status } : {}),
+      });
       return c.json({
         identifier, name, strategy: 'broker', consumer: 'llm_gateway', configured: true,
         // Where the key went: a named account, listed in Models → Providers.
         stored_in: 'provider_account', secret_resource_id: moved.secretId, provider_id: moved.providerId,
         delivery_sync: null,
+        verification: verification
+          ? { status: verification.status, message: verification.message, checked_at: verification.checkedAt.toISOString() }
+          : null,
       }, 200);
     };
     if (explicitConsumer === 'llm_gateway' && value !== null) {
@@ -422,21 +421,19 @@ export function registerSecretsRoutes(): void {
     if (!existing && value === null) {
       return c.json({ error: 'value is required' }, 400);
     }
+    // A website login holds `{ username, password }` for the sandbox browser
+    // (projects/lib/browser-logins.ts). A plain value or a delivery change here
+    // would break it or move it into the env: a person enters it again
+    // through a login link instead.
+    if (existing?.consumer === 'browser') {
+      return c.json({
+        error: `${identifier} is a website login. Enter it again through a login link: kortix secrets request ${identifier} --login --site <host>`,
+        code: 'browser_login_read_only',
+      }, 409);
+    }
     if (existing?.consumer === 'llm_gateway' && explicitConsumer === undefined && explicitStrategy === undefined && value !== null) {
       const redirected = await redirectProviderKey();
       if (redirected) return redirected;
-    }
-    // Network-Enforced Secrets is an experimental feature (`secrets_egress`).
-    // With the flag off a project cannot MOVE a secret into egress delivery — a
-    // new egress secret, or an existing non-egress one switched to it. A secret
-    // that is already egress keeps serving and stays editable, so turning the
-    // flag off never strands one. Runtime/broker/denied are unaffected.
-    if (
-      explicitStrategy === 'egress' &&
-      existing?.strategy !== 'egress' &&
-      !resolveFeatureFlag(loaded.row.metadata, 'secrets_egress')
-    ) {
-      return c.json(featureDisabledBody('secrets_egress'), 403);
     }
     // An identifier is a stable handle to ONE secret — redefining its underlying
     // KEY via upsert would silently retarget every agent grant that references

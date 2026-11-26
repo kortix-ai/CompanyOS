@@ -137,8 +137,6 @@ export const REMAINING_UI_TRANSLATION_KEYS: Readonly<Record<string, string>> = {
   'Choose which agent answers': 'texta33bc2792173',
   'Choose which model runs this turn': 'text0e22e022480d',
   'Claude Code': 'text246ef8c1130d',
-  'Clone a full, working Kortix workspace in one click, or add skills from every source into your own.':
-    'text5a7b24722fae',
   Closed: 'textc21ead0614e7',
   'Cloud runtime': 'texta5a909060ba4',
   Cmd: 'text1695b48bccfe',
@@ -325,8 +323,6 @@ export const REMAINING_UI_TRANSLATION_KEYS: Readonly<Record<string, string>> = {
   macOS: 'textaed6b7aa2a05',
   Manager: 'text8b2085f74dfa',
   Markdown: 'text0e52f6b9d025',
-  Marketplace: 'textc608981d8d68',
-  'Marketplace — Clone a ready-made Kortix workspace': 'text7eebc3924618',
   Member: 'text7c968fb71f50',
   "Members, billing, roles, and audit live in each workspace's own settings.":
     'textfde028796e58',
@@ -624,9 +620,6 @@ export const REMAINING_UI_TRANSLATION_KEYS: Readonly<Record<string, string>> = {
   'Clear notifications': 'texte6f312c6b6ef',
   'Clone address': 'textac830bd3c755',
   'Clone command': 'text6264f3bfdd91',
-  'Clone from this address with any Git client. When git asks, enter any username and a Kortix API key as the password — the Kortix command line does this for you through its credential helper, plain':
-    'texte327e6c1348b',
-  'Clone with plain': 'text7760401b25c7',
   'Conditions saved': 'textfc62a0071f66',
   'Connect my account': 'text9676bdc9332f',
   'Connect now': 'textf5e732583fb2',
@@ -653,7 +646,6 @@ export const REMAINING_UI_TRANSLATION_KEYS: Readonly<Record<string, string>> = {
   deleted: 'text1185f37d33b0',
   'Describe what is happening and when it ends.': 'text94e0d14dbf98',
   'Distribution saved': 'textadf5fc6a2d24',
-  'does not.': 'textb74106e21108',
   'Download App': 'text8ba3744d6b1d',
   'Each agent is what a person gets access to. Configure what it knows, what it can reach, and when it runs.':
     'text636453e23d69',
@@ -694,7 +686,6 @@ export const REMAINING_UI_TRANSLATION_KEYS: Readonly<Record<string, string>> = {
   Health: 'text55898449eb74',
   'How the model samples, and how many tool calls one run may make.': 'text33439eb47c9a',
   'Install the Kortix command line': 'text81fbecb138f6',
-  'instead of the Kortix command line.': 'text2f72fafe0ce1',
   Instructions: 'text934652dce41d',
   'Instructions and scripts this agent can load into a session.': 'textb27e54100c96',
   'Instructions and scripts this agent can load into a session. Click a skill to read it.':

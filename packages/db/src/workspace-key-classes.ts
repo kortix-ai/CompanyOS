@@ -97,6 +97,8 @@ export const WORKSPACE_KEY_CLASSES = {
     'credit_code_redemptions',
   ],
   workspace_owned: [
+    // An eval job (2026-11-13): account_id and project_id NOT NULL.
+    'eval_jobs',
     'app_artifacts',
     'apps',
     'artifacts',
@@ -150,6 +152,8 @@ export const WORKSPACE_KEY_CLASSES = {
   ],
   ledger: [
     'audit_activity_daily',
+    // The audit archive's export progress (2026-11-12, #12571): keeps the account of each part.
+    'audit_archive_parts',
     'audit_events',
     'claude_subscription_login_flows',
     'gateway_request_logs',
@@ -164,6 +168,13 @@ export const WORKSPACE_KEY_CLASSES = {
     'usage_events',
   ],
   project_only: [
+    'artifact_folders',
+    // The workspace calendar (flag `calendar`, 2026-11-14): items and their comments carry project_id only.
+    'calendar_comments',
+    'calendar_item_people',
+    'calendar_items',
+    // An eval trial carries project_id only (2026-11-13).
+    'eval_trials',
     // A goal's event log carries project_id only (dev, 2026-11-06).
     'project_goal_events',
     // The legacy credential move's run record (2026-11-12).
@@ -201,6 +212,8 @@ export const WORKSPACE_KEY_CLASSES = {
     'project_snapshot_archives',
     'project_space_links',
     'project_space_watchers',
+    // A trigger's hard run-cap admissions carry project_id only (2026-11-19, KRTX-4961).
+    'project_trigger_admissions',
     'project_trigger_executions',
     'project_trigger_runtime',
     'project_trigger_session_access_grants',

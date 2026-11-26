@@ -127,7 +127,7 @@ function FileRailRow({
         title={file.old_path ? `${file.old_path} → ${file.path}` : file.path}
       >
         {file.old_path && file.old_path !== file.path && (
-          <span className="text-muted-foreground/60">{file.old_path} → </span>
+          <span className="text-muted-foreground">{file.old_path} → </span>
         )}
         {file.path}
       </span>
@@ -153,7 +153,7 @@ function MainDiffColumn({ sha, file }: { sha: string; file: ProjectCommitFile | 
   if (!file) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
-        <History className="text-muted-foreground/20 h-10 w-10" />
+        <History className="text-muted-foreground h-10 w-10" />
         <p className="text-muted-foreground text-sm">
           {tHardcodedUi.raw(
             'featuresProjectFilesComponentsCheckpointDetailDialog.line166JsxTextSelectAFileToViewTheDiff',
@@ -166,17 +166,17 @@ function MainDiffColumn({ sha, file }: { sha: string; file: ProjectCommitFile | 
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* File header (sticky-feeling) */}
-      <div className="border-border/40 bg-background flex shrink-0 items-center gap-3 border-b px-5 py-3">
+      <div className="border-border bg-background flex shrink-0 items-center gap-3 border-b px-5 py-3">
         {statusIconFor(file.status, 'size-4')}
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-2">
             {file.old_path && file.old_path !== file.path && (
-              <span className="text-muted-foreground/60 truncate font-mono text-xs">
+              <span className="text-muted-foreground truncate font-mono text-xs">
                 {file.old_path}
               </span>
             )}
             {file.old_path && file.old_path !== file.path && (
-              <span className="text-muted-foreground/40">→</span>
+              <span className="text-muted-foreground">→</span>
             )}
             <span className="truncate font-mono text-sm font-medium">{file.path}</span>
           </div>
@@ -209,7 +209,7 @@ function MainDiffColumn({ sha, file }: { sha: string; file: ProjectCommitFile | 
         )}
         {error && !isLoading && (
           <div className="flex flex-col items-center justify-center gap-2 p-10 text-center">
-            <AlertCircle className="text-muted-foreground/30 h-6 w-6" />
+            <AlertCircle className="text-muted-foreground h-6 w-6" />
             <p className="text-muted-foreground text-xs">
               {tHardcodedUi.raw(
                 'featuresProjectFilesComponentsCheckpointDetailDialog.line220JsxTextFailedToLoadDiff',
@@ -219,13 +219,13 @@ function MainDiffColumn({ sha, file }: { sha: string; file: ProjectCommitFile | 
         )}
         {data && !data.patch && !isLoading && (
           <div className="flex flex-col items-center justify-center gap-2 p-10 text-center">
-            <History className="text-muted-foreground/30 h-6 w-6" />
+            <History className="text-muted-foreground h-6 w-6" />
             <p className="text-muted-foreground text-xs">
               {tHardcodedUi.raw(
                 'featuresProjectFilesComponentsCheckpointDetailDialog.line226JsxTextNoTextualDiff',
               )}
             </p>
-            <p className="text-muted-foreground/60 text-xs">
+            <p className="text-muted-foreground text-xs">
               {tHardcodedUi.raw(
                 'featuresProjectFilesComponentsCheckpointDetailDialog.line228JsxTextFileMayBeBinaryOrUnchangedInThis',
               )}
@@ -378,7 +378,7 @@ export function CheckpointDetailDialog({
       <DialogContent
         hideCloseButton
         className={cn(
-          'border-border/60 bg-background gap-0 p-0',
+          'border-border bg-background gap-0 p-0',
           'h-[92vh] max-h-[1100px] w-[96vw] max-w-[1400px] sm:max-w-[1400px]',
           'flex flex-col overflow-hidden rounded-2xl',
         )}
@@ -389,7 +389,7 @@ export function CheckpointDetailDialog({
         </DialogTitle>
 
         {/* Top bar */}
-        <div className="border-border/40 flex h-14 shrink-0 items-center gap-4 border-b px-5">
+        <div className="border-border flex h-14 shrink-0 items-center gap-4 border-b px-5">
           <Button
             variant="ghost"
             size="icon"
@@ -491,7 +491,7 @@ export function CheckpointDetailDialog({
                 {copied ? (
                   <Check className="text-kortix-green h-3 w-3" />
                 ) : (
-                  <Copy className="text-muted-foreground/70 h-3 w-3" />
+                  <Copy className="text-muted-foreground h-3 w-3" />
                 )}
                 {data.short_hash}
               </button>
@@ -502,11 +502,11 @@ export function CheckpointDetailDialog({
         {/* Body — two columns */}
         <div className="flex min-h-0 flex-1">
           {/* Left rail */}
-          <aside className="border-border/40 bg-muted/[0.15] flex w-[320px] shrink-0 flex-col border-r">
-            <div className="border-border/40 shrink-0 space-y-2 border-b px-3 py-3">
+          <aside className="border-border bg-muted/[0.15] flex w-[320px] shrink-0 flex-col border-r">
+            <div className="border-border shrink-0 space-y-2 border-b px-3 py-3">
               {/* Body / message */}
               {data?.body && (
-                <pre className="text-muted-foreground border-border/60 max-h-[80px] overflow-auto border-l-2 pl-2 font-sans text-xs leading-relaxed whitespace-pre-wrap">
+                <pre className="text-muted-foreground border-border max-h-[80px] overflow-auto border-l-2 pl-2 font-sans text-xs leading-relaxed whitespace-pre-wrap">
                   {data.body.trim()}
                 </pre>
               )}
@@ -525,7 +525,7 @@ export function CheckpointDetailDialog({
               )}
               {/* Search */}
               <div className="relative">
-                <Search className="text-muted-foreground/50 absolute top-1/2 left-2 h-3 w-3 -translate-y-1/2" />
+                <Search className="text-muted-foreground absolute top-1/2 left-2 h-3 w-3 -translate-y-1/2" />
                 <Input
                   value={fileFilter}
                   onChange={(e) => setFileFilter(e.target.value)}
@@ -547,7 +547,7 @@ export function CheckpointDetailDialog({
               )}
               {error && !isLoading && (
                 <div className="flex flex-col items-center justify-center gap-2 p-6 text-center">
-                  <AlertCircle className="text-muted-foreground/30 h-5 w-5" />
+                  <AlertCircle className="text-muted-foreground h-5 w-5" />
                   <p className="text-muted-foreground text-xs">
                     {tHardcodedUi.raw(
                       'featuresProjectFilesComponentsCheckpointDetailDialog.line546JsxTextFailedToLoadCheckpoint',

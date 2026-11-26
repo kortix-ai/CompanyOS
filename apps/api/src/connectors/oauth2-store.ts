@@ -11,7 +11,7 @@ import {
   connectionOAuthApplications,
   connectionOAuthSessions,
 } from '@kortix/db';
-import { and, eq, gt, isNull, sql } from 'drizzle-orm';
+import { and, eq, gt, isNull, ne, sql } from 'drizzle-orm';
 import { HTTPException } from 'hono/http-exception';
 import { connectionRowIsReachable } from '../projects/lib/connection-access';
 import { decryptNamedProjectSecret, decryptProjectSecret, encryptProjectSecret } from '../projects/secrets';
@@ -23,7 +23,12 @@ import { config } from '../config';
 import { logger } from '../lib/logger';
 import { ConnectionRevokedError, connectionIsEffectiveProjectDefault, upsertConnectionCredential } from './credentials';
 import { failConnection, revokeConnections } from './connection-status';
-import { nativeOAuth2CallbackResponse, nativeOAuth2CallbackUrl } from './oauth2-callback-url';
+import {
+  nativeOAuth2CallbackResponse,
+  nativeOAuth2CallbackUrl,
+  type SignInConnector,
+} from './oauth2-callback-url';
+import { takeRequestingSession } from './db-deps-connect';
 import {
   createStoredDelegatedCredential,
   parseDelegatedCredential,
@@ -39,7 +44,9 @@ import {
 } from './oauth2-lifecycle';
 import { validateAuthorizationIssuer } from './oauth2-issuer';
 import { oauthCompletionRematerializeInput } from './oauth2-rematerialize';
-import { kortixClientApplication } from './mcp-apps';
+import { kortixClientApplication, kortixClientHasOneGrantPerAccount, kortixClientIdentity, mcpAppForUrl } from './mcp-apps';
+import { CONNECTED_AS_KEY, connectedAsOf, relabelToIdentity } from './connection-identity';
+import { safeEgressFetch } from '../shared/ssrf-guard';
 import { registerOAuth2Client } from './oauth2-registration';
 import {
   type ProtectedResourceProvider,
@@ -414,7 +421,7 @@ export async function startConnectionSignIn(input: {
     },
   );
   if (!mcpSignInCheck(discovery).one_click) return null;
-  const callbackUrl = nativeOAuth2CallbackUrl('http://localhost:8008/', config.KORTIX_URL);
+  const callbackUrl = nativeOAuth2CallbackUrl('http://localhost:8008/', config.KORTIX_OAUTH_CALLBACK_ORIGIN || config.KORTIX_URL);
   const metadata = discovery.metadata ?? {};
   await registerConnectionOAuth2Client({
     identity: input.identity,
@@ -483,6 +490,95 @@ export async function createAuthorizationCodeSession(input: {
   return request;
 }
 
+/**
+ * The connector a sign-in was for, as the return page names it: the display
+ * name, and the catalogue icon slug when Kortix ships one. Null when the row
+ * is gone.
+ */
+async function signInConnector(connectionId: string): Promise<
+  (SignInConnector & { projectId: string; slug: string; app: string }) | null
+> {
+  const [row] = await db
+    .select({
+      projectId: connectorConnections.projectId,
+      slug: connectors.slug,
+      name: connectors.name,
+      providerType: connectors.providerType,
+      config: connectors.config,
+    })
+    .from(connectorConnections)
+    .innerJoin(connectors, eq(connectors.connectorId, connectorConnections.connectorId))
+    .where(eq(connectorConnections.connectionId, connectionId))
+    .limit(1);
+  if (!row) return null;
+  const cfg = (row.config ?? {}) as { url?: unknown; app?: unknown };
+  const catalogApp = typeof cfg.url === 'string' ? mcpAppForUrl(cfg.url) : null;
+  return {
+    projectId: row.projectId,
+    slug: row.slug,
+    // The same app name the finalize poll tells the agent, so its prompt reads alike.
+    app: catalogApp?.slug ?? (typeof cfg.app === 'string' && cfg.app ? cfg.app : row.slug),
+    name: row.name || catalogApp?.name || row.slug,
+    iconSlug: catalogApp?.icon ? catalogApp.slug : null,
+  };
+}
+
+/**
+ * Tell the agent that asked for this sign-in that it landed. The callback is
+ * the only step an MCP sign-in is sure to reach: a raw link the agent handed
+ * out opens no Kortix page, so no finalize poll ever runs for it.
+ */
+async function notifyWaitingSession(
+  connector: { projectId: string; slug: string; app: string },
+  connectionId: string,
+  initiatedBy: string,
+): Promise<void> {
+  try {
+    const waiting = await takeRequestingSession(connectionId);
+    if (!waiting) return;
+    const { notifyConnectorSession } = await import('./notify-session');
+    await notifyConnectorSession(waiting, connector.projectId, initiatedBy, connector.slug, connector.app);
+  } catch (error) {
+    logger.warn('[connector] OAuth sign-in could not notify the waiting session', {
+      connectionId,
+      err: (error as Error).message,
+    });
+  }
+}
+
+/**
+ * Record which account a sign-in with Kortix's own OAuth client authorized
+ * (Google: its email) as `connected_as`, and let a generic label become it.
+ * Best effort: the sign-in already succeeded, a failed lookup only leaves the
+ * label as it was.
+ */
+async function recordSignedInIdentity(
+  connectionId: string,
+  application: Pick<OAuth2ApplicationInput, 'issuer' | 'client_id'>,
+  accessToken: string,
+): Promise<void> {
+  const identity = kortixClientIdentity(application);
+  if (!identity) return;
+  try {
+    const response = await safeEgressFetch(identity.url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => {});
+      return;
+    }
+    const body = (await response.json()) as Record<string, unknown>;
+    const value = body[identity.field];
+    if (typeof value !== 'string' || !value.trim()) return;
+    const connectedAs = value.trim();
+    await db
+      .update(connectorConnections)
+      .set({ metadata: sql`${connectorConnections.metadata} || ${JSON.stringify({ [CONNECTED_AS_KEY]: connectedAs })}::jsonb`, updatedAt: new Date() })
+      .where(eq(connectorConnections.connectionId, connectionId));
+    await relabelToIdentity({ connectionId, identity: connectedAs });
+  } catch (error) {
+    logger.debug('[connector] signed-in identity lookup failed', { connectionId, err: (error as Error).message });
+  }
+}
+
 export async function completeAuthorizationCodeSession(input: {
   stateHash: string;
   code?: string;
@@ -490,7 +586,12 @@ export async function completeAuthorizationCodeSession(input: {
   callbackUrl: string;
   /** RFC 9207 `iss` from the authorization response, when the server sent one. */
   issuer?: string;
-}): Promise<{ redirectUri: string | null; ok: boolean; errorCode?: string }> {
+}): Promise<{
+  redirectUri: string | null;
+  ok: boolean;
+  errorCode?: string;
+  connector?: SignInConnector | null;
+}> {
   const claimed = await db.transaction(async (tx) => {
     const [row] = await tx
       .select()
@@ -514,8 +615,11 @@ export async function completeAuthorizationCodeSession(input: {
     return row;
   });
   if (!claimed) return { redirectUri: null, ok: false, errorCode: 'invalid_state' };
+  const connector = await signInConnector(claimed.connectionId);
+  const shown = connector ? { name: connector.name, iconSlug: connector.iconSlug } : null;
   if (!(await authorizationCanCompleteOAuth(claimed.connectionId, claimed.initiatedBy))) {
     return {
+      connector: shown,
       redirectUri: claimed.errorRedirectUri,
       ok: false,
       // Kept verbatim: the public callback contract has carried this code since
@@ -531,7 +635,7 @@ export async function completeAuthorizationCodeSession(input: {
         ? input.providerError
         : 'authorization_failed';
     await failConnection(claimed.connectionId);
-    return { redirectUri: claimed.errorRedirectUri, ok: false, errorCode };
+    return { connector: shown, redirectUri: claimed.errorRedirectUri, ok: false, errorCode };
   }
   try {
     const loaded = await loadOAuth2Application(claimed.connectionId);
@@ -546,6 +650,7 @@ export async function completeAuthorizationCodeSession(input: {
     if (!issuerVerdict.ok) {
       await failConnection(claimed.connectionId);
       return {
+        connector: shown,
         redirectUri: claimed.errorRedirectUri,
         ok: false,
         errorCode: issuerVerdict.errorCode,
@@ -569,10 +674,12 @@ export async function completeAuthorizationCodeSession(input: {
       // A revoke that landed after this sign-in started wins.
       startedAt: claimed.createdAt,
     });
+    await recordSignedInIdentity(loaded.connectionId, loaded.application, token.access_token);
     // The catalog was last fetched WITHOUT this credential, so the connector is
     // very likely sitting on a 401. Refetch before the user sees the result.
     await rematerializeAfterOAuthCompletion(loaded.connectionId);
-    return { redirectUri: claimed.successRedirectUri, ok: true };
+    if (connector) await notifyWaitingSession(connector, loaded.connectionId, claimed.initiatedBy);
+    return { connector: shown, redirectUri: claimed.successRedirectUri, ok: true };
   } catch (error) {
     // The redirect only carries `token_exchange_failed`; the cause lives here.
     logger.warn('[connector] OAuth code exchange failed', {
@@ -580,10 +687,11 @@ export async function completeAuthorizationCodeSession(input: {
       err: (error as Error).message,
     });
     if (error instanceof ConnectionRevokedError) {
-      return { redirectUri: claimed.errorRedirectUri, ok: false, errorCode: 'connection_revoked' };
+      return { connector: shown, redirectUri: claimed.errorRedirectUri, ok: false, errorCode: 'connection_revoked' };
     }
     await failConnection(claimed.connectionId);
     return {
+      connector: shown,
       redirectUri: claimed.errorRedirectUri,
       ok: false,
       errorCode: 'token_exchange_failed',
@@ -760,7 +868,54 @@ export async function oauth2ConnectionStatus(connectionId: string) {
   };
 }
 
-export async function revokeConnectionOAuth2(connectionId: string): Promise<void> {
+/**
+ * Whether another live connection holds the same upstream grant: it signed in
+ * through the same Kortix client (issuer and client id) as the same account
+ * (`connected_as`). Google keeps one grant per account for a client, so
+ * revoking any token of it ends every connection of that account, in every
+ * workspace (2026-11-20: disconnecting Drive broke Calendar with a 401).
+ */
+async function anotherConnectionHoldsGrant(connectionId: string, application: OAuth2ApplicationInput): Promise<boolean> {
+  if (!kortixClientHasOneGrantPerAccount(application)) return false;
+  const [own] = await db
+    .select({ metadata: connectorConnections.metadata })
+    .from(connectorConnections)
+    .where(eq(connectorConnections.connectionId, connectionId))
+    .limit(1);
+  const account = connectedAsOf(own?.metadata);
+  // An unnamed account cannot be matched: revoke, as before.
+  if (!account) return false;
+  const others = await db
+    .select({ projectId: connectionOAuthApplications.projectId, configEnc: connectionOAuthApplications.configEnc })
+    .from(connectorConnections)
+    .innerJoin(connectionOAuthApplications, eq(connectionOAuthApplications.connectionId, connectorConnections.connectionId))
+    .innerJoin(connectionCredentials, eq(connectionCredentials.connectionId, connectorConnections.connectionId))
+    .where(
+      and(
+        ne(connectorConnections.connectionId, connectionId),
+        eq(connectorConnections.status, 'active'),
+        sql`lower(${connectorConnections.metadata} ->> ${CONNECTED_AS_KEY}) = lower(${account})`,
+      ),
+    );
+  return others.some((row) => {
+    const value = decryptOrNull(row.projectId, row.configEnc);
+    if (value === null) return false;
+    try {
+      const other = JSON.parse(value) as Pick<OAuth2ApplicationInput, 'issuer' | 'client_id'>;
+      return other.issuer === application.issuer && other.client_id === application.client_id;
+    } catch {
+      return false;
+    }
+  });
+}
+
+/**
+ * Disconnect: revoke the token upstream, delete the local credential, mark the
+ * connection revoked. A Kortix Google connection skips the upstream revoke
+ * while another live connection holds the same grant
+ * (`anotherConnectionHoldsGrant`); the account's last connection revokes it.
+ */
+export async function revokeConnectionOAuth2(connectionId: string, runtime: OAuth2LifecycleRuntime = {}): Promise<void> {
   // An application or a token this server cannot decrypt cannot be revoked
   // upstream. The local credential is still deleted: a revoke must not fail on
   // the state it clears.
@@ -778,18 +933,24 @@ export async function revokeConnectionOAuth2(connectionId: string): Promise<void
   if (credential) {
     const value = app ? decryptOrNull(app.projectId, credential.valueEnc) : null;
     const stored = value === null ? null : parseDelegatedCredential(value);
-    if (app && stored && app.application.revocation_url) {
+    const sharedGrant =
+      app && stored && app.application.revocation_url
+        ? await anotherConnectionHoldsGrant(connectionId, app.application).catch(() => false)
+        : false;
+    if (app && stored && app.application.revocation_url && !sharedGrant) {
       if (stored.token.refresh_token) {
         await revokeOAuth2Token(
           app.application,
           stored.token.refresh_token,
           'refresh_token',
+          runtime,
         ).catch(() => undefined);
       }
       await revokeOAuth2Token(
         app.application,
         stored.token.access_token,
         'access_token',
+        runtime,
       ).catch(() => undefined);
     }
     await db
@@ -803,9 +964,12 @@ export async function handleNativeOAuth2Callback(requestUrl: string) {
   const url = new URL(requestUrl);
   const state = url.searchParams.get('state');
   if (!state || state.length > 1024) {
-    return { status: 400 as const, body: 'Invalid OAuth2 state' };
+    return nativeOAuth2CallbackResponse(
+      { ok: false, redirectUri: null, errorCode: 'invalid_state' },
+      config.FRONTEND_URL,
+    );
   }
-  const callback = nativeOAuth2CallbackUrl(requestUrl, config.KORTIX_URL);
+  const callback = nativeOAuth2CallbackUrl(requestUrl, config.KORTIX_OAUTH_CALLBACK_ORIGIN || config.KORTIX_URL);
   const result = await completeAuthorizationCodeSession({
     stateHash: createHash('sha256').update(state).digest('hex'),
     code: url.searchParams.get('code') ?? undefined,
@@ -813,5 +977,5 @@ export async function handleNativeOAuth2Callback(requestUrl: string) {
     callbackUrl: callback,
     issuer: url.searchParams.get('iss') ?? undefined,
   });
-  return nativeOAuth2CallbackResponse(result);
+  return nativeOAuth2CallbackResponse(result, config.FRONTEND_URL);
 }

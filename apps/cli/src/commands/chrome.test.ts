@@ -121,13 +121,13 @@ describe('runChrome against a daemon', () => {
   });
 });
 
-describe('feature-off line before launch', () => {
-  test('names no enable command for chrome: the flag is not offered (CHROME_LAUNCHED)', () => {
+describe('feature-off line', () => {
+  // `chrome` graduated on 2026-11-24: no workspace turns it on, the server offers it or not.
+  test('chrome names the server, not a workspace toggle', () => {
     const line = featureOffMessage('`kortix chrome`', 'chrome', new Set());
-    expect(line).not.toContain('features enable');
-    expect(line).toContain('not available yet');
+    expect(line).toBe('`kortix chrome` is not available: this Kortix server does not offer Kortix in Chrome.');
   });
-  test('other flags keep the enable hint', () => {
-    expect(featureOffMessage('`kortix goals`', 'goals', new Set())).toContain('kortix workspaces features enable goals');
+  test('a workspace flag still names the command that turns it on', () => {
+    expect(featureOffMessage('`kortix calendar`', 'calendar', new Set())).toContain('kortix workspaces features enable calendar');
   });
 });

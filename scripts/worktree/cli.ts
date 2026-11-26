@@ -39,7 +39,7 @@ import {
   autocleanConfig, parsePorcelain, meaningfulChanges, isNoise, lastActivity, decideAutoclean,
   diskLevel, diskThresholds, parseDfFreeBytes, cronLine, hasCronLine, withCronLine, withoutCronLine,
   autocleanPass, decideCap, capOwnerDir, fmtKb, cacheTrims, installRunning, RECENT_WRITE_MIN,
-  parseWorktreePorcelain, isClaudeWorktree, lockState, procStatStart, mergedPrIndex, prCovering, decideBranch,
+  parseWorktreePorcelain, isRegisteredWorktree, isClaudeWorktree, lockState, procStatStart, mergedPrIndex, prCovering, decideBranch,
   BUNDLE_NAME, scheduledCommand, currentCronLine, generationOf, loopScript, isLoopFor, pickScheduler,
   bundleRebuildReason, parseStamp,
   type AutocleanCandidate, type AutocleanVerdict, type AutocleanConfig, type AutocleanPass, type CapDir, type CapVerdict,
@@ -526,7 +526,7 @@ async function cmdCreate(a: Args) {
 
   step(`Git worktree ${pc.dim('→')} ${wtPath}`);
   const existing = sh(['git', '-C', root, 'worktree', 'list', '--porcelain']).stdout;
-  if (existing.includes(`worktree ${wtPath}`)) {
+  if (isRegisteredWorktree(existing, wtPath)) {
     sub('already exists — reusing');
   } else {
     const { args, mode } = worktreeAddArgs(root, wtPath, branch, from);
@@ -651,7 +651,16 @@ async function cmdStart(a: Args) {
       die('primary Supabase credentials are unavailable. Start the primary local stack once with `pnpm dev`, or recreate this worktree with `--db` for an isolated database.');
     }
     if (!hasKortixSchema(creds.dbUrl)) {
-      die('the shared primary Supabase DB does not have the kortix schema. Run the primary stack once to initialize it, or recreate this worktree with `--db` for an isolated database.');
+      // A primary database with no kortix schema holds no Kortix data yet: it is
+      // the fresh Supabase of a new cloud session (nothing ever ran `pnpm dev`
+      // there) or of a new laptop. Initialize it from the PRIMARY checkout, the
+      // same migrations `pnpm dev` would apply (4.3 s, 679 migrations, measured
+      // 2026-11-26), instead of stopping every agent that follows the documented
+      // `worktree create` + `worktree start`. A database that has the schema is
+      // never migrated from here.
+      step('Initializing the empty shared primary database (pnpm migrate from the primary checkout)');
+      if (await runMigrate(repoRoot(), creds.dbUrl) !== 0) die('migrate of the empty shared primary database failed. Run the primary stack once with `pnpm dev`, or recreate this worktree with `--db` for an isolated database.');
+      if (!hasKortixSchema(creds.dbUrl)) die('the shared primary Supabase DB still has no kortix schema after migrate. Run the primary stack once with `pnpm dev`, or recreate this worktree with `--db` for an isolated database.');
     }
     sub(`${creds.supabaseUrl} · ${creds.dbUrl}`);
     warnOnSharedDbCrosstalk(name, reg);
@@ -1756,7 +1765,7 @@ async function cmdDoctor(a: Args) {
   for (const [n, e] of Object.entries(reg.slots)) {
     const issues: string[] = [];
     if (!existsSync(e.path)) issues.push('worktree dir missing');
-    else if (!wts.includes(`worktree ${e.path}`)) issues.push('not a registered git worktree');
+    else if (!isRegisteredWorktree(wts, e.path)) issues.push('not a registered git worktree');
     const dbMode = dbModeOf(e);
     const orphan = dbMode === 'isolated'
       ? sh(['bash', '-lc', `docker ps -aq --filter "name=_${e.projectId}$" | head -1`]).stdout.trim()

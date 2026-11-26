@@ -53,6 +53,13 @@ it is not a fleet-wide quota and does not retry failed money operations.
 No plan caps workspaces. A workspace holds one project; a person may create
 any number of workspaces on Free, and only the first gets the free credits.
 
+Dictation (composer speech-to-text, `POST /v1/workspaces/:id/dictation`) is
+on every plan, Free included, although it runs a Kortix-managed Whisper: it
+is an input method, not a model choice (decision 2026-11-24). It costs
+`DICTATION_CREDITS_PER_MINUTE` (1 credit a minute, billed per second) from
+the wallet, a silent clip included, and it passes the same wallet gate
+and project budgets as model usage. Its ledger rows read "Dictation".
+
 `credit_accounts.tier` is the billing plan: `free` or `credits` (legacy keys
 resolve to `credits`). Stripe owns it. `tier='enterprise'` no longer exists.
 
@@ -139,11 +146,11 @@ sourceAccountId, newAccountId})` after each move
   marker clears.
 - `applyStripeSync` never writes a non-paid tier over an active comp, and
   `comp_plan_until` is admin-owned (operator path only).
-- Store purchases name the workspace: the mobile app sets the RevenueCat
-  subscriber attribute `kortix_workspace_id` before `purchasePackage` and the
-  paywall (empty = deleted); `resolveRevenueCatAccountId` credits that
-  workspace when the buyer is a member, else the buyer's default account. A
-  renewal follows the account that holds the store subscription.
+- Store purchases: the mobile app has no in-app purchase and no RevenueCat
+  SDK (removed in 1.6.58). Existing RevenueCat subscriptions still reach the
+  webhook; `resolveRevenueCatAccountId` credits the `kortix_workspace_id`
+  attribute's workspace when the buyer is a member, else the buyer's default
+  account. A renewal follows the account that holds the store subscription.
 - Cost views across a move: a project-scope read takes a row billed to another
   account only through one of the project's own sessions (marked billed
   elsewhere); account money views stay by `account_id`.
@@ -432,3 +439,24 @@ readiness. A funded Free account can pay for compute while it uses BYOK.
 The project/principal-scoped `/model-picker` catalog is the source of truth
 for executable models. A gateway trigger with no enabled model returns
 `402 no_usable_model`; credits alone never unlock managed inference.
+
+### Identity without a workspace
+
+An unscoped Supabase-authenticated person with no membership can read account-state
+without creating or choosing a workspace. The response contains `billing_state`,
+`has_active_subscription`, `subscription.status`, and `can_manage_billing: false`.
+It checks the legacy personal account key (`account_id = user_id`), its wallet
+subscription references, every page of subscriptions of its mapped Stripe
+customers, and every page of a Stripe search for subscriptions whose
+`metadata.account_id` names the person (an unmapped legacy purchase). A
+subscription the wallet already proves is reported without a provider read;
+absence always needs Stripe, so a deployment without a Stripe key answers an
+error, never absence. Ended Stripe subscriptions (`canceled`, `incomplete_expired`) do not
+count. Unknown statuses fail closed as active. A cancelled store (RevenueCat)
+subscription stays active until its recorded expiry has passed. A database or provider error is
+an error response, never a no-subscription fallback. No database means the read
+cannot be authoritative. When the personal key names an existing workspace the
+person does not serve, the read refuses with 409 `no_workspace` and reads nothing.
+Named workspace requests retain membership authorization.
+This read performs no billing writes and never grants credits. Deployment does
+not unhold production dogfood: its prerequisite must be validated separately.

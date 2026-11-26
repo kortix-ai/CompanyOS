@@ -23,6 +23,7 @@ import { formatDuration } from '../state';
 import { textRendersCard } from './card-text';
 import { isNoGroupActivityTool, normalizeActivityToolName } from './session-activity-groups';
 import type { ShowGroupedSegment } from './show-group';
+import { partStartsConnectorSignIn } from './sign-in-call';
 import { STARTED_WORK_TOOLS } from './started-work';
 
 export interface TurnWorkSplit<S extends ShowGroupedSegment = ShowGroupedSegment> {
@@ -44,7 +45,11 @@ export interface TurnWorkSplit<S extends ShowGroupedSegment = ShowGroupedSegment
 function isDeliverableSegment(segment: ShowGroupedSegment, foldStartedWork = false): boolean {
   if (segment.kind === 'show-group') return true;
   if (segment.kind !== 'standalone') return false;
-  return isNoGroupActivityTool(segment.part.tool) || (!foldStartedWork && STARTED_WORK_TOOLS.has(normalizeActivityToolName(segment.part.tool)));
+  return (
+    isNoGroupActivityTool(segment.part.tool) ||
+    partStartsConnectorSignIn(segment.part) ||
+    (!foldStartedWork && STARTED_WORK_TOOLS.has(normalizeActivityToolName(segment.part.tool)))
+  );
 }
 
 function isCardText(segment: ShowGroupedSegment): boolean {

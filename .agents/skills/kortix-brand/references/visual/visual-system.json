@@ -96,13 +96,13 @@
       },
       "destructive-foreground": { "light": "oklch(0.9851 0 0)", "dark": "oklch(0.9851 0 0)", "hex": ["#fafafa", "#fafafa"], "utility": "text-destructive-foreground", "mobile": true },
       "border": {
-        "light": "oklch(0.9128 0 0)",
-        "dark": "oklch(0.2686 0 0)",
-        "hex": ["#e2e2e2", "#262626"],
+        "light": "oklch(0.8953 0 0)",
+        "dark": "oklch(0.2924 0 0)",
+        "hex": ["#dcdcdc", "#2c2c2c"],
         "ramp": "hairline",
         "utility": "border-border",
         "mobile": true,
-        "use": "Every border. There is one border color."
+        "use": "The border token. Two borders read it: border-border (global, every element by default) is this value mixed 17.5% toward --background at 0.8px; border-strong is this value at 1px, for emphasis (a selectable row, a linked card; never the chat composer). Both are defined in packages/ui/src/styles/theme.css."
       },
       "input": { "light": "oklch(0.9461 0 0)", "dark": "oklch(0.2264 0 0)", "hex": ["#ededed", "#1c1c1c"], "ramp": "surface-2", "utility": "bg-input", "mobile": true, "use": "Legacy. Add no new use: fields use bg-popover." },
       "ring": {
@@ -156,7 +156,7 @@
       "sidebar-ring": { "ref": "ring", "utility": "ring-sidebar-ring", "mobile": true, "use": "Focus ring in the sidebar. Follows --ring, so a white-label focus color reaches the sidebar." }
     },
     "accents": {
-      "rule": "The only sources of hue in product UI. Theme-invariant today (same value in light and dark). Tinted fill = /15, glyph = solid. Two opacities, no others.",
+      "rule": "The only sources of hue in product UI. Each accent has a light and a dark value (J-7): the light value is darker so it holds contrast on white. Tinted fill = /15, glyph = solid. Two opacities, no others.",
       "kortix-base": {
         "ref": "ring",
         "hex": "#0099ff",
@@ -166,19 +166,20 @@
         "web_value": "var(--color-ring)",
         "mobile_value": "var(--ring)"
       },
-      "kortix-green": { "value": "oklch(0.581 0.165 146.619)", "hex": "#199338", "utility": "text-kortix-green", "mobile": true, "meaning": "success, running, connected, merged" },
-      "kortix-red": { "value": "oklch(0.648 0.202 24.745)", "hex": "#f14b4c", "utility": "text-kortix-red", "mobile": true, "meaning": "error, failed" },
-      "kortix-orange": { "value": "oklch(0.691 0.142 71.784)", "hex": "#d18b19", "utility": "text-kortix-orange", "mobile": true, "meaning": "warning, needs attention" },
+      "kortix-green": { "light": "oklch(0.48 0.143 146.619)", "dark": "oklch(0.581 0.165 146.619)", "hex": ["#037225", "#199338"], "utility": "text-kortix-green", "mobile": true, "meaning": "success, running, connected, merged" },
+      "kortix-red": { "light": "oklch(0.52 0.202 24.745)", "dark": "oklch(0.648 0.202 24.745)", "hex": ["#c21425", "#f14b4c"], "utility": "text-kortix-red", "mobile": true, "meaning": "error, failed" },
+      "kortix-orange": { "light": "oklch(0.615 0.13 71.784)", "dark": "oklch(0.691 0.142 71.784)", "hex": ["#b47508", "#d18b19"], "utility": "text-kortix-orange", "mobile": true, "meaning": "warning, needs attention" },
       "kortix-yellow": {
-        "value": "oklch(0.732 0.15 90.688)",
-        "hex": "#cca300",
+        "light": "oklch(0.609 0.124 90.688)",
+        "dark": "oklch(0.732 0.15 90.688)",
+        "hex": ["#9f7f02", "#cca300"],
         "utility": "text-kortix-yellow",
         "mobile": true,
         "meaning": "pending",
-        "note": "Slightly outside sRGB; displays clip to #cca300. 2.38:1 on #ffffff."
+        "note": "The dark value is slightly outside sRGB and clips to #cca300. The light value #9f7f02 is 3.81:1 on #ffffff."
       },
-      "kortix-blue": { "value": "oklch(0.652 0.177 252.624)", "hex": "#2b91f7", "utility": "text-kortix-blue", "mobile": true, "meaning": "info, open, in review" },
-      "kortix-purple": { "value": "oklch(0.675 0.131 306.212)", "hex": "#ab80d6", "utility": "text-kortix-purple", "mobile": true, "meaning": "reserved: no default meaning" }
+      "kortix-blue": { "light": "oklch(0.61 0.177 252.624)", "dark": "oklch(0.652 0.177 252.624)", "hex": ["#1784e9", "#2b91f7"], "utility": "text-kortix-blue", "mobile": true, "meaning": "info, open, in review" },
+      "kortix-purple": { "light": "oklch(0.622 0.131 306.212)", "dark": "oklch(0.675 0.131 306.212)", "hex": ["#9b70c5", "#ab80d6"], "utility": "text-kortix-purple", "mobile": true, "meaning": "reserved: no default meaning" }
     },
     "status_mobile_only": {
       "rule": "Web uses kortix-green and kortix-orange for status. Mobile aliases its semantic success and warning tokens to the same accents (J-4).",
@@ -285,6 +286,13 @@
       "8xl": { "size": "6rem", "line_height": "1", "px": 96, "surface": "marketing" }
     },
     "weights": { "normal": "body, meta (default, do not write it)", "medium": "row title, label, active nav", "semibold": "detail title, with tracking-tight" },
+    "weight_values": {
+      "note": "Roobert is variable (wght 300-900), so a step can sit between the named instances. normal and medium are tuned by eye (Jay, 2026-11-25); Emitted as --font-weight-*, which the font-normal / font-medium / font-semibold / font-bold utilities read.",
+      "normal": 430,
+      "medium": 470,
+      "semibold": 550,
+      "bold": 600
+    },
     "tracking": { "normal": "0em", "tight": "-0.025em (Tailwind default) with text-2xl and up, and on mono" },
     "portable_text": {
       "note": "Tailwind stock values. The web app does not override them. Emitted to tokens.css only, for HTML outside apps/web that has no Tailwind utilities: use var(--tracking-tight) and var(--leading-*), never a literal.",
@@ -327,14 +335,12 @@
     }
   },
   "elevation": {
-    "rule": "In page flow = border, no shadow. Floating = shadow + hairline border. Never dark:shadow-*.",
-    "source": "Tailwind 4.3.3 defaults (node_modules/tailwindcss/theme.css:406-412). Kortix defines no shadow tokens.",
+    "rule": "In page flow = border, no shadow. Floating = shadow + hairline border (bg-popover border shadow-xs). Three steps only, each a smooth stack of faint layers: there is no shadow-lg, shadow-xl or shadow-2xl. Never dark:shadow-*.",
+    "source": "xs, sm, md: the smooth layered stacks of shadow-plugin 2.1.1 (MIT, shadow.floriankiem.com), copied as values into packages/ui/src/styles/theme.css; the plugin is not installed. lg, xl and 2xl are removed (--shadow-*: initial).",
     "steps": {
-      "xs": { "value": "0 1px 2px 0 rgb(0 0 0 / 0.05)", "use": "Chips, the segmented chip, slider thumbs" },
-      "sm": { "value": "0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)", "use": "Sticky bars" },
-      "md": { "value": "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)", "use": "Dropdowns, selects, popovers" },
-      "lg": { "value": "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)", "use": "Modals, sheets, toasts" },
-      "xl": { "value": "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)", "use": "Command palette, floating windows" }
+      "xs": { "value": "0 0 4px 0 rgb(0 0 0 / 0.04)", "use": "Dropdowns, selects, popovers, hover cards; chips, the segmented chip, slider thumbs" },
+      "sm": { "value": "0 18px 47px 0 rgb(0 0 0 / 0.03), 0 7.5px 19px 0 rgb(0 0 0 / 0.02), 0 4px 10.5px 0 rgb(0 0 0 / 0.02), 0 2.3px 5.8px 0 rgb(0 0 0 / 0.01), 0 1.2px 3.1px 0 rgb(0 0 0 / 0.01), 0 0.5px 1.3px 0 rgb(0 0 0 / 0.01)", "use": "Sticky bars" },
+      "md": { "value": "0 17.54px 23.39px 0 rgb(0 0 0 / 0.04), 0 9.4px 12.5px 0 rgb(0 0 0 / 0.03), 0 5.25px 7px 0 rgb(0 0 0 / 0.02), 0 2.79px 3.72px -2px rgb(0 0 0 / 0.01), 0 1.16px 1.5px 0 rgb(0 0 0 / 0.01)", "use": "Modals, sheets, the command palette" }
     }
   },
   "effects": {
@@ -461,7 +467,7 @@
       "change": "Mobile keeps stock spacing (decided), but also stock type (text-xs 12 vs 13px) and radius (xl 12 vs 14px). Decide whether type and radius follow web."
     },
     { "id": "J-6", "status": "open", "change": "text-md line-height uses 0.9375 against a 0.9rem size. Fix the denominator or delete text-md (8 uses)." },
-    { "id": "J-7", "status": "open", "change": "kortix-* accents are theme-invariant and measure 2.38-3.98:1 on #ffffff (yellow lowest). Decide on light/dark pairs for text use." },
+    { "id": "J-7", "status": "resolved", "change": "Each kortix-* accent has a light and a dark value. Light green/red 4.55:1 on #dedede, the darkest light fill token (6.1:1 on #ffffff); orange/yellow/blue/purple 3.05:1 on #e6e6e6. Dark keeps the old values. Mobile follows both values: global.css per scope, native THEME.accent[tone] (KRTX-5033)." },
     {
       "id": "J-8",
       "date": "2026-10-01",

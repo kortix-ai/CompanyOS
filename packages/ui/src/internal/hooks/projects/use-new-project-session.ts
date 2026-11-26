@@ -246,19 +246,14 @@ export function useNewProjectSession(projectId: string | undefined) {
 
       // A space thread shows up in the timeline at once, so it gets no toast.
       const inSpace = Boolean(opts.create?.space_id);
-      // `threads.*`, not `hardcodedUi.i18nComplete.*`. The two
-      // i18nComplete slots these used to read hold the literal strings
-      // "startingSession" and "sessionStarted" in en, fr, de, pt, sr and
-      // zh — the key id was written into the value slot — so the toast
-      // rendered its own key name. `threads.startingSession` /
-      // `threads.sessionStarted` are the canonical entries and are
-      // correctly translated in all nine catalogs.
+      // `threads.startingSession`, not `hardcodedUi.i18nComplete.*`: those
+      // slots held the key id as their value in six catalogs.
       const createSession = () =>
         inSpace
           ? createSessionRow()
-          : loadingToast(t('startingSession'), createSessionRow(), {
-              success: t('sessionStarted'),
-            });
+          : // No success toast: the session page opens next, and a toast for
+            // the session on screen covered its composer's Send/Stop button.
+            loadingToast(t('startingSession'), createSessionRow(), { success: false });
 
       createScopedSession({
         create: createSession,

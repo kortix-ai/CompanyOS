@@ -21,6 +21,13 @@ export function bindProjectOperationsReview(projectId: string) {
         P.claimWarmProjectSession(projectId, input),
     },
 
+    /** The agents the caller can message (`channels` flag). An agent's chat is `spaces.dm(name)`. */
+    agentDirectory: {
+      list: () => P.listWorkspaceAgentDirectory(projectId),
+      /** `setPaused(name, paused)`: a paused agent gets messages but no automatic run. */
+      setPaused: (name: string, paused: boolean) => P.setWorkspaceAgentPaused(projectId, name, paused),
+    },
+
     /** Channels and the caller's DMs (`chat` flag). A session joins one with `sessions.create({ space_id })`. */
     spaces: {
       list: () => P.listWorkspaceSpaces(projectId),
@@ -78,6 +85,12 @@ export function bindProjectOperationsReview(projectId: string) {
       /** Last in the order. A taken name (any case) rejects with 409 `group_name_taken`. */
       create: (input: Parameters<typeof P.createWorkspaceSessionGroup>[1]) => P.createWorkspaceSessionGroup(projectId, input),
       rename: (groupId: string, name: string) => P.renameWorkspaceSessionGroup(projectId, groupId, name),
+      /** Rename, change the description, or both; `description: null` clears it. */
+      update: (groupId: string, input: Parameters<typeof P.updateWorkspaceSessionGroup>[2]) => P.updateWorkspaceSessionGroup(projectId, groupId, input),
+      /** Who sees the group (and so its sessions): its creator only. */
+      share: (groupId: string, input: Parameters<typeof P.setWorkspaceSessionGroupSharing>[2]) => P.setWorkspaceSessionGroupSharing(projectId, groupId, input),
+      /** The whole ordered tab list after Sessions. */
+      setTabs: (groupId: string, tabs: Parameters<typeof P.setWorkspaceSessionGroupTabs>[2]) => P.setWorkspaceSessionGroupTabs(projectId, groupId, tabs),
       /** Every group id, once, in the new order; an out-of-date list rejects with 409 `group_order_stale`. */
       reorder: (groupIds: readonly string[]) => P.reorderWorkspaceSessionGroups(projectId, groupIds),
       /** Its sessions stay, in no group. */

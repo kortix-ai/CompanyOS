@@ -42,7 +42,8 @@ export interface Redirect {
  * every shell in use ships `/workspaces` in its list.
  */
 export const DESKTOP_SHELL_UA = 'KortixDesktop';
-const DESKTOP: Condition = { type: 'header', key: 'user-agent', value: `.*${DESKTOP_SHELL_UA}.*` };
+/** A `has`/`missing` redirect condition that matches the desktop shell's user agent. */
+export const DESKTOP_SHELL_HEADER: Condition = { type: 'header', key: 'user-agent', value: `.*${DESKTOP_SHELL_UA}.*` };
 
 /** True for a request from the desktop shell. */
 export function isDesktopShell(userAgent: string | null | undefined): boolean {
@@ -74,8 +75,8 @@ function withDesktopShell(rules: Redirect[]): Redirect[] {
     const destination = desktopShellPath(rule.destination);
     const twin: Redirect[] = destination === rule.source || rule.source === '/new'
       ? []
-      : [{ ...rule, destination, has: [...(rule.has ?? []), DESKTOP] }];
-    return [...twin, { ...rule, missing: [...(rule.missing ?? []), DESKTOP] }];
+      : [{ ...rule, destination, has: [...(rule.has ?? []), DESKTOP_SHELL_HEADER] }];
+    return [...twin, { ...rule, missing: [...(rule.missing ?? []), DESKTOP_SHELL_HEADER] }];
   });
 }
 
@@ -98,13 +99,10 @@ function workspaceRedirectTable(locales: readonly string[]): Redirect[] {
       // top-level segments were shared in Slack, saved as bookmarks and baked
       // into agent transcripts, so every one keeps resolving. `agent` became
       // `agents`, `config` became `settings`; the rest kept their names.
-      // Review is the workspace Inbox page itself (KRTX-4799; it was a tab
-      // there on 2026-11-08 and its own page from 2026-11-04). Its old
-      // addresses (`/review`, `/customize/review`) land there in one hop;
-      // `?id=` rides along and opens the item.
+      // Review has its own route; keep retired Customize links working.
       {
-        source: `${prefix}/:id/:old(review|customize/review)`,
-        destination: '/workspaces/:id/inbox?view=review',
+        source: `${prefix}/:id/customize/review`,
+        destination: '/workspaces/:id/review',
         permanent: false,
       },
       // Agents moved again on 2026-11-08, into Workspace settings

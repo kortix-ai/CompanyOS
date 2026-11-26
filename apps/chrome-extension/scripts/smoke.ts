@@ -11,6 +11,7 @@ const app = join(import.meta.dir, '..');
 // KORTIX_SMOKE_CHROME points at another Chrome build.
 const CHROME = process.env.KORTIX_SMOKE_CHROME || chromium.executablePath();
 const EXT_ID = 'gefbbnjgoiljpbnalgafbhbfdhikgjek';
+const VERSION: string = JSON.parse(await Bun.file(join(app, 'src/manifest.json')).text()).version;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 let failures = 0;
 const check = (name: string, ok: boolean, detail = '') => {
@@ -213,7 +214,7 @@ try {
   check('extension loads with the pinned ID', true);
   await until('control socket auth', () => frames.find((f) => f.type === 'auth'));
   const auth = frames.find((f) => f.type === 'auth');
-  check('control: auth frame carries token and identity', auth.token === 'test' && auth.info.extensionVersion === '1.0.0' && !!auth.info.os, JSON.stringify(auth));
+  check('control: auth frame carries token and identity', auth.token === 'test' && auth.info.extensionVersion === VERSION && !!auth.info.os, JSON.stringify(auth));
   await until('stored chromeId', async () => (await sw!.eval(`chrome.storage.local.get('chromeId').then(r => r.chromeId)`)) === 'b1');
   check('control: chromeId stored from auth_ok', true);
 
@@ -275,14 +276,27 @@ try {
   check('tab list shows two tabs', (r.out.match(/form\.html/g) ?? []).length >= 2, r.out);
   const n = await sw.eval(`chrome.tabGroups.query({ title: 'Kortix · Smoke test' }).then(([g]) => chrome.tabs.query({ groupId: g.id })).then(t => t.length)`);
   check('the new tab joined the group', n === 2, String(n));
+  const secondPage = (await targets()).find((t) => t.type === 'page' && t.url.includes('second=1'));
+  const secondCdp = await Cdp.open(secondPage.webSocketDebuggerUrl);
+  const hasOverlay = (c: Cdp) => c.eval(`!!document.getElementById('kortix-overlay-host')?.shadowRoot?.querySelector('.glow.on')`);
+  await ab('get', 'title');
+  await until('second tab highlighted', () => hasOverlay(secondCdp));
+  check('target switch clears the first tab', !(await hasOverlay(pg)));
+  check('target switch highlights the second tab', await hasOverlay(secondCdp));
   r = await ab('tab', 'close');
+  secondCdp.close();
   check('tab close', r.code === 0, r.out);
   await sleep(500);
   const n2 = await sw.eval(`chrome.tabGroups.query({ title: 'Kortix · Smoke test' }).then(([g]) => chrome.tabs.query({ groupId: g.id })).then(t => t.length)`);
   check('one tab left in the group after close', n2 === 1, String(n2));
 
+  await ab('get', 'title'); // Selecting the remaining tab is an interaction, not discovery.
+  await until('remaining tab highlighted', () => hasOverlay(pg));
+
   // Overlay: bar docks bottom-right; dark tokens apply; the agent label is a blue chip with white text.
-  check('overlay: bar docks bottom-right', (await overlay(`(() => { const b = r.querySelector('.bar').getBoundingClientRect(); return Math.abs(innerWidth - 16 - b.right) < 2 && Math.abs(innerHeight - 16 - b.bottom) < 2 && !r.querySelector('.bar').classList.contains('top'); })()`)) === true);
+  await pg.eval('scrollTo(0, 0)');
+  await sleep(350);
+  check('overlay: bar docks bottom-right', (await overlay(`(() => { const b = r.querySelector('.bar').getBoundingClientRect(); return Math.abs(document.documentElement.clientWidth - 16 - b.right) < 2 && Math.abs(innerHeight - 16 - b.bottom) < 2 && !r.querySelector('.bar').classList.contains('top'); })()`)) === true);
   check('overlay: agent label is a fixed blue chip with white text', (await overlay(`(() => { const c = getComputedStyle(r.querySelector('.label')); return c.backgroundColor === 'rgb(0, 153, 255)' && c.color === 'rgb(255, 255, 255)'; })()`)) === true);
   check('overlay: tokens resolve in the shadow tree', (await overlay(`getComputedStyle(r.querySelector('.bar')).backgroundColor !== 'rgba(0, 0, 0, 0)'`)) === true);
 

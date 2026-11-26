@@ -2,6 +2,7 @@
 
 import { useRequestDemo } from '@/features/contact/request-demo-provider';
 import { MarketingButton } from '@/features/marketing/kit/marketing-button';
+import { DitherField } from '@/features/marketing/kit/dither-field';
 import Link from 'next/link';
 
 import { WorkspaceFramework } from './workspace-framework';
@@ -26,8 +27,9 @@ export function SandBandHero() {
             The CompanyOS
           </h1>
           <p className="text-muted-foreground max-w-2xl text-base text-pretty sm:text-lg md:text-xl">
-            The cloud-native agent harness for companies. Hand it an outcome and agents run it 24/7
-            on your tools and context. Open source, in our cloud or yours.
+            The operating system for the AI-native company. Connect every data source, orchestrate
+            agents, and keep their skills, memory and connectors in one git repo you own. Open
+            source, any model, in our cloud or yours.
           </p>
         </div>
 
@@ -40,7 +42,7 @@ export function SandBandHero() {
           >
             Talk to sales
           </MarketingButton>
-          <MarketingButton size="md" className="hit-area-y-1" asChild>
+          <MarketingButton variant="primary" size="md" className="hit-area-y-1" asChild>
             <Link href="/auth">Start for free</Link>
           </MarketingButton>
         </div>
@@ -50,6 +52,10 @@ export function SandBandHero() {
           between the rails. */}
       <div className="kx-rail-fade relative border-y px-4 lg:px-17">
         <div className="bg-card relative flex flex-col items-center gap-7 overflow-hidden px-4 py-7 lg:gap-10 lg:px-0 lg:pt-17 lg:pb-10">
+          {/* The brand blue, as a dither field rising from the bottom of the band behind the board. */}
+          <div aria-hidden className="pointer-events-none absolute inset-x-0 top-1/3 bottom-0 opacity-60 [mask-image:linear-gradient(to_bottom,transparent,#000_70%)]">
+            <DitherField className="text-kortix-base" />
+          </div>
           {/* The walkthrough keeps the hero's dev dimensions: max-w-304 wide,
               a 1264 × 860 board, in the same band padding. */}
           <div id="demo" className="relative w-full max-w-304 scroll-mt-24">

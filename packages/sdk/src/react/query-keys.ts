@@ -438,6 +438,12 @@ export const qk = {
     },
 
     /**
+     * The workspace's sessions at work now (`working=only`), for a Running
+     * view. Two segments past `sessionsScope`, so it is never one session's key.
+     */
+    runningSessions: (id: string) => [...qk.project.sessionsScope(id), 'list-running', 'visible'] as const,
+
+    /**
      * One session's children (`parent=<sessionId>`), infinite. Its own slot
      * beside `sessionsPaged`; nests under `sessionsScope` for invalidation.
      */
@@ -635,6 +641,8 @@ export const qk = {
     unifiedTriggers: (id: string) => [...qk.project.scope(id), 'unified-triggers'] as const,
     /** `listProjectSpaces` — the project's channels and the caller's DMs. */
     spaces: (id: string) => [...qk.project.scope(id), 'spaces'] as const,
+    /** `listWorkspaceAgentDirectory` — the agents the caller can message. Under `spaces`, so opening a DM refreshes each agent's `chat_space_id`. */
+    agentDirectory: (id: string) => [...qk.project.spaces(id), 'agent-directory'] as const,
     /** `listProjectSessionGroups` — the project's session groups, in order. */
     sessionGroups: (id: string) => [...qk.project.scope(id), 'session-groups'] as const,
     /** `listProjectSpaceApps` — one channel's Apps. Under `apps`, so every App mutation's invalidation refetches it. */
@@ -643,6 +651,7 @@ export const qk = {
     spaceLinks: (id: string, spaceId: string) => [...qk.project.spaces(id), spaceId, 'links'] as const,
     /** `listProjectSpaceMembers` — a channel's people (the header roster, the Members tab). Under `spaces`, so a spaces refresh refreshes it. */
     spaceMembers: (id: string, spaceId: string) => [...qk.project.spaces(id), spaceId, 'members'] as const,
+    spaceActivity: (id: string, spaceId: string) => [...qk.project.spaces(id), spaceId, 'activity'] as const,
     /** `getProjectSpaceProactive` — a space's watcher settings (`spaces_proactive`). Under `spaces`, so a spaces refresh refreshes it. */
     spaceProactive: (id: string, spaceId: string) => [...qk.project.spaces(id), spaceId, 'proactive'] as const,
     /** `getProjectSpaceGeneralNotice` — `#general`'s turned-on-again line. Under `spaces`, so a spaces refresh refreshes it. */
@@ -697,6 +706,24 @@ export const qk = {
     goal: (id: string, goalId: string) => [...qk.project.goals(id), 'goal', goalId] as const,
     /** `listProjectGoalEvents` — one goal's audit trail. */
     goalEvents: (id: string, goalId: string) => [...qk.project.goals(id), 'events', goalId] as const,
+    /** `listWorkspaceEvalSuites` — the `evals:` suites of kortix.yaml. Every eval key starts with it. */
+    evals: (id: string) => [...qk.project.scope(id), 'evals'] as const,
+    /** `listWorkspaceEvalJobs`, filtered by suite (`''`: every suite). */
+    evalJobs: (id: string, suite: string) => [...qk.project.evals(id), 'jobs', suite] as const,
+    /** `getWorkspaceEvalJob` and `listWorkspaceEvalTrials` of one job. */
+    evalJob: (id: string, jobId: string) => [...qk.project.evals(id), 'job', jobId] as const,
+    /** `getWorkspaceEvalTrial` — one trial with its instruction and files. */
+    evalTrial: (id: string, jobId: string, trialId: string) => [...qk.project.evalJob(id, jobId), 'trial', trialId] as const,
+    /** `listWorkspaceEvalTasks` of a suite. */
+    evalTasks: (id: string, suite: string) => [...qk.project.evals(id), 'tasks', suite] as const,
+    /** Every calendar key starts with it (flag `calendar`). */
+    calendar: (id: string) => [...qk.project.scope(id), 'calendar'] as const,
+    /** `listWorkspaceCalendarItems` of one window and filter (`key`: the query as a string). */
+    calendarItems: (id: string, key: string) => [...qk.project.calendar(id), 'items', key] as const,
+    /** `getWorkspaceCalendarItem` — one item and its comments. */
+    calendarItem: (id: string, itemId: string) => [...qk.project.calendar(id), 'item', itemId] as const,
+    /** `listWorkspaceCalendarPeople` — who can be assigned or mentioned. */
+    calendarPeople: (id: string) => [...qk.project.calendar(id), 'people'] as const,
     /** `listSessionReminders` — `GET /projects/:id/sessions/:sid/reminders`. */
     sessionReminders: (id: string, sessionId: string) =>
       [...qk.project.reminders(id), 'session', sessionId] as const,

@@ -151,6 +151,10 @@ export const WORKSPACE_BINDINGS: readonly WorkspaceBindingRule[] = [
   { pattern: '/v1/chrome/attach', binding: OWN_SESSION, sessionBoundOnly: true },
   { pattern: '/v1/chrome/release', binding: OWN_SESSION, sessionBoundOnly: true },
   { pattern: '/v1/chrome/connections', methods: ['GET'], binding: OWN_SESSION, sessionBoundOnly: true },
+  // A guided setup that the session's agent runs (`kortix plan` in the
+  // sandbox): the handler reports it as the person who started the session,
+  // or drops it (cli/setup-events.ts `setupPersonOf`). Before `/v1/cli`.
+  { pattern: '/v1/cli/setup-events', methods: ['POST'], binding: OWN_SESSION, sessionBoundOnly: true },
 
   // ── ambient, bound by the handler to the credential's own workspace ────
   { pattern: '/v1/usage/cost-summary', methods: ['GET'], binding: OWN_WORKSPACE },
@@ -238,7 +242,7 @@ export const WORKSPACE_BINDINGS: readonly WorkspaceBindingRule[] = [
   ...[
     '/v1/admin', '/v1/agent-marks', '/v1/connectors', '/v1/docs', '/v1/edge', '/v1/generation', '/v1/git',
     '/v1/health', '/v1/llm', '/v1/llm-gateway', '/v1/marketplace', '/v1/openapi.json', '/v1/ops',
-    '/v1/platform', '/v1/prewarm', '/v1/public', '/v1/router', '/v1/runtime-assets', '/v1/system',
+    '/v1/platform', '/v1/prewarm', '/v1/public', '/v1/qualiloop', '/v1/router', '/v1/runtime-assets', '/v1/system',
     '/v1/user-roles', '/v1/webhooks',
   ].flatMap((prefix) => both(prefix, PLATFORM)),
 

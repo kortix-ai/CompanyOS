@@ -463,14 +463,10 @@ export function createKortixAuth(options: KortixAuthOptions): KortixAuth {
   }
 
   async function handleRefresh(request: Request): Promise<Response> {
-    const url = new URL(request.url);
-    const returnTo = safeReturnTo(url.searchParams.get('return_to'));
-    const session = await readSession(request);
-    if (!session) return redirectTo(signInUrl(returnTo), [clearLine(sessionCookie)]);
-    if (isLive(session)) return redirectTo(returnTo);
-    const refreshed = await tokenRequest({ grant_type: 'refresh_token', refresh_token: session.rt });
-    if (!refreshed.ok) return redirectTo(signInUrl(returnTo), [clearLine(sessionCookie)]);
-    return redirectTo(returnTo, [await sessionCookieLine(refreshed.session)]);
+    const returnTo = safeReturnTo(new URL(request.url).searchParams.get('return_to'));
+    const live = await liveSession(request);
+    if (!live) return redirectTo(signInUrl(returnTo), [clearLine(sessionCookie)]);
+    return redirectTo(returnTo, live.setCookie ? [live.setCookie] : []);
   }
 
   async function handleSignOut(request: Request): Promise<Response> {

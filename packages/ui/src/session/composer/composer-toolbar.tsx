@@ -5,6 +5,7 @@ import { useUiHostConfig } from '../../providers/ui-provider';
 import type { FlatModel, ProviderListResponse } from '@kortix/sdk/react';
 import { ArrowCounterClockwiseIcon } from '@phosphor-icons/react';
 
+import { cn } from '../../lib/utils';
 import { Button } from '../../primitives/button';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '../../primitives/hover-card';
 import Loading from '../../primitives/loading';
@@ -53,6 +54,8 @@ import { SendStopControl } from './send-stop-control';
  *     model choice, moved behind a click.
  */
 export interface ComposerToolbarProps {
+  /** One-row `inline` composer: the two halves become the row's outer columns. */
+  collapsed?: boolean;
   models: FlatModel[];
   /** Threaded through to ModelSelector so it can show its loading state —
    *  added on main while this toolbar was being extracted. */
@@ -100,6 +103,8 @@ export interface ComposerToolbarProps {
   leading?: React.ReactNode;
   /** The `chat_input` control holds model and effort: this toolbar draws neither. */
   pickersInChatInput?: boolean;
+  /** The agent runs a program (`run`), not a model: this toolbar draws neither model nor effort. */
+  noModel?: boolean;
 
   isSending: boolean;
   isBusy: boolean;
@@ -126,10 +131,18 @@ export interface ComposerToolbarProps {
   attachmentUnsupported?: string | null;
   /** The host's voice call, offered in Send's place on an empty composer. See `SendStopControl`. */
   call?: ComposerCall;
+  /** The microphone (`DictationControl`), drawn right before Send. */
+  dictation?: React.ReactNode;
+  /**
+   * A dictation take is running: its Done button is the primary action, so
+   * Send steps aside. Stop stays while a turn runs.
+   */
+  dictationActive?: boolean;
   onSubmit: () => void;
 }
 
 export function ComposerToolbar({
+  collapsed = false,
   models,
   modelsLoading,
   selectedModel,
@@ -149,6 +162,7 @@ export function ComposerToolbar({
   rewind,
   leading,
   pickersInChatInput = false,
+  noModel = false,
   isSending,
   isBusy,
   onStop,
@@ -168,12 +182,14 @@ export function ComposerToolbar({
   attachmentFailed = false,
   attachmentUnsupported = null,
   call,
+  dictation,
+  dictationActive = false,
   onSubmit,
 }: ComposerToolbarProps) {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const { modelPickerEnabled } = useUiHostConfig();
   const showModel =
-    !pickersInChatInput && modelPickerEnabled && (models.length > 0 || modelRequired) && !!onModelChange;
+    !noModel && !pickersInChatInput && modelPickerEnabled && (models.length > 0 || modelRequired) && !!onModelChange;
   // Either `/` palette row opens the one merged popover.
   const pickerOpen =
     modelMenuOpen === undefined && reasoningMenuOpen === undefined
@@ -185,8 +201,10 @@ export function ComposerToolbar({
   };
 
   return (
-    <div className="kortix-composer-toolbar flex items-center justify-between gap-1 overflow-visible">
-      <div className="flex min-w-0 items-center gap-1 overflow-visible">
+    // Collapsed (`inline` composer, one row): the toolbar dissolves (`contents`) and its two halves
+    // become the row's first and last columns, either side of the editor.
+    <div className={cn('kortix-composer-toolbar overflow-visible', collapsed ? 'contents' : 'flex items-center justify-between gap-1')}>
+      <div className={cn('flex min-w-0 items-center gap-1 overflow-visible', collapsed && 'col-start-1 row-start-1')}>
         {leading}
 
         {showModel && (
@@ -206,7 +224,7 @@ export function ComposerToolbar({
           />
         )}
 
-        {!showModel && modelPickerEnabled && !pickersInChatInput && <ReasoningEffortSelector
+        {!showModel && !noModel && modelPickerEnabled && !pickersInChatInput && <ReasoningEffortSelector
           variants={variants}
           selectedVariant={selectedVariant}
           onVariantChange={onVariantChange}
@@ -215,7 +233,7 @@ export function ComposerToolbar({
         />}
       </div>
 
-      <div className="flex shrink-0 items-center gap-1.5">
+      <div className={cn('flex shrink-0 items-center gap-1.5', collapsed && 'col-start-3 row-start-1')}>
         {rewind && (
           <HoverCard openDelay={0} closeDelay={0}>
             <HoverCardTrigger asChild>
@@ -250,7 +268,9 @@ export function ComposerToolbar({
 
         {toolbarSlot}
 
-        <SendStopControl
+        {dictation}
+
+        {(!dictationActive || isBusy) && <SendStopControl
           isSending={isSending}
           isBusy={isBusy}
           onStop={onStop}
@@ -271,7 +291,7 @@ export function ComposerToolbar({
           attachmentUnsupported={attachmentUnsupported}
           call={call}
           onSubmit={onSubmit}
-        />
+        />}
       </div>
     </div>
   );

@@ -20,12 +20,14 @@ import { SQL, is } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import {
+  chatEventDedup,
   accountGithubInstallations,
   accountMembers,
   projectMembers,
   projectSecrets,
   projectSessions,
   projectTriggerRuntime,
+  projectTriggerExecutions,
   projects,
   sessionLifecycleCommands,
 } from '@kortix/db';
@@ -64,6 +66,7 @@ const alertCalls: Array<{ kind: 'raise' | 'clear'; input: Record<string, unknown
 const watcherCalls: Array<{ kind: 'follow' | 'drop'; ref: Record<string, unknown> }> = [];
 /** The credential kind the mocked auth reports; unset by default, as before. */
 let testAuthType: string | undefined;
+let dispatcherSessionId: string | undefined;
 /** Set to make that seam throw: the provider pick, the model defaults read, a watcher write. */
 let providerFailure: Error | null = null;
 let modelDefaultsFailure: Error | null = null;
@@ -145,6 +148,7 @@ function resetState() {
   alertCalls.length = 0;
   watcherCalls.length = 0;
   testAuthType = undefined;
+  dispatcherSessionId = undefined;
   providerFailure = null;
   modelDefaultsFailure = null;
   watcherFailure = null;
@@ -175,6 +179,7 @@ mock.module('../middleware/auth', () => ({
     c.set('userId', auth.userId);
     c.set('userEmail', auth.userEmail);
     if (testAuthType) c.set('authType', testAuthType);
+    if (dispatcherSessionId) c.set('sessionId', dispatcherSessionId);
     await next();
   },
 }));
@@ -452,8 +457,8 @@ mock.module('../projects/secrets', () => ({
 }));
 
 /** `resolveSessionHarness` reads the project LEFT JOIN its session (KRTX-2419): the join resolves through the same chain. */
-const withLeftJoin = <T extends object>(chain: T): T & { leftJoin: () => T } =>
-  Object.assign(chain, { leftJoin: () => chain });
+const withLeftJoin = <T extends object>(chain: T): T & { leftJoin: () => T; innerJoin: () => T } =>
+  Object.assign(chain, { leftJoin: () => chain, innerJoin: () => chain });
 
 const triggerDbMock: any = {
     execute: async () => [],
@@ -496,6 +501,7 @@ const triggerDbMock: any = {
             if (fields && Object.keys(fields).includes('provisioningCount')) {
               return [{ provisioningCount: provisioningSessionCount }];
             }
+            if (table === projectTriggerExecutions) return triggerExecutionRows.slice(0, 1);
             if (table === projects) return [projectRow];
             if (table === accountMembers) {
               return [{ accountId: ACCOUNT_ID, accountRole: 'owner', userId: USER_ID }];
@@ -533,6 +539,7 @@ const triggerDbMock: any = {
       values: (values: any) => ({
         returning: async () => {
           const now = new Date('2026-01-02T00:00:00Z');
+          if (table === chatEventDedup) return [{ eventId: values.eventId }];
           if (table === projectSessions) {
             const row: typeof projectSessions.$inferSelect = {
               sessionId: values.sessionId,
@@ -597,6 +604,7 @@ const triggerDbMock: any = {
         },
         onConflictDoNothing: () => ({
           returning: async () => {
+            if (table === chatEventDedup) return [{ eventId: values.eventId }];
             if (table !== sessionLifecycleCommands || !values.idempotencyKey) return [];
             const existing = lifecycleCommandRows.find(
               (row) => row.idempotencyKey === values.idempotencyKey,
@@ -1045,6 +1053,59 @@ function webhookEntry(opts: {
 describe('git-backed triggers — runtime fire paths', () => {
   beforeEach(() => resetState());
 
+  test('disabled keyed manual dispatch refuses invalid payloads before provisioning', async () => {
+    seedManifest(cronEntry({ slug: 'guarded', name: 'Guarded', cron: '* * * * * *', prompt: 'Draft' }) + `
+    enabled: false
+    session_key: '{{ body.thread_id }}'
+    filter:
+      body.thread_id:
+        prefix: th_
+`);
+    for (const payload of [{ body: { thread_id: 'x' } }, {}]) {
+      const response = await createApp().request(`/v1/projects/${PROJECT_ID}/triggers/guarded/fire`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ payload }),
+      });
+      expect(response.status).toBe(429);
+    }
+    expect(sandboxProvisionCalls).toBe(0);
+  });
+
+  test('replaying a stored run does not grant the replayer dispatcher ancestry', async () => {
+    dispatcherSessionId = 'synthetic-replayer';
+    testAuthType = 'pat';
+    seedManifest(cronEntry({ slug: 'worker', name: 'Worker', cron: '* * * * * *', prompt: 'Draft' }));
+    const executionId = randomUUID();
+    triggerExecutionRows.push({ executionId, projectId: PROJECT_ID, slug: 'worker', status: 'succeeded', payload: { body: { text: 'synthetic stored input' } }, payloadVerified: true, source: 'manual' });
+    const response = await createApp().request(`/v1/projects/${PROJECT_ID}/triggers/worker/runs/${executionId}/replay`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+    });
+    expect(response.status).toBe(202);
+    expect(sessionRows).toHaveLength(1);
+    expect(sessionRows[0]?.metadata?.spawned_by_session).toBeUndefined();
+  });
+
+  test('disabled keyed manual fire retains authenticated dispatcher ancestry and reuses its session', async () => {
+    dispatcherSessionId = 'synthetic-dispatcher';
+    testAuthType = 'pat';
+    seedManifest(cronEntry({ slug: 'worker', name: 'Worker', cron: '* * * * * *', prompt: 'Draft' }) + `
+    enabled: false
+    session_key: '{{ body.thread_id }}'
+`);
+    const fire = () => createApp().request(`/v1/projects/${PROJECT_ID}/triggers/worker/fire`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ payload: { body: { thread_id: 'th_synthetic' } } }),
+    });
+    const first = await fire();
+    const result = await first.json();
+    expect({ status: first.status, result }).toMatchObject({ status: 202 });
+    expect(sessionRows.at(-1)?.metadata).toMatchObject({ spawned_by_session: 'synthetic-dispatcher', trigger_session_key: 'th_synthetic' });
+    const second = await fire();
+    expect(second.status).toBe(202);
+    expect((await second.json()).session_id).toBe(result.session_id);
+    expect(sessionRows).toHaveLength(1);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
   test('manual fire without overrides resolves the project model and selected agent before provisioning', async () => {
     modelDefaults.projects[PROJECT_ID] = 'glm-5.3-flash';
     projectRow.metadata = {
@@ -1245,23 +1306,23 @@ describe('git-backed triggers — runtime fire paths', () => {
     ]);
   });
 
-  test('a failed attempt the cron retries raises nothing; the fifth dead-letters and raises once', async () => {
+  // isTerminalFireFailure (#12645): a fire that says `retryable: false` is final on its
+  // first attempt. The five-attempt retry budget itself is trigger-execution-store's
+  // (trigger-execution-store.integration.test.ts).
+  test('a fire with no account owner to run as dead-letters on its first attempt and raises once', async () => {
     seedManifest(cronEntry({ slug: 'flaky', name: 'Flaky', cron: '* * * * * *', prompt: 'Report' }));
     const slot = new Date('2026-01-01T00:00:30Z');
     seedRuntimeCron({ slug: 'flaky', prompt: 'Report', nextFireAt: slot });
-    // No owner to run as: a failure with no permanent code, so it retries.
+    // No owner to run as: no retry can find one.
     automationActor = null;
 
     await runProjectTriggerSweep(slot);
-    expect(await drainTriggerExecutionQueue(slot)).toMatchObject({ queued: 1, failed: 0 });
+    expect(await drainTriggerExecutionQueue(slot)).toMatchObject({ queued: 0, failed: 1 });
     expect(runtimeRows[0]).toMatchObject({ lastStatus: 'failed' });
-    expect(alertCalls).toEqual([]);
-
-    // Each retry is due 2 s after its failure; claim each one well after that.
-    for (let attempt = 2; attempt <= 5; attempt += 1) {
-      await drainTriggerExecutionQueue(new Date(Date.now() + attempt * 60_000));
-    }
-    expect(triggerExecutionRows[0]).toMatchObject({ status: 'dead_lettered', attempts: 5 });
+    expect(triggerExecutionRows[0]).toMatchObject({ status: 'dead_lettered', attempts: 1 });
+    // A later drain claims nothing and raises nothing more.
+    await drainTriggerExecutionQueue(new Date(Date.now() + 5 * 60_000));
+    expect(triggerExecutionRows[0]).toMatchObject({ status: 'dead_lettered', attempts: 1 });
     expect(alertCalls).toEqual([
       {
         kind: 'raise',

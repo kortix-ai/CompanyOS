@@ -1,8 +1,9 @@
 // KRTX-2201: the folder-access dialog keyed its form on the grants query's
 // `dataUpdatedAt`. Every drive mutation on the Files page invalidates that
 // query, so a background refetch while the dialog was open remounted the form
-// and threw away the unsaved draft. The draft now lives from the opening's
-// first fetch until the dialog closes or the folder changes.
+// and threw away the unsaved draft. The draft now lives from the opening until
+// the dialog closes or the folder changes; until the person edits, it follows
+// the server.
 import { afterEach, expect, mock, test } from 'bun:test';
 import { act } from 'react';
 import type { Root } from 'react-dom/client';
@@ -86,13 +87,16 @@ mock.module('@/features/providers/auth-provider', () => ({
 const { createRoot } = await import('react-dom/client');
 const { FolderAccessDialog } = await import('./folder-access-dialog');
 
+// The app's defaults (`react-query-provider.tsx`): a cached copy stays fresh
+// for 5 minutes, so an opening with a fresh cache fetches nothing.
+const appClient = () => new QueryClient({ defaultOptions: { queries: { staleTime: 5 * 60 * 1000 } } });
 let root: Root | null = null;
-let client = new QueryClient();
+let client = appClient();
 
 afterEach(async () => {
   await act(async () => root?.unmount());
   root = null;
-  client = new QueryClient();
+  client = appClient();
   server.clear();
   pending.length = 0;
   holdFetches = false;
@@ -155,18 +159,24 @@ test('a refetch while the dialog is open keeps the unsaved draft', async () => {
   expect(button('Save')?.disabled).toBe(false);
 });
 
-test('a reopened dialog starts its draft from the grants fetched for that opening', async () => {
+test('every opening starts a fresh draft, and an untouched draft follows a refetch that lands after opening', async () => {
   server.set('/Sales', view('/Sales', ['scout']));
   await render('/Sales', true);
   await removeAgent('scout');
   await render('/Sales', false);
 
-  // The grants changed while the dialog was closed; the cache still holds the old ones.
+  // Reopened with a fresh cache: no fetch, the form shows at once, last opening's edit is gone.
+  await render('/Sales', true);
+  expect(listedAgents()).toEqual(['scout']);
+  expect(button('Save')?.disabled).toBe(true);
+  await render('/Sales', false);
+
+  // A drive mutation while closed invalidates the grants, which changed on the server.
   server.set('/Sales', view('/Sales', ['scout', 'writer']));
+  await act(async () => client.invalidateQueries());
   holdFetches = true;
   await render('/Sales', true);
-  expect(listedAgents()).toEqual([]);
-  expect(button('Save')).toBeUndefined();
+  expect(listedAgents()).toEqual(['scout']);
 
   await act(async () => pending.shift()?.());
   await settle();

@@ -371,8 +371,9 @@ export function registerChangeRequestActionsRoutes(): void {
         logger.warn('[cr-merge] goal wake failed', { projectId, error: error instanceof Error ? error.message : String(error) }),
       );
       // The `change_request` trigger source: every trigger this merge
-      // matches fires (lib/change-request-triggers.ts). Best-effort and not
-      // awaited: the merge is durable and its response must not wait on a fire.
+      // matches fires, then the CR's origin session gets its one merge notice
+      // (lib/change-request-triggers.ts). Best-effort and not awaited: the
+      // merge is durable and its response must not wait on a fire.
       void import('../lib/change-request-triggers')
         .then(({ fireChangeRequestMergedTriggers }) =>
           fireChangeRequestMergedTriggers(loaded.row, [
@@ -385,7 +386,7 @@ export function registerChangeRequestActionsRoutes(): void {
               merge_commit_sha: result.merge_commit_sha,
             },
             ...alsoMerged.map((other) => ({ cr_id: other.cr_id, number: other.number, base_ref: cr.baseRef, merge_commit_sha: result.merge_commit_sha })),
-          ]),
+          ], cr.originSessionId),
         )
         .catch(() => {});
       // The merge moved the CR's base branch. Sessions on it converge.

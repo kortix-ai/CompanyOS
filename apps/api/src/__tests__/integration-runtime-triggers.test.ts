@@ -6,11 +6,13 @@
  *   2. the webhook receiver finds a runtime webhook trigger;
  *   3. connector subscriptions reconcile runtime event triggers;
  *   4. a merged change request fires the triggers it matches, once;
- *   5. a kortix.yaml `type: change_request` trigger fires on a matching merge.
+ *   5. a kortix.yaml `type: change_request` trigger fires on a matching merge;
+ *   6. the session that opened a merged request gets one merge notice, armed or not.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { accountMembers, accounts, projectSessions, projectTriggerExecutions, projectTriggerRuntime, projects, sessionLifecycleCommands } from '@kortix/db';
 import { and, eq } from 'drizzle-orm';
+import { setNoticeBatchHoldForTests } from '../projects/session-notice-batch';
 
 import { newRuntimeTriggerId, parseRuntimeTriggerBody, runtimeTriggerSpec, runtimeWebhookSpec } from '../projects/lib/runtime-triggers';
 import { fireChangeRequestMergedTriggers } from '../projects/lib/change-request-triggers';
@@ -61,6 +63,8 @@ async function commandsOf(sessionId: string) {
 }
 
 beforeAll(async () => {
+  // A merge notice stays queued for the assertions: no delivery kick during the test.
+  setNoticeBatchHoldForTests(60_000);
   await db.insert(accounts).values({ accountId: ACCOUNT, name: 'runtime-triggers-test' });
   await db.insert(projects).values({
     projectId: PROJECT,
@@ -199,5 +203,47 @@ describe('runtime triggers', () => {
     expect(runs.filter((run) => run.slug === 'merged-release')).toEqual([]);
     const text = JSON.stringify((await commandsOf(sessionId))[0]?.payload);
     expect(text).toContain('CR #9 merged into main');
+  });
+
+  test('the session that opened a merged request gets one merge notice without arming a wake-up (KRTX-5211)', async () => {
+    const origin = await seedSession();
+    const bystander = await seedSession();
+    const cr = { cr_id: crypto.randomUUID(), number: 11, title: 'Add <search>', base_ref: 'dev', head_ref: 'search', merge_commit_sha: 'f00' };
+
+    expect(await fireChangeRequestMergedTriggers(await projectRow(), [cr], origin)).toBe(0);
+    // A retried hook for the same merge adds no second notice.
+    await fireChangeRequestMergedTriggers(await projectRow(), [cr], origin);
+
+    const commands = await commandsOf(origin);
+    expect(commands).toHaveLength(1);
+    expect(commands[0]).toMatchObject({ source: 'system:cr-merged', actorUserId: OWNER, idempotencyKey: `cr-merged:${cr.cr_id}` });
+    const text = JSON.stringify(commands[0]?.payload);
+    expect(text).toContain('<kortix_system type=\\"cr-merged\\" source=\\"kortix-change-requests\\">CR #11 \\"Add search\\" was merged into dev.</kortix_system>');
+    expect(text).toContain('"synthetic":true');
+    expect(await commandsOf(bystander)).toHaveLength(0);
+  });
+
+  test('a session that armed its own wake-up for the merged request gets that one prompt, not a second notice', async () => {
+    const origin = await seedSession();
+    const cr = { cr_id: crypto.randomUUID(), number: 12, title: 'Fix login', base_ref: 'dev', head_ref: 'login', merge_commit_sha: 'ba5' };
+    const spec = await seedSessionTrigger(origin, { prompt: 'CR #{{ change_request.number }} merged', source: { type: 'change_request', cr_id: cr.cr_id } });
+
+    expect(await fireChangeRequestMergedTriggers(await projectRow(), [cr], origin)).toBe(1);
+    await fireChangeRequestMergedTriggers(await projectRow(), [cr], origin);
+
+    const commands = await commandsOf(origin);
+    expect(commands.map((command) => command.source)).toEqual(['trigger:reminder']);
+    expect(JSON.stringify(commands[0]?.payload)).toContain(`[REMINDER ${spec.slug} — one-time trigger (change request merged) on this session`);
+  });
+
+  test('a merge notice skips a deleted origin session and a session of another project', async () => {
+    const deleted = await seedSession();
+    await db.update(projectSessions).set({ metadata: { deletedAt: new Date().toISOString() } }).where(eq(projectSessions.sessionId, deleted));
+    const cr = { cr_id: crypto.randomUUID(), number: 13, title: null, base_ref: 'dev' };
+
+    await fireChangeRequestMergedTriggers(await projectRow(), [cr], deleted);
+    await fireChangeRequestMergedTriggers({ ...(await projectRow()), projectId: crypto.randomUUID() }, [cr], await seedSession());
+
+    expect(await db.select().from(sessionLifecycleCommands).where(eq(sessionLifecycleCommands.idempotencyKey, `cr-merged:${cr.cr_id}`))).toEqual([]);
   });
 });

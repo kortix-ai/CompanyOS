@@ -98,6 +98,14 @@ describe('kortixSystemElements', () => {
       { type: 'rules', source: 'kortix-rules', label: 'text6725e7bbcd28', detail: 'rules' },
     ]);
   });
+
+  test('a change request merge notice shows its own sentence as the line (KRTX-5211)', () => {
+    const t = Object.assign((key: string) => key, { raw: (key: string) => key }) as unknown as UiTranslator;
+    const text = '<kortix_system type="cr-merged" source="kortix-change-requests">CR #7 "Fix" was merged into main.</kortix_system>\nThis message is from the platform, not from the user.';
+    expect(extractKortixSystemMessages(text, t)).toEqual([
+      { type: 'cr-merged', source: 'kortix-change-requests', label: 'CR #7 "Fix" was merged into main.' },
+    ]);
+  });
 });
 
 describe('no message can freeze the tab that parses it', () => {

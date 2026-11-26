@@ -134,8 +134,6 @@ export function FolderAccessDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const t = useTranslations('drives');
-  const access = useFolderAccess(driveId, path, open);
-  const ready = open && !!access.data && access.data.path === path;
   return (
     <Modal open={open} onOpenChange={onOpenChange}>
       <ModalContent className="sm:max-w-lg">
@@ -143,25 +141,48 @@ export function FolderAccessDialog({
           <ModalTitle>{t('shareTitle', { name: folderName(path, t('files')) })}</ModalTitle>
           <ModalDescription>{t('folderAccessDescription')}</ModalDescription>
         </ModalHeader>
-        {ready ? (
-          <FolderAccessForm
-            // A fresh draft for every folder and every opening.
-            key={`${path}:${access.dataUpdatedAt}`}
-            driveId={driveId}
-            projectId={projectId}
-            path={path}
-            grants={access.data!.grants}
-            canManage={access.data!.access === 'manage' && access.data!.grantable}
-            grantable={access.data!.grantable}
-            onDone={() => onOpenChange(false)}
-          />
-        ) : (
-          <ModalBody>
-            <Skeleton className="h-40 w-full" />
-          </ModalBody>
-        )}
+        <FolderAccessBody driveId={driveId} projectId={projectId} path={path} onDone={() => onOpenChange(false)} />
       </ModalContent>
     </Modal>
+  );
+}
+
+/**
+ * Mounted only while the dialog is open, so `isFetchedAfterMount` means
+ * "fetched during this opening" (and resets when the folder changes). The
+ * draft starts from those grants, never from a cached copy, and a refetch
+ * while open (every drive mutation on the page invalidates the grants) does
+ * not reset it.
+ */
+function FolderAccessBody({
+  driveId,
+  projectId,
+  path,
+  onDone,
+}: {
+  driveId: string;
+  projectId: string;
+  path: string;
+  onDone: () => void;
+}) {
+  const access = useFolderAccess(driveId, path);
+  if (!access.isFetchedAfterMount || !access.data) {
+    return (
+      <ModalBody>
+        <Skeleton className="h-40 w-full" />
+      </ModalBody>
+    );
+  }
+  return (
+    <FolderAccessForm
+      driveId={driveId}
+      projectId={projectId}
+      path={path}
+      grants={access.data.grants}
+      canManage={access.data.access === 'manage' && access.data.grantable}
+      grantable={access.data.grantable}
+      onDone={onDone}
+    />
   );
 }
 

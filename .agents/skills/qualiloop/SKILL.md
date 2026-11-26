@@ -17,6 +17,7 @@ QualiLoop project **#1 "Kortix AI Corp"**.
 | Endpoint | `POST /v1/qualiloop/chat` (`apps/api/src/qualiloop/index.ts`): `{prompt, metadata.session_id, metadata.turn_index}` in, `{"reply"}` out, `X-Agent-Secret` checked in constant time |
 | Turn | `apps/api/src/projects/qualiloop/turn.ts`: one QualiLoop conversation = one Kortix session (id = a hash of the conversation id), started or continued through the normal session lifecycle as the project's owner, source `qualiloop` (origin `user`: the owner's own private chat, with Drive and memory) |
 | Trace | `apps/api/src/projects/qualiloop/spans.ts`: after the turn, the session log becomes one OTLP/JSON trace (turn span, a `chat` span per model call with the system prompt and tokens, an `execute_tool` span per tool call), sent before the reply returns |
+| Retries | each `turn_index` claims its turn once (`qualiloop_turns` in the session's metadata): a resent turn after a network failure waits for the same turn and sends the prompt nothing twice |
 | Keep-alive | the route answers `200` at once and sends a space every 15 s until the JSON: Cloudflare cuts a response whose first byte takes over 100 s, and a turn with a sandbox boot can take minutes |
 
 The route answers `404` unless both `QUALILOOP_AGENT_SECRET` and
@@ -60,14 +61,26 @@ Staging and prod stay unconfigured: leave the secret unset there.
 `npx qualiloop ...` from any folder, signed in with `npx qualiloop login`
 (a browser approval). Every command names the project it acted on: check it is #1.
 
-1. `npx qualiloop connect check`: one real turn plus its trace. Every required
+1. Reset the test project. Test conversations make real things (agents,
+   skills, crons, reminders, Apps, connectors, secrets, Drive files, memory,
+   artifacts, invites). Left behind, crons fire and spend, and the next test
+   sees another workspace. As the test account:
+   `KORTIX_TOKEN=<access token> QUALILOOP_KORTIX_PROJECT_ID=<id> .agents/skills/qualiloop/scripts/reset.sh`.
+   It deletes them, puts the repository back to the tag `qualiloop-baseline`
+   (the tree the project had when it was created; set it once with `git tag`
+   and `git push origin qualiloop-baseline` on a new test project) and exits
+   `1` when anything is left.
+2. `npx qualiloop connect check`: one real turn plus its trace. Every required
    item passes, or the endpoint, the deploy or a variable is broken.
-2. `npx qualiloop suites run core --wait --fail-on major`: the Core suite.
+3. `npx qualiloop suites run core --wait --fail-on major`: the Core suite.
    One conversation is one conversation credit on QualiLoop, and one sandbox
    plus model use on the dev test account.
-3. `npx qualiloop problems categories`, then the failed runs' problems: what to fix.
-4. To cover something new: `npx qualiloop generate "<what to test>" --suite core --wait`.
-   QualiLoop writes the tests; do not write them by hand.
+4. `npx qualiloop problems categories`, then the failed runs' problems: what to fix.
+5. One run proves little: the same tests on the same model gave 19 major
+   problems, then 7. Compare a change on 3 runs of the tests it touches.
+6. To cover something new: `npx qualiloop generate "<what to test>" --suite core --wait`.
+   QualiLoop writes the tests; do not write them by hand. Run `reset.sh` again
+   after every run.
 
 `npx qualiloop guide` prints QualiLoop's own loop for working on an agent.
 

@@ -91,6 +91,23 @@ export function builderCommand(namespace: string): string {
   return `rm -f ${OUT} ${EXIT}; nohup runuser -u ${RUNTIME_USER} -- env ${env} bash -c ${shellQuote(run)} >/dev/null 2>&1 </dev/null &`;
 }
 
+/**
+ * The box command that reads a build's progress: one `exit=<code>` line (empty while the builder still
+ * runs: it writes the exit file only when it ends), then the tail of its output.
+ */
+export function buildPollCommand(exitPath: string = EXIT, outPath: string = OUT): string {
+  return `printf 'exit=%s\\n' "$(cat ${exitPath} 2>/dev/null)"; tail -c 6000 ${outPath} 2>/dev/null`;
+}
+
+/** A poll's result: `exit` is null while the builder runs (or the reply is not a poll's). */
+export function parseBuildPoll(stdout: string): { exit: string | null; out: string } {
+  const nl = stdout.indexOf('\n');
+  const first = nl === -1 ? stdout : stdout.slice(0, nl);
+  const out = nl === -1 ? '' : stdout.slice(nl + 1);
+  const m = /^exit=(\d+)\s*$/.exec(first);
+  return { exit: m ? m[1] : null, out };
+}
+
 /** The key the builder printed last, when its output ends with a valid one. */
 export function keyFromBuilderOutput(out: string): string | null {
   const lines = out.trim().split('\n');
@@ -135,7 +152,10 @@ async function latestBuild(projectId: string) {
   return row ?? null;
 }
 
-/** Advance one project's build by one step. Returns true when it did something. */
+/**
+ * Advance one project's build by one step. Returns true when it did something or a build is in flight,
+ * so the job keeps looking every minute until the build ends.
+ */
 export async function advanceWorkspaceCacheBuild(project: ProjectRow, now: Date): Promise<boolean> {
   const builder = workspaceCacheBuilderOf(project.metadata);
   if (!builder || !resolveFeatureFlag(project.metadata, 'platinum_cache')) return false;
@@ -214,7 +234,8 @@ async function advanceRunning(
   const volume = recordedWorkspaceVolume(sessionId, sessionMetadata);
   if (!volume?.cache) return fail('the build session has no workspace cache (flag turned off, or no volume)');
   const found = await sessionBox(sessionId);
-  if (!found?.box || !(await boxReady(found.box))) return false;
+  // Still booting: in flight, look again next minute.
+  if (!found?.box || !(await boxReady(found.box))) return true;
   const box = found.box;
   if (record.state === 'starting') {
     const started = await boxOps().exec(box, builderCommand(volume.cache.namespace), 30_000);
@@ -222,11 +243,11 @@ async function advanceRunning(
     await writeBuild(sessionId, { ...record, state: 'running' });
     return true;
   }
-  const read = await boxOps().exec(box, `cat ${EXIT} 2>/dev/null; echo ---; tail -c 6000 ${OUT} 2>/dev/null`, 30_000);
-  const [exitPart, ...rest] = read.stdout.split('\n---\n');
-  const exit = exitPart.trim();
-  if (!exit) return false;
-  const out = rest.join('\n---\n');
+  // Before the builder ends there is no exit file. Reading that as a failure failed every build on its
+  // first poll (2026-11-26, dev.kortix.com: "builder exited ---").
+  const read = await boxOps().exec(box, buildPollCommand(), 30_000);
+  const { exit, out } = parseBuildPoll(read.stdout);
+  if (exit === null) return true;
   if (exit !== '0') return fail(`builder exited ${exit}: ${out.trim().split('\n').slice(-3).join(' | ')}`);
   const key = keyFromBuilderOutput(out);
   if (!key) return fail('builder printed no workspace-cache-key line');

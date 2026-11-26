@@ -965,9 +965,9 @@ export function SessionChat({
   const [commandError, setCommandError] = useState<KortixSendError | null>(null);
   const [modelErrorReset, setModelErrorReset] = useState<{ sessionId: string; atMs: number } | null>(null);
   const clearCommandError = useCallback((pickedAtMs: number) => {
-    setCommandError(null);
+    setCommandError((current) => current === commandError ? null : current);
     setModelErrorReset({ sessionId, atMs: pickedAtMs });
-  }, [sessionId]);
+  }, [sessionId, commandError]);
   const local = useSessionModelSelection({
     onModelChanged: clearCommandError,
     agents,

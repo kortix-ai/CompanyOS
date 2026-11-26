@@ -1,2 +1,6 @@
 <h2>Confirm your signup</h2>
-<p><a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=signup">Confirm your email address</a></p>
+{{ if or (eq (printf "%.8s" .RedirectTo) "https://") (eq (printf "%.7s" .RedirectTo) "http://") }}
+<p><a href="{{ .SiteURL }}/auth/confirm?redirect_to={{ .RedirectTo }}&token_hash={{ .TokenHash }}">Confirm your email address</a></p>
+{{ else }}
+<p><a href="{{ .ConfirmationURL }}">Confirm your email address</a></p>
+{{ end }}

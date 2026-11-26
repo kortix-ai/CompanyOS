@@ -58,13 +58,8 @@ verify_enabled = true
 enable_signup = true
 enable_confirmations = false
 
-# The signup confirmation links straight to the web callback with the token
-# hash; the callback verifies it (verifyOtp). GoTrue's own
-# {{ .ConfirmationURL }} answers a PKCE signup with a code that expires 5
-# minutes after the signup started, so a confirmation opened later lands on
-# "link expired". {{ .RedirectTo }} is the callback URL the web minted (it
-# always carries ?returnUrl=). The hosted projects' "Confirm signup" template
-# carries the same link; the API send-email hook builds it in buildSignupUrl.
+# Native targets retain GoTrue's confirmation URL. Web links use the public
+# site URL's /auth/confirm adapter, which preserves callback query parameters.
 [auth.email.template.confirmation]
 subject = "Confirm your email address"
 content_path = "./supabase/templates/confirmation.html"

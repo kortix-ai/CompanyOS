@@ -100,7 +100,7 @@ const THREE_AGENTS: FakeAgent[] = [
 
 function startServer(
   agents: FakeAgent[] = DEFAULT_AGENTS,
-  opts: { detailStatus?: number; picker?: object } = {},
+  opts: { detailStatus?: number; picker?: object; access?: object } = {},
 ): string {
   let defaultAgent = 'default';
   const agentModelPins: Record<string, string> = {};
@@ -128,6 +128,10 @@ function startServer(
       // pin can name. Unset: the route 404s like an older API.
       if (p === '/model-picker' && req.method === 'GET' && opts.picker) {
         return Response.json(opts.picker);
+      }
+      // GET /projects/:id/model-access: explicit denials, which PUT enforces.
+      if (p === '/model-access' && req.method === 'GET' && opts.access) {
+        return Response.json(opts.access);
       }
       if (p === '/default-agent' && req.method === 'PUT') {
         const wanted = (body as { agent: string }).agent;
@@ -719,29 +723,59 @@ describe('kortix agents — default, scope, config', () => {
       expect(r.stdout).not.toContain(NONE_SERVED);
     });
 
-    test('a connected Claude account makes its enabled models pinnable', async () => {
-      const claude = (connected: boolean, enabled: boolean) => ({
+    test('a served model the workspace denies explicitly does not count as pinnable', async () => {
+      // PUT /model-defaults refuses a model or provider in /model-access.
+      for (const access of [
+        { disabledProviders: ['openai'], disabledModels: [] },
+        { disabledProviders: [], disabledModels: ['openai/gpt-5.5'] },
+      ]) {
+        const r = await runCli(
+          ['agents', 'ls', '--project', PROJECT],
+          writeConfig(
+            startServer(THREE_AGENTS, {
+              picker: { models: { 'openai/gpt-5.5': { available: true, enabled: false } } },
+              access,
+            }),
+          ),
+        );
+        expect(r.stdout).not.toContain(PIN_HINT);
+        expect(r.stdout).toContain(NONE_SERVED);
+        server?.stop(true);
+      }
+    });
+
+    test('a model hidden only from the picker stays pinnable', async () => {
+      // `enabled: false` with no access denial is display-only: the pin works.
+      const config = writeConfig(
+        startServer(THREE_AGENTS, {
+          picker: { models: { 'openai/gpt-5.5': { available: true, enabled: false } } },
+          access: { disabledProviders: [], disabledModels: [] },
+        }),
+      );
+      const r = await runCli(['agents', 'ls', '--project', PROJECT], config);
+      expect(r.stdout).toContain(PIN_HINT);
+    });
+
+    test('a connected Claude account makes its allowed models pinnable', async () => {
+      const claude = (connected: boolean) => ({
         models: {},
         claudeSubscription: {
           connected,
-          models: [{ id: 'claude-agent/opus', connected, enabled }],
+          models: [{ id: 'claude-agent/opus', connected, enabled: false }],
         },
       });
-      const on = await runCli(
-        ['agents', 'ls', '--project', PROJECT],
-        writeConfig(startServer(THREE_AGENTS, { picker: claude(true, true) })),
-      );
-      expect(on.stdout).toContain(PIN_HINT);
-      server?.stop(true);
-      for (const [connected, enabled] of [
-        [false, true],
-        [true, false],
-      ]) {
-        const off = await runCli(
+      const cases: Array<[boolean, object, string]> = [
+        [true, { disabledProviders: [], disabledModels: [] }, PIN_HINT],
+        [false, { disabledProviders: [], disabledModels: [] }, NONE_SERVED],
+        [true, { disabledProviders: ['claude-agent'], disabledModels: [] }, NONE_SERVED],
+        [true, { disabledProviders: [], disabledModels: ['claude-agent/opus'] }, NONE_SERVED],
+      ];
+      for (const [connected, access, expected] of cases) {
+        const r = await runCli(
           ['agents', 'ls', '--project', PROJECT],
-          writeConfig(startServer(THREE_AGENTS, { picker: claude(connected, enabled) })),
+          writeConfig(startServer(THREE_AGENTS, { picker: claude(connected), access })),
         );
-        expect(off.stdout).toContain(NONE_SERVED);
+        expect(r.stdout).toContain(expected);
         server?.stop(true);
       }
     });

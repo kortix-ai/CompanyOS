@@ -205,22 +205,43 @@ function renderAgent(
 /** What `ls` says when no agent is pinned. "Pin one" only when the caller can
  *  run a model: otherwise PUT /model-defaults refuses every id with 409
  *  model_not_servable (a free-tier account with no provider, KRTX-1665), so
- *  name what unlocks one, as the web picker does. Runnable = the picker's
- *  gateway models whose provider is connected, or an enabled Claude
- *  subscription model on a connected Claude account. An unreadable picker
- *  fails open to "Pin one". */
+ *  name what unlocks one, as the web picker does. Runnable = a picker gateway
+ *  model whose provider is connected, or a Claude subscription model on a
+ *  connected Claude account, that /model-access does not deny. The picker's
+ *  `enabled` also folds in display-only hiding, which PUT ignores, so it is
+ *  not used. An unreadable picker fails open to "Pin one". */
+/** GET /projects/:id/model-access: the explicit denials PUT /model-defaults enforces. */
+type ModelAccess = { disabledProviders?: string[]; disabledModels?: string[] };
+
 async function noPinsHint(ctx: ProjectCtx): Promise<string> {
   let runnable = true;
   try {
-    // The part of GET /projects/:id/model-picker a pin can name.
-    const picker = await ctx.client.get<{
-      models?: Record<string, { available?: boolean }>;
-      claudeSubscription?: { models?: Array<{ connected?: boolean; enabled?: boolean }> };
-    }>(`/workspaces/${ctx.projectId}/model-picker`);
+    const base = `/workspaces/${ctx.projectId}`;
+    const [picker, access] = await Promise.all([
+      // The part of GET /projects/:id/model-picker a pin can name.
+      ctx.client.get<{
+        models?: Record<string, { available?: boolean }>;
+        claudeSubscription?: { models?: Array<{ id: string; connected?: boolean }> };
+      }>(`${base}/model-picker`),
+      // An API without the route has no denials.
+      ctx.client
+        .get<ModelAccess>(`${base}/model-access`)
+        .catch((): ModelAccess => ({})),
+    ]);
+    // The API's modelAccessAllows: an id is denied by its provider or itself.
+    const allowed = (id: string): boolean => {
+      const wire = id.replace(/^kortix\//, '');
+      const provider = wire.includes('/') ? wire.slice(0, wire.indexOf('/')) : 'kortix';
+      return (
+        !access.disabledProviders?.includes(provider) && !access.disabledModels?.includes(wire)
+      );
+    };
     runnable =
-      Object.values(picker.models ?? {}).some((model) => model.available !== false) ||
+      Object.entries(picker.models ?? {}).some(
+        ([id, model]) => model.available !== false && allowed(id),
+      ) ||
       (picker.claudeSubscription?.models ?? []).some(
-        (model) => model.connected && model.enabled !== false,
+        (model) => model.connected && allowed(model.id),
       );
   } catch {
     // fail open

@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'bun:test';
-import { createElement, forwardRef, type ReactNode } from 'react';
+import { createElement } from 'react';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 
 Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', { value: true, configurable: true });
@@ -48,43 +48,6 @@ mock.module('next/navigation', () => ({
   useSearchParams: () => searchParams,
   useParams: () => ({}),
   usePathname: () => '/oauth/authorize',
-}));
-
-// motion/react with no DOM: render the same tag with the animation-only props
-// stripped, and always claim reduced motion so no animation timing runs.
-const MOTION_ONLY_PROPS = new Set([
-  'initial',
-  'animate',
-  'exit',
-  'transition',
-  'variants',
-  'whileHover',
-  'whileTap',
-  'whileInView',
-  'viewport',
-  'layout',
-  'layoutId',
-]);
-const motionComponents = new Proxy(
-  {},
-  {
-    get: (_target, tag: string) =>
-      forwardRef(function MotionStub(motionProps: Record<string, unknown>, ref) {
-        const domProps = Object.fromEntries(
-          Object.entries(motionProps).filter(([key]) => !MOTION_ONLY_PROPS.has(key)),
-        );
-        return createElement(tag, { ...domProps, ref });
-      }),
-  },
-);
-const realMotion = await import('motion/react');
-mock.module('motion/react', () => ({
-  ...realMotion,
-  AnimatePresence: ({ children }: { children: ReactNode }) => <>{children}</>,
-  LazyMotion: ({ children }: { children: ReactNode }) => <>{children}</>,
-  m: motionComponents,
-  animate: () => Promise.resolve(),
-  useReducedMotion: () => true,
 }));
 
 const { default: OAuthConsentPage } = await import('./page');

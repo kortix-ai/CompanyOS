@@ -1,7 +1,7 @@
 {
   "generatedAt": "static",
-  "count": 1828,
-  "aliases": 713,
+  "count": 1832,
+  "aliases": 715,
   "routes": [
     {
       "method": "GET",
@@ -4989,6 +4989,16 @@
       "aliasOf": "/v1/workspaces/:workspaceId/version-diff"
     },
     {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/workspace-cache",
+      "aliasOf": "/v1/workspaces/:workspaceId/workspace-cache"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/workspace-cache",
+      "aliasOf": "/v1/workspaces/:workspaceId/workspace-cache"
+    },
+    {
       "method": "POST",
       "path": "/v1/projects/create-repo",
       "aliasOf": "/v1/workspaces/create-repo"
@@ -7967,6 +7977,14 @@
     {
       "method": "GET",
       "path": "/v1/workspaces/:workspaceId/version-diff"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/workspace-cache"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/workspace-cache"
     },
     {
       "method": "POST",

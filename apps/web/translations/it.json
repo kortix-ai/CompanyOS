@@ -1366,6 +1366,10 @@
         "review_swipe": {
           "name": "Schede di revisione",
           "description": "«Serve a te» nella pagina Revisione si apre come un mazzo di schede: un elemento per scheda. Scorri a destra per approvare o unire, a sinistra per rimandarlo all’agente con cosa cambiare."
+        },
+        "platinum_cache": {
+          "name": "Cache dello spazio di lavoro",
+          "description": "Le nuove sessioni partono con /workspace ripristinato dalla cache salvata di questo progetto su Platinum: un checkout pronto con node_modules e lo store di pnpm, in circa un secondo invece di minuti di preparazione. Un amministratore del progetto salva una sessione pronta come cache. Disattivata, ogni sessione parte con /workspace vuoto."
         }
       },
       "channelsSwitch": {

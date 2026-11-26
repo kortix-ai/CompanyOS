@@ -1366,6 +1366,10 @@
         "review_swipe": {
           "name": "审阅卡片",
           "description": "审阅页面的“待你处理”以卡片堆显示：每张卡片一项。向右滑动批准或合并，向左滑动附上修改意见退回给智能体。"
+        },
+        "platinum_cache": {
+          "name": "工作区缓存",
+          "description": "新会话会从本项目保存在 Platinum 上的工作区缓存恢复 /workspace：一个已准备好的代码检出，包含 node_modules 和 pnpm 存储，大约一秒即可就绪，而不是数分钟的安装。项目管理员将准备好的会话保存为缓存。关闭时，每个会话都从空的 /workspace 开始。"
         }
       },
       "channelsSwitch": {

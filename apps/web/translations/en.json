@@ -1186,6 +1186,10 @@
         "review_swipe": {
           "name": "Review cards",
           "description": "The Review page's Needs you opens as a swipe deck: one item per card. Swipe right to approve or merge, left to send it back to the agent with what should change."
+        },
+        "platinum_cache": {
+          "name": "Workspace cache",
+          "description": "New sessions start with /workspace restored from this project's saved workspace cache on Platinum: a prepared checkout with its node_modules and pnpm store, in about a second instead of minutes of setup. A project admin saves a prepared session as the cache. Off, every session starts with an empty /workspace."
         }
       },
       "channelsSwitch": {

@@ -1366,6 +1366,10 @@
         "review_swipe": {
           "name": "Cartões de revisão",
           "description": "«Precisa de você» na página de revisão abre como uma pilha de cartões: um item por cartão. Deslize para a direita para aprovar ou mesclar, para a esquerda para devolver ao agente com o que deve mudar."
+        },
+        "platinum_cache": {
+          "name": "Cache do espaço de trabalho",
+          "description": "Novas sessões começam com /workspace restaurado do cache salvo deste projeto no Platinum: um checkout pronto com node_modules e o store do pnpm, em cerca de um segundo em vez de minutos de preparação. Um administrador do projeto salva uma sessão preparada como cache. Desligado, cada sessão começa com /workspace vazio."
         }
       },
       "channelsSwitch": {

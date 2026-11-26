@@ -1366,6 +1366,10 @@
         "review_swipe": {
           "name": "Cartes de revue",
           "description": "« Vous attend » sur la page Revue s’ouvre en pile de cartes : un élément par carte. Glissez à droite pour approuver ou fusionner, à gauche pour le renvoyer à l’agent avec ce qui doit changer."
+        },
+        "platinum_cache": {
+          "name": "Cache de l'espace de travail",
+          "description": "Les nouvelles sessions démarrent avec /workspace restauré depuis le cache enregistré de ce projet sur Platinum : un checkout préparé avec ses node_modules et le store pnpm, en une seconde environ au lieu de minutes d'installation. Un administrateur du projet enregistre une session préparée comme cache. Désactivé, chaque session démarre avec un /workspace vide."
         }
       },
       "channelsSwitch": {

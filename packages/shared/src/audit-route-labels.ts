@@ -949,6 +949,8 @@ export const AUDIT_ROUTE_LABELS: Readonly<Record<string, AuditRouteLabel | strin
   'PUT /v1/projects/:workspaceId/spaces/:spaceId/tabs': { action: 'project.space.tabs.update', title: 'Changed space tabs' },
   'GET /v1/projects/:workspaceId/spaces/:spaceId/proactive': { action: 'project.space.proactive.read', title: 'Viewed space Proactive settings' },
   'PUT /v1/projects/:workspaceId/spaces/:spaceId/proactive': { action: 'project.space.proactive.update', title: 'Changed space Proactive settings' },
+  'GET /v1/projects/:workspaceId/workspace-cache': { action: 'project.workspace_cache.list', title: 'Listed saved workspaces' },
+  'POST /v1/projects/:workspaceId/workspace-cache': { action: 'project.workspace_cache.save', title: 'Saved a session’s workspace as the workspace cache' },
   'GET /v1/projects/:workspaceId/onboarding/channels': { action: 'project.space.onboarding.read', title: 'Read Channels onboarding state' },
   'POST /v1/projects/:workspaceId/onboarding/channels/marks': { action: 'project.space.onboarding.mark', title: 'Marked a Channels onboarding step' },
   'GET /v1/projects/:workspaceId/memory/layers/:layerKey': { action: 'project.memory.layer.read', title: 'Viewed memory' },

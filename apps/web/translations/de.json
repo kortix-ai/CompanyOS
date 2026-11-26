@@ -1366,6 +1366,10 @@
         "review_swipe": {
           "name": "Review-Karten",
           "description": "„Braucht dich“ auf der Review-Seite öffnet sich als Kartenstapel: ein Eintrag pro Karte. Nach rechts wischen genehmigt oder mergt, nach links schickt es mit deinem Änderungswunsch an den Agenten zurück."
+        },
+        "platinum_cache": {
+          "name": "Workspace-Cache",
+          "description": "Neue Sessions starten mit /workspace aus dem gespeicherten Workspace-Cache dieses Projekts auf Platinum: ein vorbereiteter Checkout mit node_modules und pnpm-Store, in etwa einer Sekunde statt minutenlangem Setup. Ein Projekt-Admin speichert eine vorbereitete Session als Cache. Aus: Jede Session startet mit leerem /workspace."
         }
       },
       "channelsSwitch": {

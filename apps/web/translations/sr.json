@@ -1366,6 +1366,10 @@
         "review_swipe": {
           "name": "Kartice za pregled",
           "description": "„Čeka tebe“ na stranici Pregled otvara se kao špil kartica: jedna stavka po kartici. Prevuci desno da odobriš ili spojiš, levo da je vratiš agentu sa onim što treba promeniti."
+        },
+        "platinum_cache": {
+          "name": "Keš radnog prostora",
+          "description": "Nove sesije počinju sa /workspace vraćenim iz sačuvanog keša ovog projekta na Platinumu: pripremljen checkout sa node_modules i pnpm skladištem, za oko sekundu umesto minuta pripreme. Administrator projekta čuva pripremljenu sesiju kao keš. Isključeno, svaka sesija počinje sa praznim /workspace."
         }
       },
       "channelsSwitch": {

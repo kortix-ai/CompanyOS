@@ -598,6 +598,24 @@ const FLAGS: readonly FeatureFlagDef[] = [
       '(KORTIX_FEATURE_FLAGS → kortixd). WEB: no Calendar row and no palette entry; /workspaces/:id/calendar renders FeatureGateScreen. ' +
       'The calendar_items and calendar_comments rows stay.',
   },
+  {
+    key: 'platinum_cache',
+    name: 'Workspace cache',
+    description:
+      'New sessions start with /workspace restored from this project\'s saved workspace cache on Platinum: a prepared checkout with its node_modules and pnpm store, in about a second instead of minutes of setup. A project admin saves a prepared session as the cache. Off, every session starts with an empty /workspace.',
+    stability: 'experimental',
+    // The cache is a Platinum volume feature: no Platinum, no cache.
+    available: () => Boolean(config.PLATINUM_API_KEY),
+    platformDefault: () => false,
+    enforcement: 'behavioral',
+    enforcementNote:
+      'Decided once, at POST /sessions (projects/lib/session-create.ts): with the flag on, the session\'s kws-<session_id> volume is restored from ' +
+      'the Platinum cache namespace `proj:<project_id>:ws` (newest key starting `ws-`) instead of created empty, and the session record keeps ' +
+      '`workspace_volume.cache`. A failed restore falls back to an empty volume, so the flag can never fail a session. BOX: a recorded cache gives ' +
+      'the box KORTIX_WORKSPACE_CACHE and npm_config_store_dir=/workspace/.pnpm-store (platform/services/workspace-volume.ts). API: ' +
+      'POST and GET /v1/projects/:id/workspace-cache (project admins) answer 403 feature_disabled while it is off. Turning it off changes the next ' +
+      'new session only; saved entries stay in Platinum until their idle TTL.',
+  },
 ];
 
 const FLAG_BY_KEY: Record<FeatureFlagKey, FeatureFlagDef> = Object.fromEntries(

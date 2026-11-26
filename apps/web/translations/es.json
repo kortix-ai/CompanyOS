@@ -1366,6 +1366,10 @@
         "review_swipe": {
           "name": "Tarjetas de revisión",
           "description": "«Te necesita» en la página de revisión se abre como un mazo de tarjetas: un elemento por tarjeta. Desliza a la derecha para aprobar o fusionar, a la izquierda para devolverlo al agente con lo que debe cambiar."
+        },
+        "platinum_cache": {
+          "name": "Caché del espacio de trabajo",
+          "description": "Las sesiones nuevas empiezan con /workspace restaurado desde la caché guardada de este proyecto en Platinum: un checkout preparado con sus node_modules y el almacén de pnpm, en un segundo en lugar de minutos de preparación. Un administrador del proyecto guarda una sesión preparada como caché. Desactivada, cada sesión empieza con /workspace vacío."
         }
       },
       "channelsSwitch": {

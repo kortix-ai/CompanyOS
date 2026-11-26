@@ -268,7 +268,7 @@ export function ModelPickerPanel({
           {tabs.map((id) => {
             const active = !searching && id === tab;
             return (
-              <Hint key={id} label={tabLabel(id)} side="left" className="z-50">
+              <Hint key={id} label={tabLabel(id)} side="left" className="z-50" delayDuration={0}>
                 <button
                   type="button"
                   role="tab"

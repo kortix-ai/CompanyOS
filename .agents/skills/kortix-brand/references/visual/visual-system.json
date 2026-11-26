@@ -96,13 +96,13 @@
       },
       "destructive-foreground": { "light": "oklch(0.9851 0 0)", "dark": "oklch(0.9851 0 0)", "hex": ["#fafafa", "#fafafa"], "utility": "text-destructive-foreground", "mobile": true },
       "border": {
-        "light": "oklch(0.9128 0 0)",
-        "dark": "oklch(0.2686 0 0)",
-        "hex": ["#e2e2e2", "#262626"],
+        "light": "oklch(0.8953 0 0)",
+        "dark": "oklch(0.2924 0 0)",
+        "hex": ["#dcdcdc", "#2c2c2c"],
         "ramp": "hairline",
         "utility": "border-border",
         "mobile": true,
-        "use": "The border token. Two borders read it: border-border (global, every element by default) is this value mixed 25% toward --background at 0.8px; border-strong is this value at 1px, for emphasis (the chat composer, a selectable row). Both are defined in packages/ui/src/styles/theme.css."
+        "use": "The border token. Two borders read it: border-border (global, every element by default) is this value mixed 17.5% toward --background at 0.8px; border-strong is this value at 1px, for emphasis (a selectable row, a linked card; never the chat composer). Both are defined in packages/ui/src/styles/theme.css."
       },
       "input": { "light": "oklch(0.9461 0 0)", "dark": "oklch(0.2264 0 0)", "hex": ["#ededed", "#1c1c1c"], "ramp": "surface-2", "utility": "bg-input", "mobile": true, "use": "Legacy. Add no new use: fields use bg-popover." },
       "ring": {

@@ -2,6 +2,8 @@ import React from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { describe, expect, test } from 'bun:test';
 import { QuestionPrompt } from './question-prompt';
+import { UiProvider } from '../../providers/ui-provider';
+import { defaultUiMessages } from '../../i18n';
 
 Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', {
   value: true,
@@ -164,4 +166,38 @@ test('an enabled answer submits while clarification is pending without duplicate
   await act(async () => { finishReply(); });
   expect(text(tree)).toContain('Answers submitted');
   await act(async () => { tree.unmount(); });
+});
+
+// A host's locale must control the question controls, not only the surrounding page.
+test("uses host translations for custom-answer and clarification controls", async () => {
+  const messages = {
+    ...defaultUiMessages,
+    questionPrompt: {
+      customAnswer: "Eigene Antwort",
+      customPlaceholder: "Antwort eingeben",
+      submitAnswer: "Antwort senden",
+      askClarification: "Nachfragen",
+    },
+  };
+  let tree!: ReactTestRenderer;
+  await act(async () => {
+    tree = create(
+      <UiProvider i18n={{ locale: "de", messages }}>
+        <QuestionPrompt
+          request={request}
+          onReply={() => undefined}
+          onReject={() => undefined}
+          onDiscuss={async () => undefined}
+        />
+      </UiProvider>,
+    );
+  });
+  expect(text(tree)).toContain("Eigene Antwort");
+  expect(text(tree)).toContain("Antwort eingeben");
+  expect(text(tree)).toContain("Antwort senden");
+  expect(text(tree)).toContain("Nachfragen");
+  expect(text(tree)).not.toContain("Custom answer");
+  await act(async () => {
+    tree.unmount();
+  });
 });

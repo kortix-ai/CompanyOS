@@ -196,10 +196,11 @@
   --color-ring: var(--ring);
   --color-input: var(--input);
   /* Two borders. `border-border` (the default on every element) is the
-     global hairline: the --border token mixed 25% toward the canvas.
+     global hairline: the --border token mixed 17.5% toward the canvas
+     (82.5%: 10% more contrast than the old 75%, 2026-11-26).
      `border-strong` (below) is the emphasis border: --border itself, 1px.
      A theme sets --border only; both follow it. */
-  --color-border: color-mix(in oklab, var(--border) 75%, var(--background));
+  --color-border: color-mix(in oklab, var(--border) 82.5%, var(--background));
   --color-border-strong: var(--border);
   /* Interaction overlays — translucent ink, not solid surfaces, so a hover or
      selection tint blends over whatever substrate is behind it (canvas,

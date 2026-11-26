@@ -1366,6 +1366,10 @@
         "review_swipe": {
           "name": "Kartice za pregled",
           "description": "„Čeka tebe“ na stranici Pregled otvara se kao špil kartica: jedna stavka po kartici. Prevuci desno da odobriš ili spojiš, levo da je vratiš agentu sa onim što treba promeniti."
+        },
+        "platinum_cache": {
+          "name": "Keš radnog prostora",
+          "description": "Nove sesije počinju sa /workspace vraćenim iz sačuvanog keša ovog projekta na Platinumu: pripremljen checkout sa node_modules i pnpm skladištem, za oko sekundu umesto minuta pripreme. Administrator projekta čuva pripremljenu sesiju kao keš. Isključeno, svaka sesija počinje sa praznim /workspace."
         }
       },
       "channelsSwitch": {
@@ -27461,6 +27465,10 @@
     "completeDescription": "Ako si podešavanje pokrenuo u terminalu, tamo se nastavlja samo.",
     "slackName": "Slack",
     "sectionOpen": "Čeka tebe",
+    "sectionOptional": "Opcioni konektori",
+    "skip": "Preskoči",
+    "skipNamed": "Preskoči {name}",
+    "showSkipped": "Prikaži preskočene konektore",
     "doneSummary": "{count} već podešeno",
     "done": "Gotovo",
     "connect": "Poveži {name}",
@@ -27613,5 +27621,22 @@
     "community": "Discord zajednica",
     "whatsNew": "Šta je novo",
     "fullChangelog": "Ceo dnevnik izmena"
+  },
+  "questionPrompt": {
+    "submitFailed": "Odgovori nisu poslati. Sačuvani su ovde. Pokušajte ponovo.",
+    "submitted": "Odgovori su poslati",
+    "submitting": "Slanje odgovora…",
+    "review": "Pregledajte odgovore",
+    "removeCustom": "Ukloni sopstveni odgovor: {answer}",
+    "customAnswer": "Sopstveni odgovor",
+    "customPlaceholder": "Unesite svoj odgovor",
+    "submitAnswer": "Pošalji odgovor",
+    "addAnswer": "Dodaj odgovor",
+    "nextQuestion": "Sledeće pitanje",
+    "submitAnswers": "Pošalji odgovore",
+    "askClarification": "Zatraži pojašnjenje",
+    "clarificationFailed": "Pojašnjenje nije poslato. Pokušajte ponovo.",
+    "discussionLabel": "Razgovarajte o pitanju bez odgovaranja",
+    "sendClarification": "Pošalji pojašnjenje"
   }
 }

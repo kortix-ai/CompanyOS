@@ -6,7 +6,7 @@ export const EMAIL_COLORS = {
   surface1: '#f4f4f4', // --card
   ink: '#1f1f1f', // --foreground
   inkMuted: '#666666', // --muted-foreground
-  hairline: '#e2e2e2', // --border
+  hairline: '#dcdcdc', // --border
   kortixBase: '#0099ff', // --kortix-base
   success: '#037225', // --kortix-green
   error: '#c21425', // --kortix-red

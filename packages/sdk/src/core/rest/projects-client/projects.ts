@@ -146,6 +146,8 @@ export type FeatureFlagKey =
   | 'review_swipe'
   /** Calendar: a shared calendar of dated items with the people on them and comments, plus the project's scheduled triggers (`kortix calendar`). Experimental, off by default. */
   | 'calendar'
+  /** Workspace cache: a new session's /workspace starts from the project's saved cache on Platinum (checkout, node_modules, pnpm store). Experimental, off by default. */
+  | 'platinum_cache'
   /** @deprecated Withdrawn — agents messaging people left the product. The API no longer lists, resolves, or accepts it. Removed in the next major. */
   | 'human_messaging';
 
@@ -211,6 +213,7 @@ export const FEATURE_FLAG_KEYS: readonly FeatureFlagKey[] = [
   'desktop_tabs',
   'calendar',
   'review_swipe',
+  'platinum_cache',
 ] as const;
 
 /**

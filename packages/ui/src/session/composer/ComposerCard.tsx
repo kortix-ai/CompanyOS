@@ -331,10 +331,10 @@ export function ComposerCard({
       onDragLeave={handleDragLeave}
       onDrop={handleDropFiles}
       className={cn(
-        // The composer is the one surface the user always acts on, so it takes
-        // the emphasis border (`border-strong`: 1px, the full --border
-        // color). No shadow: it sits in the page, flat.
-        'bg-background border-strong relative isolate z-10 w-full rounded-xl',
+        // The global border (`border`: 0.8px `border-border`), like every other
+        // surface; not `border-strong` (Jay, 2026-11-26). No shadow: it sits in
+        // the page, flat.
+        'bg-background relative isolate z-10 w-full rounded-xl border',
         // `inline` draws its own even inset (below); the full composer keeps its top band,
         // and so does `inline` while tiles sit above the text.
         collapsed || (inline && attachedFiles.length === 0 && pastes.length === 0) ? 'pt-0' : 'pt-3',
@@ -343,9 +343,8 @@ export function ComposerCard({
         'duration-normal ease-default transition-[border-color]',
         'motion-reduce:transition-none',
         cardClassName,
-        // `border-ring!`: the drag colour must beat `border-strong`, which sets
-        // its own colour, and twMerge would drop `border-strong` (and its
-        // width) for a plain `border-ring`.
+        // `border-ring!`: the drag colour must beat any border colour a host
+        // passes in `cardClassName`.
         isDragOver && 'border-ring! ring-ring/15 ring',
         // A layer above (`ComposerAboveCard`) owns the top corners: a notice,
         // or a visible strip (known only to CSS, through `data-composer-stack`).

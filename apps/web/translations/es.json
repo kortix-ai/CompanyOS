@@ -1366,6 +1366,10 @@
         "review_swipe": {
           "name": "Tarjetas de revisión",
           "description": "«Te necesita» en la página de revisión se abre como un mazo de tarjetas: un elemento por tarjeta. Desliza a la derecha para aprobar o fusionar, a la izquierda para devolverlo al agente con lo que debe cambiar."
+        },
+        "platinum_cache": {
+          "name": "Caché del espacio de trabajo",
+          "description": "Las sesiones nuevas empiezan con /workspace restaurado desde la caché guardada de este proyecto en Platinum: un checkout preparado con sus node_modules y el almacén de pnpm, en un segundo en lugar de minutos de preparación. Un administrador del proyecto guarda una sesión preparada como caché. Desactivada, cada sesión empieza con /workspace vacío."
         }
       },
       "channelsSwitch": {
@@ -27461,6 +27465,10 @@
     "completeDescription": "Si iniciaste la configuración en una terminal, continúa allí sola.",
     "slackName": "Slack",
     "sectionOpen": "Te necesita",
+    "sectionOptional": "Conectores opcionales",
+    "skip": "Omitir",
+    "skipNamed": "Omitir {name}",
+    "showSkipped": "Mostrar conectores omitidos",
     "doneSummary": "{count} ya configurados",
     "done": "Listo",
     "connect": "Conectar {name}",
@@ -27613,5 +27621,22 @@
     "community": "Comunidad de Discord",
     "whatsNew": "Novedades",
     "fullChangelog": "Registro de cambios completo"
+  },
+  "questionPrompt": {
+    "submitFailed": "No se pudieron enviar las respuestas. Se guardan aquí. Inténtalo de nuevo.",
+    "submitted": "Respuestas enviadas",
+    "submitting": "Enviando respuestas…",
+    "review": "Revisar respuestas",
+    "removeCustom": "Eliminar respuesta personalizada: {answer}",
+    "customAnswer": "Respuesta personalizada",
+    "customPlaceholder": "Escribe tu propia respuesta",
+    "submitAnswer": "Enviar respuesta",
+    "addAnswer": "Añadir respuesta",
+    "nextQuestion": "Siguiente pregunta",
+    "submitAnswers": "Enviar respuestas",
+    "askClarification": "Pedir aclaración",
+    "clarificationFailed": "No se pudo enviar la aclaración. Inténtalo de nuevo.",
+    "discussionLabel": "Hablar sobre la pregunta sin responderla",
+    "sendClarification": "Enviar aclaración"
   }
 }

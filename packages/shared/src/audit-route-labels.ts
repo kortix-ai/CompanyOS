@@ -26,6 +26,7 @@ import type { AuditRouteLabel } from './audit-labels';
 
 // biome-ignore format: one route per line, so a diff names exactly the route that changed
 export const AUDIT_ROUTE_LABELS: Readonly<Record<string, AuditRouteLabel | string>> = {
+  'POST /v1/qualiloop/chat': { action: 'qualiloop.chat.create', title: 'Started a QualiLoop turn' },
   'GET /.well-known/oauth-authorization-server': { action: 'oauth.server_metadata.read', title: 'Read OAuth server metadata' },
   'GET /.well-known/oauth-protected-resource': { action: 'mcp.resource_metadata.read', title: 'Read MCP resource metadata' },
   'GET /.well-known/oauth-protected-resource/v1/mcp': { action: 'mcp.server_metadata.read', title: 'Read MCP server metadata' },
@@ -949,6 +950,8 @@ export const AUDIT_ROUTE_LABELS: Readonly<Record<string, AuditRouteLabel | strin
   'PUT /v1/projects/:workspaceId/spaces/:spaceId/tabs': { action: 'project.space.tabs.update', title: 'Changed space tabs' },
   'GET /v1/projects/:workspaceId/spaces/:spaceId/proactive': { action: 'project.space.proactive.read', title: 'Viewed space Proactive settings' },
   'PUT /v1/projects/:workspaceId/spaces/:spaceId/proactive': { action: 'project.space.proactive.update', title: 'Changed space Proactive settings' },
+  'GET /v1/projects/:workspaceId/workspace-cache': { action: 'project.workspace_cache.list', title: 'Listed saved workspaces' },
+  'POST /v1/projects/:workspaceId/workspace-cache': { action: 'project.workspace_cache.save', title: 'Saved a session’s workspace as the workspace cache' },
   'GET /v1/projects/:workspaceId/onboarding/channels': { action: 'project.space.onboarding.read', title: 'Read Channels onboarding state' },
   'POST /v1/projects/:workspaceId/onboarding/channels/marks': { action: 'project.space.onboarding.mark', title: 'Marked a Channels onboarding step' },
   'GET /v1/projects/:workspaceId/memory/layers/:layerKey': { action: 'project.memory.layer.read', title: 'Viewed memory' },

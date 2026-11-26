@@ -64,6 +64,7 @@ import { registerProviderSecretPoolsRoutes } from './routes/provider-secret-pool
 import { registerProjectSessionsRoutes, registerSessionLookupRoutes } from './routes/project-sessions';
 import { registerChatThreadRoutes } from './routes/chat-threads';
 import { registerSpaceProactiveRoutes } from './routes/space-proactive';
+import { registerWorkspaceCacheRoutes } from './routes/workspace-cache';
 import { registerSessionTranscriptsRoutes } from './routes/session-transcripts';
 import { registerSessionAttachmentsRoutes } from './routes/session-attachments';
 import { registerSessionOpenBundleRoutes } from './routes/session-open-bundle';
@@ -173,6 +174,7 @@ export function registerAllProjectRoutes(): void {
   registerProjectSessionsRoutes();
   registerChatThreadRoutes();
   registerSpaceProactiveRoutes();
+  registerWorkspaceCacheRoutes();
   registerSessionTranscriptsRoutes();
   registerSessionAttachmentsRoutes();
   registerSessionOpenBundleRoutes();

@@ -57,6 +57,8 @@ export type SessionInvocationSource =
   | 'qualiloop'
   /** A person's reply on a calendar item an agent session created (`projects/calendar/`, flag `calendar`). */
   | 'system:calendar'
+  /** The workspace cache's daily rebuild (`projects/workspace-cache/builder.ts`, flag `platinum_cache`): no model turn. */
+  | 'system:workspace-cache'
   | 'admin';
 
 /** `on_backpressure` is for trigger fires only; see `backpressure.ts`. */

@@ -1366,6 +1366,10 @@
         "review_swipe": {
           "name": "Schede di revisione",
           "description": "«Serve a te» nella pagina Revisione si apre come un mazzo di schede: un elemento per scheda. Scorri a destra per approvare o unire, a sinistra per rimandarlo all’agente con cosa cambiare."
+        },
+        "platinum_cache": {
+          "name": "Cache dello spazio di lavoro",
+          "description": "Le nuove sessioni partono con /workspace ripristinato dalla cache salvata di questo progetto su Platinum: un checkout pronto con node_modules e lo store di pnpm, in circa un secondo invece di minuti di preparazione. Un amministratore del progetto salva una sessione pronta come cache. Disattivata, ogni sessione parte con /workspace vuoto."
         }
       },
       "channelsSwitch": {
@@ -27461,6 +27465,10 @@
     "completeDescription": "Se hai avviato la configurazione da un terminale, lì prosegue da sola.",
     "slackName": "Slack",
     "sectionOpen": "Da fare",
+    "sectionOptional": "Connettori facoltativi",
+    "skip": "Salta",
+    "skipNamed": "Salta {name}",
+    "showSkipped": "Mostra connettori saltati",
     "doneSummary": "{count} già configurati",
     "done": "Fatto",
     "connect": "Connetti {name}",
@@ -27613,5 +27621,22 @@
     "community": "Community Discord",
     "whatsNew": "Novità",
     "fullChangelog": "Changelog completo"
+  },
+  "questionPrompt": {
+    "submitFailed": "Impossibile inviare le risposte. Sono salvate qui. Riprova.",
+    "submitted": "Risposte inviate",
+    "submitting": "Invio delle risposte…",
+    "review": "Rivedi le risposte",
+    "removeCustom": "Rimuovi risposta personalizzata: {answer}",
+    "customAnswer": "Risposta personalizzata",
+    "customPlaceholder": "Scrivi la tua risposta",
+    "submitAnswer": "Invia risposta",
+    "addAnswer": "Aggiungi risposta",
+    "nextQuestion": "Domanda successiva",
+    "submitAnswers": "Invia risposte",
+    "askClarification": "Chiedi un chiarimento",
+    "clarificationFailed": "Impossibile inviare la richiesta di chiarimento. Riprova.",
+    "discussionLabel": "Discuti la domanda senza rispondere",
+    "sendClarification": "Invia chiarimento"
   }
 }

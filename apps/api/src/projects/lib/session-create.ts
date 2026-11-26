@@ -36,7 +36,12 @@ import { selectProvider } from '../../platform/services/provider-balancer';
 import { ProvisionTimeline } from '../../platform/services/provision-timeline';
 import { provisionSessionSandbox } from '../../platform/services/session-sandbox';
 import { resolveSessionPlacement } from '../../platform/services/sandbox-region';
-import { startWorkspaceVolume, WORKSPACE_VOLUME_SESSION_KEY, type WorkspaceVolume } from '../../platform/services/workspace-volume';
+import {
+  startWorkspaceVolume,
+  WORKSPACE_VOLUME_SESSION_KEY,
+  workspaceCacheNamespace,
+  type WorkspaceVolume,
+} from '../../platform/services/workspace-volume';
 
 
 import { db } from '../../shared/db';
@@ -1901,6 +1906,8 @@ export async function createProjectSession(input: {
   const workspaceVolume = startWorkspaceVolume({
     sessionId: identity.sessionId,
     location: sandboxRegion.location,
+    // Flag `platinum_cache`: the volume starts as the project's newest saved workspace.
+    cacheNamespace: resolveFeatureFlag(project.metadata, 'platinum_cache') ? workspaceCacheNamespace(projectId) : undefined,
   });
   const requestedSpace = await resolveRequestedSessionSpace(input);
   if (requestedSpace.error) return { error: requestedSpace.error };

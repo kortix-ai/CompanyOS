@@ -17,7 +17,8 @@ QualiLoop project **#1 "Kortix AI Corp"**.
 | Endpoint | `POST /v1/qualiloop/chat` (`apps/api/src/qualiloop/index.ts`): `{prompt, metadata.session_id, metadata.turn_index}` in, `{"reply"}` out, `X-Agent-Secret` checked in constant time |
 | Turn | `apps/api/src/projects/qualiloop/turn.ts`: one QualiLoop conversation = one Kortix session (id = a hash of the conversation id), started or continued through the normal session lifecycle as the project's owner, source `qualiloop` (origin `user`: the owner's own private chat, with Drive and memory) |
 | Trace | `apps/api/src/projects/qualiloop/spans.ts`: after the turn, the session log becomes one OTLP/JSON trace (turn span, a `chat` span per model call with the system prompt and tokens, an `execute_tool` span per tool call), sent before the reply returns |
-| Retries | each `turn_index` claims its turn once (`qualiloop_turns` in the session's metadata): a resent turn after a network failure waits for the same turn and sends the prompt nothing twice |
+| Retries | each `turn_index` claims its turn once (`qualiloop_turns` in the session's metadata): a resent turn after a network failure waits for the same answer and never sends the prompt twice |
+| Reply | the turn is answered when its prompt is in the session log and no turn is open. A prompt sent while a turn runs (a colleague's report woke the session) joins that turn, and the reply is that turn's text |
 | Keep-alive | the route answers `200` at once and sends a space every 15 s until the JSON: Cloudflare cuts a response whose first byte takes over 100 s, and a turn with a sandbox boot can take minutes |
 
 The route answers `404` unless both `QUALILOOP_AGENT_SECRET` and

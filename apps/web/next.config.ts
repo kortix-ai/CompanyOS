@@ -3,10 +3,10 @@ import { withSentryConfig } from '@sentry/nextjs';
 import fs from 'fs';
 import { createMDX } from 'fumadocs-mdx/next';
 import type { NextConfig } from 'next';
-import { PHASE_PRODUCTION_BUILD } from 'next/constants';
+import { PHASE_DEVELOPMENT_SERVER, PHASE_PRODUCTION_BUILD } from 'next/constants';
 import createNextIntlPlugin from 'next-intl/plugin';
 import path from 'path';
-import { buildBlumeDocs, getBlumeDocsOutputPaths } from './scripts/blume-docs.mjs';
+import { buildBlumeDocs, buildBlumeDocsInBackground, getBlumeDocsOutputPaths } from './scripts/blume-docs.mjs';
 import { BLOG_ORIGIN } from './src/config/blog-origin';
 import { resolveTurbopackFileSystemCacheForBuild } from './src/config/turbopack-build-cache';
 import { locales } from './src/i18n/catalog.mjs';
@@ -140,10 +140,22 @@ function ensureBlumeDocsBuilt(phase: string) {
   // Runs for BOTH `next build` and `next dev`. /docs is served by THIS app out
   // of public/docs/ in every environment — there is deliberately no second
   // server. buildBlumeDocs() no-ops when public/docs/ is already newer than
-  // content/docs/ and blume.config.ts, so a warm `next dev` pays nothing; a
-  // cold one pays a single ~6s Astro build instead of serving a 404.
+  // content/docs/ and blume.config.ts, so a warm `next dev` pays nothing.
+  // A cold `next dev` (every new worktree) starts the build in the background
+  // and serves every other route at once; /docs answers 404 until it lands
+  // (buildBlumeDocsInBackground in scripts/blume-docs.mjs has the numbers).
   // Editing a doc while `next dev` is running does NOT hot-reload: run
   // `pnpm docs:build` (or restart) to refresh public/docs/.
+  if (phase === PHASE_DEVELOPMENT_SERVER) {
+    try {
+      if (buildBlumeDocsInBackground()) {
+        console.log('[next.config.ts] building /docs in the background; it answers 404 until the build lands');
+      }
+    } catch (err) {
+      console.warn(`[next.config.ts] could not start the /docs build (${(err as Error).message}); run \`pnpm docs:build\` in apps/web`);
+    }
+    return;
+  }
   const isBuild = phase === PHASE_PRODUCTION_BUILD;
   let blumeDocsError: unknown = null;
   try {

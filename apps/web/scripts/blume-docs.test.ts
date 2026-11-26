@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { getBlumeDocsOutputPaths } from './blume-docs.mjs';
+import { buildBlumeDocs, buildBlumeDocsInBackground, getBlumeDocsOutputPaths } from './blume-docs.mjs';
 
 describe('getBlumeDocsOutputPaths', () => {
   test('names the two files that prove the docs build landed', () => {
@@ -39,5 +39,12 @@ describe('built docs search index', () => {
       if (!html.includes(`id="${id}"`)) missing.push(route);
     }
     expect(missing).toEqual([]);
+  }, 120_000);
+});
+
+describe('buildBlumeDocsInBackground', () => {
+  test('starts nothing when public/docs/ is current', () => {
+    buildBlumeDocs();
+    expect(buildBlumeDocsInBackground()).toBe(false);
   }, 120_000);
 });

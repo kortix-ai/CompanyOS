@@ -1,4 +1,6 @@
 import { spawn } from 'bun';
+import { readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import { run, which } from './exec';
 
 export async function ensureRuntimeArtifacts(worktreePath: string): Promise<number> {
@@ -7,6 +9,10 @@ export async function ensureRuntimeArtifacts(worktreePath: string): Promise<numb
     ['CLI', '@kortix/cli'],
   ];
   for (const [label, filter] of packageBuilds) {
+    if (filter === 'kortixd' && agentArtifactCurrent(worktreePath)) {
+      console.log(`  ${label} runtime artifact is current — not rebuilt`);
+      continue;
+    }
     console.log(`  building ${label} runtime artifact`);
     const code = await run(['pnpm', '--filter', filter, 'build'], { cwd: worktreePath });
     if (code !== 0) return code;
@@ -22,6 +28,43 @@ export async function ensureRuntimeArtifacts(worktreePath: string): Promise<numb
   const code = await run(['bash', script], { cwd: worktreePath });
   if (code !== 0) return code;
   return 0;
+}
+
+/** Directories an mtime walk of build inputs skips: build output and installed dependencies (the lockfile stands for those). */
+const NOT_INPUTS = new Set(['dist', 'node_modules', '.turbo', '.next']);
+
+/** Newest mtime (ms) of `path` or of anything under it outside NOT_INPUTS; 0 when it does not exist. A directory counts
+ * too, so deleting a source file (which moves only its directory's mtime) also reads as a change. */
+export function newestInputMtimeMs(path: string): number {
+  let s;
+  try { s = statSync(path); } catch { return 0; }
+  if (!s.isDirectory()) return s.mtimeMs;
+  let newest = s.mtimeMs;
+  for (const entry of readdirSync(path, { withFileTypes: true })) {
+    if (entry.isDirectory() && NOT_INPUTS.has(entry.name)) continue;
+    const m = newestInputMtimeMs(join(path, entry.name));
+    if (m > newest) newest = m;
+  }
+  return newest;
+}
+
+/**
+ * True when the sandbox agent binary is newer than every input of its build, so `pnpm --filter kortixd build`
+ * would only reproduce it. `pnpm worktree start` runs right after `create` built it, and again on every restart:
+ * 7.2 s each time on a 6 vCPU Kortix session (2026-11-26), almost all of it `bun build --compile`.
+ *
+ * Inputs: the package itself, every workspace package (its sources import packages/shared and packages/llm-gateway
+ * by relative path), and the root lockfile, package.json and tsconfig.base.json, which move on a dependency bump.
+ * An edit, a branch switch or a checkout rewrites an input's mtime, so each of those rebuilds.
+ */
+export function agentArtifactCurrent(worktreePath: string): boolean {
+  const pkg = join(worktreePath, 'apps/kortix-sandbox-agent-server');
+  let built = Infinity;
+  for (const out of ['dist/kortixd', 'dist/kortix-agent']) {
+    try { built = Math.min(built, statSync(join(pkg, out)).mtimeMs); } catch { return false; }
+  }
+  const inputs = [pkg, join(worktreePath, 'packages'), ...['pnpm-lock.yaml', 'package.json', 'tsconfig.base.json'].map((f) => join(worktreePath, f))];
+  return inputs.every((input) => newestInputMtimeMs(input) < built);
 }
 
 // Spawn `cmd`, drain its stdout+stderr and resolve the first regex match (the

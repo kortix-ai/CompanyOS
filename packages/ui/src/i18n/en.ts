@@ -1878,6 +1878,7 @@ const catalog = {
     },
     "unified": {
       "welcome": "Welcome to {name}",
+      "sessionEnded": "You were signed out. Sign in again to continue.",
       "email": "Email",
       "emailPlaceholder": "Enter your email address…",
       "password": "Password",

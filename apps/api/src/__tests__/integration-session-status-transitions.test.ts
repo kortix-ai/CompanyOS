@@ -29,7 +29,7 @@ let onProviderRemove: () => Promise<void> = async () => {};
 let providerStatus = 'stopped';
 let providerStarts = 0;
 /** What the provider start waits on. A resume case gates it to race a writer. */
-let onProviderStart: () => Promise<void> = async () => {};
+let onProviderStart: (opts?: { onProgress?: () => Promise<void> }) => Promise<void> = async () => {};
 /** Compute meters (re)opened: one per runtime that became active. */
 let computeReopens = 0;
 /** `getProvider` throws synchronously for a provider the deployment cannot build. */
@@ -39,9 +39,9 @@ mock.module('../platform/providers', () => ({
   getProvider: () => {
     if (providerUnbuildable) throw new Error('PLATINUM_API_KEY is not set');
     return {
-      start: async () => {
+      start: async (_externalId: string, opts?: { onProgress?: () => Promise<void> }) => {
         providerStarts += 1;
-        await onProviderStart();
+        await onProviderStart(opts);
       },
       stop: async () => {
         providerStops += 1;
@@ -191,6 +191,7 @@ afterAll(async () => {
          set metadata = coalesce(metadata, '{}'::jsonb) || '{"deletedAt":"cleanup"}'::jsonb
        where session_id = ${sessionId}`);
     await db.execute(sql`delete from kortix.session_turns where session_id = ${sessionId}`);
+    await db.execute(sql`delete from kortix.provider_events where session_id = ${sessionId}`);
     await db.execute(
       sql`delete from kortix.session_sandboxes where sandbox_id = ${sessionId}::uuid`,
     );
@@ -645,6 +646,57 @@ describe('resume (resumeStoppedSandbox)', () => {
       expect(sandbox.status).toBe('stopped');
       expect(sandbox.metadata.stopReason).toBe('manual');
       expect(computeReopens).toBe(0);
+    } finally {
+      onProviderStart = async () => {};
+      providerStatus = 'stopped';
+    }
+  });
+
+  /** The `provider_events` rows a wake of this fixture recorded. */
+  async function wakeEvents(f: Fixture): Promise<Row[]> {
+    return rows(
+      await db.execute(sql`
+        select outcome, total_ms, marks, error from kortix.provider_events
+         where kind = 'wake' and session_id = ${f.sandboxId}`),
+    );
+  }
+
+  // KRTX-1642: a resume records where its time went, one row per wake.
+  test('a resume that restores from archive records each wake phase', async () => {
+    const { f, row, releaseStart } = await stoppedFixture();
+    try {
+      onProviderStart = async (opts) => {
+        // The provider reports a cold-storage restore in progress.
+        await opts?.onProgress?.();
+        providerStatus = 'running';
+      };
+      expect(await resumeStoppedSandbox(row)).toBe(true);
+      releaseStart();
+      await until(async () => (await wakeEvents(f)).length > 0);
+      const [event] = await wakeEvents(f);
+      expect(event!.outcome).toBe('ok');
+      const marks = event!.marks as { label: string; atMs: number; deltaMs: number }[];
+      expect(marks.map((m) => m.label)).toEqual(['archive-restore', 'provider-running', 'rows-active']);
+      for (const m of marks) expect(m.deltaMs).toBeGreaterThanOrEqual(0);
+      expect(event!.total_ms).toBeGreaterThanOrEqual(marks.at(-1)!.atMs);
+    } finally {
+      onProviderStart = async () => {};
+      providerStatus = 'stopped';
+    }
+  });
+
+  test('a resume whose provider start fails records the failure and its reason', async () => {
+    const { f, row } = await stoppedFixture();
+    try {
+      onProviderStart = async () => {
+        throw new Error('provider refused the start');
+      };
+      expect(await resumeStoppedSandbox(row)).toBe(true);
+      await until(async () => (await wakeEvents(f)).length > 0);
+      const [event] = await wakeEvents(f);
+      expect(event!.outcome).toBe('error');
+      expect(event!.error).toBe('start_failed');
+      expect((event!.marks as { label: string }[]).map((m) => m.label)).toEqual(['provider-start']);
     } finally {
       onProviderStart = async () => {};
       providerStatus = 'stopped';

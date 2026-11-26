@@ -3,8 +3,13 @@ import { providerEvents } from '@kortix/db';
 
 export type ProviderEventInput = {
   provider: string;
-  /** 'provision' (a sandbox-create attempt) | 'migrate' (a cross-provider move) | 'boot' (the in-guest boot timeline, boot-timeline-store.ts). */
-  kind: 'provision' | 'migrate' | 'boot';
+  /**
+   * 'provision' (a sandbox-create attempt) | 'migrate' (a cross-provider move) |
+   * 'boot' (the in-guest boot timeline, boot-timeline-store.ts) | 'wake' (a
+   * stopped box resumed in place, resume-stopped-sandbox.ts) | 'wake-ready' (its
+   * runtime's first answer after that wake, session-open-readiness.ts).
+   */
+  kind: 'provision' | 'migrate' | 'boot' | 'wake' | 'wake-ready';
   outcome: 'ok' | 'error' | 'stopped';
   totalMs?: number | null;
   marks?: unknown[];

@@ -8229,6 +8229,7 @@
       "legendAssistant": "回复",
       "legendTool": "工具结果",
       "legendOther": "其他",
+      "skillsUsedLabel": "已使用的技能",
       "subAgentsLabel": "子代理",
       "subAgentsNote": "在此会话中运行的辅助代理。它们的费用计入此会话的费用。",
       "combinedMessages": "合计消息",

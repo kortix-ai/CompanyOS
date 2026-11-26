@@ -236,6 +236,50 @@ test('ship refuses a foreign workspace link before any request unless a project 
   expect(result.stderr).toContain('--workspace');
   expect(hits).toEqual([]);
 });
+// An older CLI's link, or a clone made with no active host, records the host url but no host name.
+test.each([
+  { name: '--host names another server', args: ['--host', 'elsewhere'], active: 'workspace' },
+  { name: 'the active host is another server', args: [], active: 'elsewhere' },
+])('ship reports a host mismatch, not a deleted workspace, when $name', async ({ args, active }) => {
+  const elsewhereHits: string[] = [];
+  const elsewhere = Bun.serve({
+    port: 0,
+    fetch(req) {
+      elsewhereHits.push(new URL(req.url).pathname);
+      return Response.json({ error: 'Not found' }, { status: 404 });
+    },
+  });
+  try {
+    const config = JSON.parse(readFileSync(configFile, 'utf8'));
+    config.hosts.elsewhere = { ...config.hosts.workspace, url: `http://127.0.0.1:${elsewhere.port}`, token: 'tok_elsewhere' };
+    config.active = active;
+    writeFileSync(configFile, JSON.stringify(config));
+    writeFileSync(
+      join(cwd, '.kortix/link.json'),
+      JSON.stringify({ project_id: 'workspace_project', account_id: 'account_workspace', host_url: `http://127.0.0.1:${server.port}` }),
+    );
+    const result = await cli([...ship, ...args]);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('Host mismatch');
+    expect(result.stderr).toContain(`http://127.0.0.1:${server.port}`);
+    expect(result.stderr).toContain('kortix workspaces link <id> --host elsewhere');
+    expect(result.stderr).toMatch(/kortix ship --host (other|workspace)\n/);
+    expect(result.stderr).not.toContain('no longer exists');
+    expect(elsewhereHits).toEqual([]);
+    expect(hits).toEqual([]);
+  } finally {
+    elsewhere.stop(true);
+  }
+});
+test('ship --host to another name of the linked server still ships a link that records only its host url', async () => {
+  writeFileSync(
+    join(cwd, '.kortix/link.json'),
+    JSON.stringify({ project_id: 'workspace_project', account_id: 'account_workspace', host_url: `http://127.0.0.1:${server.port}/v1` }),
+  );
+  const result = await cli([...ship, '--host', 'other']);
+  expect(result.code).toBe(0);
+  expect(hits).toEqual([{ path: '/v1/workspaces/workspace_project', auth: 'Bearer tok_other' }]);
+});
 test('ship does not fall back to session auth for an unknown host', async () => {
   const result = await cli([...ship, '--host', 'missing']);
   expect(result.code).toBe(1);

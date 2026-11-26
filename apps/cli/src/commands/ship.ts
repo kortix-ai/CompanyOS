@@ -1,8 +1,8 @@
 import { basename } from 'node:path';
 
-import { type Auth, loadAuthForHost } from '../api/auth.ts';
+import { type Auth, loadAuthForHost, sameApiBase } from '../api/auth.ts';
 import { type ApiClient, ApiError, clientFromAuth } from '../api/client.ts';
-import { activeHostName, getHost } from '../api/config.ts';
+import { activeHostName, getHost, listHosts } from '../api/config.ts';
 import type { ProjectSecretsResponse, ProjectSummary } from '../api/types.ts';
 import { takeFlags } from '../command-argv.ts';
 import { fail, takeFlagBool, takeFlagValue, tokenRejectedLine } from '../command-helpers.ts';
@@ -179,10 +179,23 @@ export async function runShip(argv: string[]): Promise<number> {
   // Ship binds this workspace, not the session that happens to run the CLI.
   const link = loadLink();
   const hostName = flags.host ?? link?.host ?? activeHostName() ?? undefined;
-  if (!flags.project && flags.host && link?.host && flags.host !== link.host) {
-    process.stderr.write(
-      `${status.err(`This folder is linked to host "${link.host}", not "${flags.host}".`)} Pass --workspace, or run kortix workspaces link --host to rebind it.\n`,
-    );
+  const hostUrl = hostName ? getHost(hostName)?.url : undefined;
+  // A link that records no host name (an older CLI's, or a clone made with no
+  // active host) still records its server's url: compare that one.
+  if (
+    !flags.project && link && link.host !== hostName &&
+    (link.host || (link.host_url && hostUrl && !sameApiBase(link.host_url, hostUrl)))
+  ) {
+    const linked = link.host ? `host "${link.host}"${link.host_url ? ` (${link.host_url})` : ''}` : link.host_url;
+    const linkedUrl = link.host_url;
+    const linkedHost = link.host ?? (linkedUrl ? listHosts().find(({ host }) => sameApiBase(host.url, linkedUrl))?.name : undefined);
+    const lines = [
+      status.err(`Host mismatch: this folder is linked to workspace ${link.project_id} on ${linked}, not on host "${hostName}"${hostUrl ? ` (${hostUrl})` : ''}.`),
+      linkedHost ? `  ${C.dim}• Ship to the linked host:${C.reset}  ${C.cyan}kortix ship --host ${linkedHost}${C.reset}` : '',
+      `  ${C.dim}• Ship a workspace on "${hostName}":${C.reset}  ${C.cyan}kortix ship --host ${hostName} --workspace <id>${C.reset}`,
+      `  ${C.dim}• Or bind this folder to it:${C.reset}  ${C.cyan}kortix workspaces link <id> --host ${hostName}${C.reset}`,
+    ];
+    process.stderr.write(`${lines.filter(Boolean).join('\n')}\n`);
     return 1;
   }
   const auth = hostName ? loadAuthForHost(hostName) : null;

@@ -25411,6 +25411,7 @@
     "exportWaiting": "Enregistrement de vos modifications, puis export…",
     "exportBlocked": "Export arrêté : vos dernières modifications ne sont pas enregistrées.",
     "clearFilters": "Effacer les filtres",
+    "typeApp": "App",
     "linkCopyFailed": "Impossible de copier le lien. Sélectionnez-le dans le champ et copiez-le.",
     "shareDropsPeople": "{count, plural, one {L’enregistrement retire la personne ajoutée. Seul Privé conserve une liste de personnes.} other {L’enregistrement retire les # personnes ajoutées. Seul Privé conserve une liste de personnes.}}",
     "askAgentHistoryError": "Impossible de charger les discussions précédentes.",

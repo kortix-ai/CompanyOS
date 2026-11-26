@@ -2,11 +2,12 @@
 
 import {
   PROJECT_WIDE_SPACE,
+  type App,
   type Artifact,
   type ArtifactFolder,
   type ManifestSpace,
 } from '@kortix/sdk';
-import { prefetchArtifact, useArtifactMutations } from '@kortix/sdk/react';
+import { prefetchArtifact, useAppAccess, useArtifactMutations } from '@kortix/sdk/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@kortix/ui/button';
 import { ConfirmDialog } from '@kortix/ui/confirm-dialog';
@@ -26,6 +27,7 @@ import Hint from '@kortix/ui/hint';
 import Loading from '@kortix/ui/loading';
 import { errorToast, successToast } from '@kortix/ui/toast';
 import {
+  AppWindowIcon,
   ArrowSquareOutIcon,
   DotsThreeIcon,
   FolderIcon,
@@ -38,6 +40,7 @@ import {
 import Link from 'next/link';
 import { memo, useEffect, useRef, useState } from 'react';
 
+import { AppPreview, appCan } from '@kortix/ui/apps';
 import { ArtifactFrame, artifactFrameKey } from '@kortix/ui/artifacts';
 
 import { useLocale, useTranslations } from '@/i18n/use-translations';
@@ -90,6 +93,8 @@ export function useColumnWidth() {
 /** A card is the rounded preview, then a plain line under it: the name, "Updated … · visibility", the actions. */
 // No position here: a shown card is `relative` (its link's ::after covers it), a filtered-out one `fixed`.
 const CARD = 'group flex flex-col gap-2.5';
+/** A card the tab or search leaves out: laid out at the column's width, fixed behind the page, invisible and inert. */
+const CARD_HIDDEN = `${CARD} pointer-events-none fixed top-0 left-0 -z-10 w-(--card-w) opacity-0`;
 const CARD_PREVIEW =
   'bg-background group-hover:border-foreground/20 group-focus-within:border-foreground/20 relative aspect-[16/10] overflow-hidden rounded-lg border transition-colors';
 const CARD_FOOTER = 'flex items-start gap-2 px-0.5';
@@ -170,7 +175,7 @@ export const ArtifactCard = memo(function ArtifactCard({
     <div
       className={
         hidden
-          ? `${CARD} pointer-events-none fixed top-0 left-0 -z-10 w-(--card-w) opacity-0`
+          ? CARD_HIDDEN
           : `${CARD} relative transition-opacity ${dragging ? 'opacity-40' : ''}`
       }
       inert={hidden}
@@ -309,6 +314,75 @@ export const ArtifactCard = memo(function ArtifactCard({
           successToast(t('removed'));
         }}
       />
+    </div>
+  );
+});
+
+/**
+ * An App as an artifact (KRTX-5217): its live preview, its name and an App label. The card opens
+ * the App's own page (`/apps?app=<id>`), the same link the Apps page and its sidebar use; every
+ * App action stays there. `shown` is the App whose preview the card frames (`cardPreviewApp`):
+ * the App itself, or the first tab of one that hides its own; null shows the App icon.
+ */
+export const AppArtifactCard = memo(function AppArtifactCard({
+  projectId,
+  app,
+  shown,
+  hidden,
+  space,
+}: {
+  projectId: string;
+  app: App;
+  shown: App | null;
+  hidden?: boolean;
+  /** The space chip: only while every space is shown. */
+  space?: string;
+}) {
+  const t = useTranslations('artifacts');
+  const locale = useLocale();
+  // As on the Apps page: a session only for an App the viewer may open and that offers a preview.
+  const canAccess = shown?.viewer_can_access !== false;
+  const access = useAppAccess(projectId, shown?.app_id ?? app.app_id, {
+    policy: false,
+    session: canAccess && !!shown && appCan(shown, 'preview'),
+  });
+  return (
+    <div className={hidden ? CARD_HIDDEN : `${CARD} relative`} inert={hidden} aria-hidden={hidden || undefined}>
+      <div className={CARD_PREVIEW}>
+        {shown ? (
+          <AppPreview
+            key={shown.active_deployment_id ?? shown.app_id}
+            app={shown}
+            url={access.session.data?.url ?? null}
+            accessError={!canAccess || access.session.isError}
+            interactive={false}
+            className="absolute inset-0 aspect-auto size-full"
+          />
+        ) : (
+          <div className="bg-muted/20 text-muted-foreground absolute inset-0 grid place-items-center">
+            <AppWindowIcon className="size-8" aria-hidden />
+          </div>
+        )}
+      </div>
+      <div className={CARD_FOOTER}>
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <Link
+            href={`/workspaces/${projectId}/apps?app=${encodeURIComponent(app.app_id)}`}
+            className="truncate text-sm font-medium outline-none after:absolute after:inset-0 after:rounded-lg focus-visible:after:ring-2 focus-visible:after:ring-ring"
+          >
+            {app.name}
+          </Link>
+          <span className="text-muted-foreground flex min-w-0 items-center gap-1.5 text-xs">
+            <AppWindowIcon weight="fill" className="size-3.5 shrink-0" aria-hidden />
+            <span className="shrink-0">{t('typeApp')}</span>
+            <span aria-hidden>·</span>
+            <span className="truncate">
+              {t('updated', { time: relativeTime(app.updated_at, locale) })}
+              {space ? ` · ${space}` : null}
+            </span>
+          </span>
+        </span>
+      </div>
     </div>
   );
 });

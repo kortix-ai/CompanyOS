@@ -1,7 +1,7 @@
 import { afterEach, expect, mock, test } from 'bun:test';
 import { Window } from 'happy-dom';
 import { act } from 'react';
-import type { Artifact } from '@kortix/sdk';
+import type { App, Artifact } from '@kortix/sdk';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', { value: true, configurable: true });
@@ -35,6 +35,26 @@ const artifacts = [
   artifact('a-beta', 'Beta doc', 'user-2', true, 'private'),
 ];
 
+// Apps are an artifact type (KRTX-5217). The gallery reads the project's App list, which the API
+// already filters to the Apps the caller may open; `apps` is that list as the server returns it.
+const app = (id: string, name: string, display: App['display'], http: 'admins' | 'app' = 'app'): App => ({
+  app_id: id, account_id: 'acct-1', project_id: 'p1', slug: id, name, url: `https://${id}.apps.example.test`,
+  access_mode: 'project', access_revision: 1, desired_state: 'running', active_deployment_id: null,
+  machine: { cpu: 1, memory_gb: 1, disk_gb: 1 }, idle_timeout_seconds: 300, last_request_at: null, display,
+  services: [{ name: 'http', protocol: 'http', access: http, internal_port: 8080, processes: ['web'], url: null }], viewer_can_access: true, created_at: '2026-11-01T00:00:00Z', updated_at: '2026-11-03T00:00:00Z',
+});
+const ownerApps = [
+  app('crm', 'CRM app', { listed: true }),
+  // A tab of the CRM card and a background App: the Apps page shows neither as a card.
+  app('crm-data', 'CRM data', { listed: true, parent: 'crm' }),
+  app('poller', 'Poller', { listed: false }),
+  app('ops', 'Ops console', { listed: true }, 'admins'),
+  app('vault', 'Restricted app', { listed: true }),
+];
+let apps: App[] = ownerApps;
+let canAdmin = true;
+const sessionRequests: string[] = [];
+
 let serverPlaceholder = false;
 let serverConfirmed = false;
 const realSdkReact = await import('@kortix/sdk/react');
@@ -49,6 +69,12 @@ mock.module('@kortix/sdk/react', () => ({
     pin: { mutate: () => {} },
   }),
   useProjectConfig: () => ({ data: null }),
+  useWorkspaceApps: () => ({ data: apps, isLoading: false, isError: false }),
+  useAppAccess: (_projectId: string, appId: string, options: { session?: boolean }) => {
+    if (options.session) sessionRequests.push(appId);
+    return { session: { data: undefined, isError: false } };
+  },
+  useCan: () => ({ allowed: canAdmin, isLoading: false }),
   useFeatureFlag: () => ({ enabled: false }),
   prefetchArtifact: () => Promise.resolve(),
 }));
@@ -81,6 +107,9 @@ const queryClient = new QueryClient();
 const render = () => root.render(<QueryClientProvider client={queryClient}><ArtifactsGallery projectId="p1" /></QueryClientProvider>);
 
 afterEach(async () => {
+  apps = ownerApps;
+  canAdmin = true;
+  sessionRequests.length = 0;
   await act(async () => root.unmount());
   container.replaceChildren();
   root = createRoot(container);
@@ -154,4 +183,44 @@ test('a cold server search at the page limit keeps existing previews mounted', a
     expect(document.querySelector('#artifact-gallery-panel [role="status"]')).toBeNull();
     expect(container.textContent).toContain('No artifacts match');
   } finally { serverPlaceholder = false; serverConfirmed = false; artifacts.splice(2); }
+});
+
+const appLinks = () => [...document.body.querySelectorAll('a[href^="/workspaces/p1/apps?app="]')];
+const appCard = (name: string) => appLinks().find((a) => a.textContent === name)?.closest('div[class*="group"]');
+
+test('an App is listed as an App-type card that opens the App, beside the docs that keep their own link', async () => {
+  await act(render);
+  // One card per App the Apps page shows as a card: no card for its tab or its background App.
+  expect(appLinks().map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
+    ['CRM app', '/workspaces/p1/apps?app=crm'],
+    ['Ops console', '/workspaces/p1/apps?app=ops'],
+    ['Restricted app', '/workspaces/p1/apps?app=vault'],
+  ]);
+  expect(appCard('CRM app')?.textContent).toContain('App');
+  // A doc keeps its artifact link and carries no App label.
+  expect(linkOf('Alpha doc').getAttribute('href')).toBe('/workspaces/p1/artifacts/a-alpha');
+  expect(linkOf('Alpha doc').closest('div[class*="group"]')?.textContent).not.toContain('App');
+});
+
+test('a viewer without access to an App gets no card for it and no access session for it', async () => {
+  // The API's list for a teammate outside the restricted App's members omits it; a non-admin
+  // also loses the admins-only App, as on the Apps page.
+  apps = ownerApps.filter((item) => item.app_id !== 'vault');
+  canAdmin = false;
+  await act(render);
+  expect(appLinks().map((a) => a.textContent)).toEqual(['CRM app']);
+  expect(sessionRequests).not.toContain('vault');
+  expect(sessionRequests).not.toContain('ops');
+});
+
+test('a search and the Pinned tab filter App cards like any artifact', async () => {
+  await act(render);
+  await type('crm');
+  expect(appCard('CRM app')?.getAttribute('aria-hidden')).toBeNull();
+  expect(appCard('Restricted app')?.getAttribute('aria-hidden')).toBe('true');
+  await type('');
+  const pinned = [...document.body.querySelectorAll('[role="tab"]')].find((t) => t.textContent === 'Pinned');
+  if (!(pinned instanceof HTMLElement)) throw new Error('missing the Pinned tab');
+  await act(() => pinned.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 })));
+  expect(appCard('CRM app')?.getAttribute('aria-hidden')).toBe('true');
 });

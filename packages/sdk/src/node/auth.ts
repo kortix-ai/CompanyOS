@@ -27,6 +27,7 @@ import type { Kortix } from '../core/client/kortix';
 import type { AccountIdentity } from '../core/rest/projects-client/accounts';
 import { stripTrailingSlashes } from '../platform/strings';
 import { withWorkspaceRouteFallback } from '../core/http/workspace-routes';
+import { b64url, fromB64url } from './b64url';
 
 /** The subset of `fetch` the kit needs — assignable from any fetch-shaped function. */
 export type KortixFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -144,20 +145,6 @@ const EXPIRY_SKEW_S = 30;
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
-
-function b64url(bytes: Uint8Array): string {
-  let s = '';
-  for (const b of bytes) s += String.fromCharCode(b);
-  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-function fromB64url(value: string): Uint8Array<ArrayBuffer> {
-  const padded = value.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (value.length % 4)) % 4);
-  const s = atob(padded);
-  const out = new Uint8Array(new ArrayBuffer(s.length));
-  for (let i = 0; i < s.length; i += 1) out[i] = s.charCodeAt(i);
-  return out;
-}
 
 function randomB64url(bytes: number): string {
   const buf = new Uint8Array(bytes);

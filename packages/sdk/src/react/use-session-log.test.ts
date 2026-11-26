@@ -438,6 +438,58 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
     const promise = new Promise<SessionLogPage | null>((done) => { resolve = done; });
     return { promise, resolve };
   }
+  test('KRTX-5046: disposal aborts pending stored and live reads without repainting', async () => {
+    for (const live of [false, true]) {
+      const pending = deferredPage();
+      let signal: AbortSignal | undefined;
+      const loader: LoadSessionLogPage = async (_p, _s, query, abort) => {
+        signal = abort;
+        return !!query.live === live ? pending.promise : page();
+      };
+      mount({ loader, boxReady: live });
+      await flush();
+      act(() => renderer?.unmount());
+      renderer = null;
+      expect(signal?.aborted).toBe(true);
+      await act(async () => pending.resolve(page()));
+      await flush();
+      expect(useSyncStore.getState().sessionLogs[SESSION]).toBeUndefined();
+    }
+  });
+
+  test('KRTX-5046: disposal cancels pending retries', async () => {
+    let reads = 0;
+    mount({ loader: async () => { reads++; throw new Error('offline'); } });
+    await flush();
+    expect(timers.filter((timer) => !timer.cancelled)).toHaveLength(1);
+    act(() => renderer?.unmount());
+    renderer = null;
+    expect(timers.every((timer) => timer.cancelled)).toBe(true);
+    await runTimers();
+    expect(reads).toBe(1);
+  });
+
+  test('KRTX-5046: replacing the loader disposes the old read before the new answer', async () => {
+    const pending = deferredPage();
+    const first: LoadSessionLogPage = () => pending.promise;
+    const second: LoadSessionLogPage = async () => userPage();
+    let replace = (_loader: LoadSessionLogPage) => {};
+    render(() => {
+      const [loader, setLoader] = useState<LoadSessionLogPage>(() => first);
+      replace = (next) => setLoader(() => next);
+      useSessionLogSync(PROJECT, SESSION, { enabled: true, loader, joinStream, schedule });
+      return null;
+    });
+    await flush();
+    act(() => replace(second));
+    await flush();
+    const held = useSyncStore.getState().sessionLogs[SESSION];
+    expect(held).toBeDefined();
+    await act(async () => pending.resolve(page()));
+    await flush();
+    expect(useSyncStore.getState().sessionLogs[SESSION]).toBe(held);
+  });
+
   const userPage = (): SessionLogPage => ({ ...page(), messages: page().messages.filter((m) => m.role === 'user') });
   // What a user-only page settles to: every reply inside its span leaves; the reply after its
   // last seq is newer than the page (the journal had not posted it) and stays.

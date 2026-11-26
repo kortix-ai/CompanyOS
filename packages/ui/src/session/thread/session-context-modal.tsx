@@ -187,14 +187,8 @@ function skillOf(role: SessionLogMessage['role'], b: SessionLogBlock): string | 
   return SKILL_FILE.exec(inputString(b.input, ['filePath', 'file_path', 'path']) ?? '')?.[1];
 }
 
-export interface SkillUsage {
-  name: string;
-  tokens: number;
-  uses: number;
-}
-
 /** The skills a session loaded and what each one put in context, largest first. */
-export function estimateSkills(messages: SessionLogMessage[]): SkillUsage[] {
+export function estimateSkills(messages: SessionLogMessage[]) {
   const chars = new Map<string, { chars: number; uses: number }>();
   for (const msg of messages) {
     for (const b of msg.blocks) {

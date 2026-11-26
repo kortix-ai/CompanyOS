@@ -202,6 +202,9 @@ function renderAgent(
   return `  ${pad(agent.name, width)}   ${C.dim}${where}${C.reset}   ${modelText}${tail}\n`;
 }
 
+/** GET /projects/:id/model-access: the explicit denials PUT /model-defaults enforces. */
+type ModelAccess = { disabledProviders?: string[]; disabledModels?: string[] };
+
 /** What `ls` says when no agent is pinned. "Pin one" only when the caller can
  *  run a model: otherwise PUT /model-defaults refuses every id with 409
  *  model_not_servable (a free-tier account with no provider, KRTX-1665), so
@@ -210,9 +213,6 @@ function renderAgent(
  *  connected Claude account, that /model-access does not deny. The picker's
  *  `enabled` also folds in display-only hiding, which PUT ignores, so it is
  *  not used. An unreadable picker fails open to "Pin one". */
-/** GET /projects/:id/model-access: the explicit denials PUT /model-defaults enforces. */
-type ModelAccess = { disabledProviders?: string[]; disabledModels?: string[] };
-
 async function noPinsHint(ctx: ProjectCtx): Promise<string> {
   let runnable = true;
   try {
@@ -223,18 +223,15 @@ async function noPinsHint(ctx: ProjectCtx): Promise<string> {
         models?: Record<string, { available?: boolean }>;
         claudeSubscription?: { models?: Array<{ id: string; connected?: boolean }> };
       }>(`${base}/model-picker`),
-      // An API without the route has no denials.
+      // Unreadable (an API without the route): no known denials, fail open.
       ctx.client
         .get<ModelAccess>(`${base}/model-access`)
         .catch((): ModelAccess => ({})),
     ]);
-    // The API's modelAccessAllows: an id is denied by its provider or itself.
+    // The API's modelAccessAllows on a wire id: denied by its provider or itself.
     const allowed = (id: string): boolean => {
-      const wire = id.replace(/^kortix\//, '');
-      const provider = wire.includes('/') ? wire.slice(0, wire.indexOf('/')) : 'kortix';
-      return (
-        !access.disabledProviders?.includes(provider) && !access.disabledModels?.includes(wire)
-      );
+      const provider = id.includes('/') ? id.slice(0, id.indexOf('/')) : 'kortix';
+      return !access.disabledProviders?.includes(provider) && !access.disabledModels?.includes(id);
     };
     runnable =
       Object.entries(picker.models ?? {}).some(

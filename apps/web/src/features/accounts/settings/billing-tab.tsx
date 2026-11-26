@@ -1,5 +1,7 @@
 'use client';
 
+import { ComputeBillingExplainer } from '@/features/billing/compute-billing-explainer';
+
 import { useAccountDetail } from '@kortix/ui/internal/account-hub/use-account-detail';
 import { Button } from '@kortix/ui/button';
 import { ConfirmDialog } from '@kortix/ui/confirm-dialog';
@@ -192,7 +194,10 @@ export function BillingTab({
           ) : null}
         </>
       ) : accountState ? (
-        <PlanCard state={accountState} />
+        <>
+          <ComputeBillingExplainer />
+          <PlanCard state={accountState} />
+        </>
       ) : null}
 
       <SettingsRowGroup>

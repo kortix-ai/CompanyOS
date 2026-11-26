@@ -1,0 +1,56 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { describe, expect, mock, test } from 'bun:test';
+import { createElement, type ReactNode } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+
+// Only replace the portal transport: render the actual modal children in SSR.
+mock.module('@kortix/ui/modal', () => {
+  const Box = ({ children }: { children?: ReactNode }) =>
+    createElement('div', null, children);
+  return {
+    Modal: Box,
+    ModalContent: Box,
+    ModalBody: Box,
+    ModalHeader: Box,
+    ModalTitle: Box,
+    ModalDescription: Box,
+    ModalClose: Box,
+    ModalFooter: Box,
+    ModalTrigger: Box,
+    ModalPortal: Box,
+    ModalOverlay: Box,
+    ModalContentInner: Box,
+  };
+});
+mock.module('@/features/providers/auth-provider', () => ({ useAuth: () => ({ user: null }) }));
+mock.module('next/navigation', () => ({
+  useSearchParams: () => new URLSearchParams(),
+  usePathname: () => '/',
+}));
+const { UpgradePlansModal } = await import('./global-upgrade-modal');
+
+describe('open pricing dialog computer explanation', () => {
+  for (const [name, props] of [
+    ['plans', { hasSubscription: false }],
+    ['plan-first', { hasSubscription: true }],
+    ['topup-first', { reason: 'insufficient_credits' }],
+    ['payment-failed', { billingState: 'payment_failed' as const }],
+  ] as const) {
+    test(`${name} renders computer rate, concurrent hours, and separate charges`, () => {
+      const html = renderToStaticMarkup(
+        <QueryClientProvider client={new QueryClient()}>
+          <UpgradePlansModal open onOpenChange={() => {}} {...props} />
+        </QueryClientProvider>,
+      )
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ');
+      expect(html).toContain('Every session starts an agent computer');
+      expect(html).toContain('including idle time');
+      expect(html).toContain('$0.11');
+      expect(html).toContain('3 computers × 1 hour = 3 computer-hours');
+      expect(html).toContain('Model usage is separate');
+      if (name === 'plans') expect(html).toContain('Continue on Free');
+      if (name === 'payment-failed') expect(html).toContain('Update payment method');
+    });
+  }
+});

@@ -1,5 +1,7 @@
 'use client';
 
+import { ComputeBillingExplainer } from '@/features/billing/compute-billing-explainer';
+
 import { FreeGrantNotice } from '@/features/billing/free-grant-notice';
 import { PlanChanger } from '@/features/billing/plan-card';
 import { PricingPlanCard } from '@/features/billing/pricing-plan-card';
@@ -163,6 +165,9 @@ export function UpgradePlansModal({
 
         {/* The /pricing plans band: hairlines top and bottom, one between the columns. */}
         <ModalBody className="p-0">
+          <div className="px-6 pb-6 md:px-8">
+            <ComputeBillingExplainer />
+          </div>
           <div className="divide-border grid grid-cols-1 divide-y border-y md:grid-cols-2 md:divide-x md:divide-y-0">
             {plans.map((plan) => (
               <UpgradePlanCard
@@ -451,6 +456,10 @@ function CreditTopUpModal({
             <FreeGrantNotice state={accountState} className="text-center" />
           </div>
         )}
+
+        <div className="border-t px-6 py-4">
+          <ComputeBillingExplainer />
+        </div>
 
         {/* A voluntary visit keeps the way to invoices, the card and
             cancelling. The out-of-credits view stays one action. */}

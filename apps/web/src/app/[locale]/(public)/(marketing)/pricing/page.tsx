@@ -1,14 +1,16 @@
 'use client';
 
+import { ComputeBillingExplainer } from '@/features/billing/compute-billing-explainer';
+
 import Link from '@/components/site-link';
 import type { PricingPlan, PricingPlanId } from '@/features/billing/pricing-plans';
 import { usePricingPlans } from '@/features/billing/use-pricing-plans';
-import { CompareTable } from '@/features/marketing/pricing/compare-table';
 import { useRequestDemo } from '@/features/contact/request-demo-provider';
 import { useEnglishOnly } from '@/features/marketing/kit/english-only';
 import { MarketingButton } from '@/features/marketing/kit/marketing-button';
 import { Band, PageFrame } from '@/features/marketing/kit/page-frame';
 import { WorksWithStrip } from '@/features/marketing/landing-sections/works-with-strip';
+import { CompareTable } from '@/features/marketing/pricing/compare-table';
 import { CreditLadder } from '@/features/marketing/pricing/credit-ladder';
 import { useLocale, useTranslations } from '@/i18n/use-translations';
 import { safeJsonForHtml } from '@/lib/security/safe-json';
@@ -29,7 +31,7 @@ import {
 } from '@kortix/ui/internal/billing/compute-pricing';
 import { SolidCheckIcon } from '@kortix/ui/internal/icons/solid-check-icon';
 import { PlusIcon } from '@phosphor-icons/react';
-import { Fragment, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 
 const START_URL = '/auth';
 
@@ -242,6 +244,10 @@ export default function PricingPage() {
               Your first agent runs in minutes. You pay for the work, not per seat.
             </span>
           </h1>
+        </div>
+
+        <div className="px-8 pb-10 lg:px-28">
+          <ComputeBillingExplainer />
         </div>
 
         <Band className="divide-border grid grid-cols-1 divide-y lg:grid-cols-3 lg:divide-x lg:divide-y-0">

@@ -390,3 +390,25 @@ describe('BillingTab — a canceled subscription with credits left', () => {
     expect(html).toContain('Cancel subscription');
   });
 });
+
+test('the plan-first billing pane explains the running computer before purchase', () => {
+  accountStateData = {
+    credits: { total: 2 },
+    can_manage_billing: true,
+    plan: { key: 'free', family: 'free', label: 'Free', sublabel: null, monthly_usd: null },
+    subscription: { status: 'none' },
+  };
+  const text = renderToStaticMarkup(
+    createElement(BillingTab, {
+      returnUrl: '/settings/plan',
+      isActive: true,
+      showWallet: false,
+    }),
+  )
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ');
+  expect(text).toContain('Every session starts an agent computer');
+  expect(text).toContain('including idle time');
+  expect(text).toContain('$0.11');
+  expect(text).toContain('Subscribe');
+});

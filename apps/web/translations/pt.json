@@ -2903,7 +2903,7 @@
         },
         "credit": {
           "question": "O que um crédito compra?",
-          "answer": "1 crédito equivale a US$ 0,01. Os créditos pagam o computador do agente, cobrado por segundo e por recurso: {vcpuRate} por vCPU por hora, {memoryRate} por GB de RAM por hora, {diskRate} por GB de armazenamento por mês. A máquina padrão de {spec} usa cerca de {creditsPerHour} créditos por hora, então 1 crédito equivale a cerca de {minutes} minutos. Um computador parado não consome computação. Seus arquivos armazenados são cobrados como armazenamento. Os créditos também pagam os modelos da Kortix, pelo preço base do provedor mais {fee}% de taxa de plataforma. Sua própria chave de API é gratuita nos primeiros US$ 1.000 de uso de modelos por mês, e depois 5% do preço do provedor são pagos com créditos. Uma assinatura do ChatGPT não consome créditos."
+          "answer": "1 crédito equivale a US$ 0,01. Os créditos pagam o computador do agente, cobrado por segundo e por recurso: {vcpuRate} por vCPU por hora, {memoryRate} por GB de RAM por hora, {diskRate} por GB de armazenamento por mês. A máquina padrão de {spec} usa cerca de {creditsPerHour} créditos por hora, então 1 crédito equivale a cerca de {minutes} minutos. Um computador parado não consome computação. Seus arquivos armazenados são cobrados como armazenamento. Os créditos também pagam os modelos da Kortix, pelo preço base do provedor mais {fee}% de taxa de plataforma. Seu provedor cobra diretamente pelo uso da sua chave de API. A Kortix isenta sua taxa BYOK nos primeiros US$ 1.000 de uso mensal a preço de tabela e depois cobra 5% por solicitação, salvo isenção. Uma assinatura do ChatGPT não usa créditos para chamadas de modelo; as cobranças do computador em execução e do armazenamento continuam."
         },
         "amounts": {
           "question": "Quanto pago por mês?",
@@ -2919,7 +2919,7 @@
         },
         "models": {
           "question": "Os modelos consomem créditos?",
-          "answer": "Os modelos da Kortix, e suas próprias chaves de API acima de US$ 1.000 de uso de modelos por mês. Os modelos da Kortix custam o preço base do provedor mais {fee}% de taxa de plataforma, pagos com créditos, e o app mostra os preços base. Com sua própria chave de API, o uso do modelo vai para o seu provedor: os primeiros US$ 1.000 por mês são gratuitos, e depois 5% do preço do provedor são pagos com créditos. Uma assinatura do ChatGPT conectada não consome créditos."
+          "answer": "Seu provedor cobra diretamente pelo uso de modelos. A Kortix isenta sua taxa BYOK nos primeiros US$ 1.000 de uso a preço de tabela por mês civil UTC e depois cobra 5% por solicitação em créditos. Licenças Enterprise ou exceções da conta podem isentar essa taxa. As cobranças de computador e armazenamento continuam. As chamadas de modelos gerenciados pela Kortix custam o preço base do provedor mais {fee}% de taxa de plataforma. Conecte sua assinatura do ChatGPT para chamadas de modelo sem cobrança da Kortix por chamada. As cobranças do computador em execução e do armazenamento continuam."
         },
         "topup": {
           "question": "Posso adicionar créditos no meio do mês?",
@@ -2949,18 +2949,18 @@
       "hours": {
         "eyebrow": "Horas de agente",
         "title": "1 crédito equivale a cerca de {minutes} minutos de computador do agente",
-        "description": "Os créditos pagam o computador do agente: a máquina na nuvem onde seu agente executa código, navega e edita arquivos. Ele é cobrado por segundo enquanto roda e não consome computação parado. Seus arquivos armazenados são cobrados como armazenamento.",
+        "description": "Seu agente usa este computador, inclusive em tarefas que usam apenas conectores. A computação é cobrada enquanto o computador está em execução, inclusive quando está ocioso, não apenas quando usa um navegador ou terminal.",
         "rate": {
           "value": "1 crédito = US$ 0,01",
           "note": "Cada nível oferece créditos a esta taxa."
         },
         "hour": {
           "value": "{creditsPerHour} créditos = 1 hora",
-          "note": "De computador do agente ({spec}). Cobrado por segundo. Nada enquanto está parado."
+          "note": "Do computador padrão do agente ({spec}), incluindo tempo ocioso em execução. Cobrado por segundo. A suspensão interrompe a computação; arquivos armazenados ainda podem gerar cobranças de armazenamento."
         },
         "tier": {
           "value": "{tierUsd} por mês ≈ {hours} horas",
-          "note": "De computador do agente, quando o uso de modelos roda nas suas próprias chaves."
+          "note": "Horas de execução combinadas no tamanho padrão, sem incluir uso de modelos, taxas BYOK e armazenamento. Computadores simultâneos compartilham esse total."
         },
         "rates": {
           "title": "Preços de computação",
@@ -2984,21 +2984,29 @@
         "title": "Os modelos são cobrados à parte do computador do agente",
         "description": "Os créditos pagam o computador do agente. O custo de uma chamada de modelo depende da origem do modelo.",
         "keys": {
-          "tag": "Grátis até US$ 1.000/mês",
+          "tag": "Taxa BYOK isenta até US$ 1.000/mês",
           "title": "Suas próprias chaves de API",
-          "body": "Adicione uma chave da Anthropic, da OpenAI ou de qualquer outro provedor. O uso do modelo vai direto para o seu provedor. Os primeiros US$ 1.000 por mês são gratuitos, e depois a Kortix adiciona 5%, pagos com créditos."
+          "body": "Seu provedor cobra diretamente pelo uso de modelos. A Kortix isenta sua taxa BYOK nos primeiros US$ 1.000 de uso a preço de tabela por mês civil UTC e depois cobra 5% por solicitação em créditos. Licenças Enterprise ou exceções da conta podem isentar essa taxa. As cobranças de computador e armazenamento continuam."
         },
         "chatgpt": {
-          "tag": "Sem créditos",
+          "tag": "Sem créditos por chamadas de modelo",
           "title": "Sua assinatura do ChatGPT",
-          "body": "Conecte sua assinatura do ChatGPT. Seus agentes a usam nas chamadas de modelo e nenhum crédito é gasto."
+          "body": "Conecte sua assinatura do ChatGPT para chamadas de modelo sem cobrança da Kortix por chamada. As cobranças do computador em execução e do armazenamento continuam."
         },
         "kortix": {
           "tag": "Pago com créditos",
           "title": "Modelos da Kortix",
           "body": "Sem chaves para gerenciar. Cada chamada custa o preço base do provedor mais {fee}% de taxa de plataforma, pagos com créditos. O app mostra os preços base."
         },
-        "summary": "Com suas próprias chaves, os créditos pagam o computador do agente e 5% do uso de modelos acima de US$ 1.000 por mês."
+        "summary": "As cobranças de modelos são separadas das horas do computador em execução e do armazenamento. Assinaturas e suas próprias chaves não eliminam as cobranças do computador."
+      },
+      "computer": {
+        "title": "Cada sessão inicia um computador do agente",
+        "running": "Seu agente usa este computador, inclusive em tarefas que usam apenas conectores. A computação é cobrada enquanto o computador está em execução, inclusive quando está ocioso, não apenas quando usa um navegador ou terminal.",
+        "rate": "Computador padrão ({spec}): ≈ {rate} por hora em execução (≈ {credits} créditos). Recursos reservados cobrados por segundo; outros tamanhos de computador têm custos diferentes.",
+        "concurrent": "As horas se somam: 3 computadores × 1 hora = 3 horas de computador, ≈ {concurrent} de computação. Uso de modelos e arquivos armazenados são cobrados à parte.",
+        "sleep": "A suspensão interrompe as cobranças de computação. Arquivos armazenados ainda podem gerar cobranças de armazenamento. Fechar o chat não é o mesmo que suspender o computador.",
+        "models": "O uso de modelos é separado. Uma assinatura do ChatGPT conectada não tem cobrança da Kortix por chamadas de modelo; as cobranças do computador continuam. Com sua própria chave de API, você paga ao provedor e qualquer taxa BYOK aplicável da Kortix."
       }
     },
     "access": {

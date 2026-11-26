@@ -2903,7 +2903,7 @@
         },
         "credit": {
           "question": "Cosa si può comprare con un credito?",
-          "answer": "1 credito vale 0,01 $. I crediti pagano il computer dell'agente, fatturato al secondo per risorsa: {vcpuRate} per vCPU all'ora, {memoryRate} per GB di RAM all'ora, {diskRate} per GB di archiviazione al mese. La macchina predefinita da {spec} usa circa {creditsPerHour} crediti all'ora, quindi 1 credito vale circa {minutes} minuti. Un computer fermo non consuma elaborazione. I suoi file salvati sono fatturati come archiviazione. I crediti pagano anche i modelli Kortix, al prezzo base del provider più una commissione di piattaforma del {fee}%. La tua chiave API è gratuita per i primi 1.000 $ di uso dei modelli al mese, poi il 5% del prezzo del provider viene pagato con i crediti. Un abbonamento ChatGPT non consuma crediti."
+          "answer": "1 credito vale 0,01 $. I crediti pagano il computer dell'agente, fatturato al secondo per risorsa: {vcpuRate} per vCPU all'ora, {memoryRate} per GB di RAM all'ora, {diskRate} per GB di archiviazione al mese. La macchina predefinita da {spec} usa circa {creditsPerHour} crediti all'ora, quindi 1 credito vale circa {minutes} minuti. Un computer fermo non consuma elaborazione. I suoi file salvati sono fatturati come archiviazione. I crediti pagano anche i modelli Kortix, al prezzo base del provider più una commissione di piattaforma del {fee}%. Il provider fattura direttamente l'uso della tua chiave API. Kortix rinuncia alla commissione BYOK sui primi 1.000 $ di uso mensile a prezzo di listino, poi addebita il 5% per richiesta salvo esenzione. Un abbonamento ChatGPT non usa crediti per le chiamate ai modelli; i costi del computer in esecuzione e dell'archiviazione restano."
         },
         "amounts": {
           "question": "Quanto pago ogni mese?",
@@ -2919,7 +2919,7 @@
         },
         "models": {
           "question": "I modelli consumano crediti?",
-          "answer": "I modelli Kortix, e le tue chiavi API oltre 1.000 $ di uso dei modelli al mese. I modelli Kortix costano il prezzo base del provider più una commissione di piattaforma del {fee}%, pagata con i crediti, e l'app mostra i prezzi base. Con la tua chiave API, l'uso del modello va al tuo provider: i primi 1.000 $ al mese sono gratuiti, poi il 5% del prezzo del provider viene pagato con i crediti. Un abbonamento ChatGPT collegato non consuma crediti."
+          "answer": "Il provider fattura direttamente l'uso dei modelli. Kortix rinuncia alla commissione BYOK sui primi 1.000 $ di uso a prezzo di listino per mese di calendario UTC, poi addebita il 5% per richiesta in crediti. Una licenza Enterprise o eccezioni dell'account possono eliminare questa commissione. I costi del computer e dell'archiviazione restano. Le chiamate ai modelli gestiti da Kortix costano il prezzo base del provider più una commissione di piattaforma del {fee}%. Collega il tuo abbonamento ChatGPT per chiamate ai modelli senza costi Kortix per chiamata. I costi del computer in esecuzione e dell'archiviazione restano."
         },
         "topup": {
           "question": "Posso aggiungere crediti a metà mese?",
@@ -2949,18 +2949,18 @@
       "hours": {
         "eyebrow": "Ore di agente",
         "title": "1 credito vale circa {minutes} minuti di computer dell'agente",
-        "description": "I crediti pagano il computer dell'agente: la macchina cloud dove il tuo agente esegue codice, naviga e modifica file. Viene fatturato al secondo mentre è in esecuzione e non consuma elaborazione da fermo. I suoi file salvati sono fatturati come archiviazione.",
+        "description": "Il tuo agente usa questo computer anche per le attività che richiedono solo connettori. Il calcolo viene fatturato mentre il computer è in esecuzione, anche quando è inattivo, non solo quando usa il browser o il terminale.",
         "rate": {
           "value": "1 credito = 0,01 $",
           "note": "Ogni livello offre crediti a questa tariffa."
         },
         "hour": {
           "value": "{creditsPerHour} crediti = 1 ora",
-          "note": "Di computer dell'agente ({spec}). Fatturato al secondo. Nulla da fermo."
+          "note": "Del computer predefinito dell'agente ({spec}), incluso il tempo di inattività mentre è in esecuzione. Fatturato al secondo. La sospensione ferma il calcolo; i file salvati possono ancora generare costi di archiviazione."
         },
         "tier": {
           "value": "{tierUsd} al mese ≈ {hours} ore",
-          "note": "Di computer dell'agente, quando l'uso dei modelli passa dalle tue chiavi."
+          "note": "Ore di esecuzione complessive alla dimensione predefinita, prima di uso dei modelli, commissioni BYOK e archiviazione. I computer in esecuzione simultanea condividono questo totale."
         },
         "rates": {
           "title": "Tariffe di calcolo",
@@ -2984,21 +2984,29 @@
         "title": "I modelli sono fatturati separatamente dal computer dell'agente",
         "description": "I crediti pagano il computer dell'agente. Il costo di una chiamata a un modello dipende da dove arriva il modello.",
         "keys": {
-          "tag": "Gratis fino a 1.000 $/mese",
+          "tag": "Commissione BYOK esente fino a 1.000 $/mese",
           "title": "Le tue chiavi API",
-          "body": "Aggiungi una chiave di Anthropic, OpenAI o di qualsiasi altro provider. L'uso del modello va direttamente al tuo provider. I primi 1.000 $ al mese sono gratuiti, poi Kortix aggiunge il 5%, pagato con i crediti."
+          "body": "Il provider fattura direttamente l'uso dei modelli. Kortix rinuncia alla commissione BYOK sui primi 1.000 $ di uso a prezzo di listino per mese di calendario UTC, poi addebita il 5% per richiesta in crediti. Una licenza Enterprise o eccezioni dell'account possono eliminare questa commissione. I costi del computer e dell'archiviazione restano."
         },
         "chatgpt": {
-          "tag": "Nessun credito",
+          "tag": "Nessun credito per le chiamate ai modelli",
           "title": "Il tuo abbonamento ChatGPT",
-          "body": "Collega il tuo abbonamento ChatGPT. I tuoi agenti lo usano per le chiamate ai modelli e non viene speso alcun credito."
+          "body": "Collega il tuo abbonamento ChatGPT per chiamate ai modelli senza costi Kortix per chiamata. I costi del computer in esecuzione e dell'archiviazione restano."
         },
         "kortix": {
           "tag": "Pagato con i crediti",
           "title": "Modelli Kortix",
           "body": "Nessuna chiave da gestire. Ogni chiamata costa il prezzo base del provider più una commissione di piattaforma del {fee}%, pagata con i crediti. L'app mostra i prezzi base."
         },
-        "summary": "Con le tue chiavi, i crediti pagano il computer dell'agente e il 5% dell'uso dei modelli oltre 1.000 $ al mese."
+        "summary": "I costi dei modelli sono separati dalle ore di esecuzione del computer e dall'archiviazione. Abbonamenti e chiavi proprie non eliminano i costi del computer."
+      },
+      "computer": {
+        "title": "Ogni sessione avvia un computer dell'agente",
+        "running": "Il tuo agente usa questo computer anche per le attività che richiedono solo connettori. Il calcolo viene fatturato mentre il computer è in esecuzione, anche quando è inattivo, non solo quando usa il browser o il terminale.",
+        "rate": "Computer predefinito ({spec}): ≈ {rate} per ora di esecuzione (≈ {credits} crediti). Risorse riservate fatturate al secondo; computer di altre dimensioni hanno costi diversi.",
+        "concurrent": "Le ore si sommano: 3 computer × 1 ora = 3 ore-computer, ≈ {concurrent} di calcolo. Uso dei modelli e file salvati sono extra.",
+        "sleep": "La sospensione interrompe i costi di calcolo. I file salvati possono continuare a generare costi di archiviazione. Chiudere la chat non equivale a sospendere il computer.",
+        "models": "L'uso dei modelli è separato. Un abbonamento ChatGPT collegato non comporta costi Kortix per le chiamate ai modelli; i costi del computer restano. Con la tua chiave API paghi il provider, più l'eventuale commissione BYOK di Kortix."
       }
     },
     "access": {

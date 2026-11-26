@@ -146,3 +146,29 @@ describe('full marketing pages render in the landing frame', () => {
     expect(document.querySelectorAll('main section').length).toBeGreaterThanOrEqual(4);
   });
 });
+
+test('pricing explains the running computer before the purchase choices', () => {
+  const document = dom(renderToStaticMarkup(<PricingPage />));
+  const plans = document.querySelector('#plans');
+  const copy = plans?.textContent ?? '';
+  expect(copy).toContain('Every session starts an agent computer');
+  expect(copy).toContain('including connector-only tasks');
+  expect(copy).toContain('including idle time');
+  expect(copy).toContain('$0.11');
+  expect(copy).toContain('3 computers × 1 hour = 3 computer-hours');
+  expect(copy).toContain('$0.33');
+  expect(copy).toContain('Model usage is separate');
+});
+
+test('pricing model cards and FAQ distinguish provider bills, fee waivers, and compute', () => {
+  const document = dom(renderToStaticMarkup(<PricingPage />));
+  const text = document.body.textContent ?? '';
+  expect(text).toContain('Your provider bills model usage directly');
+  expect(text).toContain('$1,000 of list-price usage per UTC calendar month');
+  expect(text).toContain('5% per request from credits');
+  expect(text).toContain('Licensed Enterprise or account overrides can waive this fee');
+  expect(text).toContain('provider\'s base price plus a 5.5% platform fee');
+  expect(text).toContain('without a Kortix model-call charge');
+  expect(text).toContain('Running computer and storage charges still apply');
+  expect(text).not.toContain('no credits are spent');
+});

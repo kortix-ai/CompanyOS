@@ -249,7 +249,15 @@ function dropTags(html: string): string {
  */
 const emailPort: ChannelPort = {
   async notify(target, notice) {
-    if (notice.kind === 'create_failed' && notice.error.body.code === 'project_archived') await replyNotAccepting(target);
+    if (notice.kind !== 'create_failed') return;
+    if (notice.error.body.code === 'project_archived') {
+      await replyNotAccepting(target);
+      return;
+    }
+    // The webhook acknowledged storage, not execution. Retain a refusal on the
+    // durable inbox rather than marking an email with no session as done. Do
+    // not send status mail to an untrusted sender or persist manifest details.
+    throw new Error(`Email session creation failed: ${notice.error.body.code ?? notice.error.status}`);
   },
   async prepareFollowUp(target, thread) {
     const inboxId = target.workspaceId;

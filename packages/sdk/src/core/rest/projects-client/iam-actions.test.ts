@@ -2,11 +2,11 @@
  * The project leaf catalog every host asks `useCan` / `useCans` about
  * (KRTX-1720). The API rejects an unknown leaf with 400, so a host that spells
  * a leaf by hand gets no verdict at all. These tests pin the catalog to the
- * API's own `PROJECT_ACTIONS`, and the trigger controls to the leaf each
+ * canonical live `PROJECT_ACTIONS`, and the trigger controls to the leaf each
  * trigger route asserts.
  */
 import { describe, expect, test } from 'bun:test';
-import { PROJECT_ACTIONS as API_PROJECT_ACTIONS } from '../../../../../../apps/api/src/iam/actions';
+import { PROJECT_ACTIONS as LIVE_PROJECT_ACTIONS } from '@kortix/sdk/iam-actions';
 import { WORKSPACE_ACTION_BY_LEGACY as SHARED_WORKSPACE_ACTION_BY_LEGACY } from '../../../../../shared/src/workspace-actions';
 import * as root from '../../../index';
 import {
@@ -25,11 +25,11 @@ import type { ReviewItem } from './review-items';
 const allow = (allowed: boolean) => ({ allowed });
 
 describe('PROJECT_ACTIONS', () => {
-  test('is the API catalog, key for key and leaf for leaf, plus the deprecated Rooms leaves', () => {
+  test('is the canonical live catalog, key for key and leaf for leaf, plus the deprecated Rooms leaves', () => {
     // Rooms were removed (2026-11): the SDK keeps its two leaves, deprecated, until the next major.
     const { PROJECT_ROOM_READ, PROJECT_ROOM_WRITE, ...live } = PROJECT_ACTIONS;
     expect([PROJECT_ROOM_READ, PROJECT_ROOM_WRITE]).toEqual(['project.room.read', 'project.room.write']);
-    expect(live).toEqual(API_PROJECT_ACTIONS);
+    expect(live).toEqual(LIVE_PROJECT_ACTIONS);
   });
 
   test('the root entry exports the catalog, the trigger controls and the review controls', () => {

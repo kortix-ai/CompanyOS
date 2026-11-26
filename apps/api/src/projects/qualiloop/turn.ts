@@ -8,8 +8,8 @@
  * before the reply returns (QualiLoop looks for it as soon as it has the reply).
  */
 import { gzipSync } from 'node:zlib';
-import { projectSessions, sessionTurns } from '@kortix/db';
-import { and, desc, eq, notInArray, sql } from 'drizzle-orm';
+import { projectSessions, sessionLogMessages, sessionTurns } from '@kortix/db';
+import { and, desc, eq, gt, ne, sql } from 'drizzle-orm';
 import { config } from '../../config';
 import { logger } from '../../lib/logger';
 import { db } from '../../shared/db';
@@ -35,44 +35,55 @@ export class QualiloopTurnError extends Error {}
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** The session's turn tokens so far: the turn this request starts is the one not among them. */
-async function turnTokens(sessionId: string): Promise<string[]> {
-  const rows = await db.select({ token: sessionTurns.turnToken }).from(sessionTurns).where(eq(sessionTurns.sessionId, sessionId));
-  return rows.map((row) => row.token);
+/** The text of the user messages after `afterSeq`: the prompts delivered since. */
+async function userTextsAfter(sessionId: string, afterSeq: number): Promise<string[]> {
+  const rows = await db
+    .select({ text: sql<string | null>`(select string_agg(b->>'text', '') from jsonb_array_elements(${sessionLogMessages.record}->'blocks') b where b->>'type' = 'text')` })
+    .from(sessionLogMessages)
+    .where(and(eq(sessionLogMessages.sessionId, sessionId), eq(sessionLogMessages.role, 'user'), gt(sessionLogMessages.seq, afterSeq)));
+  return rows.map((row) => row.text ?? '');
 }
 
 /**
- * The turn this request started, once it ended and its log is stored. Turns
- * are told apart by token, not by start time: `started_at` has microseconds
- * and a JS Date only milliseconds, so `> previous start` matched the previous turn.
+ * Waits until the agent answered `prompt`: the prompt is in the session log, no
+ * turn is open, and the last turn's log is stored. The prompt does not always
+ * start a turn of its own: sent while a turn runs (a colleague's report woke
+ * the session), it joins that turn. Waiting for a new turn token then waited
+ * 570 s and answered QualiLoop with an empty reply (Core run 3, turn 6).
  */
-async function awaitTurnEnd(sessionId: string, before: string[], deadline: number): Promise<void> {
-  let endedAt: number | null = null;
+async function awaitAnswer(sessionId: string, lastSeq: number, prompt: string, deadline: number): Promise<void> {
+  const head = prompt.trim().slice(0, 200);
+  let settledAt: number | null = null;
   while (Date.now() < deadline) {
-    const rows = await db
-      .select({ state: sessionTurns.state, endReason: sessionTurns.endReason, endError: sessionTurns.endError, logDurableAt: sessionTurns.logDurableAt })
+    const [open] = await db
+      .select({ token: sessionTurns.turnToken })
       .from(sessionTurns)
-      .where(before.length ? and(eq(sessionTurns.sessionId, sessionId), notInArray(sessionTurns.turnToken, before)) : eq(sessionTurns.sessionId, sessionId))
-      .orderBy(desc(sessionTurns.startedAt))
-      .limit(20);
-    // A delivered prompt can leave an `abandoned` row beside the real turn: the agent is done when no turn is open.
-    if (rows.length && rows.every((row) => row.state === 'ended')) {
-      const turn = rows.find((row) => row.endReason === 'completed') ?? rows[0]!;
-      if (turn.endReason === 'failed') {
-        throw new QualiloopTurnError(`The agent's turn failed: ${turn.endError?.message ?? 'no detail'}`);
+      .where(and(eq(sessionTurns.sessionId, sessionId), ne(sessionTurns.state, 'ended')))
+      .limit(1);
+    const delivered = !open && (await userTextsAfter(sessionId, lastSeq)).some((text) => text.includes(head));
+    if (!delivered) {
+      settledAt = null;
+    } else {
+      const [last] = await db
+        .select({ endReason: sessionTurns.endReason, endError: sessionTurns.endError, logDurableAt: sessionTurns.logDurableAt })
+        .from(sessionTurns)
+        .where(eq(sessionTurns.sessionId, sessionId))
+        .orderBy(desc(sessionTurns.startedAt))
+        .limit(1);
+      if (last?.endReason === 'failed') {
+        throw new QualiloopTurnError(`The agent's turn failed: ${last.endError?.message ?? 'no detail'}`);
       }
-      endedAt ??= Date.now();
-      if (turn.logDurableAt || Date.now() - endedAt > LOG_WAIT_MS) return;
+      settledAt ??= Date.now();
+      if (last?.logDurableAt || Date.now() - settledAt > LOG_WAIT_MS) return;
     }
     await sleep(POLL_MS);
   }
   throw new QualiloopTurnError(`The agent did not finish the turn within ${TURN_TIMEOUT_MS / 1000} s.`);
 }
 
-/** Where a turn starts: the log position and the turns before its prompt. */
+/** Where a turn starts: the last log message before its prompt. */
 interface TurnMark {
   lastSeq: number;
-  before: string[];
 }
 
 /**
@@ -134,7 +145,7 @@ export async function runQualiloopTurn(input: { conversationId: string; turnInde
   const sessionId = kortixSessionIdFor(projectId, input.conversationId);
   const [existing] = await db.select({ id: projectSessions.sessionId }).from(projectSessions)
     .where(eq(projectSessions.sessionId, sessionId)).limit(1);
-  let mark: TurnMark = { lastSeq: 0, before: [] };
+  let mark: TurnMark = { lastSeq: 0 };
   if (!existing) {
     // The first prompt starts the session, so its claim is written with it. A retry
     // while the create runs gets the same session back from the idempotency key.
@@ -151,7 +162,7 @@ export async function runQualiloopTurn(input: { conversationId: string; turnInde
       throw new QualiloopTurnError(String(created.error.body?.error ?? created.error.body?.message ?? 'The session could not start.'));
     }
   } else {
-    mark = { lastSeq: Math.max(0, ...(await logTail(sessionId)).map((m) => m.seq)), before: await turnTokens(sessionId) };
+    mark = { lastSeq: Math.max(0, ...(await logTail(sessionId)).map((m) => m.seq)) };
     const earlier = await claimTurn(sessionId, input.turnIndex, mark);
     if (earlier) {
       mark = earlier;
@@ -169,9 +180,9 @@ export async function runQualiloopTurn(input: { conversationId: string; turnInde
       drainSessionLifecycleQueue({ idempotencyKey, burst: false }).catch(() => {});
     }
   }
-  const { lastSeq, before } = mark;
+  const { lastSeq } = mark;
 
-  await awaitTurnEnd(sessionId, before, startedAtMs + TURN_TIMEOUT_MS);
+  await awaitAnswer(sessionId, lastSeq, input.prompt, startedAtMs + TURN_TIMEOUT_MS);
   const log = await logTail(sessionId);
   // The session's system prompt rides in a `context` message at the start: every model call of the turn saw it.
   const systemPrompt = log.find((m) => m.role === 'system')?.blocks.map((b) => (b.type === 'text' ? b.text : '')).join('') ?? null;

@@ -2903,7 +2903,7 @@
         },
         "credit": {
           "question": "Que permet d'acheter un crédit ?",
-          "answer": "1 crédit vaut 0,01 $. Les crédits paient l'ordinateur d'agent, facturé à la seconde et par ressource : {vcpuRate} par vCPU et par heure, {memoryRate} par Go de RAM et par heure, {diskRate} par Go de stockage et par mois. La machine par défaut de {spec} consomme environ {creditsPerHour} crédits par heure, soit environ {minutes} minutes par crédit. Un ordinateur à l'arrêt ne consomme pas de calcul. Ses fichiers stockés sont facturés comme stockage. Les crédits paient aussi les modèles Kortix, au prix de base du fournisseur plus {fee} % de frais de plateforme. Votre propre clé d'API est gratuite pour les premiers 1 000 $ d'usage de modèles par mois, puis 5 % du prix du fournisseur sont payés en crédits. Un abonnement ChatGPT ne consomme aucun crédit."
+          "answer": "1 crédit vaut 0,01 $. Les crédits paient l'ordinateur d'agent, facturé à la seconde et par ressource : {vcpuRate} par vCPU et par heure, {memoryRate} par Go de RAM et par heure, {diskRate} par Go de stockage et par mois. La machine par défaut de {spec} consomme environ {creditsPerHour} crédits par heure, soit environ {minutes} minutes par crédit. Un ordinateur à l'arrêt ne consomme pas de calcul. Ses fichiers stockés sont facturés comme stockage. Les crédits paient aussi les modèles Kortix, au prix de base du fournisseur plus {fee} % de frais de plateforme. Votre fournisseur facture directement l'usage de votre clé API. Kortix exonère ses frais BYOK sur les premiers 1 000 $ d'usage mensuel au prix catalogue, puis facture 5 % par requête sauf exonération. Un abonnement ChatGPT ne consomme aucun crédit pour les appels de modèle ; les frais d'ordinateur en fonctionnement et de stockage restent dus."
         },
         "amounts": {
           "question": "Combien dois-je payer chaque mois ?",
@@ -2919,7 +2919,7 @@
         },
         "models": {
           "question": "Les modèles consomment-ils des crédits ?",
-          "answer": "Les modèles Kortix, et vos propres clés d'API au-delà de 1 000 $ d'usage de modèles par mois. Les modèles Kortix coûtent le prix de base du fournisseur plus {fee} % de frais de plateforme, payés en crédits, et l'application affiche les prix de base. Avec votre propre clé d'API, l'usage du modèle va à votre fournisseur : les premiers 1 000 $ par mois sont gratuits, puis 5 % du prix du fournisseur sont payés en crédits. Un abonnement ChatGPT connecté ne consomme aucun crédit."
+          "answer": "Votre fournisseur facture directement l'usage des modèles. Kortix exonère ses frais BYOK sur les premiers 1 000 $ d'usage au prix catalogue par mois civil UTC, puis prélève 5 % par requête en crédits. Une licence Enterprise ou des dérogations du compte peuvent exonérer ces frais. Les frais d'ordinateur et de stockage restent dus. Les appels aux modèles gérés par Kortix coûtent le prix de base du fournisseur plus {fee} % de frais de plateforme. Connectez votre abonnement ChatGPT pour des appels de modèle sans frais Kortix par appel. Les frais d'ordinateur en fonctionnement et de stockage restent dus."
         },
         "topup": {
           "question": "Puis-je ajouter des crédits en cours de mois ?",
@@ -2936,6 +2936,10 @@
         "enterprise": {
           "question": "Et pour Enterprise ?",
           "answer": "Tout ce qui est dans Crédits, plus SAML SSO, synchronisation d'annuaire SCIM (Okta, Microsoft Entra, JumpCloud), RBAC avancé, journaux d'audit, SLA et DPA, et déploiement Cloud / VPC / sur site. Contactez-nous pour une tarification au volume."
+        },
+        "computer": {
+          "question": "When does a cloud computer use credits?",
+          "answer": "Votre agent utilise cet ordinateur, même pour les tâches utilisant uniquement des connecteurs. Le calcul est facturé tant que l'ordinateur fonctionne, même inactif, et pas seulement lorsqu'il utilise un navigateur ou un terminal. Ordinateur par défaut ({spec}) : ≈ {rate} par heure de fonctionnement (≈ {credits} crédits). Ressources réservées facturées à la seconde ; les autres tailles ont des coûts différents. Les heures s'additionnent : 3 ordinateurs × 1 heure = 3 heures-ordinateur, soit ≈ {concurrent} de calcul. L'usage des modèles et les fichiers stockés sont en supplément. La mise en veille arrête les frais de calcul. Les fichiers stockés peuvent toujours entraîner des frais de stockage. Fermer le chat ne met pas l'ordinateur en veille."
         }
       },
       "hero": {
@@ -2949,18 +2953,18 @@
       "hours": {
         "eyebrow": "Heures d'agent",
         "title": "1 crédit correspond à environ {minutes} minutes d'ordinateur d'agent",
-        "description": "Les crédits paient l'ordinateur de l'agent : la machine cloud où votre agent exécute du code, navigue et modifie des fichiers. Il est facturé à la seconde tant qu'il tourne et ne consomme pas de calcul à l'arrêt. Ses fichiers stockés sont facturés comme stockage.",
+        "description": "Votre agent utilise cet ordinateur, même pour les tâches utilisant uniquement des connecteurs. Le calcul est facturé tant que l'ordinateur fonctionne, même inactif, et pas seulement lorsqu'il utilise un navigateur ou un terminal.",
         "rate": {
           "value": "1 crédit = 0,01 $",
           "note": "Chaque palier fournit des crédits à ce tarif."
         },
         "hour": {
           "value": "{creditsPerHour} crédits = 1 heure",
-          "note": "D'ordinateur d'agent ({spec}). Facturé à la seconde. Rien à l'arrêt."
+          "note": "De l'ordinateur d'agent par défaut ({spec}), y compris le temps d'inactivité en fonctionnement. Facturé à la seconde. La veille arrête le calcul ; les fichiers stockés peuvent toujours entraîner des frais de stockage."
         },
         "tier": {
           "value": "{tierUsd} par mois ≈ {hours} heures",
-          "note": "D'ordinateur d'agent, quand l'usage des modèles passe par vos propres clés."
+          "note": "Heures de fonctionnement cumulées à la taille par défaut, hors usage des modèles, frais BYOK et stockage. Les ordinateurs simultanés partagent ce total."
         },
         "rates": {
           "title": "Tarifs de calcul",
@@ -2984,21 +2988,35 @@
         "title": "Les modèles sont facturés séparément de l'ordinateur d'agent",
         "description": "Les crédits paient l'ordinateur de l'agent. Le coût d'un appel de modèle dépend de l'origine du modèle.",
         "keys": {
-          "tag": "Gratuit jusqu'à 1 000 $/mois",
+          "tag": "Frais BYOK offerts jusqu'à 1 000 $/mois",
           "title": "Vos propres clés d'API",
-          "body": "Ajoutez une clé Anthropic, OpenAI ou de tout autre fournisseur. L'usage du modèle va directement à votre fournisseur. Les premiers 1 000 $ par mois sont gratuits, puis Kortix ajoute 5 %, payés en crédits."
+          "body": "Votre fournisseur facture directement l'usage des modèles. Kortix exonère ses frais BYOK sur les premiers 1 000 $ d'usage au prix catalogue par mois civil UTC, puis prélève 5 % par requête en crédits. Une licence Enterprise ou des dérogations du compte peuvent exonérer ces frais. Les frais d'ordinateur et de stockage restent dus."
         },
         "chatgpt": {
-          "tag": "Aucun crédit",
+          "tag": "Aucun crédit pour les appels de modèle",
           "title": "Votre abonnement ChatGPT",
-          "body": "Connectez votre abonnement ChatGPT. Vos agents l'utilisent pour les appels de modèle et aucun crédit n'est dépensé."
+          "body": "Connectez votre abonnement ChatGPT pour des appels de modèle sans frais Kortix par appel. Les frais d'ordinateur en fonctionnement et de stockage restent dus."
         },
         "kortix": {
           "tag": "Payé en crédits",
           "title": "Modèles Kortix",
           "body": "Aucune clé à gérer. Chaque appel coûte le prix de base du fournisseur plus {fee} % de frais de plateforme, payés en crédits. L'application affiche les prix de base."
         },
-        "summary": "Avec vos propres clés, les crédits paient l'ordinateur d'agent et 5 % de l'usage des modèles au-delà de 1 000 $ par mois."
+        "summary": "Les frais de modèle sont distincts des heures de fonctionnement et du stockage. Les abonnements et vos propres clés ne suppriment pas les frais d'ordinateur."
+      },
+      "computer": {
+        "title": "Chaque session démarre un ordinateur d'agent",
+        "running": "Votre agent utilise cet ordinateur, même pour les tâches utilisant uniquement des connecteurs. Le calcul est facturé tant que l'ordinateur fonctionne, même inactif, et pas seulement lorsqu'il utilise un navigateur ou un terminal.",
+        "rate": "Ordinateur par défaut ({spec}) : ≈ {rate} par heure de fonctionnement (≈ {credits} crédits). Ressources réservées facturées à la seconde ; les autres tailles ont des coûts différents.",
+        "concurrent": "Les heures s'additionnent : 3 ordinateurs × 1 heure = 3 heures-ordinateur, soit ≈ {concurrent} de calcul. L'usage des modèles et les fichiers stockés sont en supplément.",
+        "sleep": "La mise en veille arrête les frais de calcul. Les fichiers stockés peuvent toujours entraîner des frais de stockage. Fermer le chat ne met pas l'ordinateur en veille.",
+        "models": "L'usage des modèles est séparé. Un abonnement ChatGPT connecté n'entraîne aucuns frais Kortix pour les appels de modèle ; les frais d'ordinateur restent dus. Avec votre clé API, vous payez votre fournisseur et les éventuels frais BYOK de Kortix.",
+        "summary": "Chaque session utilise un ordinateur. ≈ {rate} / heure de fonctionnement.",
+        "separate": "Configuration par défaut. Modèles et stockage facturés séparément.",
+        "details": "Comprendre la facturation",
+        "label": "Cloud computer",
+        "session": "Each session, including connector tasks, runs a cloud computer.",
+        "hourly": "≈ {rate} / running hour"
       }
     },
     "access": {

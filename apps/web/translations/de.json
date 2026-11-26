@@ -2903,7 +2903,7 @@
         },
         "credit": {
           "question": "Was bekomme ich für einen Credit?",
-          "answer": "1 Credit entspricht 0,01 $. Credits bezahlen den Agent-Computer, abgerechnet pro Sekunde und Ressource: {vcpuRate} pro vCPU-Stunde, {memoryRate} pro GB RAM und Stunde, {diskRate} pro GB Speicher und Monat. Die Standardmaschine mit {spec} verbraucht etwa {creditsPerHour} Credits pro Stunde, also entspricht 1 Credit etwa {minutes} Minuten. Ein gestoppter Computer verbraucht keine Rechenleistung. Seine gespeicherten Dateien werden als Speicher abgerechnet. Credits bezahlen außerdem Kortix-Modelle zum Basispreis des Anbieters plus {fee} % Plattformgebühr. Mit eigenem API-Schlüssel sind die ersten 1.000 $ Modellnutzung pro Monat kostenlos, danach werden 5 % des Anbieterpreises mit Credits bezahlt. Ein ChatGPT-Abonnement verbraucht keine Credits."
+          "answer": "1 Credit entspricht 0,01 $. Credits bezahlen den Agent-Computer, abgerechnet pro Sekunde und Ressource: {vcpuRate} pro vCPU-Stunde, {memoryRate} pro GB RAM und Stunde, {diskRate} pro GB Speicher und Monat. Die Standardmaschine mit {spec} verbraucht etwa {creditsPerHour} Credits pro Stunde, also entspricht 1 Credit etwa {minutes} Minuten. Ein gestoppter Computer verbraucht keine Rechenleistung. Seine gespeicherten Dateien werden als Speicher abgerechnet. Credits bezahlen außerdem Kortix-Modelle zum Basispreis des Anbieters plus {fee} % Plattformgebühr. Dein Anbieter stellt die API-Schlüsselnutzung direkt in Rechnung. Kortix erlässt seine BYOK-Gebühr für die ersten 1.000 $ monatliche Nutzung zum Listenpreis und berechnet danach 5 % pro Anfrage, sofern die Gebühr nicht erlassen wird. Ein ChatGPT-Abo verbraucht für Modellaufrufe keine Credits; Kosten für laufende Computer und Speicher fallen weiterhin an."
         },
         "amounts": {
           "question": "Wie viel zahle ich pro Monat?",
@@ -2919,7 +2919,7 @@
         },
         "models": {
           "question": "Verbrauchen Modelle Credits?",
-          "answer": "Kortix-Modelle, und eigene API-Schlüssel über 1.000 $ Modellnutzung pro Monat hinaus. Kortix-Modelle kosten den Basispreis des Anbieters plus {fee} % Plattformgebühr, bezahlt mit Credits, und die App zeigt die Basispreise. Mit eigenem API-Schlüssel geht die Modellnutzung an deinen Anbieter: Die ersten 1.000 $ pro Monat sind kostenlos, danach werden 5 % des Anbieterpreises mit Credits bezahlt. Ein verbundenes ChatGPT-Abonnement verbraucht keine Credits."
+          "answer": "Dein Anbieter stellt die Modellnutzung direkt in Rechnung. Kortix erlässt seine BYOK-Gebühr für die ersten 1.000 $ Nutzung zum Listenpreis pro UTC-Kalendermonat und berechnet danach 5 % pro Anfrage aus Credits. Bei lizenziertem Enterprise oder kontospezifischen Ausnahmen kann diese Gebühr entfallen. Computer- und Speicherkosten fallen weiterhin an. Kortix-verwaltete Modellaufrufe kosten den Basispreis des Anbieters plus {fee} % Plattformgebühr. Verbinde dein ChatGPT-Abo für Modellaufrufe ohne Kortix-Modellaufrufgebühr. Kosten für laufende Computer und Speicher fallen weiterhin an."
         },
         "topup": {
           "question": "Kann ich mitten im Monat Credits hinzufügen?",
@@ -2936,6 +2936,10 @@
         "enterprise": {
           "question": "Was ist mit Enterprise?",
           "answer": "Alles aus Credits plus SAML-SSO, SCIM-Verzeichnissynchronisierung (Okta, Microsoft Entra, JumpCloud), erweitertes RBAC, Audit-Logs, SLA und DPA sowie Cloud-/VPC-/On-Prem-Deployment. Sprich uns für Mengenpreise an."
+        },
+        "computer": {
+          "question": "When does a cloud computer use credits?",
+          "answer": "Dein Agent läuft auf diesem Computer, auch bei Aufgaben, die nur Konnektoren nutzen. Rechenleistung wird während der gesamten Laufzeit berechnet, auch im Leerlauf, nicht nur bei Browser- oder Terminalnutzung. Standardcomputer ({spec}): ≈ {rate} pro Betriebsstunde (≈ {credits} Credits). Sekundengenaue Abrechnung der reservierten Ressourcen; andere Computergrößen kosten unterschiedlich viel. Die Laufzeiten addieren sich: 3 Computer × 1 Stunde = 3 Computerstunden, ≈ {concurrent} für Rechenleistung. Modellnutzung und gespeicherte Dateien kosten extra. Der Ruhezustand stoppt die Rechenkosten. Für gespeicherte Dateien können weiterhin Speicherkosten anfallen. Den Chat zu schließen versetzt den Computer nicht in den Ruhezustand."
         }
       },
       "hero": {
@@ -2949,18 +2953,18 @@
       "hours": {
         "eyebrow": "Agent-Stunden",
         "title": "1 Credit entspricht etwa {minutes} Minuten Agent-Computer",
-        "description": "Credits bezahlen den Agent-Computer: die Cloud-Maschine, auf der dein Agent Code ausführt, im Web surft und Dateien bearbeitet. Er wird sekundengenau abgerechnet, solange er läuft, und verbraucht keine Rechenleistung, solange er gestoppt ist. Seine gespeicherten Dateien werden als Speicher abgerechnet.",
+        "description": "Dein Agent läuft auf diesem Computer, auch bei Aufgaben, die nur Konnektoren nutzen. Rechenleistung wird während der gesamten Laufzeit berechnet, auch im Leerlauf, nicht nur bei Browser- oder Terminalnutzung.",
         "rate": {
           "value": "1 Credit = 0,01 $",
           "note": "Jede Stufe bietet Credits zu diesem Preis."
         },
         "hour": {
           "value": "{creditsPerHour} Credits = 1 Stunde",
-          "note": "Agent-Computer ({spec}). Sekundengenau abgerechnet. Nichts, solange er gestoppt ist."
+          "note": "Für den Standard-Agentencomputer ({spec}), einschließlich Leerlauf bei laufendem Computer. Sekundengenaue Abrechnung. Der Ruhezustand stoppt die Rechenkosten; gespeicherte Dateien können weiterhin Speicherkosten verursachen."
         },
         "tier": {
           "value": "{tierUsd} im Monat ≈ {hours} Stunden",
-          "note": "Agent-Computer, wenn die Modellnutzung über deine eigenen Schlüssel läuft."
+          "note": "Gesamte Betriebsstunden bei Standardgröße, vor Modellnutzung, BYOK-Gebühren und Speicher. Gleichzeitig laufende Computer teilen sich diese Gesamtzeit."
         },
         "rates": {
           "title": "Compute-Preise",
@@ -2984,21 +2988,35 @@
         "title": "Modelle werden getrennt vom Agent-Computer abgerechnet",
         "description": "Credits bezahlen den Agent-Computer. Was ein Modellaufruf kostet, hängt davon ab, woher das Modell kommt.",
         "keys": {
-          "tag": "Bis 1.000 $/Monat kostenlos",
+          "tag": "BYOK-Gebühr bis 1.000 $/Monat erlassen",
           "title": "Deine eigenen API-Schlüssel",
-          "body": "Füge einen Schlüssel von Anthropic, OpenAI oder einem anderen Anbieter hinzu. Die Modellnutzung geht direkt an deinen Anbieter. Die ersten 1.000 $ pro Monat sind kostenlos, danach berechnet Kortix 5 %, bezahlt mit Credits."
+          "body": "Dein Anbieter stellt die Modellnutzung direkt in Rechnung. Kortix erlässt seine BYOK-Gebühr für die ersten 1.000 $ Nutzung zum Listenpreis pro UTC-Kalendermonat und berechnet danach 5 % pro Anfrage aus Credits. Bei lizenziertem Enterprise oder kontospezifischen Ausnahmen kann diese Gebühr entfallen. Computer- und Speicherkosten fallen weiterhin an."
         },
         "chatgpt": {
-          "tag": "Keine Credits",
+          "tag": "Keine Credits für Modellaufrufe",
           "title": "Dein ChatGPT-Abonnement",
-          "body": "Verbinde dein ChatGPT-Abonnement. Deine Agenten nutzen es für Modellaufrufe und es werden keine Credits verbraucht."
+          "body": "Verbinde dein ChatGPT-Abo für Modellaufrufe ohne Kortix-Modellaufrufgebühr. Kosten für laufende Computer und Speicher fallen weiterhin an."
         },
         "kortix": {
           "tag": "Bezahlt mit Credits",
           "title": "Kortix-Modelle",
           "body": "Kein Schlüssel nötig. Jeder Aufruf kostet den Basispreis des Anbieters plus {fee} % Plattformgebühr, bezahlt mit Credits. Die App zeigt die Basispreise."
         },
-        "summary": "Mit deinen eigenen Schlüsseln bezahlen Credits den Agent-Computer und 5 % der Modellnutzung über 1.000 $ pro Monat."
+        "summary": "Modellkosten sind von den Betriebsstunden der Computer und vom Speicher getrennt. Abos und eigene Schlüssel beseitigen die Computerkosten nicht."
+      },
+      "computer": {
+        "title": "Jede Sitzung startet einen Agentencomputer",
+        "running": "Dein Agent läuft auf diesem Computer, auch bei Aufgaben, die nur Konnektoren nutzen. Rechenleistung wird während der gesamten Laufzeit berechnet, auch im Leerlauf, nicht nur bei Browser- oder Terminalnutzung.",
+        "rate": "Standardcomputer ({spec}): ≈ {rate} pro Betriebsstunde (≈ {credits} Credits). Sekundengenaue Abrechnung der reservierten Ressourcen; andere Computergrößen kosten unterschiedlich viel.",
+        "concurrent": "Die Laufzeiten addieren sich: 3 Computer × 1 Stunde = 3 Computerstunden, ≈ {concurrent} für Rechenleistung. Modellnutzung und gespeicherte Dateien kosten extra.",
+        "sleep": "Der Ruhezustand stoppt die Rechenkosten. Für gespeicherte Dateien können weiterhin Speicherkosten anfallen. Den Chat zu schließen versetzt den Computer nicht in den Ruhezustand.",
+        "models": "Modellnutzung wird separat berechnet. Mit einem verbundenen ChatGPT-Abo fällt keine Kortix-Gebühr für Modellaufrufe an; Computerkosten bleiben bestehen. Mit deinem eigenen API-Schlüssel zahlst du deinen Anbieter sowie gegebenenfalls die Kortix-BYOK-Gebühr.",
+        "summary": "Jede Sitzung nutzt einen Computer. Ca. {rate} / Laufzeitstunde.",
+        "separate": "Standardgröße. Modelle und Speicher werden separat berechnet.",
+        "details": "So funktioniert die Abrechnung",
+        "label": "Cloud computer",
+        "session": "Each session, including connector tasks, runs a cloud computer.",
+        "hourly": "≈ {rate} / running hour"
       }
     },
     "access": {

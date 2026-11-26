@@ -2903,7 +2903,7 @@
         },
         "credit": {
           "question": "What does a credit buy?",
-          "answer": "1 credit is $0.01. Credits pay for the agent computer, billed per second per resource: {vcpuRate} per vCPU-hour, {memoryRate} per GB of RAM per hour, {diskRate} per GB of storage per month. The default {spec} machine uses about {creditsPerHour} credits an hour, so 1 credit is about {minutes} minutes. A stopped computer uses no compute. Its stored files are billed as storage. Credits also pay for Kortix models, at the provider's base price plus a {fee}% platform fee. Your own API key is free for the first $1,000 of model usage a month, then 5% of the provider's price is paid from credits. A ChatGPT subscription uses no credits."
+          "answer": "1 credit is $0.01. Credits pay for the agent computer, billed per second per resource: {vcpuRate} per vCPU-hour, {memoryRate} per GB of RAM per hour, {diskRate} per GB of storage per month. The default {spec} machine uses about {creditsPerHour} credits an hour, so 1 credit is about {minutes} minutes. A stopped computer uses no compute. Its stored files are billed as storage. Credits also pay for Kortix models, at the provider's base price plus a {fee}% platform fee. Your provider bills your API-key usage directly. Kortix waives its BYOK fee on the first $1,000 of monthly list-price usage, then charges 5% per request unless waived. A ChatGPT subscription uses no credits for model calls; running computer and storage charges still apply."
         },
         "amounts": {
           "question": "How much do I pay each month?",
@@ -2919,7 +2919,7 @@
         },
         "models": {
           "question": "Do models use credits?",
-          "answer": "Kortix models do, and your own API keys past $1,000 of model usage a month. Kortix models cost the provider's base price plus a {fee}% platform fee, paid from credits, and the app shows the base prices. With your own API key, model usage goes to your provider: the first $1,000 a month is free, then 5% of the provider's price is paid from credits. A connected ChatGPT subscription uses no credits."
+          "answer": "Your provider bills model usage directly. Kortix waives its BYOK fee for the first $1,000 of list-price usage per UTC calendar month, then charges 5% per request from credits. Licensed Enterprise or account overrides can waive this fee. Computer and storage charges still apply. Kortix-managed model calls cost the provider base price plus a {fee}% platform fee. Connect your ChatGPT subscription for model calls without a Kortix model-call charge. Running computer and storage charges still apply."
         },
         "topup": {
           "question": "Can I add credits mid-month?",
@@ -2936,6 +2936,10 @@
         "enterprise": {
           "question": "What about Enterprise?",
           "answer": "Everything in Credits plus SAML SSO, SCIM directory sync (Okta, Microsoft Entra, JumpCloud), advanced RBAC, audit logs, an SLA and DPA, and Cloud / VPC / on-prem deployment. Talk to us for volume pricing."
+        },
+        "computer": {
+          "question": "When does a cloud computer use credits?",
+          "answer": "Your agent runs on this computer, including connector-only tasks. Compute is billed while the computer is running, including idle time, not only when it uses a browser or terminal. Default computer ({spec}): ≈ {rate} per running hour (≈ {credits} credits). Billed per second for reserved resources; other computer sizes cost differently. Running hours add up: 3 computers × 1 hour = 3 computer-hours, ≈ {concurrent} in compute. Model usage and stored files are extra. Sleep stops compute charges. Stored files can still incur storage charges. Closing the chat is not the same as sleeping the computer."
         }
       },
       "hero": {
@@ -2949,22 +2953,22 @@
       "hours": {
         "eyebrow": "Agent hours",
         "title": "1 credit buys about {minutes} minutes of agent computer",
-        "description": "Credits pay for the agent computer: the cloud machine where your agent runs code, browses and edits files. It bills per second while it runs and uses no compute while it is stopped. Its stored files are billed as storage.",
+        "description": "Your agent runs on this computer, including connector-only tasks. Compute is billed while the computer is running, including idle time, not only when it uses a browser or terminal.",
         "rate": {
           "value": "1 credit = $0.01",
           "note": "Every tier buys credits at this rate."
         },
         "hour": {
           "value": "{creditsPerHour} credits = 1 hour",
-          "note": "Of agent computer ({spec}). Billed per second. Nothing while it is stopped."
+          "note": "Default size · {spec}"
         },
         "tier": {
           "value": "{tierUsd} a month ≈ {hours} hours",
-          "note": "Of agent computer, when model usage runs on your own keys."
+          "note": "Compute only · combined running hours"
         },
         "rates": {
           "title": "Compute rates",
-          "note": "Billed per second for the size you reserve. A stopped computer uses no compute. Its stored files are billed as storage.",
+          "note": "Reserved resources, billed per second.",
           "vcpu": {
             "label": "vCPU",
             "price": "{price} / hour"
@@ -2984,21 +2988,35 @@
         "title": "Models are billed separately from the agent computer",
         "description": "Credits pay for the agent computer. What a model call costs depends on where the model comes from.",
         "keys": {
-          "tag": "Free to $1,000/mo",
+          "tag": "BYOK fee allowance",
           "title": "Your own API keys",
-          "body": "Add a key from Anthropic, OpenAI or any other provider. Model usage goes straight to your provider. The first $1,000 a month is free, then Kortix adds 5%, paid from credits."
+          "body": "Your provider bills model usage directly. Kortix waives its BYOK fee for the first $1,000 of list-price usage per UTC calendar month, then charges 5% per request from credits. Licensed Enterprise or account overrides can waive this fee. Computer and storage charges still apply."
         },
         "chatgpt": {
-          "tag": "No credits",
+          "tag": "No model-call credits",
           "title": "Your ChatGPT subscription",
-          "body": "Connect your ChatGPT subscription. Your agents use it for model calls and no credits are spent."
+          "body": "Connect your ChatGPT subscription for model calls without a Kortix model-call charge. Running computer and storage charges still apply."
         },
         "kortix": {
           "tag": "Paid from credits",
           "title": "Kortix models",
           "body": "No key to manage. Each call costs the provider's base price plus a {fee}% platform fee, paid from credits. The app shows base prices."
         },
-        "summary": "With your own keys, credits pay for the agent computer and 5% of model usage past $1,000 a month."
+        "summary": "Model charges are separate from running computer hours and storage. Subscriptions and your own keys do not remove computer charges."
+      },
+      "computer": {
+        "title": "Every session starts an agent computer",
+        "running": "Your agent runs on this computer, including connector-only tasks. Compute is billed while the computer is running, including idle time, not only when it uses a browser or terminal.",
+        "rate": "Default computer ({spec}): ≈ {rate} per running hour (≈ {credits} credits). Billed per second for reserved resources; other computer sizes cost differently.",
+        "concurrent": "Running hours add up: 3 computers × 1 hour = 3 computer-hours, ≈ {concurrent} in compute. Model usage and stored files are extra.",
+        "sleep": "Sleep stops compute charges. Stored files can still incur storage charges. Closing the chat is not the same as sleeping the computer.",
+        "models": "Model usage is separate. A connected ChatGPT subscription has no Kortix model-call charge; computer charges still apply. With your own API key, you pay your provider, plus any applicable Kortix BYOK fee.",
+        "summary": "Each session runs a computer. ≈ {rate} / running hour.",
+        "separate": "Default size. Models and storage billed separately.",
+        "details": "How billing works",
+        "label": "Cloud computer",
+        "session": "Each session, including connector tasks, runs a cloud computer.",
+        "hourly": "≈ {rate} / running hour"
       }
     },
     "access": {

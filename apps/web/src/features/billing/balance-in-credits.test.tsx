@@ -25,7 +25,13 @@ function render(node: ReactNode): string {
 
 function state(total: number): AccountState {
   return {
-    plan: { key: 'credits', family: 'credits', label: 'Credits', sublabel: null, monthly_usd: 3000 },
+    plan: {
+      key: 'credits',
+      family: 'credits',
+      label: 'Credits',
+      sublabel: null,
+      monthly_usd: 3000,
+    },
     subscription: {
       status: 'active',
       cancel_at_period_end: false,
@@ -91,3 +97,14 @@ describe('CreditsView', () => {
     expect(out).toContain('1 credit ');
   });
 });
+
+for (const [name, View] of [
+  ['billing overview', AccountOverviewView],
+  ['credits settings', CreditsView],
+] as const) {
+  test(`${name} does not repeat the billing rate beside the balance`, () => {
+    const out = text(render(<View state={state(5)} />));
+    expect(out).not.toContain('How billing works');
+    expect(out).not.toContain('/ running hour');
+  });
+}

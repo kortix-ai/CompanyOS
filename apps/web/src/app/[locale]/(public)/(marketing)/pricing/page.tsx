@@ -3,12 +3,12 @@
 import Link from '@/components/site-link';
 import type { PricingPlan, PricingPlanId } from '@/features/billing/pricing-plans';
 import { usePricingPlans } from '@/features/billing/use-pricing-plans';
-import { CompareTable } from '@/features/marketing/pricing/compare-table';
 import { useRequestDemo } from '@/features/contact/request-demo-provider';
 import { useEnglishOnly } from '@/features/marketing/kit/english-only';
 import { MarketingButton } from '@/features/marketing/kit/marketing-button';
 import { Band, PageFrame } from '@/features/marketing/kit/page-frame';
 import { WorksWithStrip } from '@/features/marketing/landing-sections/works-with-strip';
+import { CompareTable } from '@/features/marketing/pricing/compare-table';
 import { CreditLadder } from '@/features/marketing/pricing/credit-ladder';
 import { useLocale, useTranslations } from '@/i18n/use-translations';
 import { safeJsonForHtml } from '@/lib/security/safe-json';
@@ -18,6 +18,7 @@ import {
   agentHoursForCredits,
   COMPUTE_RATES_USD,
   DEFAULT_COMPUTE_CREDITS_PER_HOUR,
+  DEFAULT_COMPUTE_HOURLY_PRICE_USD,
   DEFAULT_COMPUTE_SPEC,
   DEFAULT_TIER_USD,
   formatWholeUsd,
@@ -29,7 +30,7 @@ import {
 } from '@kortix/ui/internal/billing/compute-pricing';
 import { SolidCheckIcon } from '@kortix/ui/internal/icons/solid-check-icon';
 import { PlusIcon } from '@phosphor-icons/react';
-import { Fragment, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 
 const START_URL = '/auth';
 
@@ -45,6 +46,7 @@ const PLAN_CTAS: Record<PricingPlanId, { cta: string; href: string }> = {
 const FAQ_IDS = [
   'free',
   'credit',
+  'computer',
   'amounts',
   'members',
   'rollover',
@@ -211,6 +213,9 @@ export default function PricingPage() {
   const facts = {
     freeCredits: new Intl.NumberFormat(locale).format(FREE_MONTHLY_CREDITS),
     creditsPerHour: DEFAULT_COMPUTE_CREDITS_PER_HOUR,
+    rate: formatRateUsd(DEFAULT_COMPUTE_HOURLY_PRICE_USD, locale),
+    credits: DEFAULT_COMPUTE_CREDITS_PER_HOUR,
+    concurrent: formatRateUsd(DEFAULT_COMPUTE_HOURLY_PRICE_USD * 3, locale),
     minutes: MINUTES_PER_CREDIT,
     spec: DEFAULT_COMPUTE_SPEC,
     fee: PLATFORM_FEE_PERCENT,
@@ -267,7 +272,7 @@ export default function PricingPage() {
         <BandHeading
           title={sentence(t('hours.title', facts))}
           titleMuted={sentence(t('hours.rate.value', facts))}
-          description={t('hours.description', facts)}
+          description={t('computer.session')}
         />
         <Band className="grid grid-cols-1 lg:grid-cols-12">
           <dl className="divide-border grid grid-cols-1 divide-y sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:col-span-7">

@@ -9,7 +9,7 @@
  */
 import { gzipSync } from 'node:zlib';
 import { projectSessions, sessionTurns } from '@kortix/db';
-import { and, desc, eq, notInArray } from 'drizzle-orm';
+import { and, desc, eq, notInArray, sql } from 'drizzle-orm';
 import { config } from '../../config';
 import { logger } from '../../lib/logger';
 import { db } from '../../shared/db';
@@ -69,6 +69,37 @@ async function awaitTurnEnd(sessionId: string, before: string[], deadline: numbe
   throw new QualiloopTurnError(`The agent did not finish the turn within ${TURN_TIMEOUT_MS / 1000} s.`);
 }
 
+/** Where a turn starts: the log position and the turns before its prompt. */
+interface TurnMark {
+  lastSeq: number;
+  before: string[];
+}
+
+/**
+ * Claims turn `index` of the session for this request, once. A retried request
+ * (QualiLoop resends a turn after a network failure) finds the claim and
+ * returns its mark: it waits for the same turn instead of sending the prompt
+ * again. The claim and the check are one statement, so two requests at once
+ * claim it once.
+ */
+async function claimTurn(sessionId: string, index: number, mark: TurnMark): Promise<TurnMark | null> {
+  const key = String(index);
+  const turns = sql`coalesce(${projectSessions.metadata}->'qualiloop_turns', '{}'::jsonb)`;
+  const claimed = await db
+    .update(projectSessions)
+    .set({
+      metadata: sql`coalesce(${projectSessions.metadata}, '{}'::jsonb) || jsonb_build_object('qualiloop_turns', ${turns} || jsonb_build_object(${key}::text, ${JSON.stringify(mark)}::jsonb))`,
+    })
+    .where(and(eq(projectSessions.sessionId, sessionId), sql`NOT (${turns} ? ${key}::text)`))
+    .returning({ id: projectSessions.sessionId });
+  if (claimed.length) return null;
+  const [row] = await db
+    .select({ mark: sql<TurnMark | null>`${projectSessions.metadata}->'qualiloop_turns'->${key}::text` })
+    .from(projectSessions)
+    .where(eq(projectSessions.sessionId, sessionId));
+  return row?.mark ?? mark;
+}
+
 // ponytail: the last 100 log messages; a turn longer than that loses its first steps from the trace.
 async function logTail(sessionId: string): Promise<LogMessage[]> {
   const page = await readSessionLogPage({ sessionId, threadId: null, beforeSeq: null, limit: 100 });
@@ -103,36 +134,42 @@ export async function runQualiloopTurn(input: { conversationId: string; turnInde
   const sessionId = kortixSessionIdFor(projectId, input.conversationId);
   const [existing] = await db.select({ id: projectSessions.sessionId }).from(projectSessions)
     .where(eq(projectSessions.sessionId, sessionId)).limit(1);
-  const before = existing ? await turnTokens(sessionId) : [];
-  const lastSeq = existing ? Math.max(0, ...(await logTail(sessionId)).map((m) => m.seq)) : 0;
-
+  let mark: TurnMark = { lastSeq: 0, before: [] };
   if (!existing) {
+    // The first prompt starts the session, so its claim is written with it. A retry
+    // while the create runs gets the same session back from the idempotency key.
     const created = await createSession({
       source: SOURCE,
       project,
       userId,
       requestingPrincipalType: 'human',
       body: { session_id: sessionId, name: `QualiLoop ${input.conversationId}`.slice(0, 120), initial_prompt: input.prompt },
-      metadata: { qualiloop_conversation_id: input.conversationId },
+      metadata: { qualiloop_conversation_id: input.conversationId, qualiloop_turns: { [input.turnIndex]: mark } },
       idempotencyKey: `qualiloop-create:${sessionId}`,
     });
     if (created.error) {
       throw new QualiloopTurnError(String(created.error.body?.error ?? created.error.body?.message ?? 'The session could not start.'));
     }
   } else {
-    // One key per turn: a retried request of the same turn sends nothing twice.
-    const idempotencyKey = `qualiloop-prompt:${sessionId}:${input.turnIndex}`;
-    await enqueueContinueSessionCommand({
-      source: SOURCE,
-      projectId: project.projectId,
-      accountId: project.accountId,
-      sessionId,
-      actorUserId: userId,
-      text: input.prompt,
-      idempotencyKey,
-    });
-    drainSessionLifecycleQueue({ idempotencyKey, burst: false }).catch(() => {});
+    mark = { lastSeq: Math.max(0, ...(await logTail(sessionId)).map((m) => m.seq)), before: await turnTokens(sessionId) };
+    const earlier = await claimTurn(sessionId, input.turnIndex, mark);
+    if (earlier) {
+      mark = earlier;
+    } else {
+      const idempotencyKey = `qualiloop-prompt:${sessionId}:${input.turnIndex}`;
+      await enqueueContinueSessionCommand({
+        source: SOURCE,
+        projectId: project.projectId,
+        accountId: project.accountId,
+        sessionId,
+        actorUserId: userId,
+        text: input.prompt,
+        idempotencyKey,
+      });
+      drainSessionLifecycleQueue({ idempotencyKey, burst: false }).catch(() => {});
+    }
   }
+  const { lastSeq, before } = mark;
 
   await awaitTurnEnd(sessionId, before, startedAtMs + TURN_TIMEOUT_MS);
   const log = await logTail(sessionId);

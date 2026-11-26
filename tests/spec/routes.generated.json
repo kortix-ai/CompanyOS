@@ -1,7 +1,7 @@
 {
   "generatedAt": "static",
-  "count": 1838,
-  "aliases": 718,
+  "count": 1840,
+  "aliases": 719,
   "routes": [
     {
       "method": "GET",
@@ -5015,6 +5015,11 @@
     },
     {
       "method": "POST",
+      "path": "/v1/projects/:workspaceId/workspace-cache/build",
+      "aliasOf": "/v1/workspaces/:workspaceId/workspace-cache/build"
+    },
+    {
+      "method": "POST",
       "path": "/v1/projects/create-repo",
       "aliasOf": "/v1/workspaces/create-repo"
     },
@@ -8012,6 +8017,10 @@
     {
       "method": "POST",
       "path": "/v1/workspaces/:workspaceId/workspace-cache"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/workspace-cache/build"
     },
     {
       "method": "POST",

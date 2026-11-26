@@ -151,10 +151,29 @@ export async function advanceWorkspaceCacheBuild(project: ProjectRow, now: Date)
   const listed = await listWorkspaceCache(project.projectId, placement.location ?? null).catch(() => null);
   const newest = listed?.entries.map((e) => (e.created_at ? Date.parse(e.created_at) : 0)).sort((a, b) => b - a)[0] ?? 0;
   if (newest && now.getTime() - newest < REBUILD_AFTER_MS - 3600_000) return false;
-  return startBuild(project, builder, now);
+  return (await startBuild(project, builder, now)) !== null;
 }
 
-async function startBuild(project: ProjectRow, builder: WorkspaceCacheBuilder, now: Date): Promise<boolean> {
+/**
+ * Start a build now (POST …/workspace-cache/build): the project's recorded builder, unless one is
+ * already running. The caller checked the flag and the person's rights.
+ */
+export async function startWorkspaceCacheBuildNow(
+  project: ProjectRow,
+  now: Date = new Date(),
+): Promise<{ session_id: string } | { error: 'no_builder' | 'build_running' | 'not_started' }> {
+  const builder = workspaceCacheBuilderOf(project.metadata);
+  if (!builder) return { error: 'no_builder' };
+  const latest = await latestBuild(project.projectId);
+  const record = latest ? buildOf(latest.metadata) : null;
+  if (latest && record && (record.state === 'starting' || record.state === 'running') && now.getTime() - Date.parse(record.started_at) <= BUILD_TIMEOUT_MS) {
+    return { error: 'build_running' };
+  }
+  const sessionId = await startBuild(project, builder, now);
+  return sessionId ? { session_id: sessionId } : { error: 'not_started' };
+}
+
+async function startBuild(project: ProjectRow, builder: WorkspaceCacheBuilder, now: Date): Promise<string | null> {
   const sessionId = crypto.randomUUID();
   const result = await createSession({
     source: WORKSPACE_CACHE_BUILD_SOURCE,
@@ -171,10 +190,10 @@ async function startBuild(project: ProjectRow, builder: WorkspaceCacheBuilder, n
       status: result.error.status,
       error: String(result.error.body?.error ?? result.error.body?.message ?? ''),
     });
-    return false;
+    return null;
   }
   logger.info('[workspace-cache] build started', { projectId: project.projectId, sessionId, agent: builder.agent });
-  return true;
+  return sessionId;
 }
 
 async function advanceRunning(

@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import {
   createSafeSessionJSONStorage,
-  registerDisposableKey,
   pruneAllRegisteredCaches,
   safeGetItem,
   safeRemoveItem,
@@ -118,17 +117,6 @@ describe('safeSetItem', () => {
     expect(safeSetItem('durable-key', 'y'.repeat(80))).toBe(true);
     expect(store.getItem('durable-key')).toBe('y'.repeat(80));
     expect(store.keys().some((k) => k.startsWith('fam_bloat:'))).toBe(false);
-  });
-
-  test('exact-key disposables are evicted only after scoped families', () => {
-    const store = install(200);
-    registerDisposableKey('blob-key');
-    store.setItem('blob-key', 'b'.repeat(60));
-    new ScopedCache<string>('fam_pri', 50).set('old', 's'.repeat(60));
-
-    expect(safeSetItem('durable2', 'd'.repeat(60))).toBe(true);
-    expect(store.keys().some((k) => k.startsWith('fam_pri:'))).toBe(false);
-    expect(store.getItem('blob-key')).toBe('b'.repeat(60));
   });
 });
 

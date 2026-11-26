@@ -2679,9 +2679,7 @@
     "indexedDBKeyValueStorage"
   ],
   "./internal/diagnostics-store": [
-    "buildDiagnosticCountsMap",
     "findDiagnosticsForFile",
-    "getRelativePath",
     "parseDiagnosticsFromToolOutput",
     "useDiagnosticsStore"
   ],
@@ -2690,9 +2688,7 @@
     "createSafeJSONStorage",
     "createSafeSessionJSONStorage",
     "pruneAllRegisteredCaches",
-    "pruneDisposableCaches",
     "registerDisposableFamily",
-    "registerDisposableKey",
     "safeGetItem",
     "safeLocalStorage",
     "safeRemoveItem",

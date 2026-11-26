@@ -8229,6 +8229,7 @@
       "legendAssistant": "Одговори",
       "legendTool": "Резултати алата",
       "legendOther": "Остало",
+      "skillsUsedLabel": "Коришћене вештине",
       "subAgentsLabel": "Подагенти",
       "subAgentsNote": "Помоћници који су радили унутар ове сесије. Њихов трошак је део трошка ове сесије.",
       "combinedMessages": "Комбиноване поруке",

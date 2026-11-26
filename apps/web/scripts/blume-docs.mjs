@@ -1,6 +1,5 @@
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -113,31 +112,3 @@ export function buildBlumeDocs() {
 }
 
 const BUILD_LOCK_WAIT_MS = 180_000;
-
-/**
- * `next dev`: start `buildBlumeDocs()` in a detached, low-priority child and return at once, so the dev
- * server's first page does not wait for the docs site. Run synchronously from next.config.ts, the build held
- * back the first compile: on a 6 vCPU Kortix session (2026-11-26) a new worktree, which never has
- * public/docs/, served its first page 88.6 s after its API was up, against 60.7 s with public/docs/ present.
- * /docs answers 404 until the child lands (the build took 19-28 s there). Every process that loads
- * next.config.ts may call this; `buildBlumeDocs`'s lock lets one child build and the others find it fresh.
- * Returns true when it started a build, false when public/docs/ is already current.
- */
-export function buildBlumeDocsInBackground() {
-  if (isPublicDocsUpToDate()) return false;
-  const child = spawn(process.execPath, ['-e', `import(${JSON.stringify(import.meta.url)}).then((m) => m.buildBlumeDocs())`], {
-    cwd: WEB_ROOT,
-    detached: true,
-    stdio: ['ignore', 'inherit', 'inherit'],
-  });
-  child.on('error', (err) => console.warn(`[blume-docs] background docs build did not start: ${err.message}`));
-  if (child.pid) {
-    try {
-      os.setPriority(child.pid, 10);
-    } catch {
-      // Priority is a courtesy to the first compile; the build runs either way.
-    }
-  }
-  child.unref();
-  return true;
-}

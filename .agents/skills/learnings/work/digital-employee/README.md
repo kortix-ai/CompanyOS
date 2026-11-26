@@ -160,4 +160,4 @@ workspace, the sandbox is disposable).
 
 ## Pick it up
 
-Read `decisions.md` first. The canonical branch is `digital-employee`.
+Read `decisions.md` first, then `phase-1-plan.md`. The canonical branch is `digital-employee`.

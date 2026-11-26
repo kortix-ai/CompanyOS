@@ -30,7 +30,7 @@ import {
   pickSlot, sh, run, which, portInUse, repoRoot, defaultWorktreePath, branchExists, freshBase, worktreeAddArgs, removeWorktree,
   renderSupabaseProject, runMigrate, supa, supaStatusEnv, slotCredsFromStatus, apiLaunchEnv, webLaunchEnv, gatewayLaunchEnv,
   writeMarker, ensureDeps, checkDeps, supaWorkdir, slotDir, startTunnel, tunnelAnswers, startStripeListen, WT_HOME, REGISTRY_PATH,
-  startSupabaseDb, startSupabaseFullStack, hasKortixSchema, ensureRuntimeArtifacts, dbModeOf,
+  startSupabaseDb, startSupabaseFullStack, hasKortixSchema, ensureRuntimeArtifacts, startDocsBuild, dbModeOf,
   ensurePrimarySupabase, primaryCredsFromStatus, primarySupabaseStatusEnv, SHARED_SUPABASE_PORTS, supabaseBin,
   branchDbName, primaryDb, branchDbExists, createBranchDb, syncBranchUsers, dropBranchDb, withDatabase,
   killTree, stackRoots, stackPids, listenersOn, psTable, cwdTable,
@@ -608,6 +608,9 @@ async function cmdStart(a: Args) {
   const e = entry!;
   const dbMode = dbModeOf(e);
   warnOnStackPressure(name, reg);
+  // A new worktree has no public/docs/, so its first `next dev` would build /docs beside the first page's
+  // compile. Started now, the build overlaps the Supabase start instead (lib/services.ts startDocsBuild).
+  if (!a.flags['no-web'] && startDocsBuild(e.path, joinPath(slotDir(name), 'docs-build.log'))) sub(`building /docs in the background (log: ${joinPath(slotDir(name), 'docs-build.log')})`);
 
   // Heal a stale ports cache. The registry stores a denormalized copy of
   // computePorts(slot), so a worktree created before a port was added to BASE

@@ -1,6 +1,8 @@
 import { spawn } from 'bun';
-import { readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { spawn as spawnChild } from 'node:child_process';
+import { existsSync, mkdirSync, openSync, readdirSync, statSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { run, which } from './exec';
 
 export async function ensureRuntimeArtifacts(worktreePath: string): Promise<number> {
@@ -33,29 +35,35 @@ export async function ensureRuntimeArtifacts(worktreePath: string): Promise<numb
 /** Directories an mtime walk of build inputs skips: build output and installed dependencies (the lockfile stands for those). */
 const NOT_INPUTS = new Set(['dist', 'node_modules', '.turbo', '.next']);
 
-/** Newest mtime (ms) of `path` or of anything under it outside NOT_INPUTS; 0 when it does not exist. A directory counts
- * too, so deleting a source file (which moves only its directory's mtime) also reads as a change. */
-export function newestInputMtimeMs(path: string): number {
+/** Newest mtime (ms) of `path` or of anything under it outside NOT_INPUTS; 0 when it does not exist. A directory
+ * below `path` counts too, so deleting a source file (which moves only its directory's mtime) reads as a change.
+ * `path`'s own mtime does not: `bun build --compile` stages its binary in the package root and renames it into dist/. */
+export function newestInputMtimeMs(path: string, root = true): number {
   let s;
   try { s = statSync(path); } catch { return 0; }
   if (!s.isDirectory()) return s.mtimeMs;
-  let newest = s.mtimeMs;
+  let newest = root ? 0 : s.mtimeMs;
   for (const entry of readdirSync(path, { withFileTypes: true })) {
     if (entry.isDirectory() && NOT_INPUTS.has(entry.name)) continue;
-    const m = newestInputMtimeMs(join(path, entry.name));
+    const m = newestInputMtimeMs(join(path, entry.name), false);
     if (m > newest) newest = m;
   }
   return newest;
 }
+
+/** The workspace packages the sandbox agent's bundle reaches through @kortix/* imports, transitively (its sources
+ * import @kortix/api-contract, @kortix/sdk and @kortix/shared). runtime-artifacts.test.ts walks the real sources. */
+export const AGENT_INPUT_PACKAGES = ['api-contract', 'llm-catalog', 'sdk', 'shared', 'voice'];
 
 /**
  * True when the sandbox agent binary is newer than every input of its build, so `pnpm --filter kortixd build`
  * would only reproduce it. `pnpm worktree start` runs right after `create` built it, and again on every restart:
  * 7.2 s each time on a 6 vCPU Kortix session (2026-11-26), almost all of it `bun build --compile`.
  *
- * Inputs: the package itself, every workspace package (its sources import packages/shared and packages/llm-gateway
- * by relative path), and the root lockfile, package.json and tsconfig.base.json, which move on a dependency bump.
- * An edit, a branch switch or a checkout rewrites an input's mtime, so each of those rebuilds.
+ * Inputs: the package itself, AGENT_INPUT_PACKAGES, and the root lockfile, package.json and tsconfig.base.json, which
+ * move on a dependency bump. Not all of packages/: the CLI build, which runs next, rewrites
+ * packages/starter/src/embedded.generated.json. An edit, a branch switch or a checkout rewrites an input's mtime, so
+ * each of those rebuilds.
  */
 export function agentArtifactCurrent(worktreePath: string): boolean {
   const pkg = join(worktreePath, 'apps/kortix-sandbox-agent-server');
@@ -63,7 +71,8 @@ export function agentArtifactCurrent(worktreePath: string): boolean {
   for (const out of ['dist/kortixd', 'dist/kortix-agent']) {
     try { built = Math.min(built, statSync(join(pkg, out)).mtimeMs); } catch { return false; }
   }
-  const inputs = [pkg, join(worktreePath, 'packages'), ...['pnpm-lock.yaml', 'package.json', 'tsconfig.base.json'].map((f) => join(worktreePath, f))];
+  const inputs = [pkg, ...AGENT_INPUT_PACKAGES.map((p) => join(worktreePath, 'packages', p)),
+    ...['pnpm-lock.yaml', 'package.json', 'tsconfig.base.json'].map((f) => join(worktreePath, f))];
   return inputs.every((input) => newestInputMtimeMs(input) < built);
 }
 
@@ -142,4 +151,30 @@ export async function startStripeListen(apiPort: number): Promise<StripeListen |
   const forwardTo = `http://localhost:${apiPort}/v1/billing/webhooks/stripe`;
   const hit = await spawnForFirstMatch(['stripe', 'listen', '--forward-to', forwardTo], /whsec_[A-Za-z0-9]+/, 20);
   return hit && { secret: hit.match, proc: hit.proc };
+}
+
+/**
+ * Start the web app's /docs build (apps/web/scripts/blume-docs.mjs) in a detached child, so it runs while
+ * `worktree start` waits on Supabase instead of beside the first page's compile. next.config.ts builds /docs
+ * whenever public/docs/ is stale, which it always is in a new worktree, and on a 6 vCPU Kortix session
+ * (2026-11-26) that build cost the first page 28 s when it ran synchronously and still slowed the compile when it
+ * ran beside it. Its lock makes a later next.config.ts build wait for this one and then find the output fresh.
+ * Returns false, starting nothing, when the worktree has no docs build or public/docs/ already exists.
+ */
+export function startDocsBuild(worktreePath: string, logPath: string): boolean {
+  const mod = join(worktreePath, 'apps', 'web', 'scripts', 'blume-docs.mjs');
+  if (!existsSync(mod) || existsSync(join(worktreePath, 'apps', 'web', 'public', 'docs', 'index.html'))) return false;
+  const node = which('node') ? 'node' : process.execPath;
+  try {
+    mkdirSync(dirname(logPath), { recursive: true });
+    const log = openSync(logPath, 'w');
+    const child = spawnChild(node, ['-e', `import(${JSON.stringify(pathToFileURL(mod).href)}).then((m) => m.buildBlumeDocs())`], {
+      cwd: join(worktreePath, 'apps', 'web'), detached: true, stdio: ['ignore', log, log],
+    });
+    child.on('error', () => {});
+    child.unref();
+    return true;
+  } catch {
+    return false; // next.config.ts still builds /docs itself.
+  }
 }

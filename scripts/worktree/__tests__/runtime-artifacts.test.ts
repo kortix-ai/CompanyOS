@@ -119,3 +119,36 @@ describe('startDocsBuild', () => {
     expect(startDocsBuild(mkdtempSync(join(tmpdir(), 'wt-docs-none-')), join(tmpdir(), 'unused.log'))).toBe(false);
   });
 });
+
+// The primary Supabase prewarm `worktree create` starts, and the wait in ensurePrimarySupabase that keeps
+// `worktree start` from stopping a start in flight.
+describe('primary Supabase prewarm pid', () => {
+  const pidFile = () => join(mkdtempSync(join(tmpdir(), 'wt-prewarm-')), 'prewarm.pid');
+
+  test('a live pid is running; a dead one is not, and its file goes', async () => {
+    const { prewarmRunning } = await import('../lib/supabase');
+    const live = pidFile();
+    writeFileSync(live, String(process.pid));
+    expect(prewarmRunning(live)).toBe(process.pid);
+    const dead = pidFile();
+    const gone = Bun.spawn(['true']);
+    await gone.exited;
+    writeFileSync(dead, String(gone.pid));
+    expect(prewarmRunning(dead)).toBeNull();
+    expect(existsSync(dead)).toBe(false);
+    expect(prewarmRunning(pidFile())).toBeNull();
+  });
+
+  test('start waits for a prewarm still running, and only then', async () => {
+    const { waitForPrimaryPrewarm } = await import('../lib/supabase');
+    const file = pidFile();
+    expect(await waitForPrimaryPrewarm(5_000, file)).toBe(false);
+    const child = Bun.spawn(['sleep', '0.6']);
+    writeFileSync(file, String(child.pid));
+    const t0 = Date.now();
+    // Reap the child as it exits, so its pid stops answering kill(pid, 0).
+    void child.exited;
+    expect(await waitForPrimaryPrewarm(5_000, file)).toBe(true);
+    expect(Date.now() - t0).toBeGreaterThanOrEqual(400);
+  });
+});

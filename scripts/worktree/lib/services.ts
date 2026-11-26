@@ -147,8 +147,8 @@ export async function startStripeListen(apiPort: number): Promise<StripeListen |
 }
 
 /**
- * Start the web app's /docs build (apps/web/scripts/blume-docs.mjs) in a detached child, so it runs while
- * `worktree start` waits on Supabase instead of beside the first page's compile. next.config.ts builds /docs
+ * Start the web app's /docs build (apps/web/scripts/blume-docs.mjs) in a detached child, from `worktree create`
+ * right after the install, so it is done before the first page compiles instead of running beside it. next.config.ts builds /docs
  * whenever public/docs/ is stale, which it always is in a new worktree, and on a 6 vCPU Kortix session
  * (2026-11-26) that build cost the first page 28 s when it ran synchronously and still slowed the compile when it
  * ran beside it. Its lock makes a later next.config.ts build wait for this one and then find the output fresh.

@@ -19,7 +19,7 @@ import {
 import { workspaceIdParam } from '../../shared/route-params';
 import { assertProjectCapability, loadProjectForUser, loadVisibleSession, sessionIsTombstoned } from '../lib/access';
 import { projectsApp } from '../lib/app';
-import { recordWorkspaceCacheBuilder } from '../workspace-cache/builder';
+import { recordWorkspaceCacheBuilder, startWorkspaceCacheBuildNow } from '../workspace-cache/builder';
 
 const EntrySchema = z.object({
   id: z.string(),
@@ -128,6 +128,41 @@ export function registerWorkspaceCacheRoutes(): void {
         const r = refusal(err);
         return c.json(r.body, r.status);
       }
+    },
+  );
+
+  projectsApp.openapi(
+    createRoute({
+      method: 'post',
+      path: '/{workspaceId}/workspace-cache/build',
+      tags: ['sessions'],
+      summary: 'Rebuild the project’s workspace cache now',
+      description:
+        'Starts the daily rebuild now: a session of the agent recorded by the last save by a person, as that person, that runs the ' +
+        'project’s `scripts/workspace-cache-build` and saves the result. 409 `no_builder` until a person has saved once, 409 ' +
+        '`build_running` while one runs. Needs project settings rights, and a person. Flag `platinum_cache`.',
+      ...auth,
+      request: { params },
+      responses: { 202: json(z.object({ session_id: z.string() }), 'The build session'), ...errors(403, 404, 409, 502) },
+    }),
+    async (c) => {
+      const loaded = await loadProjectForUser(c, workspaceIdParam(c)!, 'read');
+      if (!loaded) return c.json({ error: 'Not found' }, 404);
+      await assertProjectCapability(c, loaded.userId, loaded.row.accountId, loaded.row.projectId, PROJECT_ACTIONS.PROJECT_SETTINGS_WRITE);
+      assertAgentScope(c, PROJECT_ACTIONS.PROJECT_SETTINGS_WRITE);
+      const gate = requireFeatureFlag(c, loaded.row.metadata, 'platinum_cache');
+      if (gate) return gate;
+      if (callerKortixSessionId(c) !== null) {
+        return c.json({ error: 'A person starts a workspace cache build, not a session.', code: 'forbidden' }, 403);
+      }
+      const started = await startWorkspaceCacheBuildNow(loaded.row);
+      if ('session_id' in started) return c.json(started, 202);
+      const messages = {
+        no_builder: 'Save a prepared session as the workspace cache once first: the build repeats it.',
+        build_running: 'A workspace cache build is already running.',
+        not_started: 'The build session could not start. Try again in a minute.',
+      } as const;
+      return c.json({ error: messages[started.error], code: started.error }, started.error === 'not_started' ? 502 : 409);
     },
   );
 }

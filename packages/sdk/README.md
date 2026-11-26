@@ -396,6 +396,21 @@ await s.answerQuestion(questions[0].id, [["Yes"]]); // null dismisses it
 await s.compact(); // only when health() lists `session.compact`
 ```
 
+### Agent directory
+
+Experimental, behind the workspace flag `channels`. The agent directory lists the agents from `kortix.yaml` that a person can message, each in their own chat. An entry is not a new record. Every agent except `mode: subagent` ones is listed, and My Kortix is one when the workspace runs it. An agent's chat is the person's DM space with the agent.
+
+```ts
+const directory = kortix.workspace(workspaceId).agentDirectory;
+const agents = await directory.list(); // [{ name, display_name, model, status, is_default, builtin, chat_space_id }]
+const chat = await kortix.workspace(workspaceId).spaces.dm(agents[0].name); // the person's chat, created on first call
+const { agent, stopped_sessions } = await directory.setPaused('marketing', true);
+```
+
+`status` is `active`, `paused` or `off` (kortix.yaml disables the agent). A paused agent still gets messages. No schedule, webhook, event or monitor starts it, and pausing stops its running tasks for every person. A person firing a trigger by hand still runs it. Pausing needs the trigger-update permission. Both calls reject with 403 `feature_disabled` while `channels` is off. The REST functions are `listWorkspaceAgentDirectory(workspaceId)` and `setWorkspaceAgentPaused(workspaceId, name, paused)`; the types are `WorkspaceAgentEntry` and `WorkspaceAgentPauseResult`.
+
+React: `useWorkspaceAgentDirectory(workspaceId, { enabled })` and `useSetWorkspaceAgentPaused(workspaceId)`. Opening a chat with `useOpenWorkspaceDm` refreshes the list's `chat_space_id`.
+
 ### Apps
 
 `kortix.project(projectId).apps` deploys immutable App releases behind one stable URL: releases, machines per process group, persistent volumes. New Apps use `private` access. Apps is generally available: every project can create and deploy them.

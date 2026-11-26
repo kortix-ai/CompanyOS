@@ -1,9 +1,9 @@
 'use client';
 
 import type { ProjectSpace } from '@kortix/sdk';
-import { useProjectSessions, useProjectSpaces } from '@kortix/sdk/react';
+import { useFeatureFlag, useProjectSessions, useProjectSpaces } from '@kortix/sdk/react';
 import { MY_KORTIX_AGENT_NAME } from '@kortix/shared';
-import { LockSimpleIcon, PlusIcon } from '@phosphor-icons/react';
+import { LockSimpleIcon } from '@phosphor-icons/react';
 import { type KeyboardEvent, useMemo, useState } from 'react';
 
 import { useTranslations } from '../../i18n';
@@ -15,6 +15,7 @@ import { FadedScrollArea } from '../../primitives/faded-scroll-area';
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from '../../primitives/sidebar';
 import { useUiPathname } from '../../providers/ui-provider';
 import { ProjectReviewNavItem } from './footer/project-review-nav';
+import { ChatSectionHeading, ProjectAgentsRows } from './project-agents-nav';
 import { CreateChannelDialog } from '../spaces/create-channel-dialog';
 import { PrivateChannelsNotInRow } from '../spaces/private-channels-not-in';
 import {
@@ -28,7 +29,7 @@ import { SpaceAvatar } from '../spaces/space-avatar';
 import { usePersonalSpaceName } from '../spaces/use-personal-space-name';
 import { useMentionNames, useOtherPerson } from '../spaces/space-people';
 
-/** ↑/↓ move between the rows (Review, the spaces, New space), as in a list. */
+/** ↑/↓ move between the rows (Review, the chats, the agents, the channels), as in a list. */
 function moveFocus(event: KeyboardEvent<HTMLUListElement>) {
   if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
   const rows = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('[data-sidebar="menu-button"]'));
@@ -63,6 +64,8 @@ export function ProjectSpacesNav({ projectId }: { projectId: string }) {
   const [createOpen, setCreateOpen] = useState(false);
   const { personal, others } = useMemo(() => orderSpaces(spaces.data ?? []), [spaces.data]);
   const chatHref = `${uiRoutes().project(projectId)}/chat`;
+  // Agents (`channels`): a section of the agents the person can message, then the channels under their own heading.
+  const agentsOn = useFeatureFlag(projectId, 'channels').enabled;
 
   const hrefOf = (space: ProjectSpace) =>
     space.kind === 'dm' ? uiRoutes().dm(projectId, space.dm_agent_name ?? '') : uiRoutes().channel(projectId, space.slug ?? '');
@@ -83,6 +86,8 @@ export function ProjectSpacesNav({ projectId }: { projectId: string }) {
           isPrivate
           names={names}
         />
+        <ProjectAgentsRows projectId={projectId} pathname={pathname} enabled={agentsOn} />
+        <ChatSectionHeading label={t('spaces.title')} actionLabel={t('spaces.addChannel')} onAction={() => setCreateOpen(true)} />
         {spaces.isError && !spaces.data ? (
           <li className="space-y-1.5 px-2 py-2">
             <p className="text-destructive/80 text-xs">{t('spaces.loadError')}</p>
@@ -107,14 +112,6 @@ export function ProjectSpacesNav({ projectId }: { projectId: string }) {
             />
           );
         })}
-        {spaces.data ? (
-          <SidebarMenuItem>
-            <SidebarMenuButton onClick={() => setCreateOpen(true)} className="text-muted-foreground hover:text-sidebar-foreground">
-              <PlusIcon />
-              <span>{t('spaces.addChannel')}</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        ) : null}
         <PrivateChannelsNotInRow projectId={projectId} />
       </SidebarMenu>
       <CreateChannelDialog projectId={projectId} open={createOpen} onOpenChange={setCreateOpen} />

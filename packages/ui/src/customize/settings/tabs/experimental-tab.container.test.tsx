@@ -105,7 +105,7 @@ const click = async (el: Element) => {
 const switchOf = (key: string) => document.querySelector(`[aria-labelledby="feature-flag-${key}"]`);
 
 test('an override equal to the default offers no reset', async () => {
-  await mount([flag({ key: 'chat', name: 'Spaces', enabled: true, default_enabled: true })]);
+  await mount([flag({ key: 'channels', name: 'Channels', enabled: true, default_enabled: true })]);
   expect([...document.querySelectorAll('button')].some((b) => b.textContent?.trim() === 'Reset to default')).toBe(false);
 });
 

@@ -38,7 +38,8 @@ describe('registry ↔ contract', () => {
       [...FEATURE_FLAG_KEYS]
         .filter((key) => {
           const def = REGISTERED_FEATURE_FLAGS.find((f) => f.key === key);
-          // A hidden flag is listed (read-only) only while it resolves on.
+          // A withdrawn flag is never listed; a hidden flag is listed (read-only) only while it resolves on.
+          if (def?.withdrawn) return false;
           return !def?.catalogHidden || resolveFeatureFlag({}, key);
         })
         .sort(),
@@ -208,23 +209,37 @@ describe('resolveFeatureFlag — explicit override wins', () => {
     }
   });
 
-  test('chat is an experimental, explicit opt-in flag offered everywhere', () => {
-    expect(findCatalogFlag('chat')).toMatchObject({
-      stability: 'experimental',
-      enabled: false,
-      operator_only: false,
-    });
-    expect(resolveFeatureFlag({}, 'chat')).toBe(false);
-    expect(resolveFeatureFlag({ experimental: { chat: true } }, 'chat')).toBe(true);
+  test('channels is an experimental, explicit opt-in flag offered everywhere, listed right before chat was', () => {
+    expect(findCatalogFlag('channels')).toMatchObject({ stability: 'experimental', enabled: false, operator_only: false });
+    expect(resolveFeatureFlag({}, 'channels')).toBe(false);
+    expect(resolveFeatureFlag({ experimental: { channels: true } }, 'channels')).toBe(true);
+    const keys = REGISTERED_FEATURE_FLAGS.map((flag) => flag.key);
+    expect(keys.indexOf('channels')).toBe(keys.indexOf('chat') - 1);
   });
 
-  test('chat reads the legacy Channels and One chat overrides: chat, else project_channels, else infinichat', () => {
-    expect(resolveFeatureFlag({ experimental: { project_channels: true } }, 'chat')).toBe(true);
-    expect(resolveFeatureFlag({ experimental: { infinichat: true } }, 'chat')).toBe(true);
-    expect(resolveFeatureFlag({ experimental: { project_channels: false, infinichat: true } }, 'chat')).toBe(false);
-    expect(resolveFeatureFlag({ experimental: { chat: false, project_channels: true } }, 'chat')).toBe(false);
-    expect(resolveFeatureFlag({ experimental: { chat: 'yes', project_channels: true } }, 'chat')).toBe(true);
-    expect(buildFeatureFlagCatalog({ experimental: { project_channels: true } }).find((f) => f.key === 'chat')).toMatchObject({ enabled: true, overridden: true });
+  test('chat is withdrawn into channels: not listed, and resolves exactly as channels', () => {
+    expect(buildFeatureFlagCatalog({}).map((f) => f.key)).not.toContain('chat');
+    expect(resolveFeatureFlag({}, 'chat')).toBe(false);
+    expect(resolveFeatureFlag({ experimental: { channels: true } }, 'chat')).toBe(true);
+    expect(resolveFeatureFlag({ experimental: { channels: true, chat: false } }, 'chat')).toBe(true);
+    // A stored chat override from before the merge no longer counts: the project turns on channels.
+    expect(resolveFeatureFlag({ experimental: { chat: true } }, 'chat')).toBe(false);
+    expect(resolveFeatureFlag({ experimental: { channels: false, chat: true } }, 'chat')).toBe(false);
+    expect(resolveFeatureFlags({ experimental: { channels: true } })).toMatchObject({ channels: true, chat: true });
+  });
+
+  test('chat_input, chat_front and spaces_proactive are withdrawn: never listed, always off', () => {
+    const on = { experimental: { channels: true, chat: true, chat_input: true, chat_front: true, spaces_proactive: true } };
+    for (const key of ['chat_input', 'chat_front', 'spaces_proactive'] as const) {
+      expect(resolveFeatureFlag(on, key)).toBe(false);
+      expect(buildFeatureFlagCatalog(on).map((f) => f.key)).not.toContain(key);
+    }
+  });
+
+  test('the legacy Channels and One chat overrides are inert: chat follows channels only', () => {
+    expect(resolveFeatureFlag({ experimental: { project_channels: true } }, 'chat')).toBe(false);
+    expect(resolveFeatureFlag({ experimental: { infinichat: true } }, 'chat')).toBe(false);
+    expect(resolveFeatureFlag({ experimental: { project_channels: true, infinichat: true, channels: true } }, 'chat')).toBe(true);
     for (const key of ['project_channels', 'infinichat']) {
       expect(isFeatureFlagKey(key)).toBe(false);
       expect(buildFeatureFlagCatalog({}).map((flag) => flag.key as string)).not.toContain(key);
@@ -435,12 +450,17 @@ describe('catalogHidden', () => {
 });
 
 describe('featureDisabledBody', () => {
+  test('a chat-gated route points at Channels, the switch that exists', () => {
+    expect(featureDisabledBody('chat')).toMatchObject({ feature: 'channels', error: expect.stringContaining('Channels is not enabled') });
+  });
+
   test('carries the machine-readable code and the flag key; points at Settings, or at Kortix for a hidden flag', () => {
     for (const key of FEATURE_FLAG_KEYS) {
       const body = featureDisabledBody(key);
       expect(body.code).toBe(FEATURE_DISABLED_CODE);
       expect(body.code).toBe('feature_disabled');
-      expect(body.feature).toBe(key);
+      // A flag withdrawn into another names the switch a person turns on (`chat` -> `channels`).
+      expect(body.feature).toBe(key === 'chat' ? 'channels' : key);
       expect(typeof body.error).toBe('string');
       // A hidden flag has no toggle in Settings to point at. No message names an organization.
       expect(body.error).toContain(HIDDEN_KEYS.includes(key) ? 'Contact Kortix' : 'Workspace settings');

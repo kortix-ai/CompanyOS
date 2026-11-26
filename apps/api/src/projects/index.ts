@@ -63,6 +63,7 @@ import { registerGroupGrantsRoutes } from './routes/group-grants';
 import { registerProviderSecretPoolsRoutes } from './routes/provider-secret-pools';
 import { registerProjectSessionsRoutes, registerSessionLookupRoutes } from './routes/project-sessions';
 import { registerChatThreadRoutes } from './routes/chat-threads';
+import { registerAgentDirectoryRoutes } from './routes/agent-directory';
 import { registerSpaceProactiveRoutes } from './routes/space-proactive';
 import { registerWorkspaceCacheRoutes } from './routes/workspace-cache';
 import { registerSessionTranscriptsRoutes } from './routes/session-transcripts';
@@ -173,6 +174,7 @@ export function registerAllProjectRoutes(): void {
   registerProviderSecretPoolsRoutes();
   registerProjectSessionsRoutes();
   registerChatThreadRoutes();
+  registerAgentDirectoryRoutes();
   registerSpaceProactiveRoutes();
   registerWorkspaceCacheRoutes();
   registerSessionTranscriptsRoutes();

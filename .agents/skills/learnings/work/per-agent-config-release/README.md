@@ -118,6 +118,62 @@ Two scopes:
 Imports and skill links are parsed once per blob per API process
 (`git cat-file --batch`, memo by blob ID).
 
+Where builds run. Eight Strix reviews (of #13024 and #13028) found one
+unbounded loop after another while builds ran on the API event loop. Since
+#13028 every read of a release's tree (the whole-tree release, the per-agent
+releases, the archive route's rebuilds) runs in a tree thread
+(`config-releases/tree-jobs.ts`, `tree-thread.ts`), 2 per API process:
+- a job may run 60 s of its own time, 300 s in all; past that the thread is
+  stopped and replaced, and the same job of that project fails at once for
+  10 minutes;
+- one job per project runs at a time (a workspace is one project and one
+  account here); at most 8 of one project and 64 in all wait, each at most
+  30 s, and a free thread goes to the waiting project served least recently;
+  past a bound the build answers "busy" with no release ID (nothing caches
+  it, a session keeps its running config, the next convergence asks again),
+  and the archive route answers 503. Open: one person can create workspaces
+  without limit and so fill the queue (Strix review 10); no per-project rule
+  fixes that;
+- an agent's file list is made in the thread and crosses back once (one
+  `agentTree` job): a 100,000-file agent build blocks the event loop 13.6 ms;
+- downloads into the partial mirror stay in the API process, which holds the
+  credentials: the thread asks for them (`release-tree-git.ts`), and their
+  wait does not count against the job;
+- the thread starts no child process: it asks the API process to run each
+  `git` and `gzip` (`startProcess`), in a process group of its own. A
+  stopped thread's children are killed with their groups, and the API event
+  loop reaps them. A child a thread starts itself outlives the thread and
+  stays a zombie of the API process (Strix review 11, verified on Bun 1.4.5);
+- a thread's scratch folder carries the process ID and a per-process token;
+  the first thread of a process removes the folders of processes that ended.
+The API event loop only receives results: the largest listing (170,000
+files, the 10 MiB git output bound) blocks it ~25 ms on arrival.
+
+The governance compile (`kortix.yaml` and every prompt file it names) is not
+in a thread: it shares `compile-agent-config.ts` with session start, and that
+module loads `projects/`. A release build passes `maxPromptChars` (16 Mi
+characters in all, read 8 files at a time); past it the compile fails, there
+is no release, and the session keeps its running config. The compile, its
+JSON and its etag cost ~1 ms per Mi characters (Bun 1.4.3). Session start,
+push and reload read without that bound, as before. The `kortix.yaml` parse
+itself is not bounded here; the per-prompt authorization read parses it too.
+
+Bounds inside a build. One `ListBudget` per build counts every axis an author
+controls: bytes read (128 MiB), parsed (32 MiB) and downloaded (128 MiB), git
+round trips (512), characters of string work (200,000,000: every prefix
+compare, candidate path and directory prefix is paid by its length) and wall
+time (20 s). Also: the link scan is a linear `indexOf` pass; a text file over
+256 KiB is not scanned; a module over 512 KiB ships but is not parsed; an
+import specifier over 1,024 characters resolves to nothing; each folder is
+walked once (4,000 at most); the `folders` walk takes at most 2,000 tool
+folders and 64 hops; imports are memoized by blob and loader. Past a bound
+the release is "too large": an `agent:` session keeps its running config, a
+`repo-agent:` session keeps the whole-tree release. The bound tests are in
+`config-releases/agent-release-bounds.test.ts` and `tree-jobs.test.ts`. On
+the internal project, with every memo cleared before each of the 42 agents,
+the worst agent used 3% of the git round trips, 2% of the bytes read and 1%
+of the work.
+
 `include:` is new manifest schema. Proposal: a top-level `release.include`
 (project-wide globs) and `agents.<name>.include` (that agent only). The exact
 key needs a schema review with the `kortix-yaml-versionless` owners.

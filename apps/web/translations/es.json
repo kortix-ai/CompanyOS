@@ -3139,6 +3139,7 @@
     },
     "unified": {
       "welcome": "Te damos la bienvenida a {name}",
+      "sessionEnded": "Se cerró tu sesión. Vuelve a iniciar sesión para continuar.",
       "email": "Correo electrónico",
       "emailPlaceholder": "Introduce tu correo electrónico…",
       "password": "Contraseña",
@@ -8229,6 +8230,7 @@
       "legendAssistant": "Respuestas",
       "legendTool": "Resultados de herramientas",
       "legendOther": "Otro",
+      "skillsUsedLabel": "Skills usados",
       "subAgentsLabel": "Subagentes",
       "subAgentsNote": "Ayudantes que se ejecutaron dentro de esta sesión. Su coste forma parte del coste de esta sesión.",
       "combinedMessages": "Mensajes combinados",
@@ -21413,7 +21415,11 @@
       "textf543a9f99ce7": "Barra de acciones",
       "textca4067071fcf": "Selección",
       "text4cea356a17a1": "Cambios sin guardar",
-      "text2358f7b37c07": "La barra flotante de un modo temporal: una selección, cambios sin guardar, un pegado pendiente. Un título, una descripción atenuada, acciones con atajos de teclado y un botón de cierre."
+      "text2358f7b37c07": "La barra flotante de un modo temporal: una selección, cambios sin guardar, un pegado pendiente. Un título, una descripción atenuada, acciones con atajos de teclado y un botón de cierre.",
+      "textf14554abf742": "Reanudación de sesiones",
+      "text9b166fdc8348": "Tiempo desde que se despierta un sandbox detenido hasta que responde su entorno de ejecución, con el promedio de cada fase.",
+      "text2c501fc3ba5b": "Reanudaciones",
+      "text421f441370b1": "Fases (promedio)"
     },
     "publicShareConfirm": {
       "title": "¿Crear un enlace público?",

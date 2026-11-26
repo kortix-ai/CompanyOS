@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import type { UpstreamDescriptor } from '../domain';
 import { UpstreamHttpError } from '../errors';
 import { callUpstream, openDirectStream } from './call-upstream';
@@ -14,6 +14,25 @@ const descriptor: UpstreamDescriptor = {
 };
 
 describe('callUpstream OpenAI-compatible passthrough', () => {
+  test.each([false, true])('default fetch disables the runtime idle timeout (stream=%p)', async (stream) => {
+    const signal = new AbortController().signal;
+    const provider = new Response(stream ? 'data: [DONE]\n\n' : '{}');
+    const fetch = spyOn(globalThis, 'fetch').mockResolvedValue(provider);
+    try {
+      const response = await callUpstream({ model: 'requested', stream }, descriptor, { signal });
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(fetch).toHaveBeenCalledWith('https://provider.example/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: 'Bearer secret' },
+        body: JSON.stringify({ model: 'provider-model', stream }),
+        signal,
+        timeout: false,
+      });
+      expect(await response.text()).toBe(stream ? 'data: [DONE]\n\n' : '{}');
+    } finally {
+      fetch.mockRestore();
+    }
+  });
   test('performs one fetch and returns the provider response unchanged', async () => {
     let calls = 0;
     let received: { input: string; init: RequestInit } | undefined;

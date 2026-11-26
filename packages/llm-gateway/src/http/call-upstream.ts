@@ -3,6 +3,7 @@ import type { UpstreamDescriptor } from '../domain';
 import { ClientAbortError, UpstreamHttpError, UpstreamMisconfiguredError } from '../errors';
 import type { AiSdkFetch } from '../transports/ai-sdk';
 import { resolveTransportKind } from '../transports/route-kind';
+import { upstreamFetch } from '../upstream-fetch';
 import {
   exposeGeminiThoughtSignaturesInResponse,
   isGoogleOpenAiUpstream,
@@ -95,7 +96,7 @@ async function directOpenAiRequest(
 
   const payload = descriptor.resolvedModel ? { ...body, model: descriptor.resolvedModel } : body;
 
-  const fetchImpl = opts.fetchImpl ?? ((input, init) => fetch(input, init));
+  const fetchImpl = opts.fetchImpl ?? upstreamFetch;
   const url = `${trimTrailingSlash(descriptor.baseUrl)}/chat/completions`;
   const init: RequestInit = { method: 'POST', headers, body: JSON.stringify(payload), signal: opts.signal };
   if (!descriptor.egress) return fetchImpl(url, init);

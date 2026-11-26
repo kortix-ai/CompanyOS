@@ -17,7 +17,7 @@ mock.module('@kortix/sdk', () => ({
     syncedAccounts.push(accountId);
   },
 }));
-const { useBillingReturnUrl, BILLING_RETURNS } = await import('./billing-return');
+const { useBillingReturnUrl, BILLING_RETURNS, portalReturnUrl, settlePortalReturn } = await import('./billing-return');
 const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
 afterEach(() => {
   if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
@@ -84,3 +84,26 @@ test.each(['team_signup', 'credit_purchase', 'enterprise_contract'] as const)(
     queryClient.clear();
   },
 );
+
+// KRTX-1510: the portal's one plan change (a switch to Free) lands on its
+// return, not when Stripe's webhook arrives.
+test('the portal returns to the same page with the marker and the managed account', () => {
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: { location: { origin: 'http://localhost:13000' } },
+  });
+  const url = new URL(portalReturnUrl('http://localhost:13000/settings/plan', 'synthetic-workspace'));
+  expect(url.pathname).toBe('/settings/plan');
+  expect(url.searchParams.get('billing_portal')).toBe('return');
+  expect(url.searchParams.get('accountId')).toBe('synthetic-workspace');
+});
+
+test('the portal return re-syncs the managed account and re-reads its state', async () => {
+  const queryClient = new QueryClient();
+  const accountKey = ['account-state', 'state', { accountId: 'synthetic-workspace' }];
+  queryClient.setQueryData(accountKey, { synthetic: true });
+  await settlePortalReturn(queryClient, 'synthetic-workspace');
+  expect(syncedAccounts.at(-1)).toBe('synthetic-workspace');
+  expect(queryClient.getQueryState(accountKey)?.isInvalidated).toBe(true);
+  queryClient.clear();
+});

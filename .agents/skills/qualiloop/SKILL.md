@@ -53,7 +53,7 @@ Staging and prod stay unconfigured: leave the secret unset there.
   `POST /v1/admin/api/accounts/{id}/tier` and `/credits`). On the Free plan
   every turn ends `{"error":"No model: upgrade to the Credits plan or add your
   own provider key."}`. A low balance does the same: grant more.
-- QualiLoop saves the target with `max_parallel_conversations` 4 (each
+- QualiLoop saves the target with `max_parallel_conversations` 8 (each
   conversation is one sandbox) and `reply_timeout_seconds` 600. The route
   gives up on a turn after 570 s, so QualiLoop always gets an answer first.
 
@@ -73,9 +73,13 @@ Staging and prod stay unconfigured: leave the secret unset there.
    `1` when anything is left.
 2. `npx qualiloop connect check`: one real turn plus its trace. Every required
    item passes, or the endpoint, the deploy or a variable is broken.
-3. `npx qualiloop suites run core --wait --fail-on major`: the Core suite.
-   One conversation is one conversation credit on QualiLoop, and one sandbox
-   plus model use on the dev test account.
+3. `npx qualiloop suites run core --wait --fail-on major`: the Core suite
+   (26 tests, one or two per area). `suites run "My Kortix e2e"` is the deep
+   one (86 tests in 14 areas: first contact, delegation, agents, skills,
+   connectors, secrets, models, follow-through, automations, goals, files and
+   memory, people and billing, sessions, red team), about 1 hour at 8 at a
+   time. Reset between the two. One conversation is one conversation credit
+   on QualiLoop, and one sandbox plus model use on the dev test account.
 4. `npx qualiloop problems categories`, then the failed runs' problems: what to fix.
 5. One run proves little: the same tests on the same model gave 19 major
    problems, then 7. Compare a change on 3 runs of the tests it touches.

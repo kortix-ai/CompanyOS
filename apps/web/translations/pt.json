@@ -1370,6 +1370,10 @@
         "platinum_cache": {
           "name": "Cache do espaço de trabalho",
           "description": "Novas sessões começam com /workspace restaurado do cache salvo deste projeto no Platinum: um checkout pronto com node_modules e o store do pnpm, em cerca de um segundo em vez de minutos de preparação. Um administrador do projeto salva uma sessão preparada como cache. Desligado, cada sessão começa com /workspace vazio."
+        },
+        "sidebar_rail": {
+          "name": "Barra de ícones lateral",
+          "description": "No desktop, uma barra fixa de ícones fica ao lado da barra lateral: Início, Buscar e Mais no topo; Ajuda, Personalizar e o botão do painel embaixo. Mais lista todas as outras páginas, e o alfinete de uma linha coloca essa página na barra. Com o painel recolhido, passar o cursor sobre Início, Espaços ou Personalizar mostra o painel nessa lista."
         }
       },
       "channelsSwitch": {
@@ -1672,6 +1676,13 @@
     "pin": "Fixar barra lateral",
     "resize": "Redimensionar barra lateral",
     "resizeHelp": "Arraste para redimensionar — clique duas vezes para repor",
+    "iconRail": {
+      "navigation": "Navegação do espaço de trabalho",
+      "home": "Início",
+      "more": "Mais",
+      "pinTab": "Mostrar aba",
+      "unpinTab": "Ocultar aba"
+    },
     "customize": "Personalizar",
     "sessions": "Sessões",
     "sessionViewOptions": "Opções de visualização das sessões",
@@ -27465,6 +27476,10 @@
     "completeDescription": "Se você iniciou a configuração em um terminal, ela continua lá sozinha.",
     "slackName": "Slack",
     "sectionOpen": "Precisa de você",
+    "sectionOptional": "Conectores opcionais",
+    "skip": "Ignorar",
+    "skipNamed": "Ignorar {name}",
+    "showSkipped": "Mostrar conectores ignorados",
     "doneSummary": "{count} já configurados",
     "done": "Concluído",
     "connect": "Conectar {name}",
@@ -27617,5 +27632,22 @@
     "community": "Comunidade no Discord",
     "whatsNew": "Novidades",
     "fullChangelog": "Changelog completo"
+  },
+  "questionPrompt": {
+    "submitFailed": "Não foi possível enviar as respostas. Estão guardadas aqui. Tente novamente.",
+    "submitted": "Respostas enviadas",
+    "submitting": "A enviar respostas…",
+    "review": "Rever respostas",
+    "removeCustom": "Remover resposta personalizada: {answer}",
+    "customAnswer": "Resposta personalizada",
+    "customPlaceholder": "Escreva a sua resposta",
+    "submitAnswer": "Enviar resposta",
+    "addAnswer": "Adicionar resposta",
+    "nextQuestion": "Próxima pergunta",
+    "submitAnswers": "Enviar respostas",
+    "askClarification": "Pedir esclarecimento",
+    "clarificationFailed": "Não foi possível enviar o esclarecimento. Tente novamente.",
+    "discussionLabel": "Discutir a pergunta sem responder",
+    "sendClarification": "Enviar esclarecimento"
   }
 }

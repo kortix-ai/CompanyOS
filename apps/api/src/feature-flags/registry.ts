@@ -616,6 +616,20 @@ const FLAGS: readonly FeatureFlagDef[] = [
       'POST and GET /v1/projects/:id/workspace-cache (project admins) answer 403 feature_disabled while it is off. Turning it off changes the next ' +
       'new session only; saved entries stay in Platinum until their idle TTL.',
   },
+  {
+    key: 'sidebar_rail',
+    name: 'Sidebar rail',
+    description:
+      'On desktop, a fixed icon rail sits beside the sidebar: Home, Search and More at the top, Help, Customize and the panel toggle at the bottom. More lists every other page, and a pin on a row puts that page on the rail. With the panel collapsed, hovering Home, Spaces or Customize shows the panel on that list.',
+    stability: 'experimental',
+    wip: true,
+    available: () => true,
+    platformDefault: () => false,
+    enforcement: 'ui-only',
+    enforcementNote:
+      'UI-ONLY: the web project sidebar (packages/ui/src/workspace/sidebar/project-sidebar.tsx) mounts ProjectRail on desktop while this is on. ' +
+      'Off, the sidebar is unchanged. Mobile never shows the rail. No route reads it. BOX: listed in KORTIX_FEATURE_FLAGS like every enabled flag; nothing in the box reads it.',
+  },
 ];
 
 const FLAG_BY_KEY: Record<FeatureFlagKey, FeatureFlagDef> = Object.fromEntries(

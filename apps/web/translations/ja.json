@@ -1370,6 +1370,10 @@
         "platinum_cache": {
           "name": "ワークスペースキャッシュ",
           "description": "新しいセッションは、Platinum に保存されたこのプロジェクトのワークスペースキャッシュから /workspace を復元して始まります。node_modules と pnpm ストアを含む準備済みのチェックアウトが、数分のセットアップではなく約 1 秒で用意されます。プロジェクト管理者が準備済みのセッションをキャッシュとして保存します。オフの場合、各セッションは空の /workspace で始まります。"
+        },
+        "sidebar_rail": {
+          "name": "サイドバーのアイコンレール",
+          "description": "デスクトップでは、サイドバーの横に固定のアイコンレールが表示されます。上部にホーム、検索、その他、下部にヘルプ、カスタマイズ、パネルの切り替えがあります。その他には他のすべてのページが並び、行のピンでそのページをレールに追加できます。パネルを折りたたんだ状態でホーム、スペース、カスタマイズにカーソルを合わせると、その一覧のパネルが表示されます。"
         }
       },
       "channelsSwitch": {
@@ -1672,6 +1676,13 @@
     "pin": "サイドバーを固定",
     "resize": "サイドバーのサイズを変更",
     "resizeHelp": "ドラッグしてサイズ変更 — ダブルクリックでリセット",
+    "iconRail": {
+      "navigation": "ワークスペースのナビゲーション",
+      "home": "ホーム",
+      "more": "その他",
+      "pinTab": "タブを表示",
+      "unpinTab": "タブを非表示"
+    },
     "customize": "カスタマイズ",
     "sessions": "セッション",
     "sessionViewOptions": "セッション表示オプション",
@@ -27465,6 +27476,10 @@
     "completeDescription": "ターミナルでセットアップを開始した場合、そちらで自動的に続行されます。",
     "slackName": "Slack",
     "sectionOpen": "対応が必要",
+    "sectionOptional": "任意のコネクター",
+    "skip": "スキップ",
+    "skipNamed": "{name}をスキップ",
+    "showSkipped": "スキップしたコネクターを表示",
     "doneSummary": "{count} 件は設定済み",
     "done": "完了",
     "connect": "{name} を接続",
@@ -27617,5 +27632,22 @@
     "community": "Discord コミュニティ",
     "whatsNew": "新機能",
     "fullChangelog": "すべての変更履歴"
+  },
+  "questionPrompt": {
+    "submitFailed": "回答を送信できませんでした。回答はここに保存されています。もう一度お試しください。",
+    "submitted": "回答を送信しました",
+    "submitting": "回答を送信中…",
+    "review": "回答を確認",
+    "removeCustom": "自由回答を削除: {answer}",
+    "customAnswer": "自由回答",
+    "customPlaceholder": "回答を入力",
+    "submitAnswer": "回答を送信",
+    "addAnswer": "回答を追加",
+    "nextQuestion": "次の質問",
+    "submitAnswers": "回答を送信",
+    "askClarification": "説明を求める",
+    "clarificationFailed": "説明の依頼を送信できませんでした。もう一度お試しください。",
+    "discussionLabel": "回答せずに質問について話し合う",
+    "sendClarification": "説明の依頼を送信"
   }
 }

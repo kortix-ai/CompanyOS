@@ -68,6 +68,14 @@ export const WORKSPACE_CACHE_ENV = 'KORTIX_WORKSPACE_CACHE';
 export const WORKSPACE_CACHE_PNPM_STORE = '/workspace/.pnpm-store';
 /** Every workspace cache key starts with this; a restore takes the newest one. */
 export const WORKSPACE_CACHE_KEY_PREFIX = 'ws-';
+/**
+ * Entries a project keeps: the newest, which every restore takes, and the one before it. Measured on
+ * CompanyOS (2026-11-26): a 14-day-old workspace still installs in 8.3 s against 2.3 s fresh and 42-55 s
+ * with no cache, so an older entry is worth keeping and a third is not worth the budget.
+ */
+export const WORKSPACE_CACHE_MAX_ENTRIES = 2;
+/** Idle lifetime of an entry: a project that stops starting sessions stops paying for its cache after a week. */
+export const WORKSPACE_CACHE_TTL_SECONDS = 7 * 24 * 3600;
 /** Platinum's cache key rule, narrowed to the `ws-` keys a project saves. */
 const WORKSPACE_CACHE_KEY = /^ws-[A-Za-z0-9._:+=-]{1,120}$/;
 /** Platinum's namespace rule. */
@@ -461,6 +469,8 @@ export async function saveWorkspaceCache(input: {
           namespace: workspaceCacheNamespace(input.projectId),
           key: input.key,
           volume: volume.name,
+          max_entries: WORKSPACE_CACHE_MAX_ENTRIES,
+          ttl_seconds: WORKSPACE_CACHE_TTL_SECONDS,
           ...(commitId ? { ref: commitId } : {}),
         }),
         signal: AbortSignal.timeout(60_000),

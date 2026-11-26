@@ -104,6 +104,7 @@ export const QuestionPrompt = React.forwardRef<QuestionPromptHandle, QuestionPro
   function QuestionPrompt({ request, onReply, onReject, onActionChange, onDiscuss }, ref) {
     const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
     const tCommon = useTranslations('common');
+    const tQuestion = useTranslations('questionPrompt');
     const questions = request.questions;
     const isSingle = questions.length === 1 && !questions[0].multiple;
 
@@ -127,13 +128,13 @@ export const QuestionPrompt = React.forwardRef<QuestionPromptHandle, QuestionPro
           await onReply(request.id, values);
           setAnswered(true);
         } catch {
-          setError('Could not submit answers. Your answers are saved here. Try again.');
+          setError(tQuestion('submitFailed'));
         } finally {
           submitting.current = false;
           setReplying(false);
         }
       },
-      [onReply, request.id],
+      [onReply, request.id, tQuestion],
     );
     // Collapsed hides the body so the transcript gets the height back.
     const [collapsed, setCollapsed] = useState(false);
@@ -300,14 +301,14 @@ export const QuestionPrompt = React.forwardRef<QuestionPromptHandle, QuestionPro
     if (answered)
       return (
         <p role="status" className="px-3 py-2 text-sm">
-          Answers submitted
+          {tQuestion('submitted')}
         </p>
       );
     if (replying)
       return (
         <p role="status" className="flex items-center gap-2 px-3 py-2 text-sm">
           <Loading className="size-4 shrink-0" />
-          Submitting answers…
+          {tQuestion('submitting')}
         </p>
       );
 
@@ -318,7 +319,7 @@ export const QuestionPrompt = React.forwardRef<QuestionPromptHandle, QuestionPro
     // -----------------------------------------------------------------------
 
     const total = questions.length;
-    const stepLabel = isConfirm ? 'Review answers' : currentQuestion?.header?.trim() || '';
+    const stepLabel = isConfirm ? tQuestion('review') : currentQuestion?.header?.trim() || '';
     const collapsedLabel = isConfirm
       ? stepLabel
       : questionPlainLine(currentQuestion?.question ?? '') || stepLabel;
@@ -519,7 +520,7 @@ export const QuestionPrompt = React.forwardRef<QuestionPromptHandle, QuestionPro
               </div>
             ) : null}
             {isMulti && currentAnswers.filter((answer) => !options.some((option) => option.label === answer)).map((answer) => (
-              <Button key={answer} size="sm" variant="ghost" className="mx-3" onClick={() => toggle(answer)} aria-label={`Remove custom answer: ${answer}`}>{answer}</Button>
+              <Button key={answer} size="sm" variant="ghost" className="mx-3" onClick={() => toggle(answer)} aria-label={tQuestion('removeCustom', { answer })}>{answer}</Button>
             ))}
             {showCustom && !isConfirm && (
               <form
@@ -532,29 +533,29 @@ export const QuestionPrompt = React.forwardRef<QuestionPromptHandle, QuestionPro
                 }}
               >
                 <label className="text-muted-foreground text-xs" htmlFor={`${request.id}-custom`}>
-                  Custom answer
+                  {tQuestion('customAnswer')}
                 </label>
                 <Textarea
                   id={`${request.id}-custom`}
                   value={custom}
                   onChange={(event) => setCustom(event.target.value)}
-                  placeholder="Type your own answer"
+                  placeholder={tQuestion('customPlaceholder')}
                 />
                 <Button type="submit" size="sm" disabled={!custom.trim()}>
-                  {isSingle ? 'Submit answer' : isMulti ? 'Add answer' : 'Next question'}
+                  {isSingle ? tQuestion('submitAnswer') : isMulti ? tQuestion('addAnswer') : tQuestion('nextQuestion')}
                 </Button>
               </form>
             )}
             {isConfirm && (
               <Button size="sm" className="m-3" onClick={submit}>
-                Submit answers
+                {tQuestion('submitAnswers')}
               </Button>
             )}
             {onDiscuss && (
               <div className="space-y-2 px-3 py-2">
                 {discussion === null ? (
                   <Button size="sm" variant="ghost" onClick={() => setDiscussion('')}>
-                    Ask for clarification
+                    {tQuestion('askClarification')}
                   </Button>
                 ) : (
                   <form
@@ -571,7 +572,7 @@ export const QuestionPrompt = React.forwardRef<QuestionPromptHandle, QuestionPro
                         );
                         setDiscussion(null);
                       } catch {
-                        setError('Could not send clarification. Try again.');
+                        setError(tQuestion('clarificationFailed'));
                       } finally {
                         discussingRef.current = false;
                         setDiscussing(false);
@@ -582,7 +583,7 @@ export const QuestionPrompt = React.forwardRef<QuestionPromptHandle, QuestionPro
                       htmlFor={`${request.id}-discussion`}
                       className="text-muted-foreground text-xs"
                     >
-                      Discuss the question without answering it
+                      {tQuestion('discussionLabel')}
                     </label>
                     <Textarea
                       id={`${request.id}-discussion`}
@@ -591,7 +592,7 @@ export const QuestionPrompt = React.forwardRef<QuestionPromptHandle, QuestionPro
                       disabled={discussing}
                     />
                     <Button type="submit" size="sm" disabled={discussing || !discussion.trim()}>
-                      Send clarification
+                      {tQuestion('sendClarification')}
                     </Button>
                   </form>
                 )}

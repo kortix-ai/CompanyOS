@@ -347,7 +347,7 @@ const ProjectSheelLayout = ({
   children: React.ReactNode;
 }) => {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
-  const { state, isMobile, toggleSidebar, peek, peekEnter, peekLeave } = useSidebar();
+  const { state, isMobile, toggleSidebar, peek, peekEnter, peekLeave, rail } = useSidebar();
   const isExpanded = !isMobile && state === 'expanded';
   // The sidebar hides fully when collapsed (offcanvas everywhere, no icon
   // rail), so a hidden sidebar means no seam border and no way back from the
@@ -389,8 +389,9 @@ const ProjectSheelLayout = ({
       data-kx-titlebar-owner=""
     >
       {/* Collapsed: an invisible strip on the viewport's left edge summons
-          the sidebar as a hover flyout; it self-hides while docked open. */}
-      <SidebarEdgePeek />
+          the sidebar as a hover flyout; it self-hides while docked open. With
+          the icon rail (`sidebar_rail`), the rail's hover does that instead. */}
+      {rail ? null : <SidebarEdgePeek />}
       {/* Some project views start with content instead of a titlebar row. Give
           those views the same native drag band without covering controls on
           views that already own the band. CSS disables this fallback whenever
@@ -409,7 +410,7 @@ const ProjectSheelLayout = ({
       {/* Page headers can share z-50 with this fixed control. Paint the
           control after them so their macOS drag regions cannot take its click. */}
       {children}
-      {desktopShell && !isExpanded && (
+      {desktopShell && !isExpanded && !rail && (
         <Hint
           label={
             peek ? tI18nComplete.raw('textbc44e1fccb68') : tI18nComplete.raw('text45609089ee73')

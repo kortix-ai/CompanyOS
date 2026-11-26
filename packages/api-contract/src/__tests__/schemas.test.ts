@@ -171,6 +171,7 @@ function projectFixture(overrides: Record<string, unknown> = {}) {
       review_swipe: false,
       calendar: false,
       platinum_cache: false,
+      sidebar_rail: false,
     },
     experimental_features: [],
     default_sandbox_provider: null,
@@ -941,6 +942,7 @@ describe('envelopes', () => {
       'calendar',
       'review_swipe',
       'platinum_cache',
+      'sidebar_rail',
     ]);
   });
 

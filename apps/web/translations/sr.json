@@ -1370,6 +1370,10 @@
         "platinum_cache": {
           "name": "Keš radnog prostora",
           "description": "Nove sesije počinju sa /workspace vraćenim iz sačuvanog keša ovog projekta na Platinumu: pripremljen checkout sa node_modules i pnpm skladištem, za oko sekundu umesto minuta pripreme. Administrator projekta čuva pripremljenu sesiju kao keš. Isključeno, svaka sesija počinje sa praznim /workspace."
+        },
+        "sidebar_rail": {
+          "name": "Трака са иконама",
+          "description": "На рачунару, фиксна трака са иконама стоји поред бочне траке: Почетна, Претрага и Још на врху; Помоћ, Прилагоди и прекидач панела на дну. Још приказује све остале странице, а чиода на реду ставља ту страницу на траку. Када је панел скупљен, прелазак мишем преко Почетне, Простора или Прилагоди приказује панел са тим списком."
         }
       },
       "channelsSwitch": {
@@ -1672,6 +1676,13 @@
     "pin": "Закачи бочну траку",
     "resize": "Промени ширину бочне траке",
     "resizeHelp": "Превуците за промену ширине — кликните двапут за враћање",
+    "iconRail": {
+      "navigation": "Навигација радног простора",
+      "home": "Почетна",
+      "more": "Још",
+      "pinTab": "Прикажи картицу",
+      "unpinTab": "Сакриј картицу"
+    },
     "customize": "Прилагоди",
     "sessions": "Сесије",
     "sessionViewOptions": "Опције приказа сесија",
@@ -27465,6 +27476,10 @@
     "completeDescription": "Ako si podešavanje pokrenuo u terminalu, tamo se nastavlja samo.",
     "slackName": "Slack",
     "sectionOpen": "Čeka tebe",
+    "sectionOptional": "Opcioni konektori",
+    "skip": "Preskoči",
+    "skipNamed": "Preskoči {name}",
+    "showSkipped": "Prikaži preskočene konektore",
     "doneSummary": "{count} već podešeno",
     "done": "Gotovo",
     "connect": "Poveži {name}",
@@ -27617,5 +27632,22 @@
     "community": "Discord zajednica",
     "whatsNew": "Šta je novo",
     "fullChangelog": "Ceo dnevnik izmena"
+  },
+  "questionPrompt": {
+    "submitFailed": "Odgovori nisu poslati. Sačuvani su ovde. Pokušajte ponovo.",
+    "submitted": "Odgovori su poslati",
+    "submitting": "Slanje odgovora…",
+    "review": "Pregledajte odgovore",
+    "removeCustom": "Ukloni sopstveni odgovor: {answer}",
+    "customAnswer": "Sopstveni odgovor",
+    "customPlaceholder": "Unesite svoj odgovor",
+    "submitAnswer": "Pošalji odgovor",
+    "addAnswer": "Dodaj odgovor",
+    "nextQuestion": "Sledeće pitanje",
+    "submitAnswers": "Pošalji odgovore",
+    "askClarification": "Zatraži pojašnjenje",
+    "clarificationFailed": "Pojašnjenje nije poslato. Pokušajte ponovo.",
+    "discussionLabel": "Razgovarajte o pitanju bez odgovaranja",
+    "sendClarification": "Pošalji pojašnjenje"
   }
 }

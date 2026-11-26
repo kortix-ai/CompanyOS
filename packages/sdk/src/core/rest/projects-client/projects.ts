@@ -148,6 +148,8 @@ export type FeatureFlagKey =
   | 'calendar'
   /** Workspace cache: a new session's /workspace starts from the project's saved cache on Platinum (checkout, node_modules, pnpm store). Experimental, off by default. */
   | 'platinum_cache'
+  /** Sidebar rail: a fixed icon rail (Home, Search, More) beside the sidebar panel on desktop. Client-only, off by default. */
+  | 'sidebar_rail'
   /** @deprecated Withdrawn — agents messaging people left the product. The API no longer lists, resolves, or accepts it. Removed in the next major. */
   | 'human_messaging';
 
@@ -214,6 +216,7 @@ export const FEATURE_FLAG_KEYS: readonly FeatureFlagKey[] = [
   'calendar',
   'review_swipe',
   'platinum_cache',
+  'sidebar_rail',
 ] as const;
 
 /**

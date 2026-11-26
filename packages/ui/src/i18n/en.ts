@@ -868,6 +868,14 @@ const catalog = {
         "review_swipe": {
           "name": "Review cards",
           "description": "The Review page's Needs you opens as a swipe deck: one item per card. Swipe right to approve or merge, left to send it back to the agent with what should change."
+        },
+        "platinum_cache": {
+          "name": "Workspace cache",
+          "description": "New sessions start with /workspace restored from this project's saved workspace cache on Platinum: a prepared checkout with its node_modules and pnpm store, in about a second instead of minutes of setup. A project admin saves a prepared session as the cache. Off, every session starts with an empty /workspace."
+        },
+        "sidebar_rail": {
+          "name": "Sidebar rail",
+          "description": "On desktop, a fixed icon rail sits beside the sidebar: Home, Search and More at the top, Help, Customize and the panel toggle at the bottom. More lists every other page, and a pin on a row puts that page on the rail. With the panel collapsed, hovering Home, Spaces or Customize shows the panel on that list."
         }
       },
       "channelsSwitch": {
@@ -1138,6 +1146,13 @@ const catalog = {
     "pin": "Pin sidebar",
     "resize": "Resize sidebar",
     "resizeHelp": "Drag to resize — double-click to reset",
+    "iconRail": {
+      "navigation": "Workspace navigation",
+      "home": "Home",
+      "more": "More",
+      "pinTab": "Show tab",
+      "unpinTab": "Hide tab"
+    },
     "customize": "Customize",
     "sessions": "Sessions",
     "sessionViewOptions": "Session view options",
@@ -10868,6 +10883,23 @@ const catalog = {
     "remove": "Remove",
     "share": "Share",
     "notMember": "Share a session only with members of this workspace."
+  },
+  "questionPrompt": {
+    "submitFailed": "Could not submit answers. Your answers are saved here. Try again.",
+    "submitted": "Answers submitted",
+    "submitting": "Submitting answers…",
+    "review": "Review answers",
+    "removeCustom": "Remove custom answer: {answer}",
+    "customAnswer": "Custom answer",
+    "customPlaceholder": "Type your own answer",
+    "submitAnswer": "Submit answer",
+    "addAnswer": "Add answer",
+    "nextQuestion": "Next question",
+    "submitAnswers": "Submit answers",
+    "askClarification": "Ask for clarification",
+    "clarificationFailed": "Could not send clarification. Try again.",
+    "discussionLabel": "Discuss the question without answering it",
+    "sendClarification": "Send clarification"
   }
 };
 

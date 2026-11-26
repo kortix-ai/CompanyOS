@@ -1,4 +1,5 @@
 import { BillingAccountProvider } from '@kortix/ui/internal/stores/billing-account-context';
+import { ACCOUNT_PANEL_PARAM, hubParamsFromUrl } from '@kortix/ui/internal/stores/account-panel-store';
 import { QueryClient } from '@tanstack/react-query';
 import { afterEach, expect, mock, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -87,15 +88,21 @@ test.each(['team_signup', 'credit_purchase', 'enterprise_contract'] as const)(
 
 // KRTX-1510: the portal's one plan change (a switch to Free) lands on its
 // return, not when Stripe's webhook arrives.
-test('the portal returns to the same page with the marker and the managed account', () => {
+test('the portal returns to the Plan page itself, with a marker naming the managed account', () => {
   Object.defineProperty(globalThis, 'window', {
     configurable: true,
     value: { location: { origin: 'http://localhost:13000' } },
   });
-  const url = new URL(portalReturnUrl('http://localhost:13000/settings/plan', 'synthetic-workspace'));
-  expect(url.pathname).toBe('/settings/plan');
-  expect(url.searchParams.get('billing_portal')).toBe('return');
-  expect(url.searchParams.get('accountId')).toBe('synthetic-workspace');
+  const url = new URL(
+    portalReturnUrl('http://localhost:13000/workspaces/synthetic-project/admin/plan', 'synthetic-workspace'),
+  );
+  expect(url.pathname).toBe('/workspaces/synthetic-project/admin/plan');
+  // AccountHubRouter routes any URL carrying a hub key to the hub's section:
+  // `accountId` alone sent this return from Plan to /admin (G9 review item).
+  expect(url.searchParams.has(ACCOUNT_PANEL_PARAM)).toBe(false);
+  expect(hubParamsFromUrl(url.searchParams).toString()).toBe('');
+  expect(url.searchParams.get('billing_portal')).toBe('synthetic-workspace');
+  expect(new URL(portalReturnUrl('/settings/billing', undefined)).searchParams.get('billing_portal')).toBe('');
 });
 
 test('the portal return re-syncs the managed account and re-reads its state', async () => {

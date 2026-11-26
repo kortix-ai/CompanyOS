@@ -1095,3 +1095,10 @@ test('kortix_connectors add: the card names the next step the install returns', 
   expect((await run('kortix_connectors', { action: 'add', app: 'composio:stripe' })).card.subtitle).toContain('it needs a key')
   expect((await run('kortix_connectors', { action: 'add', app: 'curated/broken' })).card.subtitle).toBe('It does not work yet: its tools could not be loaded.')
 })
+
+test('kortix_connectors find: an app whose access Kortix knows says what its sign-in lets agents do', async () => {
+  fakeKortix(`'connectors catalog gmail --limit 8 --json') echo '{"items":[{"id":"kortix:gmail","name":"Gmail","description":"Read, search, send and organize email.","access":"Read, search, send, label and archive mail.","installed":[]},{"id":"composio:gmail","name":"Gmail (Composio)","description":"Email.","installed":[]}]}' ;;`)
+  const result = await run('kortix_connectors', { action: 'find', query: 'gmail' })
+  expect(result.card.rows?.[0]?.detail).toBe('Read, search, send and organize email. Signing in lets agents: Read, search, send, label and archive mail.')
+  expect(result.card.rows?.[1]?.detail).toBe('Email.')
+})

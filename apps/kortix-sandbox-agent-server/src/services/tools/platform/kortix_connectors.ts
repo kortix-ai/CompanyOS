@@ -26,6 +26,8 @@ interface CatalogRow {
   id?: string
   name?: string | null
   description?: string | null
+  /** What a sign-in lets agents do, in plain words; only for apps whose scopes Kortix knows. */
+  access?: string | null
   installed_as?: string | null
   /** The slugs this app is installed as; `[]` when it is not. */
   installed?: string[] | string | null
@@ -77,7 +79,7 @@ async function find(query: string, context: PlatformToolContext) {
         const installed = app.installed_as || (Array.isArray(app.installed) ? app.installed.length > 0 : app.installed)
         return {
           title: app.name || app.id || 'app',
-          ...(app.description ? { detail: app.description } : {}),
+          ...(app.description || app.access ? { detail: [app.description, app.access ? `Signing in lets agents: ${app.access}` : null].filter(Boolean).join(' ') } : {}),
           ...(installed ? { badge: 'added' } : {}),
         }
       }),
@@ -152,7 +154,7 @@ async function connect(slug: string, shared: boolean, forTrigger: boolean, conte
 export default {
   description:
     'Outside apps agents may use (Gmail, Google Drive, Notion, Slack, a CRM…). Actions: `list` (what is added and signed in); ' +
-    '`find` (query: search every app Kortix can connect); `add` (app: an id from find); ' +
+    '`find` (query: search every app Kortix can connect; an app\'s `access` says what its sign-in lets agents do: name it, word for word, before the person says yes, and for an app with no `access` say its sign-in page lists what it asks for, never guess); `add` (app: an id from find); ' +
     '`connect` (slug: get the sign-in link for the person; shared=true makes the sign-in the whole workspace\'s; ' +
     'for_trigger=true when the sign-in is for a trigger, wake-up or other automation: those run only on the shared sign-in, so it mints that one). ' +
     'Mint ONE link per app and end the turn: never a private link first and a shared one after it. ' +

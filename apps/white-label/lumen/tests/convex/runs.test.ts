@@ -253,6 +253,89 @@ describe('run engine: fan-out, validation, repair, nudge, relaunch, limits', () 
     expect(fake.sessions).toHaveLength(1);
   });
 
+  test.each(['missing cell', 'outside batch'])('a schema-valid row with %s stays rejected until a corrected version is accepted', async (defect) => {
+    const { t, matterId, docs } = await world(2);
+    fake.script.onStart = (s) => {
+      writeAll(s);
+      const input = inputOf(s);
+      const row = goodRow(docs[0], input.columns, 1);
+      if (defect === 'missing cell') delete row.cells[input.columns[0].key];
+      else row.doc_id = 'outside-batch';
+      fake.write(`${dirOf(s)}/out/rows/${docs[0]}.json`, row);
+    };
+    // Leave the rejected version unchanged for one more poll, then repair it.
+    fake.script.onSend = (s) => { if (s.sends.length === 2) writeAll(s); };
+    const { runId, reviewId } = await startReview(t, matterId, docs);
+    await finish(t);
+    expect(fake.sessions[0].sends).toHaveLength(2);
+    const batch = await t.run((ctx) => ctx.db.query('runBatches').withIndex('by_run', (q) => q.eq('runId', runId)).first());
+    expect(batch).toMatchObject({ status: 'succeeded', attempts: { repair: 2 } });
+    const files = await t.run((ctx) => ctx.db.query('runFiles').collect());
+    expect(files.find((f) => f.path === `out/rows/${docs[0]}.json`)).toMatchObject({ status: 'accepted' });
+    expect(files.find((f) => f.path === `out/rows/${docs[0]}.json`)?.errors).toBeUndefined();
+    const cells = await t.run((ctx) => ctx.db.query('reviewCells').withIndex('by_review', (q) => q.eq('reviewId', reviewId)).collect());
+    expect(cells).toHaveLength(16);
+    expect(cells.every((c) => c.state === 'filled' && c.value === `answer ${c.columnKey}`)).toBe(true);
+  });
+
+  test('semantic rejection preserves human cells and progress, then accepts a corrected row', async () => {
+    const { t, matterId, docs } = await world(2);
+    const { runId, reviewId } = await startReview(t, matterId, docs);
+    const batch = await t.run(async (ctx) => {
+      const b = await ctx.db.query('runBatches').withIndex('by_run', (q) => q.eq('runId', runId)).first();
+      if (!b) throw new Error('Missing batch');
+      await ctx.db.patch(b._id, { documentIds: [docs[0]], lastProgressAt: 123 });
+      const cells = await ctx.db.query('reviewCells').withIndex('by_review', (q) => q.eq('reviewId', reviewId)).collect();
+      for (const cell of cells.filter((c) => c.documentId === docs[0])) {
+        if (cell.columnKey === 'parties') await ctx.db.patch(cell._id, { value: 'Human verified', reviewStatus: 'verified', state: 'filled' });
+        if (cell.columnKey === 'term') await ctx.db.patch(cell._id, { value: 'Original', editedValue: 'Human edit', state: 'filled' });
+      }
+      return b;
+    });
+    const review = await t.run((ctx) => ctx.db.get(reviewId));
+    if (!review) throw new Error('Missing review');
+    const path = `out/rows/${docs[0]}.json`;
+    const ingest = (version: string, value: unknown) => t.mutation(internal.runs.ingestResult, { batchId: batch._id, path, version, value });
+    expect(await ingest('1', goodRow(docs[1], review.columns, 2))).toEqual([`doc_id ${docs[1]} is not a document of this batch`]);
+    const invalid = goodRow(docs[0], review.columns, 1);
+    delete invalid.cells.term;
+    expect(await ingest('2', invalid)).toEqual([`row ${docs[0]}: no cell for column term`]);
+    const rejected = await t.run((ctx) => ctx.db.query('runFiles').withIndex('by_batch_path', (q) => q.eq('batchId', batch._id).eq('path', path)).unique());
+    expect(rejected).toMatchObject({ status: 'rejected', version: '2' });
+    expect((await t.run((ctx) => ctx.db.get(batch._id)))?.lastProgressAt).toBe(123);
+    let cells = await t.run((ctx) => ctx.db.query('reviewCells').withIndex('by_review', (q) => q.eq('reviewId', reviewId)).collect());
+    expect(cells.find((c) => c.documentId === docs[0] && c.columnKey === 'parties')).toMatchObject({ value: 'Human verified', reviewStatus: 'verified' });
+    expect(cells.some((c) => c.aiValue !== undefined)).toBe(false);
+    expect(await ingest('3', goodRow(docs[0], review.columns, 1))).toEqual([]);
+    cells = await t.run((ctx) => ctx.db.query('reviewCells').withIndex('by_review', (q) => q.eq('reviewId', reviewId)).collect());
+    expect(cells.find((c) => c.documentId === docs[0] && c.columnKey === 'parties')).toMatchObject({ value: 'Human verified', aiValue: 'answer parties', reviewStatus: 'verified' });
+    expect(cells.find((c) => c.documentId === docs[0] && c.columnKey === 'term')).toMatchObject({ value: 'Original', editedValue: 'Human edit', aiValue: 'answer term' });
+    await t.finishAllScheduledFunctions(() => vi.runAllTimers(), 500);
+  });
+
+  test('an unchanged semantically invalid row and done.json fail after repair retries without partially filling cells', async () => {
+    const { t, matterId, docs } = await world(1);
+    fake.script.onStart = (s) => {
+      writeAll(s);
+      const input = inputOf(s);
+      const row = goodRow(docs[0], input.columns, 1);
+      delete row.cells[input.columns[input.columns.length - 1].key];
+      fake.write(`${dirOf(s)}/out/rows/${docs[0]}.json`, row);
+    };
+    const { runId, reviewId } = await startReview(t, matterId, docs);
+    await finish(t);
+    const run = await t.run((ctx) => ctx.db.get(runId));
+    expect(run).toMatchObject({ status: 'failed' });
+    const batch = await t.run((ctx) => ctx.db.query('runBatches').withIndex('by_run', (q) => q.eq('runId', runId)).first());
+    expect(batch).toMatchObject({ status: 'failed', attempts: { repair: 2 } });
+    expect(fake.sessions[0].sends).toHaveLength(2);
+    if (!batch) throw new Error('Missing batch');
+    const file = await t.run((ctx) => ctx.db.query('runFiles').withIndex('by_batch_path', (q) => q.eq('batchId', batch._id).eq('path', `out/rows/${docs[0]}.json`)).unique());
+    expect(file).toMatchObject({ status: 'rejected', errors: [expect.stringContaining('no cell for column')] });
+    const cells = await t.run((ctx) => ctx.db.query('reviewCells').withIndex('by_review', (q) => q.eq('reviewId', reviewId)).collect());
+    expect(cells.some((c) => c.value !== undefined)).toBe(false);
+  });
+
   test('an idle session with results missing is nudged, then finishes', async () => {
     const { t, matterId, docs } = await world(1);
     fake.script.turn = idleNow;

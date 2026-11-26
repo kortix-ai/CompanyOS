@@ -11,8 +11,13 @@ import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'rea
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 let auth: { user: { id: string } | null; isLoading: boolean } = { user: null, isLoading: true };
+let signedOutRedirects = 0;
 mock.module('@/features/providers/auth-provider', () => ({ useAuth: () => auth }));
-mock.module('@/lib/auth/use-signed-out-redirect', () => ({ useSignedOutRedirect: () => {} }));
+mock.module('@/lib/auth/use-signed-out-redirect', () => ({
+  useSignedOutRedirect: () => {
+    signedOutRedirects += 1;
+  },
+}));
 mock.module('@kortix/ui/internal/hooks/admin/use-admin-role', () => ({ useAdminRole: () => ({ data: null }) }));
 mock.module('@kortix/ui/internal/lib/onboarding/use-app-home', () => ({ useAppHome: () => '/' }));
 mock.module('next/navigation', () => ({
@@ -129,7 +134,9 @@ async function submitRequest() {
 
 test('unresolved auth shows the pending frame and sends no access read', async () => {
   auth = { user: null, isLoading: true };
+  signedOutRedirects = 0;
   await mount();
+  expect(signedOutRedirects).toBeGreaterThan(0);
   expect(calls).toHaveLength(0);
   expect(screen()).not.toContain('projectAccessBoundary.');
   expect(screen()).not.toContain('PROJECT CONTENT');
@@ -193,7 +200,7 @@ test('a project deleted while waiting shows not-found and stops polling', async 
   await advance(15_000);
   expect(summaryGets()).toBe(2);
   expect(screen()).toContain('projectAccessBoundary.notFoundHeading');
-  await advance(60_000);
+  for (let poll = 0; poll < 4; poll += 1) await advance(15_000);
   expect(summaryGets()).toBe(2);
 });
 
@@ -205,7 +212,7 @@ test('approval opens the project and stops polling', async () => {
   expect(summaryGets()).toBe(2);
   expect(screen()).toContain('PROJECT CONTENT');
   expect(calls.some((call) => call.url === `${SUMMARY}/detail`)).toBe(true);
-  await advance(60_000);
+  for (let poll = 0; poll < 4; poll += 1) await advance(15_000);
   expect(summaryGets()).toBe(2);
 });
 
@@ -246,7 +253,7 @@ test('a different signed-in user starts from a fresh gate, with no inherited wai
   expect(summaryGets()).toBe(2);
   expect(screen()).toContain('projectAccessBoundary.privateHeading');
   expect(screen()).not.toContain('projectAccessBoundary.waitingHeading');
-  await advance(45_000);
+  for (let poll = 0; poll < 3; poll += 1) await advance(15_000);
   expect(summaryGets()).toBe(2);
 });
 

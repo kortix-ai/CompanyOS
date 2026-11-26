@@ -1,6 +1,6 @@
+import { NextIntlClientProvider } from '@/i18n/use-translations';
 import { afterEach, expect, mock, test } from 'bun:test';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
-import { NextIntlClientProvider } from '@/i18n/use-translations';
 import messages from '../../../../../translations/en.json';
 
 /**
@@ -16,15 +16,18 @@ Object.defineProperty(globalThis, 'window', {
   configurable: true,
 });
 let search = new URLSearchParams();
-const signedOut = { user: null, session: null, isLoading: false, bootstrapError: null as Error | null, supabase: {} };
-let auth = { ...signedOut };
+type AuthState = { isLoading: boolean; bootstrapError: Error | null };
+const signedOut: AuthState = { isLoading: false, bootstrapError: null };
+let auth: AuthState = { ...signedOut };
 mock.module('next/navigation', () => ({
   useRouter: () => ({ replace: () => {}, push: () => {} }),
   usePathname: () => '/auth',
   useParams: () => ({}),
   useSearchParams: () => search,
 }));
-mock.module('@/features/providers/auth-provider', () => ({ useAuth: () => auth }));
+mock.module('@/features/providers/auth-provider', () => ({
+  useAuth: () => ({ user: null, session: null, supabase: {}, ...auth }),
+}));
 mock.module('@/lib/supabase/client', () => ({
   fetchSamlEnabled: async () => false,
   createClient: () => ({ auth: {} }),
@@ -61,7 +64,6 @@ async function renderedText(query: string): Promise<string> {
 }
 
 test('explains a session that ended once the session check finds none', async () => {
-  expect(NOTICE).toBeString();
   expect(await renderedText('redirect=%2Fworkspaces&reason=session_ended')).toContain(NOTICE);
 });
 

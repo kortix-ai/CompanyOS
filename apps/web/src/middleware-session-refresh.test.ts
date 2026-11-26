@@ -116,7 +116,10 @@ describe('middleware leaves session refresh to the browser', () => {
     // as AuthSessionMissingError (400, no code) and clears the cookie itself.
     getUser.mockResolvedValue({
       data: { user: null },
-      error: Object.assign(new Error('Auth session missing!'), { name: 'AuthSessionMissingError', status: 400 }),
+      error: Object.assign(new Error('Auth session missing!'), {
+        name: 'AuthSessionMissingError',
+        status: 400,
+      }),
     });
     const prefetch = await middleware(request);
 

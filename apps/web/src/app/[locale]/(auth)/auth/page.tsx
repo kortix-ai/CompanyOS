@@ -1116,11 +1116,7 @@ function AuthCardForm({
       </m.div>
 
       <m.div {...rise(0.06)}>
-        {info ? (
-          <InfoStrip message={info} />
-        ) : (
-          sessionEnded && <InfoStrip message={t('sessionEnded')} />
-        )}
+        {(info || sessionEnded) && <InfoStrip message={info ?? t('sessionEnded')} />}
 
         {/* The pre-hydration submit guard targets this attribute. It ships
             from the root layout <head> (lib/auth/entry-hydration-guard.ts):

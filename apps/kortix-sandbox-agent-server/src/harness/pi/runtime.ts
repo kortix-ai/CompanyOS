@@ -2791,7 +2791,9 @@ export class PiRuntime {
       for (const diagnostic of diagnostics) if (diagnostic.type !== 'collision') logger.warn('[pi] skill diagnostic', diagnostic)
       // A flagged managed skill exists only while the project's flag is on.
       const withheld = await withheldManagedSkills(this.env)
-      return skills.filter((skill) => !withheld.includes(skill.name))
+      // By name: pi lists a folder in readdir order, which differs from one machine to the next,
+      // so the same agent's system prompt listed its skills in another order in every session.
+      return skills.filter((skill) => !withheld.includes(skill.name)).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
     } catch (err) {
       logger.warn('[pi] skill load failed', { err: (err as Error).message })
       return []

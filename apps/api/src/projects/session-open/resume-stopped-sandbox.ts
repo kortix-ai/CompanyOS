@@ -169,6 +169,9 @@ export async function resumeStoppedSandbox(
   const tl = new ProvisionTimeline(row.sandboxId, 'wake');
   let startPhase = 'provider-start';
   let failReason: string | null = null;
+  // The boot this wake started (its provider-running confirmation): the runtime's
+  // first answer records it too (`wake-ready`), and the analytics pairs on it.
+  let bootEpochMs: number | null = null;
   void executeClaimedRuntimeWake({
     knownStatus: knownProviderStatus ?? null,
     getStatus: () => provider.getStatus(externalId),
@@ -247,6 +250,7 @@ export async function resumeStoppedSandbox(
       });
       if (!finalized) return false;
       tl.mark('rows-active');
+      bootEpochMs = confirmedAt.getTime();
       invalidateSandbox(externalId);
       // The provider had this box STOPPED: whatever turn was still open on it
       // is over. Normally applyStoppedState settled those rows already and
@@ -365,7 +369,7 @@ export async function resumeStoppedSandbox(
         kind: 'wake',
         outcome,
         totalMs: summary.totalMs,
-        marks: summary.marks,
+        marks: bootEpochMs === null ? summary.marks : [...summary.marks, { bootEpochMs }],
         error: failReason,
         sessionId: row.sessionId,
         accountId: row.accountId,

@@ -2,9 +2,6 @@ import type { listProviderEventsSince } from './queries';
 
 type ProviderEventRow = Awaited<ReturnType<typeof listProviderEventsSince>>[number];
 
-/** A resume ends at its runtime's first answer; one later than this after the wake is another visit. */
-const RESUME_READY_WINDOW_MS = 15 * 60_000;
-
 /** The `GET /api/provider-analytics` body, aggregated from `days` of provider_events rows. */
 export function summarizeProviderAnalytics(rows: ProviderEventRow[], days: number) {
   const pct = (xs: number[], p: number): number => {
@@ -58,26 +55,31 @@ export function summarizeProviderAnalytics(rows: ProviderEventRow[], days: numbe
   });
 
   // Session resume (KRTX-1642): a `wake` row holds the provider phases up to the
-  // rows going active; the session's first `wake-ready` row after it holds the
-  // last phase, until the runtime answered. Their sum is the resume a user waits.
-  const readyBySession = new Map<string | null, ProviderEventRow[]>();
-  for (const r of [...wakeReady].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())) {
-    const list = readyBySession.get(r.sessionId);
-    if (list) list.push(r);
-    else readyBySession.set(r.sessionId, [r]);
-  }
-  const firstReadyAfter = (w: ProviderEventRow) => {
-    const at = w.createdAt.getTime();
-    return readyBySession
-      .get(w.sessionId)
-      ?.find((r) => r.createdAt.getTime() >= at && r.createdAt.getTime() - at <= RESUME_READY_WINDOW_MS);
+  // rows going active; the `wake-ready` row of the same boot holds the last phase,
+  // until the runtime answered. Their sum is the resume a user waits. Both rows
+  // carry that boot (`{ bootEpochMs }` in their marks: the wake's provider-running
+  // confirmation), so a ready row pairs with exactly the wake that booted it,
+  // whichever row was inserted first.
+  const bootOf = (r: ProviderEventRow): string | null => {
+    for (const m of r.marks ?? []) {
+      if (typeof m === 'object' && m !== null && 'bootEpochMs' in m && typeof m.bootEpochMs === 'number') {
+        return `${r.sessionId}:${m.bootEpochMs}`;
+      }
+    }
+    return null;
   };
+  const readyByBoot = new Map<string, ProviderEventRow>();
+  for (const r of wakeReady) {
+    const boot = bootOf(r);
+    if (boot !== null) readyByBoot.set(boot, r);
+  }
   const wakes = namesOf(wake).map((p) => {
     const evs = wake.filter((r) => r.provider === p);
     const resumes = evs
       .filter((w) => w.outcome === 'ok')
       .flatMap((w) => {
-        const ready = firstReadyAfter(w);
+        const boot = bootOf(w);
+        const ready = boot === null ? undefined : readyByBoot.get(boot);
         return ready ? [{ wake: w, ready }] : [];
       });
     const resumeMs = resumes.map((r) => (r.wake.totalMs ?? 0) + (r.ready.totalMs ?? 0));

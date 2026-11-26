@@ -88,6 +88,7 @@ const { claimRetiredSandboxRow, isRetiredSandboxRow } = await import(
   '../platform/services/retired-sandbox-row'
 );
 const { stopSession } = await import('../projects/session-lifecycle/stop');
+const { runtimeBootEpochMs, runtimeBootIsWake } = await import('../projects/session-lifecycle/readiness-clocks');
 const { beginSandboxTurn } = await import('../projects/sandbox-turn-lifecycle');
 const { transitionRuntime, transitionSandbox, transitionSession } = await import(
   '../projects/session-lifecycle/status-transitions'
@@ -676,6 +677,13 @@ describe('resume (resumeStoppedSandbox)', () => {
       const [event] = await wakeEvents(f);
       expect(event!.outcome).toBe('ok');
       const marks = event!.marks as { label: string; atMs: number; deltaMs: number }[];
+      // The last entry is the boot this wake started: the epoch the runtime's
+      // first answer reads (runtimeBootEpochMs) and records on its `wake-ready`
+      // row, so the analytics pairs the two.
+      const boot: unknown = marks.pop();
+      const { sandbox } = await read(f);
+      expect(runtimeBootIsWake(sandbox.metadata)).toBe(true);
+      expect(boot).toEqual({ bootEpochMs: runtimeBootEpochMs(sandbox.metadata) });
       expect(marks.map((m) => m.label)).toEqual(['archive-restore', 'provider-running', 'rows-active']);
       for (const m of marks) expect(m.deltaMs).toBeGreaterThanOrEqual(0);
       expect(event!.total_ms).toBeGreaterThanOrEqual(marks.at(-1)!.atMs);

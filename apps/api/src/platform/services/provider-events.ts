@@ -7,7 +7,8 @@ export type ProviderEventInput = {
    * 'provision' (a sandbox-create attempt) | 'migrate' (a cross-provider move) |
    * 'boot' (the in-guest boot timeline, boot-timeline-store.ts) | 'wake' (a
    * stopped box resumed in place, resume-stopped-sandbox.ts) | 'wake-ready' (its
-   * runtime's first answer after that wake, session-open-readiness.ts).
+   * runtime's first answer after that wake, session-open-readiness.ts). Both
+   * wake kinds add `{ bootEpochMs }` to `marks`: the boot that pairs them.
    */
   kind: 'provision' | 'migrate' | 'boot' | 'wake' | 'wake-ready';
   outcome: 'ok' | 'error' | 'stopped';

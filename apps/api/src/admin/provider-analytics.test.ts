@@ -28,27 +28,32 @@ const marks = (...phases: [string, number][]) => {
   return phases.map(([label, deltaMs]) => ({ label, atMs: (at += deltaMs), deltaMs }));
 };
 
+/** The boot a wake started, as both of its rows carry it. */
+const boot = (atMs: number) => ({ bootEpochMs: t0 + atMs });
+
 describe('provider analytics: session resume (KRTX-1642)', () => {
   const rows: Row[] = [
     // Resume A: a cold-storage restore, runtime answered 5 s after the box ran.
-    event({ kind: 'wake', outcome: 'ok', sessionId: 'a', totalMs: 40_000, marks: marks(['archive-restore', 38_000], ['provider-running', 1_500], ['rows-active', 500]) }, 0),
-    event({ kind: 'wake-ready', outcome: 'ok', sessionId: 'a', totalMs: 5_000, marks: marks(['runtime-ready', 5_000]) }, 5_100),
-    // Resume B: a plain start; its runtime answered twice, only the first counts.
-    event({ kind: 'wake', outcome: 'ok', sessionId: 'b', totalMs: 2_000, marks: marks(['provider-start', 1_200], ['provider-running', 600], ['rows-active', 200]) }, 60_000),
-    event({ kind: 'wake-ready', outcome: 'ok', sessionId: 'b', totalMs: 3_000, marks: marks(['runtime-ready', 3_000]) }, 63_000),
-    event({ kind: 'wake-ready', outcome: 'ok', sessionId: 'b', totalMs: 9_000, marks: marks(['runtime-ready', 9_000]) }, 300_000),
-    // Resume C: its runtime never answered within the window, so no resume total.
-    event({ kind: 'wake', outcome: 'ok', sessionId: 'c', totalMs: 3_000, marks: marks(['provider-start', 1_800], ['provider-running', 900], ['rows-active', 300]) }, 0),
-    event({ kind: 'wake-ready', outcome: 'ok', sessionId: 'c', totalMs: 4_000, marks: marks(['runtime-ready', 4_000]) }, 20 * 60_000),
-    // A failed wake, and a runtime answer before any wake of its session.
+    event({ kind: 'wake', outcome: 'ok', sessionId: 'a', totalMs: 40_000, marks: [...marks(['archive-restore', 38_000], ['provider-running', 1_500], ['rows-active', 500]), boot(39_500)] }, 40_000),
+    event({ kind: 'wake-ready', outcome: 'ok', sessionId: 'a', totalMs: 5_000, marks: [...marks(['runtime-ready', 5_000]), boot(39_500)] }, 44_500),
+    // Resume B: its runtime answered while the wake still ran its billing
+    // awaits, so the ready row was inserted first; the boot still pairs them.
+    event({ kind: 'wake-ready', outcome: 'ok', sessionId: 'b', totalMs: 3_000, marks: [...marks(['runtime-ready', 3_000]), boot(61_800)] }, 64_800),
+    event({ kind: 'wake', outcome: 'ok', sessionId: 'b', totalMs: 2_000, marks: [...marks(['provider-start', 1_200], ['provider-running', 600], ['rows-active', 200]), boot(61_800)] }, 70_000),
+    // Session C woke twice: the first wake's runtime never answered, the second
+    // one's did. The one ready row belongs to the second wake only.
+    event({ kind: 'wake', outcome: 'ok', sessionId: 'c', totalMs: 3_000, marks: [...marks(['provider-start', 1_800], ['provider-running', 900], ['rows-active', 300]), boot(2_700)] }, 3_000),
+    event({ kind: 'wake', outcome: 'ok', sessionId: 'c', totalMs: 3_000, marks: [...marks(['provider-start', 1_800], ['provider-running', 900], ['rows-active', 300]), boot(122_700)] }, 123_000),
+    event({ kind: 'wake-ready', outcome: 'ok', sessionId: 'c', totalMs: 4_000, marks: [...marks(['runtime-ready', 4_000]), boot(122_700)] }, 126_700),
+    // A failed wake, and a runtime answer of a boot no recorded wake started.
     event({ kind: 'wake', outcome: 'error', sessionId: 'd', totalMs: 1_000, error: 'start_failed', marks: marks(['provider-start', 1_000]) }, 0),
-    event({ kind: 'wake-ready', outcome: 'ok', sessionId: 'e', totalMs: 7_000 }, -1_000),
-    event({ kind: 'wake', outcome: 'ok', sessionId: 'e', totalMs: 1_000, provider: 'daytona', marks: marks(['provider-start', 1_000]) }, 0),
+    event({ kind: 'wake-ready', outcome: 'ok', sessionId: 'e', totalMs: 7_000, marks: [...marks(['runtime-ready', 7_000]), boot(500)] }, 7_500),
+    event({ kind: 'wake', outcome: 'ok', sessionId: 'e', totalMs: 1_000, provider: 'daytona', marks: [...marks(['provider-start', 1_000]), boot(90_000)] }, 90_000),
   ];
   const summary = summarizeProviderAnalytics(rows, 7);
 
   test('each provider reports its wakes, their phases and the end-to-end resume time', () => {
-    expect(summary.totals.wakes).toBe(5);
+    expect(summary.totals.wakes).toBe(6);
     expect(summary.wakes).toEqual([
       {
         provider: 'daytona',
@@ -59,19 +64,32 @@ describe('provider analytics: session resume (KRTX-1642)', () => {
       },
       {
         provider: 'platinum',
-        wakes: 4, ok: 3, error: 1, stopped: 0, successRate: 75,
-        p50Ms: 3_000, p95Ms: 3_000, avgMs: 15_000,
+        wakes: 5, ok: 4, error: 1, stopped: 0, successRate: 80,
+        p50Ms: 3_000, p95Ms: 3_000, avgMs: 12_000,
         phases: [
           { label: 'archive-restore', avgMs: 38_000 },
-          { label: 'provider-running', avgMs: 1_000 },
-          { label: 'rows-active', avgMs: 333 },
-          { label: 'provider-start', avgMs: 1_500 },
+          { label: 'provider-running', avgMs: 975 },
+          { label: 'rows-active', avgMs: 325 },
+          { label: 'provider-start', avgMs: 1_600 },
           { label: 'runtime-ready', avgMs: 4_000 },
         ],
-        // A: 40 s + 5 s; B: 2 s + 3 s.
-        resumes: 2, resumeP50Ms: 5_000, resumeP95Ms: 5_000,
+        // A: 40 s + 5 s; B: 2 s + 3 s; C's second wake: 3 s + 4 s.
+        resumes: 3, resumeP50Ms: 7_000, resumeP95Ms: 7_000,
       },
     ]);
+  });
+
+  const resumesOf = (session: string) => {
+    const [platinum] = summarizeProviderAnalytics(rows.filter((r) => r.sessionId === session), 7).wakes;
+    return { resumes: platinum!.resumes, resumeP50Ms: platinum!.resumeP50Ms };
+  };
+
+  test('a ready row inserted before its wake row still pairs with that wake', () => {
+    expect(resumesOf('b')).toEqual({ resumes: 1, resumeP50Ms: 5_000 });
+  });
+
+  test('a session that woke twice pairs its one ready row with the wake that booted it', () => {
+    expect(resumesOf('c')).toEqual({ resumes: 1, resumeP50Ms: 7_000 });
   });
 
   test('wake rows stay out of the provisioning numbers', () => {

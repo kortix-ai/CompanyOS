@@ -508,14 +508,17 @@ export async function judgeBootBudget(
       });
       // The last phase of a resume (KRTX-1642): provider running to the
       // runtime's first answer. The admin provider analytics pairs it with the
-      // session's `wake` row.
+      // `wake` row of the same boot (`bootEpochMs`).
       if (answered.afterWake && answered.bootMs !== null) {
         recordProviderEvent({
           provider: row.provider,
           kind: 'wake-ready',
           outcome: 'ok',
           totalMs: answered.bootMs,
-          marks: [{ label: 'runtime-ready', atMs: answered.bootMs, deltaMs: answered.bootMs }],
+          marks: [
+            { label: 'runtime-ready', atMs: answered.bootMs, deltaMs: answered.bootMs },
+            { bootEpochMs: answered.bootEpochMs },
+          ],
           sessionId: row.sessionId,
           accountId: row.accountId,
         });

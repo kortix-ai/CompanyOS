@@ -259,7 +259,10 @@ function blockFrom(args: Record<string, any>, base: Record<string, unknown>): Re
   if (args.mode === 'primary' || args.mode === 'subagent' || args.mode === 'all') behavior.mode = args.mode
   if (Object.keys(behavior).length > 0) block.behavior = behavior
   for (const key of ['connectors', 'secrets', 'apps', 'skills', 'tools', 'kortix_permissions'] as const) {
-    if (args[key] !== undefined) block[key] = args[key]
+    if (args[key] === undefined) continue
+    // A model writes "every" or "nothing" as a one-item list; kortix.yaml refuses `["all"]` as a skill name.
+    const one = Array.isArray(args[key]) && args[key].length === 1 ? String(args[key][0]).toLowerCase() : null
+    block[key] = one === 'all' || one === '*' ? 'all' : one === 'none' ? 'none' : args[key]
   }
   if (typeof args.space === 'string' && args.space !== 'none') block.space = args.space
   if (typeof args.enabled === 'boolean') block.enabled = args.enabled

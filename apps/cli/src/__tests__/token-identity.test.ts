@@ -530,4 +530,9 @@ describe('validation issues for a program', () => {
       'Validation failed (agents.writer.tools: unknown tool "question"; behavior.prompt: Required; (body): invalid)',
     );
   });
+
+  test('an issue the message already names is not repeated', () => {
+    const message = 'agents.x.skills: not registered under `skills`: all.';
+    expect(withIssues(message, { issues: [{ path: 'agents.x.skills', message: 'not registered under `skills`: all.' }] })).toBe(message);
+  });
 });

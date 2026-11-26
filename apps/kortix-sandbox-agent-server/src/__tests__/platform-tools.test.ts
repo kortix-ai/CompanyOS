@@ -1055,3 +1055,10 @@ describe('CLI output shapes', () => {
     ])
   })
 })
+
+test('kortix_agents create: a one-item ["all"] or ["none"] grant is written as the word kortix.yaml accepts', async () => {
+  fakeKortix(`'agents config helper --json') echo '{"kortix_error":{"kind":"failed","status":404,"message":"No agent helper"}}' >&2; exit 1 ;;
+  'agents config helper --file '*' --json') cp "$5" ${JSON.stringify(join('$BIN', 'block.json'))}; echo '{"ok":true,"agent":"helper","block":{}}' ;;`.replaceAll('$BIN', bin))
+  await run('kortix_agents', { action: 'create', name: 'helper', description: 'Helps', instructions: 'Help.', skills: ['all'], secrets: ['none'], connectors: ['gmail'] })
+  expect(JSON.parse(readFileSync(join(bin, 'block.json'), 'utf8'))).toMatchObject({ skills: 'all', secrets: 'none', connectors: ['gmail'] })
+})

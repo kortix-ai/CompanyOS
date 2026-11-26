@@ -278,8 +278,11 @@ export function withIssues(message: string, body: unknown): string {
   const issues = (body as { issues?: Array<{ path?: unknown; message?: string }> } | null)?.issues;
   if (!Array.isArray(issues) || issues.length === 0) return message;
   const where = (path: unknown) => (Array.isArray(path) ? path.join('.') : typeof path === 'string' ? path : '');
-  const lines = issues.slice(0, 5).map((issue) => `${where(issue.path) || '(body)'}: ${issue.message ?? 'invalid'}`);
-  return `${message} (${lines.join('; ')})`;
+  const lines = issues
+    .slice(0, 5)
+    .map((issue) => `${where(issue.path) || '(body)'}: ${issue.message ?? 'invalid'}`)
+    .filter((line) => !message.includes(line.replace(/\.$/, '')));
+  return lines.length ? `${message} (${lines.join('; ')})` : message;
 }
 
 export async function printPermissionDenialIdentity(): Promise<void> {

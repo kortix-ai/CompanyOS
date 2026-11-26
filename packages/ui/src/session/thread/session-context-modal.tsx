@@ -211,7 +211,6 @@ export function estimateSkills(
       chars.set(name, { chars: prev.chars + size, uses: prev.uses + 1 });
     }
   }
-  if (chars.size === 0) return [];
   const raw = rawTokens(messages);
   const estimated = raw.system + raw.user + raw.assistant + raw.tool;
   const scale = input && estimated > input ? input / estimated : 1;

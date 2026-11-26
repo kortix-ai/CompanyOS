@@ -418,9 +418,12 @@ describe('repeated sweeps of one notice', () => {
     expect(privacyReports()).toEqual([]);
   });
 
+  const VENDOR: Subprocessor = { name: 'Example Inference, Inc.', purpose: 'Inference', location: 'United States' };
+  const audited = (summary: Record<string, unknown>) => [{ outputSummary: expect.objectContaining(summary) }];
+
   // Sweep 1 is mid-send to a manager when their other workspace turns paid and sweep 2 runs.
   async function raceWithInFlightSend(addedOn: string, label: string, firstSendStatus: number) {
-    const rows: Subprocessor[] = [{ ...ROWS[1]!, addedOn }];
+    const rows: Subprocessor[] = [{ ...VENDOR, addedOn }];
     const person = await seedUser(label);
     const first = await seedAccount(`subproc-${label}-first`, 'credits', [[person, 'owner']]);
     let settle = (_status: number) => {};
@@ -445,12 +448,11 @@ describe('repeated sweeps of one notice', () => {
 
   test('a send that fails while another sweep runs is retried for the account that sweep found, not recorded as delivered', async () => {
     const { rows, person, first, later } = await raceWithInFlightSend('2026-11-09', 'inflight-owner', 503);
-    const [notice] = emailsTo(email(person, 'inflight-owner'));
-    expect(emailsTo(email(person, 'inflight-owner'))).toHaveLength(1);
-    expect(notice!.text).toContain('subproc-inflight-owner-first-account and subproc-inflight-owner-later-account');
+    expect(emailsTo(email(person, 'inflight-owner'))).toEqual([
+      expect.objectContaining({ text: expect.stringContaining('subproc-inflight-owner-first-account and subproc-inflight-owner-later-account') }),
+    ]);
     for (const { account_id } of [first, later]) {
-      const [audit] = await audits(account_id, '2026-11-09');
-      expect(audit!.outputSummary).toMatchObject({ recipients: 1, previously_notified: 0, undelivered: 0 });
+      expect(await audits(account_id, '2026-11-09')).toEqual(audited({ recipients: 1, previously_notified: 0, undelivered: 0 }));
     }
 
     sent = [];
@@ -461,12 +463,11 @@ describe('repeated sweeps of one notice', () => {
   test('a send that succeeds while another sweep runs covers that sweep\'s account on the next sweep, with no second email', async () => {
     const { person, later } = await raceWithInFlightSend('2026-11-11', 'landed-owner', 0);
     expect(emailsTo(email(person, 'landed-owner'))).toEqual([]);
-    const [audit] = await audits(later.account_id, '2026-11-11');
-    expect(audit!.outputSummary).toMatchObject({ recipients: 1, previously_notified: 1, undelivered: 0 });
+    expect(await audits(later.account_id, '2026-11-11')).toEqual(audited({ recipients: 1, previously_notified: 1, undelivered: 0 }));
   });
 
   test('a send claim left by a sweep that died mid-send is taken over once it is stale', async () => {
-    const rows: Subprocessor[] = [{ ...ROWS[1]!, addedOn: '2026-11-12' }];
+    const rows: Subprocessor[] = [{ ...VENDOR, addedOn: '2026-11-12' }];
     const owner = await seedUser('crash-owner');
     const account = await seedAccount('subproc-crash', 'credits', [[owner, 'owner']]);
     const claim = `legal:subprocessor-notice:2026-11-12:to:${new Bun.CryptoHasher('sha256').update(email(owner, 'crash-owner')).digest('hex')}`;
@@ -474,7 +475,6 @@ describe('repeated sweeps of one notice', () => {
 
     await runSubprocessorNoticeSweep(new Date('2026-11-12T09:00:00Z'), rows);
     expect(emailsTo(email(owner, 'crash-owner'))).toHaveLength(1);
-    const [audit] = await audits(account.account_id, '2026-11-12');
-    expect(audit!.outputSummary).toMatchObject({ recipients: 1, previously_notified: 0 });
+    expect(await audits(account.account_id, '2026-11-12')).toEqual(audited({ recipients: 1, previously_notified: 0 }));
   });
 });

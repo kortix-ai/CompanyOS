@@ -36,6 +36,8 @@ let second: SeededProject;
 // A paid account nobody can be emailed for yet.
 let unreachable: SeededProject;
 let sent: EmailMessage[] = [];
+// Addresses whose delivery fails the way the transport reports it: a result, not a throw.
+let failing = new Set<string>();
 const customerEmails = () => sent.filter((m) => !m.subject.startsWith('[Kortix compliance]'));
 const privacyReports = () => sent.filter((m) => m.subject.startsWith('[Kortix compliance]'));
 const savedEnv = config.INTERNAL_KORTIX_ENV;
@@ -62,6 +64,7 @@ beforeAll(async () => {
     { accountId: unreachable.account_id, tier: 'credits' },
   ]);
   setOwnerAlertSenderForTest(async (message) => {
+    if (message.to.some((to) => failing.has(to))) return { ok: false, provider: 'mailpit', status: 503, error: 'unavailable' };
     sent.push(message);
     return { ok: true, provider: 'mailpit', status: 200 };
   });
@@ -69,6 +72,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   sent = [];
+  failing = new Set();
   config.INTERNAL_KORTIX_ENV = 'prod';
 });
 
@@ -213,6 +217,120 @@ describe('the subprocessor notice sweep', () => {
     config.INTERNAL_KORTIX_ENV = 'dev';
     const rows: Subprocessor[] = [{ ...ROWS[1]!, addedOn: '2026-10-21' }];
     expect(await runSubprocessorNoticeSweep(new Date('2026-10-21T09:00:00Z'), rows)).toEqual({ accountsNotified: 0 });
+    expect(sent).toEqual([]);
+  });
+});
+
+describe('repeated sweeps of one notice', () => {
+  const seeded: SeededProject[] = [];
+  const users: string[] = [];
+
+  async function seedUser(label: string): Promise<string> {
+    const id = crypto.randomUUID();
+    users.push(id);
+    await db.execute(sql`
+      insert into auth.users (id, email, instance_id, aud, role)
+      values (${id}::uuid, ${email(id, label)}, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated')`);
+    return id;
+  }
+
+  async function seedAccount(label: string, tier: string, managers: [string, 'owner' | 'admin'][]): Promise<SeededProject> {
+    const project = await seedProject(label);
+    seeded.push(project);
+    for (const [userId, accountRole] of managers) {
+      await insertIntoView(db, accountMembers, { userId, accountId: project.account_id, accountRole });
+    }
+    await db.insert(creditAccounts).values({ accountId: project.account_id, tier });
+    return project;
+  }
+
+  const audits = (accountId: string, addedOn: string) =>
+    db
+      .select({ outputSummary: auditEvents.outputSummary })
+      .from(auditEvents)
+      .where(and(eq(auditEvents.accountId, accountId), eq(auditEvents.action, 'legal.subprocessor_notice.sent'), eq(auditEvents.resourceId, addedOn)));
+  const emailsTo = (address: string) => customerEmails().filter((m) => m.to.includes(address));
+
+  afterAll(async () => {
+    for (const userId of users) await deleteFromView(db, accountMembers, eq(accountMembers.userId, userId));
+    for (const { account_id } of seeded) await db.delete(creditAccounts).where(eq(creditAccounts.accountId, account_id));
+    await removeSeeded(seeded);
+    for (const userId of users) await db.execute(sql`delete from auth.users where id = ${userId}::uuid`);
+  });
+
+  test('a later sweep that only finds a newly paid account emails no one twice and sends privacy@ no second warning', async () => {
+    const rows: Subprocessor[] = [{ ...ROWS[1]!, addedOn: '2026-11-01' }];
+    const person = await seedUser('repeat-owner');
+    const first = await seedAccount('subproc-repeat-first', 'credits', [[person, 'owner']]);
+    await runSubprocessorNoticeSweep(new Date('2026-11-02T09:00:00Z'), rows);
+    expect(emailsTo(email(person, 'repeat-owner'))).toHaveLength(1);
+    expect(privacyReports().map((m) => m.subject)).toEqual([expect.stringContaining('Subprocessor notice sent to')]);
+    expect(await audits(first.account_id, '2026-11-01')).toHaveLength(1);
+
+    // Unchanged inputs: nothing at all.
+    sent = [];
+    expect(await runSubprocessorNoticeSweep(new Date('2026-11-02T10:00:00Z'), rows)).toEqual({ accountsNotified: 0 });
+    expect(sent).toEqual([]);
+
+    // The same person's second workspace turns paid 8 days later (fewer than 30 days remain).
+    const later = await seedAccount('subproc-repeat-later', 'tier_2_20', [[person, 'admin']]);
+    sent = [];
+    expect(await runSubprocessorNoticeSweep(new Date('2026-11-10T09:00:00Z'), rows)).toEqual({ accountsNotified: 1 });
+    expect(sent).toEqual([]);
+    // The coverage of the new account is still recorded: its manager already holds the notice.
+    const [audit] = await audits(later.account_id, '2026-11-01');
+    expect(audit!.outputSummary).toMatchObject({ recipients: 1, previously_notified: 1, effective_date: '2026-12-08' });
+
+    // A distinct update still reaches the same person, with its own record for privacy@.
+    const update: Subprocessor = { name: 'Another Vendor, Ltd.', purpose: 'Search', location: 'Ireland', addedOn: '2026-11-10' };
+    sent = [];
+    await runSubprocessorNoticeSweep(new Date('2026-11-10T10:00:00Z'), [...rows, update]);
+    const [notice] = emailsTo(email(person, 'repeat-owner'));
+    expect(emailsTo(email(person, 'repeat-owner'))).toHaveLength(1);
+    expect(notice!.text).toContain('Another Vendor, Ltd.: Search (Ireland)');
+    expect(notice!.text).toContain('subproc-repeat-first-account and subproc-repeat-later-account');
+    expect(privacyReports()).toHaveLength(1);
+    expect(privacyReports()[0]!.text).toContain('Another Vendor, Ltd.');
+  });
+
+  test('two sweeps at once deliver each notice once per person and one report', async () => {
+    const rows: Subprocessor[] = [{ ...ROWS[1]!, addedOn: '2026-11-03' }];
+    const person = await seedUser('race-owner');
+    for (const label of ['subproc-race-a', 'subproc-race-b', 'subproc-race-c']) await seedAccount(label, 'credits', [[person, 'owner']]);
+
+    const now = new Date('2026-11-03T09:00:00Z');
+    await Promise.all([runSubprocessorNoticeSweep(now, rows), runSubprocessorNoticeSweep(now, rows)]);
+    const recipients = customerEmails().flatMap((m) => m.to);
+    expect(recipients.length).toBe(new Set(recipients).size);
+    expect(emailsTo(email(person, 'race-owner'))).toHaveLength(1);
+    expect(privacyReports()).toHaveLength(1);
+  });
+
+  test('a failed delivery is retried for the recipient who missed it, not for the one who got it', async () => {
+    const rows: Subprocessor[] = [{ ...ROWS[1]!, addedOn: '2026-11-04' }];
+    const owner = await seedUser('retry-owner');
+    const admin = await seedUser('retry-admin');
+    const account = await seedAccount('subproc-retry', 'credits', [[owner, 'owner'], [admin, 'admin']]);
+
+    failing = new Set([email(admin, 'retry-admin')]);
+    await runSubprocessorNoticeSweep(new Date('2026-11-04T09:00:00Z'), rows);
+    expect(emailsTo(email(owner, 'retry-owner'))).toHaveLength(1);
+    // Not covered yet: no audit event claims the admin was notified.
+    expect(await audits(account.account_id, '2026-11-04')).toEqual([]);
+
+    failing = new Set();
+    sent = [];
+    await runSubprocessorNoticeSweep(new Date('2026-11-04T10:00:00Z'), rows);
+    expect(customerEmails().filter((m) => [email(owner, 'retry-owner'), email(admin, 'retry-admin')].includes(m.to[0]!)).map((m) => m.to[0])).toEqual([
+      email(admin, 'retry-admin'),
+    ]);
+    // The retry does not repeat the privacy@ record of the first sweep.
+    expect(privacyReports()).toEqual([]);
+    const [audit] = await audits(account.account_id, '2026-11-04');
+    expect(audit!.outputSummary).toMatchObject({ recipients: 2, previously_notified: 1 });
+
+    sent = [];
+    expect(await runSubprocessorNoticeSweep(new Date('2026-11-04T11:00:00Z'), rows)).toEqual({ accountsNotified: 0 });
     expect(sent).toEqual([]);
   });
 });

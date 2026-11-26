@@ -43,15 +43,25 @@ runs hourly in the billing worker, on prod only (`INTERNAL_KORTIX_ENV=prod`).
 - A row is open from the first sweep that sees it on prod until its effective
   date. The release has 7 days to reach prod, so every customer gets 30 to 37
   days.
-- Each open notice goes once to the owners and admins of every paid account
-  (`credit_accounts.tier` not `free` or `none`). Reply-To is
-  privacy@kortix.com: a reply is an objection.
-- Each notified account gets an audit event `legal.subprocessor_notice.sent`
-  (`resource_id` = `addedOn`, `output_summary` = recipient count, effective
-  date, vendor names). The customer sees it in the account's audit log.
-- privacy@kortix.com gets one report per sweep that sent. Subject "Subprocessor
-  notice gave only N days" means the release took more than 7 days: hold the
-  vendor until 30 days after that report and move `addedOn`.
+- Each open notice goes once to each owner and admin of every paid account
+  (`credit_accounts.tier` not `free` or `none`): one email per person, listing
+  their paid workspaces. Reply-To is privacy@kortix.com: a reply is an
+  objection. Claim rows in `kortix.chat_event_dedup`
+  (`legal:subprocessor-notice:<addedOn>:…`, per account, per person as a
+  SHA-256 of the address, and per report) keep every email once-only across
+  sweeps, replicas and retries.
+- An account that turns paid later in the window is covered by a later sweep.
+  A manager who already has the notice gets no second email. A failed delivery
+  is retried by the next sweep for that recipient only.
+- Each covered account gets an audit event `legal.subprocessor_notice.sent`
+  once every manager has the notice (`resource_id` = `addedOn`,
+  `output_summary` = recipient count, `previously_notified` = managers who had
+  it from an earlier sweep, effective date, vendor names). The customer sees
+  it in the account's audit log.
+- privacy@kortix.com gets one report per notice, from the sweep that first
+  delivers it. Subject "Subprocessor notice gave only N days" means the
+  release took more than 7 days: hold the vendor until 30 days after that
+  report and move `addedOn`.
 
 ## Evidence for an auditor
 
@@ -70,7 +80,8 @@ where action = 'legal.subprocessor_notice.sent' and resource_id = '<addedOn>'
 order by created_at;
 ```
 
-The privacy@kortix.com reports give the per-sweep totals.
+The privacy@kortix.com report gives the first sweep's total; the audit events
+give every account.
 
 ## Tests
 

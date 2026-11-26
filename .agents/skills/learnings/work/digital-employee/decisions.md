@@ -30,3 +30,14 @@
 
 - **D1 (Marko)** Name: Autonomy.INC or Mirko.ai, and the default employee
   name (the design uses "Otto").
+
+## Decided (later the same day)
+
+- **2026-11-26 (Marko)** It is one autonomous cognitive being with its own
+  identity that scales itself without limit, seen from outside as one
+  employee. It has the same action space as a person, end to end.
+- **2026-11-26** Every worker is the employee itself: same self, memory,
+  accounts and voice. A live self-state lets every copy see what the others
+  do.
+- **2026-11-26** The parity checklist in `README.md` is the definition of
+  done. Each row becomes an agent eval task.

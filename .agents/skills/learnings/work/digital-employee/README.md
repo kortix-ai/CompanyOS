@@ -57,8 +57,22 @@ repeats a DM to the whole company. Each fact carries its source and its
 audience (`public`, `team`, `private:<person>`). Recall in a conversation
 returns only the facts whose audience includes everyone in that conversation.
 
-## The mind and the workers: parallel without losing the thread
+## One being, many hands: the mind and the workers
 
+The employee is one autonomous being with its own identity. It scales itself
+without limit, but from outside it is always one person: one Slack member, one
+email address, one voice, one memory. A worker is not a subagent with its own
+persona. A worker is the employee itself, working on one more thing at once.
+
+- **Same self in every copy.** Every worker loads the same self, the same
+  memory, the same accounts and the same voice. No worker has a name, a prompt
+  or a memory of its own.
+- **Each copy knows what the others do.** One live self-state ("now") lists
+  every running copy: its thread, its task, what it waits on. Each copy reads
+  it on every turn, so two copies never contradict each other or do the same
+  work twice.
+- **Scale is a budget, not a design limit.** The mind starts as many workers
+  as the work and the workspace budget allow. Each worker has a full computer.
 - **The mind** is one root session per employee, always on. Every inbound
   event lands in one feed: channel messages, email, calls, SMS, triggers,
   connector events, goal wake-ups (`apps/api/src/integrations/event-inbox.ts`
@@ -86,6 +100,27 @@ returns only the facts whose audience includes everyone in that conversation.
 
 My Kortix's computer has no browser today (`apps/sandbox/MACHINE.md:44`). The
 employee runs on the full computer.
+
+## The parity checklist: the definition of done
+
+The employee has the same action space as a person, end to end. Each row is a
+task it must finish alone on dev, from a real input to a real result. The rows
+become tasks in the agent evals (`evals/`), so parity is measured, not claimed.
+
+| # | A person can | The proof |
+|---|---|---|
+| 1 | Get hired and onboarded by talking | A voice interview writes its self, goals and first facts |
+| 2 | Read and answer email from anyone | Mail to its address gets a correct reply in the same thread |
+| 3 | Work in Slack and Teams as a member | It answers a DM, joins a channel, starts a thread, as a user and not a bot |
+| 4 | Join a call from a link | It joins a Meet link and a Slack huddle, talks, and acts on what it hears |
+| 5 | Call and text a phone | It calls a number, holds a conversation, and sends and reads SMS |
+| 6 | Sign up and sign in anywhere | It creates an account on a new site, stores the password, sets up 2FA, and signs in again a week later |
+| 7 | Use any web app | It finishes a task in a web app that has no API, with its saved login |
+| 8 | Remember everything, with discretion | A fact from person A is used for A, never told to B |
+| 9 | Do many things at once | Three people ask at once, three copies work, no answer contradicts another |
+| 10 | Act without being asked | It moves a goal forward and reports back with no prompt from a person |
+| 11 | Learn the job | A task it failed once, it does right next time, through a skill it wrote |
+| 12 | Pay for something | Later: a purchase under a limit, an approval above it |
 
 ## UX
 

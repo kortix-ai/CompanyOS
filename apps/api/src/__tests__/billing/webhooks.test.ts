@@ -82,7 +82,7 @@ beforeEach(() => {
 
 // Import AFTER mocking
 const { processStripeWebhook, processRevenueCatWebhook } = await import('../../billing/services/webhooks');
-const { resolveCreditsPriceId } = await import('../../billing/services/tiers');
+const { resolveCreditsPriceId, resolveFreePriceId } = await import('../../billing/services/tiers');
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
@@ -484,6 +484,28 @@ describe('subscription changes', () => {
 
     expect(updateCreditAccountCalls[0].data.tier).toBe('credits');
     expect(updateCreditAccountCalls[0].data.planMonthlyUsd).toBe('20');
+  });
+
+  // KRTX-1510: the Stripe portal downgrades by switching the item to the $0
+  // Free price; the subscription stays active. The paid amount goes with the plan.
+  test('a switch to the Free price moves the plan to Free and clears the paid amount', async () => {
+    mockRegistry.getCreditAccount = async () =>
+      createMockCreditAccount({ tier: 'credits', planMonthlyUsd: '50', scheduledMonthlyUsd: '20', stripeSubscriptionId: 'sub_test_123' });
+    const sub = createMockStripeSubscription({
+      items: { data: [{ id: 'si_test_123', quantity: 5000, price: { id: resolveFreePriceId(), unit_amount: 0, currency: 'usd' } }] },
+      metadata: { account_id: 'acc_test_123', plan_key: 'credits', tier_key: 'credits' },
+    });
+    const event = createMockStripeEvent('customer.subscription.updated', sub);
+    mockRegistry.stripeClient.webhooks.constructEvent = () => event;
+
+    await processStripeWebhook(JSON.stringify(event), 'sig');
+
+    expect(updateCreditAccountCalls[0].data).toMatchObject({
+      tier: 'free',
+      planMonthlyUsd: null,
+      scheduledMonthlyUsd: null,
+      scheduledTierChangeDate: null,
+    });
   });
 });
 

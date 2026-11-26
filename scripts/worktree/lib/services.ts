@@ -1,7 +1,7 @@
 import { spawn } from 'bun';
 import { spawn as spawnChild } from 'node:child_process';
-import { existsSync, mkdirSync, openSync, readdirSync, statSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { existsSync, mkdirSync, openSync, readFileSync, statSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { run, which } from './exec';
 
@@ -32,48 +32,41 @@ export async function ensureRuntimeArtifacts(worktreePath: string): Promise<numb
   return 0;
 }
 
-/** Directories an mtime walk of build inputs skips: build output and installed dependencies (the lockfile stands for those). */
-const NOT_INPUTS = new Set(['dist', 'node_modules', '.turbo', '.next']);
-
-/** Newest mtime (ms) of `path` or of anything under it outside NOT_INPUTS; 0 when it does not exist. A directory
- * below `path` counts too, so deleting a source file (which moves only its directory's mtime) reads as a change.
- * `path`'s own mtime does not: `bun build --compile` stages its binary in the package root and renames it into dist/. */
-export function newestInputMtimeMs(path: string, root = true): number {
-  let s;
-  try { s = statSync(path); } catch { return 0; }
-  if (!s.isDirectory()) return s.mtimeMs;
-  let newest = root ? 0 : s.mtimeMs;
-  for (const entry of readdirSync(path, { withFileTypes: true })) {
-    if (entry.isDirectory() && NOT_INPUTS.has(entry.name)) continue;
-    const m = newestInputMtimeMs(join(path, entry.name), false);
-    if (m > newest) newest = m;
-  }
-  return newest;
-}
-
-/** The workspace packages the sandbox agent's bundle reaches through @kortix/* imports, transitively (its sources
- * import @kortix/api-contract, @kortix/sdk and @kortix/shared). runtime-artifacts.test.ts walks the real sources. */
-export const AGENT_INPUT_PACKAGES = ['api-contract', 'llm-catalog', 'sdk', 'shared', 'voice'];
+/** The sandbox agent package, and the bun metafile its scripts/build.sh writes next to the binary: every module the bundle read. */
+const AGENT_PKG = 'apps/kortix-sandbox-agent-server';
+const AGENT_META = 'dist/kortix-agent.meta.json';
 
 /**
- * True when the sandbox agent binary is newer than every input of its build, so `pnpm --filter kortixd build`
+ * True when the sandbox agent binary is newer than every input of its last build, so `pnpm --filter kortixd build`
  * would only reproduce it. `pnpm worktree start` runs right after `create` built it, and again on every restart:
  * 7.2 s each time on a 6 vCPU Kortix session (2026-11-26), almost all of it `bun build --compile`.
  *
- * Inputs: the package itself, AGENT_INPUT_PACKAGES, and the root lockfile, package.json and tsconfig.base.json, which
- * move on a dependency bump. Not all of packages/: the CLI build, which runs next, rewrites
- * packages/starter/src/embedded.generated.json. An edit, a branch switch or a checkout rewrites an input's mtime, so
- * each of those rebuilds.
+ * Inputs: every module the bundle read, as the build's metafile lists them (one that is gone reads as a change), the
+ * package's package.json and tsconfig.json, and the root pnpm-lock.yaml, package.json and tsconfig.base.json, which
+ * move on a dependency bump. A file the bundle never read does not count: the CLI build that runs next rewrites
+ * packages/starter/src/embedded.generated.json. A new file enters the bundle only through an edit to a file already
+ * in it, which counts. No metafile (a Bun without --metafile, or a build from before it) means rebuild.
  */
 export function agentArtifactCurrent(worktreePath: string): boolean {
-  const pkg = join(worktreePath, 'apps/kortix-sandbox-agent-server');
+  const pkg = join(worktreePath, AGENT_PKG);
   let built = Infinity;
-  for (const out of ['dist/kortixd', 'dist/kortix-agent']) {
-    try { built = Math.min(built, statSync(join(pkg, out)).mtimeMs); } catch { return false; }
+  let modules: string[];
+  try {
+    for (const out of ['dist/kortixd', 'dist/kortix-agent']) built = Math.min(built, statSync(join(pkg, out)).mtimeMs);
+    const meta = JSON.parse(readFileSync(join(pkg, AGENT_META), 'utf8')) as { inputs?: Record<string, unknown> };
+    modules = Object.keys(meta.inputs ?? {}).filter((m) => !/^[a-z]+:/.test(m)); // not bun: builtins
+  } catch {
+    return false;
   }
-  const inputs = [pkg, ...AGENT_INPUT_PACKAGES.map((p) => join(worktreePath, 'packages', p)),
-    ...['pnpm-lock.yaml', 'package.json', 'tsconfig.base.json'].map((f) => join(worktreePath, f))];
-  return inputs.every((input) => newestInputMtimeMs(input) < built);
+  if (modules.length === 0) return false;
+  const required = [...modules.map((m) => resolve(pkg, m)), join(pkg, 'package.json'), join(pkg, 'tsconfig.json')];
+  for (const file of required) {
+    try { if (statSync(file).mtimeMs >= built) return false; } catch { return false; }
+  }
+  for (const file of ['pnpm-lock.yaml', 'package.json', 'tsconfig.base.json'].map((f) => join(worktreePath, f))) {
+    try { if (statSync(file).mtimeMs >= built) return false; } catch { /* optional at the root */ }
+  }
+  return true;
 }
 
 // Spawn `cmd`, drain its stdout+stderr and resolve the first regex match (the

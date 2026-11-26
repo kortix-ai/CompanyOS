@@ -19,16 +19,12 @@
  * checks (`isTreeObject`) and in tests.
  */
 
-import { execFile, spawn } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { join, posix, resolve } from 'node:path';
-import { promisify } from 'node:util';
 import type { GitBackedProject } from '../projects/git/types';
 import { isObjectFetchTooLarge } from '../shared/over-limit-memo';
 import { bumpBounded } from '../shared/ttl-memo';
-import { gitEnv, runGit, scratchDir, treeObjects } from './release-tree-git';
-
-const execFileAsync = promisify(execFile);
+import { runGit, runProcess, scratchDir, treeObjects } from './release-tree-git';
 
 /**
  * The release archive cap. A release is the repository's whole tree at the
@@ -344,6 +340,9 @@ async function gitWithInput(
 /** The default bound on what one `gitStdin` call holds from stdout. */
 const MAX_GIT_STDOUT_BYTES = 64 * 1024 * 1024;
 
+/** What one `gitStdin` call may run: its job may run 60 s of its own time (`tree-jobs.ts`). */
+const GIT_STDIN_TIMEOUT_MS = 60_000;
+
 /**
  * `git <args>` in `repo` with `input` on stdin; its stdout bytes. Throws on a
  * non-zero exit. Output over `maxOutputBytes` kills the child and throws
@@ -351,42 +350,20 @@ const MAX_GIT_STDOUT_BYTES = 64 * 1024 * 1024;
  * from one call, whatever the repository holds.
  */
 async function gitStdin(repo: string, env: Record<string, string>, args: string[], input: string, maxOutputBytes = MAX_GIT_STDOUT_BYTES): Promise<Buffer> {
-  const child = spawn('git', args, {
+  // It may read the mirror (alternates), which must never fetch on its own: `childEnv` sets GIT_NO_LAZY_FETCH.
+  const result = await runProcess({
+    command: 'git',
+    args,
     cwd: repo,
-    // It may read the mirror (alternates), which must never fetch on its own.
-    env: gitEnv(env),
-    stdio: ['pipe', 'pipe', 'pipe'],
+    env,
+    input: new TextEncoder().encode(input),
+    maxOutputBytes,
+    timeoutMs: GIT_STDIN_TIMEOUT_MS,
   });
-  const stdout: Buffer[] = [];
-  const stderr: Buffer[] = [];
-  let stdoutBytes = 0;
-  let overBudget = false;
-  child.stdout.on('data', (chunk: Buffer) => {
-    if (overBudget) return;
-    stdoutBytes += chunk.length;
-    if (stdoutBytes > maxOutputBytes) {
-      overBudget = true;
-      stdout.length = 0;
-      child.kill('SIGKILL');
-      return;
-    }
-    stdout.push(chunk);
-  });
-  child.stderr.on('data', (chunk: Buffer) => {
-    if (stderr.length < 64) stderr.push(chunk);
-  });
-  const exit = new Promise<number | null>((resolveExit, reject) => {
-    child.once('error', reject);
-    child.once('close', resolveExit);
-  });
-  child.stdin.on('error', () => undefined);
-  child.stdin.end(input);
-  const code = await exit;
-  if (overBudget) throw new ConfigArchiveTooLargeError(maxOutputBytes, stdoutBytes);
-  if (code !== 0) {
-    throw new Error(`git ${args[0]} failed: ${Buffer.concat(stderr).toString('utf8').trim()}`);
-  }
-  return Buffer.concat(stdout);
+  if (result.overOutput) throw new ConfigArchiveTooLargeError(maxOutputBytes, result.stdoutBytes);
+  if (result.timedOut) throw new Error(`git ${args[0]} failed: no answer in ${GIT_STDIN_TIMEOUT_MS} ms`);
+  if (result.exitCode !== 0) throw new Error(`git ${args[0]} failed: ${result.stderr.trim()}`);
+  return Buffer.from(result.stdout.buffer, result.stdout.byteOffset, result.stdout.byteLength);
 }
 
 /**
@@ -1162,10 +1139,9 @@ async function archiveThroughGzip(
   if (archived.exitCode !== 0) throw new Error(`git archive ${commit} failed: ${archived.stderr.trim()}`);
   const tarBytes = (await stat(tarPath)).size;
   if (tarBytes > MAX_CONFIG_TAR_BYTES) throw new ConfigArchiveTooLargeError(limit, tarBytes);
-  try {
-    await execFileAsync('gzip', ['-n', '-f', tarPath], { timeout: 60_000, env: gitEnv() });
-  } catch (error) {
-    throw new Error(`gzip -n failed: ${(error as Error).message}`);
+  const gzipped = await runProcess({ command: 'gzip', args: ['-n', '-f', tarPath], cwd: repo, maxOutputBytes: 64 * 1024, timeoutMs: 60_000 });
+  if (gzipped.exitCode !== 0) {
+    throw new Error(`gzip -n failed: ${gzipped.timedOut ? 'no answer in 60000 ms' : gzipped.stderr.trim() || `exit ${gzipped.exitCode}`}`);
   }
   // Read once and measure the bytes read: a stat followed by a read can see
   // two different files (CodeQL js/file-system-race).

@@ -4,6 +4,7 @@
  * ends, a job that waits on a download, a thread that crashes.
  */
 import { afterEach, describe, expect, test } from 'bun:test';
+import { spawnSync } from 'node:child_process';
 import { ConfigArchiveTooLargeError } from './release-tree';
 import type { ReleaseTreeObjects } from './release-tree-git';
 import { TreeJobBusyError, TreeJobs, TreeJobTimeoutError, type TreeJobsOptions } from './tree-jobs';
@@ -28,6 +29,30 @@ afterEach(async () => {
   await jobs?.close();
   jobs = null;
 });
+
+interface ProcessRow {
+  pid: number;
+  ppid: number;
+  command: string;
+}
+
+/** The processes whose command line holds `marker`. */
+function processesWith(marker: string): ProcessRow[] {
+  const out = spawnSync('ps', ['-A', '-o', 'pid=,ppid=,command='], { encoding: 'utf8' }).stdout;
+  return out
+    .split('\n')
+    .filter((line) => line.includes(marker))
+    .map((line) => {
+      const [pid, ppid, ...command] = line.trim().split(/\s+/);
+      return { pid: Number(pid), ppid: Number(ppid), command: command.join(' ') };
+    })
+    .filter((row) => row.command.includes(`sleep ${marker}`));
+}
+
+/** A process's state (`S`, `R`, `Z`…), or null when no process has that ID. */
+function processState(pid: number): string | null {
+  return spawnSync('ps', ['-o', 'stat=', '-p', String(pid)], { encoding: 'utf8' }).stdout.trim() || null;
+}
 
 /** Run `fn` and return the longest time, in ms, the event loop could not run a 5 ms timer. */
 async function longestStall<T>(fn: () => Promise<T>): Promise<{ result: T; stallMs: number }> {
@@ -124,6 +149,30 @@ describe('tree threads', () => {
     const run = start();
     await expect(run('p', 'crash')).rejects.toThrow('tree thread failed');
     expect(await run('p', 'sleep', { ms: 1 })).toBe(1);
+  });
+
+  test('a stopped thread takes its child processes along: each ends, and the API process reaps its own', async () => {
+    const run = start({ jobMillis: 2_000, env: { PATH: process.env.PATH } });
+    // A sleep length no other process on the machine uses.
+    const marker = `47.${process.pid}`;
+    const job = run('p', 'hang', { text: marker });
+    job.catch(() => undefined);
+    let found: ProcessRow[] = [];
+    for (let tries = 0; tries < 100 && found.length < 3; tries += 1) {
+      await Bun.sleep(20);
+      found = processesWith(marker);
+    }
+    const git = found.find((row) => row.ppid === process.pid);
+    // git, the shell of its alias, and `sleep`; only git is a child of this process.
+    expect(found.length).toBe(3);
+    expect(git?.command).toContain('git');
+
+    await expect(job).rejects.toBeInstanceOf(TreeJobTimeoutError);
+    // git is gone, not a zombie: the stop killed its process group, and the API process reaped it.
+    for (let tries = 0; tries < 50 && processState(git!.pid) !== null; tries += 1) await Bun.sleep(20);
+    expect(processState(git!.pid)).toBeNull();
+    // Its shell and `sleep` were killed with it.
+    for (const row of found) expect(processState(row.pid) ?? 'gone').not.toMatch(/^[RSDTU]/);
   });
 
   test('archive bytes arrive as a Buffer', async () => {

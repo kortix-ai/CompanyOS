@@ -39,7 +39,7 @@ import { bumpBounded } from '../shared/ttl-memo';
 import { configArchiveKey, configArchiveProjectPrefix, getConfigArchiveStore, type ConfigArchiveStore } from './store';
 import type { AgentFileListInput, ConfigReleaseFile, ConfigReleaseVariant } from './release-tree';
 import { ConfigArchiveTooLargeError, HEX40, MAX_CONFIG_ARCHIVE_BYTES, variantAgent } from './release-tree';
-import { configureReleaseTreeGit, type ReleaseTreeObjects } from './release-tree-git';
+import { configureReleaseTreeGit, startProcess, type ReleaseTreeObjects } from './release-tree-git';
 import { TreeJobBusyError, TreeJobs, TreeJobTimeoutError } from './tree-jobs';
 import type { TreeOp, TreeOpArgs, TreeOpResult } from './tree-protocol';
 
@@ -69,9 +69,18 @@ const projectObjects: ReleaseTreeObjects = {
 };
 
 // The few calls that still run in this process (`isTreeObject`, and tests) use the same git.
-configureReleaseTreeGit({ env: childProcessEnv(), objects: projectObjects, scratchDir: tmpdir() });
+configureReleaseTreeGit({
+  objects: projectObjects,
+  run: (spec) => startProcess(spec, childProcessEnv()).result,
+  scratchDir: tmpdir(),
+});
 
-/** Every read of repository content for a release runs in a tree thread. */
+/**
+ * A release's tree (listings, file lists, parses, archives) is read in a tree
+ * thread. Its governance compile is not: `compileGovernance` reads
+ * `kortix.yaml` and its prompt files in this process, as a session start
+ * does, bounded by `MAX_GOVERNANCE_PROMPT_CHARS`.
+ */
 export const treeJobs = new TreeJobs({ env: childProcessEnv(), objects: projectObjects });
 
 /** A tree job that did not run now: not built, not cached, asked again at the next convergence. */
@@ -278,15 +287,25 @@ export async function storeConfigArchive(
 /** The `none` variant's compiled governance: an empty config object, which kortixd accepts. */
 const EMPTY_GOVERNANCE = '{}';
 
+/**
+ * The prompt text one governance compile reads in all, in characters. Past it
+ * the compile fails (`PromptFilesTooLargeError`): no release, and the session
+ * keeps the config it runs. The compile, its JSON and its etag cost ~1 ms per
+ * Mi characters on the API event loop (Bun 1.4.3); the largest config known
+ * is ~380 KB from ~40 files (2026-10-30).
+ */
+const MAX_GOVERNANCE_PROMPT_CHARS = 16 * 1024 * 1024;
+
 async function compileGovernance(
   project: GitBackedProject,
   commit: string,
   variant: ConfigReleaseVariant,
 ): Promise<string | null> {
-  if (variant === 'project') return resolveCompiledAgentConfigForSession(project, commit);
+  const read = { maxPromptChars: MAX_GOVERNANCE_PROMPT_CHARS };
+  if (variant === 'project') return resolveCompiledAgentConfigForSession(project, commit, read);
   if (variant === 'none') return EMPTY_GOVERNANCE;
   if (variant === 'mykortix') return buildMyKortixConfig();
-  return resolveSelectedAgentConfigForSession(project, variantAgent(variant)!, commit);
+  return resolveSelectedAgentConfigForSession(project, variantAgent(variant)!, commit, read);
 }
 
 async function build(

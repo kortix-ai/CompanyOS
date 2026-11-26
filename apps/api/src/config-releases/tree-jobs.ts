@@ -1,7 +1,10 @@
 /**
- * The tree threads: where every read of repository content for a config
- * release runs (`tree-thread.ts`). The API event loop only sends a job and
- * receives its result, so no repository can stall the API, whatever it holds.
+ * The tree threads: where a config release's tree is read, listed, parsed and
+ * archived (`tree-thread.ts`). The API event loop only sends a job, starts the
+ * child processes the job asks for, and receives its result, so no repository
+ * tree can stall the API, whatever it holds. (The release's governance compile,
+ * `kortix.yaml` and its prompt files, runs in the API process with a size
+ * bound: `builder.ts`.)
  *
  * - `threads` threads per API process run one job each.
  * - Jobs are counted per project (here a workspace is one project and one
@@ -11,18 +14,20 @@
  * - A job may run `jobMillis` of its own time: the time its thread waits for
  *   a download the API process runs for it does not count, the download has
  *   its own bounds. Past that, or past `wallMillis` in all, the thread is
- *   stopped and replaced. The job fails with `TreeJobTimeoutError`, and the
- *   same job of that project fails at once for `timeoutMemoMillis`.
+ *   stopped and replaced: its child processes are killed with their process
+ *   groups, and its scratch folder removed. The job fails with
+ *   `TreeJobTimeoutError`, and the same job of that project fails at once for
+ *   `timeoutMemoMillis`.
  * - At most `maxWaitingPerProject` jobs of one project, and `maxWaiting` in
  *   all, wait for a thread, each for at most `maxWaitMillis`. Past any of
  *   them: `TreeJobBusyError`. Nothing is cached for it: the caller asks again.
  */
 
 import { createHash, randomUUID } from 'node:crypto';
-import { rm } from 'node:fs/promises';
+import { readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { ReleaseTreeObjects } from './release-tree-git';
+import { startProcess, type ProcessSpec, type ReleaseTreeObjects, type StartedProcess } from './release-tree-git';
 import {
   asBuffer,
   deserializeError,
@@ -53,7 +58,7 @@ export class TreeJobTimeoutError extends Error {
 export interface TreeJobsOptions {
   /** Answers the downloads a thread asks for, with the project's credentials. */
   objects: ReleaseTreeObjects;
-  /** The variables every git child process of a thread starts from. */
+  /** The variables every child process of a thread starts from. */
   env: Record<string, string | undefined>;
   /** Tests: another thread module that speaks `tree-protocol.ts`. */
   entry?: URL;
@@ -136,6 +141,41 @@ interface Slot {
   scratchDir: string;
   job: RunningJob | null;
   stopped: boolean;
+  /** The child processes started for this thread that have not ended. */
+  children: Set<StartedProcess>;
+}
+
+/**
+ * A thread's scratch folder: `<tmp>/kortix-tree-thread-<pid>-<token>-<uuid>`.
+ * `token` is drawn once per process, so a later process with the same ID (a
+ * restarted container) can tell the folder is not its own.
+ */
+const SCRATCH_PREFIX = 'kortix-tree-thread-';
+const PROCESS_TOKEN = randomUUID().slice(0, 8);
+let sweptScratch = false;
+
+/** Is `pid` a live process? */
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
+/** Remove the scratch folders that a process which ended left behind (a crash, a kill). Runs once per process. */
+async function sweepScratch(root: string): Promise<void> {
+  const names = await readdir(root).catch(() => [] as string[]);
+  await Promise.all(
+    names.map(async (name) => {
+      if (!name.startsWith(SCRATCH_PREFIX)) return;
+      const [pidText, token] = name.slice(SCRATCH_PREFIX.length).split('-');
+      const pid = Number(pidText);
+      if (!pid || token === PROCESS_TOKEN || (pid !== process.pid && alive(pid))) return;
+      await rm(join(root, name), { recursive: true, force: true }).catch(() => undefined);
+    }),
+  );
 }
 
 /** The bytes of a result (the result itself, or its `archive`), as `Buffer`s again. */
@@ -157,6 +197,8 @@ export class TreeJobs {
   private lastServed = 0;
   /** Per project: the digest of each job that ran past its time, and when that stops counting. */
   private readonly timedOut = new Map<string, Map<string, number>>();
+  /** The cleanups of stopped threads still running: their children end, then their folder goes. */
+  private readonly cleanups = new Set<Promise<void>>();
   private lastJob = 0;
 
   constructor(options: TreeJobsOptions) {
@@ -183,9 +225,10 @@ export class TreeJobs {
     });
   }
 
-  /** Stop every thread. Tests only: a job still running fails. */
+  /** Stop every thread, and wait until their children ended and their folders are gone. Tests only: a job still running fails. */
   async close(): Promise<void> {
     for (const slot of [...this.slots]) this.stop(slot, new Error('tree threads closed'));
+    await Promise.all([...this.cleanups]);
   }
 
   /** The waiting job to run next: of a project with no running job, the one served least recently; first come first within it. */
@@ -227,9 +270,13 @@ export class TreeJobs {
   }
 
   private startThread(): Slot {
-    const scratchDir = join(tmpdir(), `kortix-tree-thread-${randomUUID()}`);
+    if (!sweptScratch) {
+      sweptScratch = true;
+      this.track(sweepScratch(tmpdir()));
+    }
+    const scratchDir = join(tmpdir(), `${SCRATCH_PREFIX}${process.pid}-${PROCESS_TOKEN}-${randomUUID()}`);
     const thread = new Worker(this.options.entry) as Thread;
-    const slot: Slot = { thread, scratchDir, job: null, stopped: false };
+    const slot: Slot = { thread, scratchDir, job: null, stopped: false, children: new Set() };
     thread.unref();
     thread.addEventListener('message', (event: MessageEvent<FromThread>) => this.receive(slot, event.data));
     thread.addEventListener('error', (event) => {
@@ -237,13 +284,18 @@ export class TreeJobs {
       this.stop(slot, new Error(`tree thread failed: ${(event as ErrorEvent).message}`));
     });
     thread.addEventListener('close', () => this.stop(slot, new Error('tree thread exited')));
-    this.post(slot, { type: 'init', env: this.options.env, scratchDir });
+    this.post(slot, { type: 'init', scratchDir });
     this.slots.push(slot);
     return slot;
   }
 
-  private post(slot: Slot, message: ToThread): void {
-    slot.thread.postMessage(message);
+  private post(slot: Slot, message: ToThread, transfer: Transferable[] = []): void {
+    slot.thread.postMessage(message, transfer);
+  }
+
+  private track(cleanup: Promise<void>): void {
+    this.cleanups.add(cleanup);
+    void cleanup.finally(() => this.cleanups.delete(cleanup));
   }
 
   private start(slot: Slot, job: Job): void {
@@ -294,20 +346,43 @@ export class TreeJobs {
     job.reject(original instanceof Error ? original : deserializeError(message.error));
   }
 
-  /** Run a download the thread asked for; its clock stops meanwhile. */
-  private async answer(slot: Slot, job: RunningJob, id: number, method: keyof ReleaseTreeObjects, args: unknown[]): Promise<void> {
-    if (job.open++ === 0) this.pauseClock(job);
+  /**
+   * Answer a request of the thread: a download, during which its clock stops,
+   * or a child process (`run`), whose time counts as the job's own.
+   */
+  private async answer(slot: Slot, job: RunningJob, id: number, method: keyof ReleaseTreeObjects | 'run', args: unknown[]): Promise<void> {
+    const download = method !== 'run';
+    if (download && job.open++ === 0) this.pauseClock(job);
     let reply: ToThread;
+    let transfer: Transferable[] = [];
     try {
-      const handler = this.options.objects[method] as (...input: unknown[]) => Promise<unknown>;
-      reply = { type: 'response', id, ok: true, value: await handler(...args) };
+      if (method === 'run') {
+        const result = await this.runChild(slot, args[0] as ProcessSpec);
+        reply = { type: 'response', id, ok: true, value: result };
+        transfer = [result.stdout.buffer as ArrayBuffer];
+      } else {
+        const handler = this.options.objects[method] as (...input: unknown[]) => Promise<unknown>;
+        reply = { type: 'response', id, ok: true, value: await handler(...args) };
+      }
     } catch (error) {
       job.requestErrors.set(id, error);
       reply = { type: 'response', id, ok: false, error: serializeError(error) };
     }
     if (slot.job !== job) return;
-    if (--job.open === 0) this.resumeClock(slot, job);
-    this.post(slot, reply);
+    if (download && --job.open === 0) this.resumeClock(slot, job);
+    this.post(slot, reply, transfer);
+  }
+
+  /** Start a child process for `slot`'s thread. It is the API process's child: its event loop reaps it, and `stop` kills it. */
+  private async runChild(slot: Slot, spec: ProcessSpec) {
+    if (slot.stopped) throw new Error('tree thread stopped');
+    const child = startProcess(spec, this.options.env);
+    slot.children.add(child);
+    try {
+      return await child.result;
+    } finally {
+      slot.children.delete(child);
+    }
   }
 
   private finish(slot: Slot, job: RunningJob): void {
@@ -319,14 +394,24 @@ export class TreeJobs {
     this.pump();
   }
 
-  /** Stop `slot`'s thread and remove its scratch folder; its job fails with `error`. */
+  /**
+   * Stop `slot`'s thread; its job fails with `error`. Its child processes are
+   * killed with their process groups, and its scratch folder is removed once
+   * they ended: none writes into it after.
+   */
   private stop(slot: Slot, error: Error): void {
     if (slot.stopped) return;
     slot.stopped = true;
     const at = this.slots.indexOf(slot);
     if (at >= 0) this.slots.splice(at, 1);
     slot.thread.terminate();
-    void rm(slot.scratchDir, { recursive: true, force: true }).catch(() => undefined);
+    const children = [...slot.children];
+    for (const child of children) child.kill();
+    this.track(
+      Promise.allSettled(children.map((child) => child.result))
+        .then(() => rm(slot.scratchDir, { recursive: true, force: true }))
+        .catch(() => undefined),
+    );
     const job = slot.job;
     if (job) {
       this.finish(slot, job);

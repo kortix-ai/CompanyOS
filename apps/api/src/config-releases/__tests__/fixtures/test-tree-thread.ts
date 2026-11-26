@@ -32,6 +32,17 @@ async function run(jobId: number, op: string, args: { ms?: number; text?: string
       if (!answer.ok) throw deserializeError(answer.error, id);
       return answer.value;
     }
+    case 'hang': {
+      // A child process that outlives its job: git runs a shell alias, which runs `sleep`.
+      const id = (lastRequest += 1);
+      const answer = await new Promise<Extract<ToThread, { type: 'response' }>>((resolve) => {
+        pending.set(id, resolve);
+        const spec = { command: 'git', args: ['-c', `alias.hang=!sleep ${args.text}; :`, 'hang'], cwd: '/', maxOutputBytes: 1024, timeoutMs: 60_000 };
+        post({ type: 'request', jobId, id, method: 'run', args: [spec] });
+      });
+      if (!answer.ok) throw deserializeError(answer.error, id);
+      return answer.value;
+    }
     case 'tooLarge':
       throw new ConfigArchiveTooLargeError(5, 9);
     case 'crash':

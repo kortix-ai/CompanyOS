@@ -5,7 +5,8 @@
  *
  * API process → thread: `init` once, then one `job` at a time, and a
  * `response` to each `request`. Thread → API process: one `result` per job,
- * and a `request` for each download the job needs (`ReleaseTreeObjects`).
+ * and a `request` for each download (`ReleaseTreeObjects`) and each child
+ * process (`run`) the job needs.
  */
 
 import {
@@ -90,7 +91,8 @@ export type TreeOps = typeof treeOps;
 export type TreeOp = keyof TreeOps;
 export type TreeOpArgs<K extends TreeOp> = Parameters<TreeOps[K]>[0];
 export type TreeOpResult<K extends TreeOp> = Awaited<ReturnType<TreeOps[K]>>;
-export type TreeRequestMethod = keyof ReleaseTreeObjects;
+/** A download, or `run`: a child process (`ProcessSpec`) the API process starts for the thread. */
+export type TreeRequestMethod = keyof ReleaseTreeObjects | 'run';
 
 export interface SerializedError {
   name: string;
@@ -102,7 +104,7 @@ export interface SerializedError {
 }
 
 export type ToThread =
-  | { type: 'init'; env: Record<string, string | undefined>; scratchDir: string }
+  | { type: 'init'; scratchDir: string }
   | { type: 'job'; id: number; op: TreeOp; args: unknown }
   | { type: 'response'; id: number; ok: true; value: unknown }
   | { type: 'response'; id: number; ok: false; error: SerializedError };

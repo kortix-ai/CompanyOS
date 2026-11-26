@@ -120,9 +120,9 @@ Imports and skill links are parsed once per blob per API process
 
 Where builds run. Eight Strix reviews (of #13024 and #13028) found one
 unbounded loop after another while builds ran on the API event loop. Since
-#13028 every read of repository content for a release (the whole-tree
-release, the per-agent releases, the archive route's rebuilds) runs in a tree
-thread (`config-releases/tree-jobs.ts`, `tree-thread.ts`), 2 per API process:
+#13028 every read of a release's tree (the whole-tree release, the per-agent
+releases, the archive route's rebuilds) runs in a tree thread
+(`config-releases/tree-jobs.ts`, `tree-thread.ts`), 2 per API process:
 - a job may run 60 s of its own time, 300 s in all; past that the thread is
   stopped and replaced, and the same job of that project fails at once for
   10 minutes;
@@ -138,9 +138,25 @@ thread (`config-releases/tree-jobs.ts`, `tree-thread.ts`), 2 per API process:
   `agentTree` job): a 100,000-file agent build blocks the event loop 13.6 ms;
 - downloads into the partial mirror stay in the API process, which holds the
   credentials: the thread asks for them (`release-tree-git.ts`), and their
-  wait does not count against the job.
+  wait does not count against the job;
+- the thread starts no child process: it asks the API process to run each
+  `git` and `gzip` (`startProcess`), in a process group of its own. A
+  stopped thread's children are killed with their groups, and the API event
+  loop reaps them. A child a thread starts itself outlives the thread and
+  stays a zombie of the API process (Strix review 11, verified on Bun 1.4.5);
+- a thread's scratch folder carries the process ID and a per-process token;
+  the first thread of a process removes the folders of processes that ended.
 The API event loop only receives results: the largest listing (170,000
 files, the 10 MiB git output bound) blocks it ~25 ms on arrival.
+
+The governance compile (`kortix.yaml` and every prompt file it names) is not
+in a thread: it shares `compile-agent-config.ts` with session start, and that
+module loads `projects/`. A release build passes `maxPromptChars` (16 Mi
+characters in all, read 8 files at a time); past it the compile fails, there
+is no release, and the session keeps its running config. The compile, its
+JSON and its etag cost ~1 ms per Mi characters (Bun 1.4.3). Session start,
+push and reload read without that bound, as before. The `kortix.yaml` parse
+itself is not bounded here; the per-prompt authorization read parses it too.
 
 Bounds inside a build. One `ListBudget` per build counts every axis an author
 controls: bytes read (128 MiB), parsed (32 MiB) and downloaded (128 MiB), git

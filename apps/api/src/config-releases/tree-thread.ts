@@ -7,11 +7,12 @@
  * It loads only `release-tree.ts` and its small helpers. A download into a
  * project's partial store needs the project's credentials, which only the API
  * process holds: the thread asks for it (`request`), and the API process
- * answers.
+ * answers. The thread starts no child process either: it asks the API
+ * process to run each one (`run`), which kills them when it stops the thread.
  */
 
 import { mkdir } from 'node:fs/promises';
-import { configureReleaseTreeGit, type ReleaseTreeObjects } from './release-tree-git';
+import { configureReleaseTreeGit, type ProcessResult, type ProcessSpec, type ReleaseTreeObjects } from './release-tree-git';
 import {
   deserializeError,
   serializeError,
@@ -33,11 +34,11 @@ function post(message: FromThread, transfer: Transferable[] = []): void {
   self.postMessage(message, transfer);
 }
 
-function request<T>(method: TreeRequestMethod, args: unknown[]): Promise<T> {
+function request<T>(method: TreeRequestMethod, args: unknown[], transfer: Transferable[] = []): Promise<T> {
   const id = (lastRequest += 1);
   return new Promise<T>((resolve, reject) => {
     pending.set(id, { resolve: resolve as (value: unknown) => void, reject });
-    post({ type: 'request', jobId: currentJob, id, method, args });
+    post({ type: 'request', jobId: currentJob, id, method, args }, transfer);
   });
 }
 
@@ -47,10 +48,19 @@ const objects: ReleaseTreeObjects = {
   faultIn: (repo, stderr) => request('faultIn', [repo, stderr]),
 };
 
+/** A byte array on an `ArrayBuffer` of its own: it moves between the threads instead of being copied. */
+function own(bytes: Uint8Array): Uint8Array {
+  return bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength ? bytes : new Uint8Array(bytes);
+}
+
+function run(spec: ProcessSpec): Promise<ProcessResult> {
+  if (!spec.input) return request('run', [spec]);
+  const input = own(spec.input);
+  return request('run', [{ ...spec, input }], [input.buffer as ArrayBuffer]);
+}
+
 /** The byte arrays of a result, each on an `ArrayBuffer` of its own, so they move to the API process instead of being copied. */
 function movable(value: unknown): { value: unknown; transfer: Transferable[] } {
-  const own = (bytes: Uint8Array) =>
-    bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength ? bytes : new Uint8Array(bytes);
   if (value instanceof Uint8Array) {
     const bytes = own(value);
     return { value: bytes, transfer: [bytes.buffer as ArrayBuffer] };
@@ -81,7 +91,7 @@ self.onmessage = (event: MessageEvent<ToThread>) => {
   const message = event.data;
   if (message.type === 'init') {
     ready = mkdir(message.scratchDir, { recursive: true }).then(() => {
-      configureReleaseTreeGit({ env: message.env, objects, scratchDir: message.scratchDir });
+      configureReleaseTreeGit({ objects, run, scratchDir: message.scratchDir });
     });
     return;
   }

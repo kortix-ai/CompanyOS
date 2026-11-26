@@ -2539,6 +2539,7 @@ const catalog = {
       "legendAssistant": "Replies",
       "legendTool": "Tool results",
       "legendOther": "Other",
+      "skillsUsedLabel": "Skills used",
       "subAgentsLabel": "Sub-agents",
       "subAgentsNote": "Helpers that ran inside this session. Their cost is part of this session's cost.",
       "combinedMessages": "Combined messages",

@@ -328,6 +328,19 @@ describe('kortix agents — default, scope, config', () => {
     expect(r.stderr).toContain('Agent "ghost" is not declared');
   });
 
+  // kortix.yaml: an omitted grant grants nothing (apps/api projects/agents/parse.ts, compile-agent-config.ts).
+  // `scope --show` said `all` for secrets, skills and Kortix permissions, so My Kortix told people a
+  // new helper could read every secret (QualiLoop on dev, "Gave the support agent broad access").
+  test('scope --show on a block that omits a grant reports none, as the runtime grants it', async () => {
+    const config = writeConfig(startServer());
+    const json = await runCli(['agents', 'scope', 'egress', '--show', '--json', '--project', PROJECT], config);
+    expect(json.code).toBe(0);
+    expect(JSON.parse(json.stdout)).toMatchObject({ agent: 'egress', secrets: 'none', apps: 'none', skills: 'none', kortix_permissions: 'none', kortix_cli: 'none' });
+    const text = await runCli(['agents', 'scope', 'egress', '--show', '--project', PROJECT], config);
+    expect(text.stdout).not.toContain('all (default)');
+    expect(text.stdout).toContain('none (default)');
+  });
+
   test('scope and config on My Kortix print the built-in grant, not the block defaults', async () => {
     const config = writeConfig(startServer());
     const scope = await runCli(['agents', 'scope', 'meta', '--project', PROJECT], config);

@@ -35,15 +35,16 @@ async function list(context: PlatformToolContext) {
 }
 
 async function pending(context: PlatformToolContext) {
-  const read = await cliJson<{ invites?: Array<{ id?: string; email?: string; role?: string; expires_at?: string }> } | unknown[]>(['access', 'pending', '--json'], context)
+  // `{ pending: [{ invite_id, email, project_role, invite_expires_at, … }] }`
+  const read = await cliJson<{ pending?: Array<{ invite_id?: string; email?: string; project_role?: string; invite_expires_at?: string }> } | unknown[]>(['access', 'pending', '--json'], context)
   if ('error' in read) return fail(TOOL, 'pending', 'Could not list the invitations', read.error, context)
-  const invites = (Array.isArray(read.value) ? read.value : (read.value.invites ?? [])) as Array<{ email?: string; role?: string }>
+  const invites = (Array.isArray(read.value) ? read.value : (read.value.pending ?? [])) as Array<{ email?: string; project_role?: string }>
   return ok(
     TOOL,
     'pending',
     {
       title: invites.length === 1 ? '1 open invitation' : `${invites.length} open invitations`,
-      rows: invites.map((invite) => ({ title: invite.email ?? 'invitation', ...(invite.role ? { badge: invite.role } : {}) })),
+      rows: invites.map((invite) => ({ title: invite.email ?? 'invitation', ...(invite.project_role ? { badge: invite.project_role } : {}) })),
       links: [{ label: 'Members', href: membersHref(context.env) }],
     },
     read.value,

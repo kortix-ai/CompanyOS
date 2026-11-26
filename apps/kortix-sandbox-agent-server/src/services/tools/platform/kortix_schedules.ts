@@ -78,6 +78,14 @@ interface TriggerRow {
   source?: TriggerSource
   target?: { kind?: string; session_id?: string }
   next_fire_at?: string | null
+  /** `kortix triggers ls --json` (`trigger-draft.ts`): the kortix.yaml trigger's kind and schedule. */
+  type?: string | null
+  every_seconds?: number | null
+  run_at?: string | null
+  timezone?: string
+  app?: string | null
+  event?: { connector?: string; type?: string } | null
+  auto_paused_at?: string | null
 }
 
 /** One row of `kortix loops ls --json`: a loop, or a trigger that wakes this session. */
@@ -380,8 +388,13 @@ function rowsOf(value: unknown): TriggerRow[] {
 /** The schedule of a kortix.yaml or runtime agent trigger, when it names one. */
 function when(row: TriggerRow): string | undefined {
   if (row.source?.type && row.source.type !== 'schedule') return condition(row.source)
+  if (row.event) return `Wakes when ${condition({ type: 'event', connector: row.event.connector, event: row.event.type })}`
+  if (row.type === 'webhook' || row.type === 'app') return `Wakes when ${condition({ type: row.type, app: row.app ?? undefined })}`
+  if (row.cron) return row.cron
+  if (row.every_seconds) return schedule({ every: `${row.every_seconds}s` })
+  if (row.run_at) return schedule({ at: row.run_at })
   const on = (row.on ?? row.source ?? {}) as Record<string, unknown>
-  const value = row.schedule ?? row.cron ?? row.every ?? on.cron ?? on.every ?? on.at ?? on.schedule
+  const value = row.schedule ?? row.every ?? on.cron ?? on.every ?? on.at ?? on.schedule
   return typeof value === 'string' && value ? value : undefined
 }
 
@@ -409,7 +422,7 @@ async function list(context: PlatformToolContext) {
     schedule: when(row) ?? null,
     agent: row.agent ?? null,
     next_fire: row.next_fire_at ?? null,
-    state: row.enabled === false || row.paused || row.state === 'paused' ? 'paused' : (row.state ?? 'active'),
+    state: row.enabled === false || row.paused || row.auto_paused_at || row.state === 'paused' ? 'paused' : (row.state ?? 'active'),
   }))
 
   const rows: KortixCardRow[] = [
@@ -605,7 +618,10 @@ async function automate(args: Record<string, any>, context: PlatformToolContext)
     if (n) flags.push(`--${flag}=${n}`)
   }
 
-  const made = await cliRun(['triggers', 'add', name, ...flags, '--apply'], context)
+  // Created paused, so it runs nothing before its test passes; `resume` puts it live. An App event
+  // automation starts live: its `test` is a real App event, which a paused trigger would not run.
+  const paused = on !== 'app_event'
+  const made = await cliRun(['triggers', 'add', name, ...flags, ...(paused ? ['--disabled'] : []), '--apply'], context)
   if ('error' in made) {
     // A webhook secret that is missing or stored for agents: hand back the link where the person saves it
     // for webhooks (an intake link: the value never passes through chat or this session).
@@ -629,17 +645,20 @@ async function automate(args: Record<string, any>, context: PlatformToolContext)
     TOOL,
     'automate',
     {
-      title: `Automation set: ${name}`,
+      title: paused ? `Automation saved, paused: ${name}` : `Automation set: ${name}`,
       subtitle: targetApp
         ? `Calls the App ${targetApp} (${targetPath}) on ${reacts}`
         : `${typeof args.agent === 'string' && args.agent.trim() ? args.agent.trim() : 'My Kortix'} runs on ${reacts}${key ? ', one session per key' : ''}`,
       rows: [
         ...(filter.length ? [{ title: 'Only when', detail: short(filter.map((f) => f.replace('--filter=', '')).join(' · '), 140) }] : []),
         ...(url ? [{ title: 'Webhook URL', detail: url }] : []),
+        ...(paused ? [{ title: 'Not running yet', detail: 'Test it, then resume it to put it live' }] : []),
       ],
       links: [{ label: 'Triggers', href: adminHref(context.env, 'triggers') }],
     },
-    { name, on, ...(url ? { webhook_url: url } : {}), next: 'Run `test` with a sample payload before you tell the person it is live.', output: short(made.text, 600) },
+    { name, on, ...(url ? { webhook_url: url } : {}), next: paused
+        ? 'It is paused and runs nothing yet. Run `test` with a sample that should run and one that should not, fix it until both come out right, then `resume` it by name to put it live.'
+        : 'Run `test` with a sample payload before you tell the person it is live.', output: short(made.text, 600) },
   )
 }
 
@@ -786,7 +805,8 @@ async function change(action: string, verb: keyof typeof VERB, id: string, conte
         'triggers',
         cli.triggers,
         id,
-        ...(verb === 'remove' && !RUNTIME_ID.test(id) ? ['--apply'] : []),
+        // pause and resume too: without --apply the CLI edits a local kortix.yaml, not the live project.
+        ...(verb !== 'run_now' && !RUNTIME_ID.test(id) ? ['--apply'] : []),
         // A kortix.yaml trigger's fire waits up to 90 s for the run's outcome by default, past this tool's
         // own limit: return once the fire is accepted, and read the outcome with `runs`.
         ...(verb === 'run_now' && !RUNTIME_ID.test(id) ? ['--wait=0'] : []),
@@ -816,7 +836,7 @@ export default {
     '2) `session_key` per thing ("{{ event.data.thread_id }}", "{{ body.issue.number }}", "{{ body.email }}") so a follow-up about the same thing lands in the same session; ' +
     '3) a prompt that judges first: "If this is not <what matters>, stop: do nothing and send no message. Otherwise …", with the event fields it needs; ' +
     '4) cap it (`max_runs_per_day`, e.g. 20) and pick the agent with the least access, and a fast model for triage; ' +
-    '5) ask the person before you create it (it runs unattended and uses credits), then call automate directly: it checks the secret, the connector and the Event triggers feature itself, and its error says what is missing (never check with the shell); then `test` with a sample payload (an App event automation gets a real test event and reports the run it started; any other fires nothing: the filter verdict, the session key and the prompt) and fix it until it is right; ' +
+    '5) ask the person before you create it (it runs unattended and uses credits), then call automate directly: it checks the secret, the connector and the Event triggers feature itself, and its error says what is missing (never check with the shell); then `test` with a sample payload (an App event automation gets a real test event and reports the run it started; any other fires nothing: the filter verdict, the session key and the prompt) and fix it until it is right; it is created paused (an App event automation excepted) and runs nothing until you `resume` it by name once the test passed; ' +
     '6) tell them in one line what it does, set a `follow_up` in 2-3 days to read its `runs` and tune it, and `remove` it (by name) when it is no longer wanted.',
   parameters: {
     type: 'object',

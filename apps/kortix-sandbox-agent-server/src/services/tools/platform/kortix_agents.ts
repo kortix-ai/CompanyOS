@@ -88,7 +88,7 @@ interface PickerModel {
 interface ModelPicker {
   models?: Record<string, PickerModel>
   defaultModel?: string
-  claudeSubscription?: { connected?: boolean; models?: Array<{ id: string; name?: string; description?: string; limit?: { context?: number }; efforts?: string[]; connected?: boolean }> }
+  claudeSubscription?: { connected?: boolean; models?: Array<{ id: string; name?: string; description?: string; limit?: { context?: number }; efforts?: string[]; connected?: boolean; enabled?: boolean }> }
 }
 
 /** A model a spawn may name, as the model reads it. */
@@ -148,7 +148,7 @@ function usableModels(picker: ModelPicker): UsableModel[] {
     })
   const claude = picker.claudeSubscription?.connected
     ? (picker.claudeSubscription.models ?? [])
-        .filter((model) => model.connected !== false)
+        .filter((model) => model.connected !== false && model.enabled !== false)
         .map((model): UsableModel => ({
           id: model.id,
           name: model.name || model.id,
@@ -259,7 +259,10 @@ function blockFrom(args: Record<string, any>, base: Record<string, unknown>): Re
   if (args.mode === 'primary' || args.mode === 'subagent' || args.mode === 'all') behavior.mode = args.mode
   if (Object.keys(behavior).length > 0) block.behavior = behavior
   for (const key of ['connectors', 'secrets', 'apps', 'skills', 'tools', 'kortix_permissions'] as const) {
-    if (args[key] !== undefined) block[key] = args[key]
+    if (args[key] === undefined) continue
+    // A model writes "every" or "nothing" as a one-item list; kortix.yaml refuses `["all"]` as a skill name.
+    const one = Array.isArray(args[key]) && args[key].length === 1 ? String(args[key][0]).toLowerCase() : null
+    block[key] = one === 'all' || one === '*' ? 'all' : one === 'none' ? 'none' : args[key]
   }
   if (typeof args.space === 'string' && args.space !== 'none') block.space = args.space
   if (typeof args.enabled === 'boolean') block.enabled = args.enabled
@@ -318,7 +321,7 @@ async function setAccess(name: string, args: Record<string, any>, context: Platf
   const set = await cliJson<Record<string, unknown>>(['agents', 'scope', name, ...flags, '--json'], context)
   if ('error' in set) return fail(TOOL, 'set_access', `Could not change what ${name} may use`, set.error, context)
   const after = await cliJson<Record<string, unknown>>(['agents', 'scope', name, '--show', '--json'], context)
-  const now = 'error' in after ? set.value : after.value
+  const now = 'error' in after ? { ...set.value, secrets: set.value.secrets ?? set.value.env } : after.value
   return ok(
     TOOL,
     'set_access',

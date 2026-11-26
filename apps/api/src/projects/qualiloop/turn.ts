@@ -21,6 +21,7 @@ import {
   enqueueContinueSessionCommand,
   resolveProjectAutomationActor,
 } from '../session-lifecycle';
+import { turnReply } from './reply';
 import { buildTurnTrace, kortixSessionIdFor, type LogMessage } from './spans';
 
 // Origin `user` (not a `system:` source): the test must meet the agent a person meets in their own chat.
@@ -187,12 +188,7 @@ export async function runQualiloopTurn(input: { conversationId: string; turnInde
   // The session's system prompt rides in a `context` message at the start: every model call of the turn saw it.
   const systemPrompt = log.find((m) => m.role === 'system')?.blocks.map((b) => (b.type === 'text' ? b.text : '')).join('') ?? null;
   const messages = log.filter((m) => m.seq > lastSeq && m.role !== 'system');
-  const reply = messages
-    .filter((m) => m.role === 'assistant')
-    .map((m) => m.blocks.map((b) => (b.type === 'text' ? b.text : '')).join(''))
-    .filter((text) => text.trim())
-    .join('\n\n')
-    .trim();
+  const reply = turnReply(messages);
 
   await sendTrace(buildTurnTrace({
     conversationId: input.conversationId,

@@ -61,6 +61,7 @@ export const FeatureFlagMapSchema = z.object({
   reminders: z.boolean(),
   us_region: z.boolean(),
   event_triggers: z.boolean(),
+  channels: z.boolean(),
   chat: z.boolean(),
   shared_drives: z.boolean(),
   goals: z.boolean(),
@@ -1497,6 +1498,33 @@ export const SpaceMembersAddInputSchema = z
   .strict();
 export type SpaceMembersAddInput = z.infer<typeof SpaceMembersAddInputSchema>;
 
+/**
+ * One line of a channel's activity, drawn in its timeline between messages.
+ * - `member_joined`: a person joined (they added themself).
+ * - `member_added`: `actor` added a person.
+ * - `agent_added` / `agent_removed`: `actor` changed the channel's agents.
+ */
+export const SpaceActivitySchema = z
+  .object({
+    /** Stable across reads: `member:<user_id>` or the agent change's id. */
+    id: z.string(),
+    kind: z.enum(['member_joined', 'member_added', 'agent_added', 'agent_removed']),
+    /** Who it is about. A person: `id` is their user id, `name` their display name. An agent: `id` and `name` are its name in kortix.yaml. */
+    subject: z.object({ kind: z.enum(['person', 'agent']), id: z.string(), name: z.string() }).strict(),
+    /** Who did it; null for a join and when it is not known. */
+    actor: z.object({ user_id: z.string(), name: z.string() }).strict().nullable(),
+    at: z.string(),
+  })
+  .strict();
+export type SpaceActivity = z.infer<typeof SpaceActivitySchema>;
+
+/** `GET /projects/:id/spaces/:spaceId/activity`: newest first, at most {@link SPACE_ACTIVITY_LIMIT}. */
+export const SpaceActivityListSchema = z.object({ activity: z.array(SpaceActivitySchema) }).strict();
+export type SpaceActivityList = z.infer<typeof SpaceActivityListSchema>;
+
+/** At most this many lines in one activity read. */
+export const SPACE_ACTIVITY_LIMIT = 200;
+
 /** At most this many agents in one channel's agent list. */
 export const SPACE_AGENTS_MAX = 50;
 
@@ -1608,6 +1636,41 @@ export type SpaceUpdateInput = z.infer<typeof SpaceUpdateInputSchema>;
 
 export const SpaceDmInputSchema = z.object({ agent_name: z.string().trim().min(1).max(200) }).strict();
 export type SpaceDmInput = z.infer<typeof SpaceDmInputSchema>;
+
+/**
+ * An agent directory entry (flag `channels`): an agent of the workspace a
+ * person can message. An entry is an agent from kortix.yaml, not a new record. `chat_space_id` is the
+ * caller's own chat with it (their DM space), null until they first open it
+ * (`POST /spaces/dm`).
+ */
+export const AgentDirectoryEntrySchema = z
+  .object({
+    /** The agent name in kortix.yaml. */
+    name: z.string(),
+    /** The name a person reads. My Kortix for the built-in agent, else the agent name. */
+    display_name: z.string(),
+    /** The agent's model (`provider/model`), or null for the project default. */
+    model: z.string().nullable(),
+    /** `active`: it answers. `paused`: messages reach it, but no schedule or event starts it. `off`: kortix.yaml disables it or its block has an error. */
+    status: z.enum(['active', 'paused', 'off']),
+    /** The project's `default_agent`. */
+    is_default: z.boolean(),
+    /** My Kortix, the built-in agent. */
+    builtin: z.boolean(),
+    chat_space_id: z.string().nullable(),
+  })
+  .strict();
+export type AgentDirectoryEntry = z.infer<typeof AgentDirectoryEntrySchema>;
+
+export const AgentDirectorySchema = z.object({ agents: z.array(AgentDirectoryEntrySchema) }).strict();
+
+export const AgentPauseInputSchema = z.object({ paused: z.boolean() }).strict();
+export type AgentPauseInput = z.infer<typeof AgentPauseInputSchema>;
+
+/** The agent after a pause or resume, and how many of its running tasks the pause stopped (0 on resume). */
+export const AgentPauseResultSchema = z.object({ agent: AgentDirectoryEntrySchema, stopped_sessions: z.number().int().nonnegative() }).strict();
+export type AgentPauseResult = z.infer<typeof AgentPauseResultSchema>;
+export type AgentDirectory = z.infer<typeof AgentDirectorySchema>;
 
 /** A link pinned to a channel: `/projects/:id/spaces/:spaceId/links`. */
 export const SpaceLinkSchema = z

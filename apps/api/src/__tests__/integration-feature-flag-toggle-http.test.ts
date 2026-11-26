@@ -151,19 +151,20 @@ describe('PATCH /v1/projects/:projectId/features', () => {
     );
   });
 
-  test('the withdrawn project_channels key reads and writes chat, for released clients', async () => {
+  test('the withdrawn chat and project_channels keys write channels, for released clients', async () => {
     const on = await patch(`/v1/projects/${PROJECT}/features`, JSON.stringify({ feature: 'project_channels', enabled: true }));
     expect(on.status).toBe(200);
     const body = await on.json();
-    expect([body.experimental.chat, body.experimental.project_channels]).toEqual([true, true]);
-    expect(await storedOverrides(PROJECT)).toEqual({ chat: true });
+    expect([body.experimental.channels, body.experimental.chat, body.experimental.project_channels]).toEqual([true, true, true]);
+    expect(await storedOverrides(PROJECT)).toEqual({ channels: true });
 
     const off = await patch(`/v1/projects/${PROJECT}/features`, JSON.stringify({ feature: 'chat', enabled: false }));
     expect(off.status).toBe(200);
     const offBody = await off.json();
-    expect([offBody.experimental.chat, offBody.experimental.project_channels]).toEqual([false, false]);
+    expect([offBody.experimental.channels, offBody.experimental.chat, offBody.experimental.project_channels]).toEqual([false, false, false]);
+    expect(await storedOverrides(PROJECT)).toEqual({ channels: false });
 
-    await patch(`/v1/projects/${PROJECT}/features`, JSON.stringify({ feature: 'project_channels', enabled: null }));
+    await patch(`/v1/projects/${PROJECT}/features`, JSON.stringify({ feature: 'channels', enabled: null }));
     expect(await storedOverrides(PROJECT)).toBeUndefined();
   });
 

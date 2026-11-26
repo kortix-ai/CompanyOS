@@ -254,12 +254,14 @@ test('with chat on, the sidebar is Spaces only (Cmd+J still opens the new-sessio
   expect(general).toBeGreaterThan(personal);
   // The My Kortix DM is that personal row, never a second row of its own.
   expect(html).not.toContain('href="/workspaces/synthetic-project/dm/kortix"');
-  // Live channels only, then the add row.
+  // Live channels only, under the Channels heading and its + (New channel).
   expect(html).not.toContain('/c/old');
-  expect(html.indexOf('spaces.addChannel')).toBeGreaterThan(general);
+  const addChannel = html.indexOf('spaces.addChannel');
+  expect(addChannel).toBeGreaterThan(personal);
+  expect(addChannel).toBeLessThan(general);
   // The session list is the secondary list, below the spaces.
   expect(html).toContain('data-testid="session-list" data-secondary="true"');
-  expect(html.indexOf('data-testid="session-list"')).toBeGreaterThan(html.indexOf('spaces.addChannel'));
+  expect(html.indexOf('data-testid="session-list"')).toBeGreaterThan(general);
   await act(async () => {
     win.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'j', metaKey: true }));
   });

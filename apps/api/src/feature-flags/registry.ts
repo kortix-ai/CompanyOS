@@ -156,6 +156,13 @@ export interface FeatureFlagDef {
    */
   catalogHidden?: true;
   /**
+   * Removed from the product as a switch: the catalog never lists it and no
+   * project can turn it on. `off`: it always resolves false (its code stays
+   * dormant). `channels`: it resolves exactly as the `channels` flag (merged
+   * into it); its own stored override is ignored.
+   */
+  withdrawn?: 'off' | 'channels';
+  /**
    * IAM actions that exist only with this flag. The account permission catalog
    * (`GET /accounts/:id/iam/permissions`) leaves them out until a project of the
    * account has the flag on ({@link hiddenIamActions}).
@@ -348,8 +355,32 @@ const FLAGS: readonly FeatureFlagDef[] = [
   // account are the only connectors path. A stored override is inert; the
   // serializer keeps sending `true` for older clients.
   {
+    key: 'channels',
+    name: 'Channels',
+    description:
+      "Slack-style channels and a chat with each of the workspace's agents, in one sidebar: Agents and Channels. Every message in a channel starts a thread. Replaces the session list; existing sessions move into #general.",
+    stability: 'experimental',
+    wip: true,
+    available: () => true,
+    platformDefault: () => false,
+    enforcement: 'routes',
+    enforcementNote:
+      'The one switch for channels, DMs and agent chats (product owner, 2026-11-26). `chat` is withdrawn into it: `chat` resolves exactly as `channels`, ' +
+      'so every `chat` gate below (spaces routes, chat threads, session filing, thread files, memory) follows this flag. A stored `experimental.chat` ' +
+      'override no longer counts: a project that had `chat` on turns `channels` on. PATCH /features with `chat` or `project_channels` writes `channels` ' +
+      '(released clients). Turning it on runs `chat`\'s toggle effects too: #general, and every session without a space filed into it ' +
+      '(feature-flags/write.ts, toggle-effects.ts). API: GET /agent-directory and POST /agent-directory/:name/pause answer 403 feature_disabled ' +
+      'while off (routes/agent-directory.ts); a paused agent starts no automatic trigger run only while on (lib/agent-directory.ts agentPauseReason). ' +
+      'BOX: a person\'s thread in their chat with an agent gets `kortix.agent_chat` in runtime_context (lib/session-create.ts), and pi adds the ' +
+      'reply note (harness/pi/agent-chat.ts). WEB: the chat sidebar shows Agents and Channels; /dm/:agent is the agent chat and is 404 while off. ' +
+      'The flag adds no table of its own (project_space_activity belongs to channels); turning it off loses no data.',
+  },
+  {
     key: 'chat',
-    name: 'Slack-style Spaces',
+    // Withdrawn into `channels` (product owner, 2026-11-26): one switch. `chat` stays the code's name
+    // for the channels and DMs and resolves exactly as `channels`. Its stored override no longer counts.
+    withdrawn: 'channels',
+    name: 'Slack-style Channels',
     description:
       "Use Slack-style channels and direct messages, where every message starts a thread. Switches the sidebar to the chat layout. Separate from Spaces, which groups sessions, files and tabs.",
     stability: 'experimental',
@@ -365,7 +396,7 @@ const FLAGS: readonly FeatureFlagDef[] = [
       '(drives/service.ts sessionSpaceFolder; a private channel\'s as before). The conversation is never copied into files: ' +
       'each turn\'s system text names the thread\'s root session (read with `kortix sessions log <id>`), the thread folder ' +
       '(<space folder>/threads/<slug>-<id>/ with work/ and results/) and context.md. ' +
-      'STORED OVERRIDE: experimental.chat, else the legacy experimental.project_channels, else experimental.infinichat (explicitOverride). ' +
+      'RESOLUTION: exactly `channels` (withdrawn); experimental.chat, experimental.project_channels and experimental.infinichat are inert. ' +
       'BOX: absent from KORTIX_FEATURE_FLAGS (projects/lib/feature-flag-env.ts), so kortixd withholds the kortix-channel-memory skill; a change reaches the next new box. ' +
       'WEB: a Chat row (/projects/:id/chat) and the spaces list replace New session and the session list; /projects/:id/chat renders FeatureGateScreen while off. ' +
       'PRIVATE CHANNELS (shared/space-access.ts) are enforced whatever this flag says, and created only with KORTIX_PRIVATE_CHANNELS_ENABLED. ' +
@@ -463,7 +494,9 @@ const FLAGS: readonly FeatureFlagDef[] = [
   },
   {
     key: 'chat_input',
-    name: 'Spaces-ChatInput',
+    // Withdrawn (product owner, 2026-11-25): not part of Channels. Always off, not listed; its code stays dormant.
+    withdrawn: 'off',
+    name: 'Channels-ChatInput',
     description:
       'One control under the composer for who answers and how: pick the agent, and every other setting stays on Auto, inherited from that agent. Open a row to override the model, thinking effort, secrets, provider keys or sandbox for this session, and reset it to Auto in one click.',
     stability: 'experimental',
@@ -479,9 +512,11 @@ const FLAGS: readonly FeatureFlagDef[] = [
   },
   {
     key: 'chat_front',
-    name: 'Spaces-Router',
+    // Withdrawn (product owner, 2026-11-25): not part of Channels. Always off, not listed; its code stays dormant.
+    withdrawn: 'off',
+    name: 'Channels-Router',
     description:
-      'With Slack-style Spaces on, the agent you chat with in a thread is a router: it does quick work itself (an answer, a short text, a look at the thread files) and hands longer work to the Space\'s agents. It writes back like a person, in short messages. An agent saves its full result as a file in the thread, and the router links that file instead of retyping it. Show work under a message opens the work behind it. Needs My Kortix on in kortix.yaml.',
+      'With Slack-style Channels on, the agent you chat with in a thread is a router: it does quick work itself (an answer, a short text, a look at the thread files) and hands longer work to the channel\'s agents. It writes back like a person, in short messages. An agent saves its full result as a file in the thread, and the router links that file instead of retyping it. Show work under a message opens the work behind it. Needs My Kortix on in kortix.yaml.',
     stability: 'experimental',
     wip: true,
     available: () => true,
@@ -503,9 +538,11 @@ const FLAGS: readonly FeatureFlagDef[] = [
   },
   {
     key: 'spaces_proactive',
-    name: 'Spaces-Proactive',
+    // Withdrawn (product owner, 2026-11-25): not part of Channels. Always off, not listed; its code stays dormant.
+    withdrawn: 'off',
+    name: 'Channels-Proactive',
     description:
-      'With Slack-style Spaces on, a space can watch itself: turn on Proactive in its details, and an agent reads what happens there (finished threads, questions left open, people who join) and writes in the chat only when it matters: a result worth sharing, a decision you need to make, or something overdue. It can also start a thread that does the work. Optional daily brief at 9:00.',
+      'With Slack-style Channels on, a channel can watch itself: turn on Proactive in its details, and an agent reads what happens there (finished threads, questions left open, people who join) and writes in the chat only when it matters: a result worth sharing, a decision you need to make, or something overdue. It can also start a thread that does the work. Optional daily brief at 9:00.',
     stability: 'experimental',
     wip: true,
     available: () => true,
@@ -658,10 +695,8 @@ function overridesOf(metadata: unknown): Record<string, unknown> {
 /** Read a single project's explicit override for a flag. Non-boolean garbage
  *  in the stored map is treated as "no override". */
 function explicitOverride(metadata: unknown, key: FeatureFlagKey): boolean | undefined {
-  const map = overridesOf(metadata);
-  // `chat` merged Channels (`project_channels`) and One chat (`infinichat`), 2026-11: a project keeps its old choice.
-  const stored = key === 'chat' ? [map.chat, map.project_channels, map.infinichat] : [map[key]];
-  return stored.find((value): value is boolean => typeof value === 'boolean');
+  const value = overridesOf(metadata)[key];
+  return typeof value === 'boolean' ? value : undefined;
 }
 
 /**
@@ -672,6 +707,9 @@ function explicitOverride(metadata: unknown, key: FeatureFlagKey): boolean | und
 export function resolveFeatureFlag(metadata: unknown, key: FeatureFlagKey): boolean {
   const def = FLAG_BY_KEY[key];
   if (!def || !def.available()) return false;
+  if (def.withdrawn === 'off') return false;
+  // Withdrawn into `channels`: exactly its value. The flag's own stored override no longer counts.
+  if (def.withdrawn === 'channels') return resolveFeatureFlag(metadata, 'channels');
   return explicitOverride(metadata, key) ?? def.platformDefault();
 }
 
@@ -727,6 +765,8 @@ export interface FeatureFlagView {
  */
 export function buildFeatureFlagCatalog(metadata: unknown): FeatureFlagView[] {
   return FLAGS.flatMap((f) => {
+    // A withdrawn flag is no switch: never listed.
+    if (f.withdrawn) return [];
     const enabled = resolveFeatureFlag(metadata, f.key);
     if (f.catalogHidden && !enabled) return [];
     return [{

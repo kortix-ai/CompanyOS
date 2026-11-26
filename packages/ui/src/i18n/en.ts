@@ -1412,6 +1412,7 @@ const catalog = {
     "appsNoMatches": "No matches",
     "spaces": {
       "channels": "Channels",
+      "chat": "Chat",
       "addChannel": "New channel",
       "loadError": "Could not load channels.",
       "newAgent": "New agent",

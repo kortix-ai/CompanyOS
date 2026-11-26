@@ -136,6 +136,17 @@ mobile release. Per platform it does each step only when it is missing:
    The submission notice reports the release policy. An approved version
    held for a manual release stays held until a person releases it in App Store Connect.
    The run fails and identifies this incomplete platform; it never overrides that gate.
+   Apple takes one version at a time. While it still has an older version (in
+   review, or approved and not live yet), it refuses a new one with `409 You
+   cannot create a new version of the App in the current state`. The run then
+   reports that the new version waits and changes nothing. An older version
+   held for a manual release fails the run: release it first.
+
+The scheduled run (05:17 and 17:17 UTC) runs the script on `prod` with
+`--finish-only`. It never builds on EAS, so only deployed code ships. It
+finishes what an earlier run left open: a version that waited for the one
+before it, or a submission that failed. It starts only when no other Mobile
+Store run is queued or running.
 
 Only released code ships. The run builds, submits or sends to review only an
 EAS build made from a clean tree at a commit of the deployed history. It

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Releases the app version in app.json to the App Store and Google Play.
 //
-//   node apps/mobile/scripts/store-release.mjs [--dry-run]
+//   node apps/mobile/scripts/store-release.mjs [--dry-run] [--finish-only]
 //
 // .github/workflows/mobile-store.yml runs it after every Deploy Prod, on the
 // released `prod` commit. Per platform, each step only when it is missing:
@@ -10,6 +10,9 @@
 //      (Android: Play production track; iOS: App Store Connect);
 //   3. iOS review: the App Store version carries that build and goes to App
 //      Review, preserving existing release policies (new versions: automatic).
+//      While Apple still has an older version, the new one waits for it.
+// --finish-only skips step 1. The scheduled run uses it to finish a release
+// that stopped halfway; only Deploy Prod's run or a dispatch starts a build.
 // A run with nothing to do changes nothing. runtimeVersion equals the version,
 // so native code that changed after the version's store build needs a version
 // bump; the run says so instead of building.
@@ -20,7 +23,7 @@
 //
 // Auth: EXPO_TOKEN only. App Store Connect calls use the API key EAS Submit
 // already stores for this app, read from Expo at run time.
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { sign } from 'node:crypto';
 import { appendFileSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -113,34 +116,73 @@ function trustedBuild(build) {
   }
 }
 
-const eas = (args) =>
-  execFileSync('eas', args, { cwd: MOBILE, encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], maxBuffer: 1 << 28 });
-const easJson = (args) => JSON.parse(eas([...args, '--json', '--non-interactive']));
+/**
+ * Runs a command and resolves with its stdout; stderr goes to the log.
+ * Asynchronous on purpose. fetch keeps its connection to api.expo.dev open
+ * between calls. execFileSync blocks the event loop for the whole command
+ * (`eas build --wait`: ~12 min), so fetch's 4 s idle timer never closes that
+ * connection, and the runner's network drops it meanwhile. The next fetch
+ * wrote to it: `fetch failed` (EPIPE) in 3 ms. That stopped every automatic
+ * iOS release from 1.6.36 to 1.6.56 right after the upload; Android shipped
+ * because nothing calls fetch after its submit. Reproduced on the Mobile
+ * Store runner pool: 700 s execFileSync -> EPIPE, 700 s async wait -> 200.
+ */
+export function run(command, args, { cwd } = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { cwd, stdio: ['ignore', 'pipe', 'inherit'] });
+    const stdout = [];
+    child.stdout.on('data', (chunk) => stdout.push(chunk));
+    child.on('error', reject);
+    child.on('close', (code, signal) => {
+      if (code === 0) resolve(Buffer.concat(stdout).toString('utf8'));
+      else reject(new Error(`${command} ${args[0]} exited with ${code ?? signal}`));
+    });
+  });
+}
+
+const eas = (args) => run('eas', args, { cwd: MOBILE });
+const easJson = async (args) => JSON.parse(await eas([...args, '--json', '--non-interactive']));
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * fetch that survives a dropped connection. A network error ("fetch failed"),
  * a 429 or a 5xx is tried again with backoff (2 s, 4 s, 8 s); any other
- * response returns at once. One dropped App Store Connect call used to end
- * the whole iOS release after the build was uploaded (1.6.49, 1.6.56).
- * A retried POST that the server already applied answers 409; the caller
- * fails loud and a rerun of the idempotent release picks up from there.
- */
-/**
+ * response returns at once. A retried POST that the server already applied
+ * answers 409; the caller fails loud and a rerun of the idempotent release
+ * picks up from there.
+ *
  * @param {string} url
  * @param {RequestInit} init
  * @param {{ attempts?: number, fetchFn?: (url: string, init: RequestInit) => Promise<Response>, wait?: (ms: number) => Promise<void> }} [options]
  */
 export async function fetchWithRetry(url, init, { attempts = 4, fetchFn = fetch, wait = sleep } = {}) {
   for (let attempt = 1; ; attempt += 1) {
+    let failure;
     try {
       const res = await fetchFn(url, init);
       if ((res.status !== 429 && res.status < 500) || attempt >= attempts) return res;
+      failure = `HTTP ${res.status}`;
     } catch (error) {
       if (attempt >= attempts) throw error;
+      failure = describeError(error);
     }
+    console.log(`${new URL(url).host}: attempt ${attempt} of ${attempts} failed (${failure}); retrying`);
     await wait(2_000 * 2 ** (attempt - 1));
   }
+}
+
+/**
+ * An error's message with every cause under it. fetch reports only "fetch
+ * failed" and keeps the network error (ECONNRESET, ENOTFOUND, a timeout per
+ * address) in `cause`; four iOS releases stopped on that bare message.
+ */
+export function describeError(error) {
+  const parts = [];
+  for (let e = error, depth = 0; e && depth < 4; e = e.cause, depth += 1) {
+    const each = e.errors?.map((x) => [x.code, x.address].filter(Boolean).join(' ')).join(', ');
+    parts.push([e.code, e.message, each && `[${each}]`].filter(Boolean).join(' '));
+  }
+  return parts.join(' <- ');
 }
 
 const report = [];
@@ -269,6 +311,19 @@ export async function releaseIos({ projectId, appId, version, buildNumber, dryRu
   if (step === 'blocked') throw new Error(`${label} needs a person in App Store Connect: ${stateOf(target)}.`);
   if (step === 'release') throw new Error(`${label} awaits manual release in App Store Connect; the explicit release gate is preserved.`);
 
+  // Apple takes one version at a time. While it still has an older one (in
+  // review, or approved and not live yet), a new version answers 409 "You
+  // cannot create a new version of the App in the current state". This one
+  // waits, and the scheduled run submits it once the older one is live.
+  const ahead = target || draft ? null : versions.find((v) => ['wait', 'release'].includes(iosStep(stateOf(v))));
+  if (ahead) {
+    const older = `${ahead.attributes.versionString} (${stateOf(ahead)})`;
+    if (iosStep(stateOf(ahead)) === 'release') {
+      throw new Error(`${label} waits behind ${older}: release it in App Store Connect, then a later run submits ${version}.`);
+    }
+    return note('notice', `${label} waits: Apple still has ${older}. A later run submits ${version} once it is live.`);
+  }
+
   const build = await processedBuild(asc, appId, version, buildNumber, dryRun);
   if (dryRun) {
     const how = target ? `version ${stateOf(target)}` : draft ? `rename draft ${draft.attributes.versionString}` : 'create the version';
@@ -318,7 +373,7 @@ export async function releaseIos({ projectId, appId, version, buildNumber, dryRu
   note('notice', `${label} submitted for App Review; release policy: ${target.attributes.releaseType}.`, true);
 }
 
-async function releasePlatform({ platform, expo, easConfig, dryRun }) {
+async function releasePlatform({ platform, expo, easConfig, dryRun, finishOnly }) {
   const version = expo.version;
   const projectId = expo.extra.eas.projectId;
   const appId = appIdentifier(expo, platform);
@@ -332,16 +387,17 @@ async function releasePlatform({ platform, expo, easConfig, dryRun }) {
   }
 
   if (!build) {
+    if (finishOnly) return note('notice', `${platform} ${version}: no store build yet; a scheduled run never builds (Deploy Prod's run or a dispatch does).`);
     if (dryRun) return note('notice', `${platform} ${version}: no usable store build; would build, submit${platform === 'ios' ? ' and send to App Review' : ` to the Play ${track} track`} (dry run).`);
     const dirty = execFileSync('git', ['status', '--porcelain'], { cwd: REPO, encoding: 'utf8' }).trim();
     if (dirty) throw new Error(`refusing to build from a checkout with uncommitted changes:\n${dirty.slice(0, 500)}`);
     console.log(`building ${platform} ${version} on EAS (profile ${PROFILE})`);
-    [build] = easJson(['build', '--platform', platform, '--profile', PROFILE, '--wait']);
+    [build] = await easJson(['build', '--platform', platform, '--profile', PROFILE, '--wait']);
     note('notice', `${platform} ${version} (${build.appBuildVersion}) built: https://expo.dev/accounts/kortix/projects/kortix/builds/${build.id}`, true);
   } else {
     let diff;
     try {
-      diff = nativeDiff(easJson(['fingerprint:compare', '--build-id', build.id]), platform);
+      diff = nativeDiff(await easJson(['fingerprint:compare', '--build-id', build.id]), platform);
     } catch {
       diff = [];
     }
@@ -353,7 +409,7 @@ async function releasePlatform({ platform, expo, easConfig, dryRun }) {
 
   if (ship) {
     if (dryRun) return note('notice', `${platform} ${version} (${build.appBuildVersion}): would submit build ${build.id} (dry run).`);
-    eas(['submit', '--platform', platform, '--profile', PROFILE, '--id', build.id, '--non-interactive', '--wait']);
+    await eas(['submit', '--platform', platform, '--profile', PROFILE, '--id', build.id, '--non-interactive', '--wait']);
     const where = platform === 'ios' ? 'App Store Connect' : `the Google Play ${track} track`;
     note('notice', `${platform} ${version} (${build.appBuildVersion}) submitted to ${where}.`, true);
   } else if (platform === 'android') {
@@ -369,9 +425,9 @@ async function postToSlack() {
   const { SLACK_BOT_TOKEN: token, SLACK_RELEASE_CHANNEL: channel, GITHUB_SERVER_URL, GITHUB_REPOSITORY, GITHUB_RUN_ID } = process.env;
   const changed = report.filter((r) => r.level !== 'notice' || r.changed);
   if (!token || !channel || changed.length === 0) return;
-  const run = GITHUB_RUN_ID ? `\n<${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}|Mobile Store run>` : '';
+  const link = GITHUB_RUN_ID ? `\n<${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}|Mobile Store run>` : '';
   const icon = { notice: '📱', warning: '⚠️', error: '🛑' };
-  const text = changed.map((r) => `${icon[r.level]} ${r.text}`).join('\n') + run;
+  const text = changed.map((r) => `${icon[r.level]} ${r.text}`).join('\n') + link;
   const res = await fetch('https://slack.com/api/chat.postMessage', {
     method: 'POST',
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json; charset=utf-8' },
@@ -384,6 +440,7 @@ async function postToSlack() {
 
 export async function main({ release = releasePlatform, notify = postToSlack } = {}) {
   const dryRun = process.argv.includes('--dry-run');
+  const finishOnly = process.argv.includes('--finish-only');
   if (!process.env.EXPO_TOKEN) throw new Error('EXPO_TOKEN is not set');
   const expo = JSON.parse(readFileSync(join(MOBILE, 'app.json'), 'utf8')).expo;
   const easConfig = JSON.parse(readFileSync(join(MOBILE, 'eas.json'), 'utf8'));
@@ -391,10 +448,10 @@ export async function main({ release = releasePlatform, notify = postToSlack } =
   // iOS first: Apple's review is the longest wait.
   for (const platform of ['ios', 'android']) {
     try {
-      await release({ platform, expo, easConfig, dryRun });
+      await release({ platform, expo, easConfig, dryRun, finishOnly });
     } catch (error) {
       failed = true;
-      note('error', `${platform} ${expo.version}: ${error.message}`);
+      note('error', `${platform} ${expo.version}: ${describeError(error)}`);
     }
   }
   if (!dryRun) await notify();

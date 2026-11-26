@@ -3,6 +3,7 @@
 import { uiRoutes } from '../../lib/routes';
 import { Button } from '../../primitives/button';
 import Hint from '../../primitives/hint';
+import { Tabs, TabsList, TabsTrigger } from '../../primitives/tabs';
 import { Kbd, KbdGroup } from '../../primitives/kbd';
 import {
   Sidebar,
@@ -38,11 +39,14 @@ import { AppsModal } from '../../internal/apps-and-extensions/apps-modal';
 import { useAppsModalStore } from '../../internal/stores/apps-modal-store';
 import {
   ArrowUpRightIcon,
+  GitPullRequestIcon,
   MagnifyingGlassIcon,
   NavigationArrowIcon,
   PlusIcon,
 } from '@phosphor-icons/react';
 import { UiLink as Link, useUiPathname, useUiRouter } from '../../providers/ui-provider';
+import { useCapabilityAccess } from '../../internal/layout/project-settings-nav';
+import { reviewHref } from '../../internal/lib/capability-tab-routes';
 import { SettingsReturnTracker, SidebarDrill } from './sidebar-drill';
 import { ProjectRail } from './project-rail';
 import { SpaceFormModal } from '../session-spaces/space-form-modal';
@@ -120,6 +124,15 @@ export function ProjectSidebar({
   const showingSpaces = railed && !showingSettings && (peeking ? peekSection === 'spaces' : spacesOpen);
   // New space, from the Spaces title row (rail only).
   const [newSpaceOpen, setNewSpaceOpen] = useState(false);
+  // Chat on, rail: the panel shows the chats or the sessions.
+  const [chatTab, setChatTab] = useState<'chat' | 'sessions'>('chat');
+  // Review on the Chat tab's title row: for the people who may act on it (the Review row's own rule).
+  const reviewAccess = useCapabilityAccess(projectId);
+  const reviewPage = reviewHref(projectId);
+  const reviewLink =
+    reviewPage && reviewAccess.settled && reviewAccess.tabs.includes('review')
+      ? { href: reviewPage, active: !!pathname?.startsWith(reviewPage.split('?')[0]!) }
+      : null;
   // The Sessions title row's right edge (rail only): the session list draws its view options button there.
   const [sessionsFilterSlot, setSessionsFilterSlot] = useState<HTMLDivElement | null>(null);
   const router = useUiRouter();
@@ -274,16 +287,25 @@ export function ProjectSidebar({
               !peek && 'kx-titlebar-row kx-titlebar-band-height kx-project-sidebar-titlebar',
             )}
           >
-            <span className="text-foreground min-w-0 flex-1 truncate text-sm font-medium">
-              {showingSettings
-                ? t('customize')
-                : showingSpaces
-                  ? tGroups('heading')
-                  : chat
-                    ? t('spaces.channels')
-                    : t('sessions')}
-            </span>
-            {showingSettings || chat ? null : showingSpaces ? (
+            {chat && !showingSettings && !showingSpaces ? (
+              // Chat on: two views of the panel, the chats and the sessions.
+              <Tabs value={chatTab} onValueChange={(value) => setChatTab(value as 'chat' | 'sessions')} className="min-w-0 flex-1">
+                {/* `-ml-2.5` cancels the first trigger's `px-2.5`: its label starts on the list's label edge. */}
+                <TabsList variant="secondary" size="sm" className="-ml-2.5">
+                  <TabsTrigger value="chat" className="w-fit flex-none px-2.5">
+                    {t('spaces.chat')}
+                  </TabsTrigger>
+                  <TabsTrigger value="sessions" className="w-fit flex-none px-2.5">
+                    {t('sessions')}
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+            ) : (
+              <span className="text-foreground min-w-0 flex-1 truncate text-sm font-medium">
+                {showingSettings ? t('customize') : showingSpaces ? tGroups('heading') : t('sessions')}
+              </span>
+            )}
+            {showingSettings ? null : showingSpaces ? (
               // Spaces: the Spaces page, then New space, at the row's right edge.
               // `-mr-1.75` cancels the `icon-base` button's inset (29px box, 16px glyph):
               // the last glyph ends on the row's edge, as the title starts on it.
@@ -310,6 +332,30 @@ export function ProjectSidebar({
                   </Button>
                 </Hint>
               </div>
+            ) : chat && chatTab === 'chat' ? (
+              // Review, as an icon at the row's right edge (it is the list's first row without the rail).
+              reviewLink ? (
+                <Hint label={t('spaces.review')} side="bottom">
+                  <Button
+                    asChild
+                    variant="ghost"
+                    size="icon-base"
+                    className={cn(
+                      'text-muted-foreground hover:text-foreground -mr-1.75',
+                      reviewLink.active && 'bg-sidebar-accent text-foreground',
+                    )}
+                  >
+                    <Link
+                      href={reviewLink.href}
+                      prefetch
+                      aria-label={t('spaces.review')}
+                      aria-current={reviewLink.active ? 'page' : undefined}
+                    >
+                      <GitPullRequestIcon className="size-4" />
+                    </Link>
+                  </Button>
+                </Hint>
+              ) : null
             ) : (
               <div ref={setSessionsFilterSlot} className="-mr-1.75 flex shrink-0 items-center" />
             )}
@@ -462,9 +508,15 @@ export function ProjectSidebar({
                 {/* Spaces on: Review and the Spaces are the only things up
                     top. Everything else (Customize, Drive, Apps, Artifacts,
                     the session list) waits in "More" at the bottom. */}
-                <div className="min-h-0 flex-1">
-                  <ProjectSpacesNav projectId={projectId} />
-                </div>
+                {railed && chatTab === 'sessions' ? (
+                  <ProjectSessionList projectId={projectId} hideSpaces filterSlot={sessionsFilterSlot} />
+                ) : (
+                  <div className="min-h-0 flex-1">
+                    <ProjectSpacesNav projectId={projectId} review={!railed} />
+                  </div>
+                )}
+                {/* On the rail the panel's tabs pick Chat or Sessions, and the
+                    rail's More menu holds the pages: no More row here. */}
                 {railed ? null : <SidebarMoreGroup projectId={projectId} footer={<SidebarMenu className="gap-1">{connectRows}</SidebarMenu>} />}
               </>
             ) : (

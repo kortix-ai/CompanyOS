@@ -1942,6 +1942,7 @@
     "appsNoMatches": "无匹配项",
     "spaces": {
       "channels": "频道",
+      "chat": "聊天",
       "addChannel": "新建频道",
       "loadError": "无法加载频道。",
       "newAgent": "新建智能体",

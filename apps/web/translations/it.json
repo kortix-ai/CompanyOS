@@ -3006,7 +3006,10 @@
         "rate": "Computer predefinito ({spec}): ≈ {rate} per ora di esecuzione (≈ {credits} crediti). Risorse riservate fatturate al secondo; computer di altre dimensioni hanno costi diversi.",
         "concurrent": "Le ore si sommano: 3 computer × 1 ora = 3 ore-computer, ≈ {concurrent} di calcolo. Uso dei modelli e file salvati sono extra.",
         "sleep": "La sospensione interrompe i costi di calcolo. I file salvati possono continuare a generare costi di archiviazione. Chiudere la chat non equivale a sospendere il computer.",
-        "models": "L'uso dei modelli è separato. Un abbonamento ChatGPT collegato non comporta costi Kortix per le chiamate ai modelli; i costi del computer restano. Con la tua chiave API paghi il provider, più l'eventuale commissione BYOK di Kortix."
+        "models": "L'uso dei modelli è separato. Un abbonamento ChatGPT collegato non comporta costi Kortix per le chiamate ai modelli; i costi del computer restano. Con la tua chiave API paghi il provider, più l'eventuale commissione BYOK di Kortix.",
+        "summary": "Ogni sessione usa un computer. ≈ {rate} / ora di esecuzione.",
+        "separate": "Dimensione predefinita. Modelli e spazio di archiviazione fatturati separatamente.",
+        "details": "Come funziona la fatturazione"
       }
     },
     "access": {

@@ -3006,7 +3006,10 @@
         "rate": "Default computer ({spec}): ≈ {rate} per running hour (≈ {credits} credits). Billed per second for reserved resources; other computer sizes cost differently.",
         "concurrent": "Running hours add up: 3 computers × 1 hour = 3 computer-hours, ≈ {concurrent} in compute. Model usage and stored files are extra.",
         "sleep": "Sleep stops compute charges. Stored files can still incur storage charges. Closing the chat is not the same as sleeping the computer.",
-        "models": "Model usage is separate. A connected ChatGPT subscription has no Kortix model-call charge; computer charges still apply. With your own API key, you pay your provider, plus any applicable Kortix BYOK fee."
+        "models": "Model usage is separate. A connected ChatGPT subscription has no Kortix model-call charge; computer charges still apply. With your own API key, you pay your provider, plus any applicable Kortix BYOK fee.",
+        "summary": "Each session runs a computer. ≈ {rate} / running hour.",
+        "separate": "Default size. Models and storage billed separately.",
+        "details": "How billing works"
       }
     },
     "access": {

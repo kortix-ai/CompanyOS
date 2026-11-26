@@ -3006,7 +3006,10 @@
         "rate": "Computador padrão ({spec}): ≈ {rate} por hora em execução (≈ {credits} créditos). Recursos reservados cobrados por segundo; outros tamanhos de computador têm custos diferentes.",
         "concurrent": "As horas se somam: 3 computadores × 1 hora = 3 horas de computador, ≈ {concurrent} de computação. Uso de modelos e arquivos armazenados são cobrados à parte.",
         "sleep": "A suspensão interrompe as cobranças de computação. Arquivos armazenados ainda podem gerar cobranças de armazenamento. Fechar o chat não é o mesmo que suspender o computador.",
-        "models": "O uso de modelos é separado. Uma assinatura do ChatGPT conectada não tem cobrança da Kortix por chamadas de modelo; as cobranças do computador continuam. Com sua própria chave de API, você paga ao provedor e qualquer taxa BYOK aplicável da Kortix."
+        "models": "O uso de modelos é separado. Uma assinatura do ChatGPT conectada não tem cobrança da Kortix por chamadas de modelo; as cobranças do computador continuam. Com sua própria chave de API, você paga ao provedor e qualquer taxa BYOK aplicável da Kortix.",
+        "summary": "Cada sessão usa um computador. ≈ {rate} / hora em execução.",
+        "separate": "Configuração padrão. Modelos e armazenamento cobrados à parte.",
+        "details": "Como funciona a cobrança"
       }
     },
     "access": {

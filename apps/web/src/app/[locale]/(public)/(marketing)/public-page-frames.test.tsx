@@ -151,13 +151,8 @@ test('pricing explains the running computer before the purchase choices', () => 
   const document = dom(renderToStaticMarkup(<PricingPage />));
   const plans = document.querySelector('#plans');
   const copy = plans?.textContent ?? '';
-  expect(copy).toContain('Every session starts an agent computer');
-  expect(copy).toContain('including connector-only tasks');
-  expect(copy).toContain('including idle time');
+  expect(copy).toContain('Each session runs a computer');
   expect(copy).toContain('$0.11');
-  expect(copy).toContain('3 computers × 1 hour = 3 computer-hours');
-  expect(copy).toContain('$0.33');
-  expect(copy).toContain('Model usage is separate');
 });
 
 test('pricing model cards and FAQ distinguish provider bills, fee waivers, and compute', () => {

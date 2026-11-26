@@ -5,8 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 // Only replace the portal transport: render the actual modal children in SSR.
 mock.module('@kortix/ui/modal', () => {
-  const Box = ({ children }: { children?: ReactNode }) =>
-    createElement('div', null, children);
+  const Box = ({ children }: { children?: ReactNode }) => createElement('div', null, children);
   return {
     Modal: Box,
     ModalContent: Box,
@@ -36,7 +35,7 @@ describe('open pricing dialog computer explanation', () => {
     ['topup-first', { reason: 'insufficient_credits' }],
     ['payment-failed', { billingState: 'payment_failed' as const }],
   ] as const) {
-    test(`${name} renders computer rate, concurrent hours, and separate charges`, () => {
+    test(`${name} renders a concise computer rate and separate charges`, () => {
       const html = renderToStaticMarkup(
         <QueryClientProvider client={new QueryClient()}>
           <UpgradePlansModal open onOpenChange={() => {}} {...props} />
@@ -44,11 +43,11 @@ describe('open pricing dialog computer explanation', () => {
       )
         .replace(/<[^>]+>/g, ' ')
         .replace(/\s+/g, ' ');
-      expect(html).toContain('Every session starts an agent computer');
-      expect(html).toContain('including idle time');
+      expect(html).toContain('Each session runs a computer');
       expect(html).toContain('$0.11');
-      expect(html).toContain('3 computers × 1 hour = 3 computer-hours');
-      expect(html).toContain('Model usage is separate');
+      expect(html).toContain('Models and storage billed separately');
+      expect(html).toContain('How billing works');
+      expect(html).not.toContain('including idle time');
       if (name === 'plans') expect(html).toContain('Continue on Free');
       if (name === 'payment-failed') expect(html).toContain('Update payment method');
     });

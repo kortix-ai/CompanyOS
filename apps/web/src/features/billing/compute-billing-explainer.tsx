@@ -1,6 +1,8 @@
 'use client';
 
 import { useLocale, useTranslations } from '@/i18n/use-translations';
+import { Button } from '@kortix/ui/button';
+import { Disclosure, DisclosureContent, DisclosureTrigger } from '@kortix/ui/disclosure';
 import {
   DEFAULT_COMPUTE_CREDITS_PER_HOUR,
   DEFAULT_COMPUTE_HOURLY_PRICE_USD,
@@ -21,13 +23,25 @@ export function ComputeBillingExplainer() {
   };
 
   return (
-    <section className="space-y-3" aria-label={t('title')}>
-      <h3 className="text-foreground text-sm font-medium">{t('title')}</h3>
-      <p className="text-muted-foreground text-sm text-pretty">{t('running')}</p>
-      <p className="text-foreground text-sm tabular-nums">{t('rate', facts)}</p>
-      <p className="text-muted-foreground text-sm text-pretty">{t('concurrent', facts)}</p>
-      <p className="text-muted-foreground text-xs text-pretty">{t('sleep')}</p>
-      <p className="text-muted-foreground text-xs text-pretty">{t('models')}</p>
+    <section className="space-y-2" aria-label={t('title')}>
+      <p className="text-foreground text-sm font-medium">{t('summary', facts)}</p>
+      <p className="text-muted-foreground text-xs">{t('separate')}</p>
+      <Disclosure>
+        <DisclosureTrigger>
+          <Button variant="ghost" size="sm">
+            {t('details')}
+          </Button>
+        </DisclosureTrigger>
+        <DisclosureContent>
+          <div className="space-y-3 pt-3">
+            <p className="text-muted-foreground text-sm">{t('running')}</p>
+            <p className="text-muted-foreground text-sm">{t('rate', facts)}</p>
+            <p className="text-muted-foreground text-sm">{t('concurrent', facts)}</p>
+            <p className="text-muted-foreground text-xs">{t('sleep')}</p>
+            <p className="text-muted-foreground text-xs">{t('models')}</p>
+          </div>
+        </DisclosureContent>
+      </Disclosure>
     </section>
   );
 }

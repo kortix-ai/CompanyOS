@@ -407,8 +407,7 @@ test('the plan-first billing pane explains the running computer before purchase'
   )
     .replace(/<[^>]+>/g, ' ')
     .replace(/\s+/g, ' ');
-  expect(text).toContain('Every session starts an agent computer');
-  expect(text).toContain('including idle time');
+  expect(text).toContain('Each session runs a computer');
   expect(text).toContain('$0.11');
   expect(text).toContain('Subscribe');
 });

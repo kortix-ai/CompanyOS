@@ -3006,7 +3006,10 @@
         "rate": "Ordinateur par défaut ({spec}) : ≈ {rate} par heure de fonctionnement (≈ {credits} crédits). Ressources réservées facturées à la seconde ; les autres tailles ont des coûts différents.",
         "concurrent": "Les heures s'additionnent : 3 ordinateurs × 1 heure = 3 heures-ordinateur, soit ≈ {concurrent} de calcul. L'usage des modèles et les fichiers stockés sont en supplément.",
         "sleep": "La mise en veille arrête les frais de calcul. Les fichiers stockés peuvent toujours entraîner des frais de stockage. Fermer le chat ne met pas l'ordinateur en veille.",
-        "models": "L'usage des modèles est séparé. Un abonnement ChatGPT connecté n'entraîne aucuns frais Kortix pour les appels de modèle ; les frais d'ordinateur restent dus. Avec votre clé API, vous payez votre fournisseur et les éventuels frais BYOK de Kortix."
+        "models": "L'usage des modèles est séparé. Un abonnement ChatGPT connecté n'entraîne aucuns frais Kortix pour les appels de modèle ; les frais d'ordinateur restent dus. Avec votre clé API, vous payez votre fournisseur et les éventuels frais BYOK de Kortix.",
+        "summary": "Chaque session utilise un ordinateur. ≈ {rate} / heure de fonctionnement.",
+        "separate": "Configuration par défaut. Modèles et stockage facturés séparément.",
+        "details": "Comprendre la facturation"
       }
     },
     "access": {

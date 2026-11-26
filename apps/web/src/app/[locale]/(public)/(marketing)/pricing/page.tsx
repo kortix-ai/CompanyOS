@@ -15,6 +15,8 @@ import { CreditLadder } from '@/features/marketing/pricing/credit-ladder';
 import { useLocale, useTranslations } from '@/i18n/use-translations';
 import { safeJsonForHtml } from '@/lib/security/safe-json';
 import { cn } from '@kortix/ui';
+import { Button } from '@kortix/ui/button';
+import { Disclosure, DisclosureContent, DisclosureTrigger } from '@kortix/ui/disclosure';
 import { useLocalizedUiCatalog } from '@kortix/ui/i18n';
 import {
   agentHoursForCredits,
@@ -273,7 +275,6 @@ export default function PricingPage() {
         <BandHeading
           title={sentence(t('hours.title', facts))}
           titleMuted={sentence(t('hours.rate.value', facts))}
-          description={t('hours.description', facts)}
         />
         <Band className="grid grid-cols-1 lg:grid-cols-12">
           <dl className="divide-border grid grid-cols-1 divide-y sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:col-span-7">
@@ -322,9 +323,18 @@ export default function PricingPage() {
                 <h3 className="text-foreground mt-6 text-lg font-medium tracking-tight text-balance">
                   {t(`models.${id}.title`)}
                 </h3>
-                <p className="text-muted-foreground mt-2 text-sm text-pretty">
-                  {t(`models.${id}.body`, facts)}
-                </p>
+                <Disclosure>
+                  <DisclosureTrigger>
+                    <Button variant="ghost" size="sm">
+                      {t('computer.details')}
+                    </Button>
+                  </DisclosureTrigger>
+                  <DisclosureContent>
+                    <p className="text-muted-foreground mt-2 text-sm text-pretty">
+                      {t(`models.${id}.body`, facts)}
+                    </p>
+                  </DisclosureContent>
+                </Disclosure>
               </li>
             ))}
           </ul>

@@ -176,10 +176,12 @@ const SKILL_FILE = /(?:^|[/\\])([^/\\]+)[/\\]SKILL\.md$/;
 /**
  * The skill a block loaded into context: a `skill` tool call (OpenCode), a read
  * of a `SKILL.md` (pi loads a skill as a file) or pi's `/skill` user message.
+ * A skill loaded another way (a shell `cat`, a sub-agent) is not attributed.
  */
 function skillOf(role: SessionLogMessage['role'], b: SessionLogBlock): string | undefined {
   if (b.type === 'text') return role === 'user' ? detectSkillEnvelope(b.text)?.name : undefined;
-  if (b.type !== 'tool_call') return undefined;
+  // A call that failed loaded nothing.
+  if (b.type !== 'tool_call' || b.status === 'error') return undefined;
   if (b.name === 'skill') return inputString(b.input, ['name']);
   if (b.kind !== 'read') return undefined;
   return SKILL_FILE.exec(inputString(b.input, ['filePath', 'file_path', 'path']) ?? '')?.[1];

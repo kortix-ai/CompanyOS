@@ -343,10 +343,13 @@ describe('estimateSkills', () => {
     ]);
   });
 
-  test('a skill call still running counts once; one with no name is skipped', () => {
+  test('a skill call still running counts once; one with no name or that failed is skipped', () => {
+    const failed = { content: [], is_error: true, error: { message: 'e'.repeat(40) } };
     const messages = [
       assistant({}, [
         tool({ name: 'skill', kind: 'skill', status: 'running', input: { name: 'pdf' } }),
+        tool({ name: 'skill', kind: 'skill', status: 'error', input: { name: 'docx' }, result: failed }),
+        tool({ name: 'read', kind: 'read', status: 'error', input: { path: 'skills/xlsx/SKILL.md' }, result: failed }),
         tool({ name: 'skill', kind: 'skill', input: {}, result: done('x'.repeat(40)) }),
         tool({ name: 'skill', kind: 'skill', input: { name: '  ' }, result: done('x'.repeat(40)) }),
       ]),

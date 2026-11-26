@@ -55,7 +55,12 @@ export async function fireChangeRequestMergedTriggers(
           .map((row) => row.spec as unknown as GitTriggerSpec)
           .filter((spec) => spec && changeRequestMatches(spec, cr))
           .map(async (spec) => {
-            const payload = firePayload(spec, cr, now);
+            const payload = {
+              change_request: cr,
+              // A kortix.yaml slug has no `.`; a runtime id does (`trigger.<hex>`).
+              trigger: { slug: spec.slug, type: spec.type, kind: spec.slug.includes('.') ? 'runtime' : 'declared' },
+              fired_at: now.toISOString(),
+            };
             // A pinned, keyed or reused trigger can land in the origin itself.
             const intoOrigin = originSessionId ? (await existingTriggerSessions(project.projectId, spec, payload)).includes(originSessionId) : false;
             return { spec, cr, payload, intoOrigin };
@@ -86,15 +91,6 @@ export async function fireChangeRequestMergedTriggers(
     });
     return 0;
   }
-}
-
-function firePayload(spec: GitTriggerSpec, cr: MergedChangeRequest, now: Date): Record<string, unknown> {
-  return {
-    change_request: cr,
-    // A kortix.yaml slug has no `.`; a runtime id does (`trigger.<hex>`).
-    trigger: { slug: spec.slug, type: spec.type, kind: spec.slug.includes('.') ? 'runtime' : 'declared' },
-    fired_at: now.toISOString(),
-  };
 }
 
 async function fireOne(

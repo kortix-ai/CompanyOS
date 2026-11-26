@@ -240,13 +240,13 @@ export async function findKeyedTriggerSession(
 }
 
 /**
- * The existing sessions a fire of `spec` prompts before it creates one, in the
- * order {@link queueExistingTriggerSession} tries them: a session target's
- * session, else the `pinned` session the user chose, the `keyed` session for
- * the key rendered from the payload, and the `reuse` canonical session this
- * trigger created last (also a dead pin's fallback), so one long-lived session
- * accumulates context across fires. Reads only: a caller can tell where a fire
- * lands without firing it.
+ * The existing sessions a fire of `spec` prompts before it creates one: a
+ * session target's one session, none for an App target, else in the order
+ * {@link queueExistingTriggerSession} tries them: the `pinned` session the user
+ * chose, the `keyed` session for the key rendered from the payload, and the
+ * `reuse` canonical session this trigger created last (also a dead pin's
+ * fallback), so one long-lived session accumulates context across fires.
+ * Reads only: a caller can tell where a fire lands without firing it.
  */
 export async function existingTriggerSessions(projectId: string, spec: GitTriggerSpec, payload: Record<string, unknown>): Promise<string[]> {
   if (spec.target?.app) return [];

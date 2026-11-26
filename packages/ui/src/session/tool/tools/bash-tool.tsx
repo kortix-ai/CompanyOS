@@ -144,7 +144,7 @@ function CommandBlock({
       </div>
 
       {(hasOutput || settled) && (
-        <div className="border-border/60 border-t">
+        <div className="border-border border-t">
           {richOutput ? (
             richOutput
           ) : output ? (
@@ -181,7 +181,7 @@ function CommandBlock({
             // Muted ink, like the trigger's "Command failed": a failed command
             // is ordinary agent work (it reads the error and tries again), so
             // the words carry the verdict and no color raises an alarm.
-            'border-border/60 border-t py-2 font-mono text-xs tabular-nums text-muted-foreground',
+            'border-border border-t py-2 font-mono text-xs tabular-nums text-muted-foreground',
             // Metadata about the card, not a third pane: it keeps the shorter
             // 8px vertical inset, and only the horizontal one is the surface's
             // to supply.

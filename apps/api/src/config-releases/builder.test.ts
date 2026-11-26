@@ -939,6 +939,32 @@ describe('buildConfigRelease', () => {
     expect(descriptor.compiled_governance_etag).toBe(release.compiled_governance_etag);
   });
 
+  test('a release that was not built stays no release for a session without repository access', () => {
+    const governance = '{"agent":{}}';
+    const notBuilt = {
+      release_id: null,
+      source_commit: 'c'.repeat(40),
+      config_dir: null,
+      config_tree_id: null,
+      archive: null,
+      files: null,
+      compiled_governance: governance,
+      compiled_governance_etag: 'e'.repeat(16),
+    };
+    // The tree threads were busy, and the agent's files were over the cap.
+    for (const release of [
+      { ...notBuilt, reason: 'another release of this project is being built', deferred: true as const },
+      { ...notBuilt, reason: 'the files of the agent exceed the 32-byte config archive limit' },
+    ]) {
+      const descriptor = toDescriptor(release, { repositoryAccess: false });
+      expect(descriptor.release_id).toBeNull();
+      expect(descriptor.reason).toBe(release.reason);
+      expect(descriptor.files).toBeNull();
+      expect(descriptor.archive).toBeNull();
+      expect('deferred' in descriptor).toBe(false);
+    }
+  });
+
   test('a whole-tree release given to a session without repository access loses its files', async () => {
     const sha = seed();
     const release = await buildConfigRelease(project, sha, 'project', { store });

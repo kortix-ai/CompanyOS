@@ -87,7 +87,9 @@ function ResetPasswordContent() {
       description={t('form.description')}
       footer={<BackToSignIn />}
     >
-      <form onSubmit={handleSubmit} className="space-y-5">
+      {/* POST: a submit before hydration is native, and a GET would put the
+          new password in the URL (KRTX-1850). */}
+      <form method="post" onSubmit={handleSubmit} className="space-y-5">
         <div className="space-y-3">
           <FieldLabel htmlFor="password">{t('form.newPassword')}</FieldLabel>
           <Input

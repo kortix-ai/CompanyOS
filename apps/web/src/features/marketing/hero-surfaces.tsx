@@ -767,7 +767,7 @@ export function HeroSurfaces() {
 
   return (
     <div className="w-full">
-      <div className="border-border bg-card h-[340px] overflow-hidden rounded-lg border shadow-2xl lg:h-[clamp(600px,calc(100svh-20px),520px)]">
+      <div className="border-border bg-card h-[340px] overflow-hidden rounded-lg border shadow-md lg:h-[clamp(600px,calc(100svh-20px),520px)]">
         <SurfacePanel surface={active} />
       </div>
 

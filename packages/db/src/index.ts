@@ -105,6 +105,7 @@ export {
   projectSpaces,
   projectSpaceLinks,
   projectSpaceMembers,
+  projectSpaceActivity,
   projectSpaceWatchers,
   projectSpaceEvents,
   projectGoals,

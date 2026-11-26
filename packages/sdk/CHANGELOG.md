@@ -5,6 +5,15 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Added (cost-export record analysis; additive)
+- `analyzeCostExport(result)`: reads a `fetchCostExportCsv` result once and returns it with
+  `rowCount` (data records, header excluded) and `capped` (the count reached `rowCap`, so the
+  export may be truncated). Same `Blob`; type `CostExportAnalysis`. `fetchCostExportCsv` and
+  `CostExportResult` are unchanged.
+- `countCsvDataRows(body)` and `isCostExportCapped(rowCount, rowCap)`, the two rules behind it,
+  moved from the web export button: quoted CR/LF and doubled quotes stay in one record, and a
+  missing or non-positive cap never counts as capped.
+
 ### Changed (Network-Enforced Secrets need no flag)
 - The `secrets_egress` project flag ("Network-Enforced Secrets") graduated (2026-11-23): every
   project can set a secret's exposure to enforced. The sandbox holds a handle, and Kortix

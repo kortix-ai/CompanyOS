@@ -6669,6 +6669,24 @@ await p.approvals.resolve('<execution_id>', 'deny', { note: 'Send it to the ops 
 
 The `executionId` of a held call from code is `ConnectorApprovalPendingError.executionId`. With a workspace-scoped token, poll the by-id read until `detail.run.state` is final; do not repeat the `run`. With any other token, repeat the identical `run` after approval. `p.approvals.sessionsNeedingInput()` returns `{ total, sessions }`: the count of held calls per session. The Review inbox (`p.review.*`) is in [SDK reference > The workspace handle](/docs/developers#sdk-reference).
 
+### Message the workspace's agents
+
+Experimental, behind the workspace flag `channels`. The agent directory lists the agents from `kortix.yaml` that a person can message, each in their own chat. Every agent except `mode: subagent` ones is listed. An agent's chat is the person's DM space with the agent, and each message in it starts a thread, which is one session.
+
+```ts
+const directory = kortix.workspace(workspaceId).agentDirectory;
+const agents = await directory.list();
+const chat = await kortix.workspace(workspaceId).spaces.dm('marketing');
+await directory.setPaused('marketing', true); // { agent, stopped_sessions }
+```
+
+| Route | What it does |
+| -- | -- |
+| `GET /v1/workspaces/:id/agent-directory` | The agents the caller can message, with `status` (`active`, `paused`, `off`) and the caller's `chat_space_id`. |
+| `POST /v1/workspaces/:id/agent-directory/:name/pause` | `{ paused }`. A paused agent gets messages, but no automatic trigger starts it, and its running tasks stop. Needs the trigger-update permission. |
+
+Both routes answer 403 `feature_disabled` while `channels` is off.
+
 ### Deploy and operate Apps
 
 An App is a service the workspace hosts. `p.apps` creates it, uploads a build, deploys a release and runs its machines.

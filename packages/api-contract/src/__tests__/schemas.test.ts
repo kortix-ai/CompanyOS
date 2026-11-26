@@ -151,6 +151,7 @@ function projectFixture(overrides: Record<string, unknown> = {}) {
       volumes: false,
       drives: false,
       session_log_restore: false,
+      channels: false,
       chat: false,
       shared_drives: false,
       goals: false,
@@ -170,6 +171,8 @@ function projectFixture(overrides: Record<string, unknown> = {}) {
       desktop_tabs: false,
       review_swipe: false,
       calendar: false,
+      platinum_cache: false,
+      sidebar_rail: false,
     },
     experimental_features: [],
     default_sandbox_provider: null,
@@ -924,6 +927,7 @@ describe('envelopes', () => {
       'reminders',
       'us_region',
       'event_triggers',
+      'channels',
       'chat',
       'shared_drives',
       'goals',
@@ -939,6 +943,8 @@ describe('envelopes', () => {
       'desktop_tabs',
       'calendar',
       'review_swipe',
+      'platinum_cache',
+      'sidebar_rail',
     ]);
   });
 

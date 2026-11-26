@@ -129,7 +129,7 @@ describe('only a project admin turns Channels on or off', () => {
     expect(res.status).toBe(403);
     expect(JSON.stringify(await res.json())).toContain('(workspace.settings.write)');
     const [row] = await db.select({ m: projects.metadata }).from(projects).where(eq(projects.projectId, PROJECT));
-    expect((row!.m as any).experimental.chat).toBe(true);
+    expect((row!.m as any).experimental.channels).toBe(true);
   });
 });
 

@@ -3157,6 +3157,7 @@
     },
     "unified": {
       "welcome": "Bienvenue sur {name}",
+      "sessionEnded": "Vous avez été déconnecté. Reconnectez-vous pour continuer.",
       "email": "E-mail",
       "emailPlaceholder": "Saisissez votre adresse e-mail…",
       "password": "Mot de passe",
@@ -8247,6 +8248,7 @@
       "legendAssistant": "Réponses",
       "legendTool": "Résultats d'outils",
       "legendOther": "Autre",
+      "skillsUsedLabel": "Skills utilisés",
       "subAgentsLabel": "Sous-agents",
       "subAgentsNote": "Assistants exécutés dans cette session. Leur coût fait partie du coût de cette session.",
       "combinedMessages": "Messages combinés",
@@ -21431,7 +21433,11 @@
       "textf543a9f99ce7": "Barre d’actions",
       "textca4067071fcf": "Sélection",
       "text4cea356a17a1": "Modifications non enregistrées",
-      "text2358f7b37c07": "La barre flottante d’un mode temporaire : une sélection, des modifications non enregistrées, un collage en attente. Un titre, une description atténuée, des actions avec raccourcis clavier et un bouton de fermeture."
+      "text2358f7b37c07": "La barre flottante d’un mode temporaire : une sélection, des modifications non enregistrées, un collage en attente. Un titre, une description atténuée, des actions avec raccourcis clavier et un bouton de fermeture.",
+      "textf14554abf742": "Reprise de session",
+      "text9b166fdc8348": "Temps entre le réveil d'une sandbox arrêtée et la première réponse de son runtime, avec la moyenne de chaque phase.",
+      "text2c501fc3ba5b": "Reprises",
+      "text421f441370b1": "Phases (moy.)"
     },
     "publicShareConfirm": {
       "title": "Créer un lien public ?",

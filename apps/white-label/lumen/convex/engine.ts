@@ -360,8 +360,8 @@ export const poll = internalAction({
       const rejected: string[] = [];
       let waiting = false;
       for (const f of files) {
-        // Each version is read once. A rejected file is reported once; the agent's next write is a new version.
-        if (seen.get(f.path)?.version === f.version) continue;
+        // Accepted versions are immutable; rejected versions remain repairable on every poll.
+        if (seen.get(f.path)?.version === f.version && seen.get(f.path)?.status === "accepted") continue;
         let value: unknown;
         try {
           value = await asOperator(() => readJson(driveId, `${dir}/${f.path}`));
@@ -390,7 +390,9 @@ export const poll = internalAction({
         }
         const problems = await ctx.runMutation(internal.runs.ingestResult, { batchId, path: f.path, version: f.version, value, files: stored });
         rejected.push(...problems);
-        seen.set(f.path, { version: f.version, status: "accepted" });
+        const status = problems.length ? "rejected" : "accepted";
+        if (problems.length) await ctx.runMutation(internal.runs.recordFile, { batchId, path: f.path, version: f.version, status, errors: problems });
+        seen.set(f.path, { version: f.version, status });
       }
       const accepted = new Set([...seen].filter(([, s]) => s.status === "accepted").map(([p]) => p));
       const owed = missing({ run, batch }, accepted);

@@ -1942,6 +1942,7 @@
     "appsNoMatches": "一致するものはありません",
     "spaces": {
       "channels": "チャンネル",
+      "chat": "チャット",
       "addChannel": "新しいチャンネル",
       "loadError": "チャンネルを読み込めませんでした。",
       "newAgent": "新しいエージェント",

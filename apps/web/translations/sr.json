@@ -1942,6 +1942,7 @@
     "appsNoMatches": "Nema rezultata",
     "spaces": {
       "channels": "Канали",
+      "chat": "Ћаскање",
       "addChannel": "Нови канал",
       "loadError": "Учитавање канала није успело.",
       "newAgent": "Нови агент",

@@ -1942,6 +1942,7 @@
     "appsNoMatches": "Aucun résultat",
     "spaces": {
       "channels": "Canaux",
+      "chat": "Discussion",
       "addChannel": "Nouveau canal",
       "loadError": "Impossible de charger les canaux.",
       "newAgent": "Nouvel agent",

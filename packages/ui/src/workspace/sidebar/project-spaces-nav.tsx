@@ -54,7 +54,14 @@ function isAt(pathname: string | null, href: string): boolean {
  * skeleton for navigation); the personal row renders at once, since `/chat`
  * creates that space on first open.
  */
-export function ProjectSpacesNav({ projectId }: { projectId: string }) {
+export function ProjectSpacesNav({
+  projectId,
+  review = true,
+}: {
+  projectId: string;
+  /** False: Review is a button on the panel's title row (the icon rail, `sidebar_rail`). */
+  review?: boolean;
+}) {
   const t = useTranslations('sidebar');
   const pathname = useUiPathname();
   const spaces = useProjectSpaces(projectId);
@@ -75,7 +82,7 @@ export function ProjectSpacesNav({ projectId }: { projectId: string }) {
       <SidebarMenu className="gap-px" onKeyDown={moveFocus}>
         {/* The Review page, the same row the default sidebar shows first.
             Spacing, not a rule, sets Review apart from the spaces. */}
-        <ProjectReviewNavItem projectId={projectId} itemClassName="mb-2" />
+        {review ? <ProjectReviewNavItem projectId={projectId} itemClassName="mb-2" /> : null}
         <SpaceRow
           projectId={projectId}
           space={personal}

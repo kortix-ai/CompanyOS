@@ -93,7 +93,7 @@ mock.module('@kortix/sdk/react', () => ({
   useRuntimeSessions: () => ({ data: [] }),
   useRuntimeConfig: () => ({ data: {} }),
   useProjectConfig: () => ({}),
-  useSessionPrompts: () => ({ prompts: inboxPrompts, enqueue: (input: CreateSessionPromptInput) => enqueuePrompt(input) }),
+  useSessionPrompts: () => ({ prompts: inboxPrompts, refetch: async () => {}, enqueue: (input: CreateSessionPromptInput) => enqueuePrompt(input) }),
   useSessionMessageAuthors: () => ({ data: undefined }),
   useFeatureFlag: () => ({ enabled: true, isLoading: false }),
   useSessionWorking: () => ({
@@ -990,4 +990,42 @@ describe('SessionChat model pick', () => {
       globalThis.fetch = originalFetch;
     }
   });
+});
+
+test('a confirmed model pick clears a stale provider failure from the mounted transcript', async () => {
+  const { Window } = await import('happy-dom');
+  const browser = new Window();
+  Object.defineProperty(globalThis, 'window', { value: browser, configurable: true });
+  Object.defineProperty(globalThis, 'document', { value: browser.document, configurable: true });
+  for (const name of ['Element', 'HTMLElement', 'Node', 'ShadowRoot']) {
+    Object.defineProperty(globalThis, name, { value: Reflect.get(browser, name), configurable: true });
+  }
+  const { act, create } = await import('react-test-renderer');
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const originalFetch = globalThis.fetch;
+  configureKortix({ backendUrl: 'http://synthetic.local/v1', getToken: async () => 'synthetic-token' });
+  globalThis.fetch = Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    return Response.json(request.method === 'PUT' ? { model: 'kortix/model-b', applied_live: true } : { turns: {}, models: [], providers: [], sessions: [], prompts: [], accountDefault: null, projectDefault: null, platformDefault: 'kortix/model-a', agentDefaults: {}, freeTier: false });
+  }, { preconnect: originalFetch.preconnect });
+  fixtureMessages = [
+    baseFixtureMessages[0],
+    { info: { ...baseFixtureMessages[1].info, time: { created: 2, completed: 3 }, error: { name: 'APIError', data: { message: 'synthetic provider exhausted' } } }, parts: [] },
+  ];
+  persistedOutcome = { recent_failures: [{ message_id: 'user-fixture', ended_at: new Date(3).toISOString(), error: { name: 'Error', message: 'synthetic provider exhausted' } }] };
+  const client = new QueryClient();
+  const tree = <QueryClientProvider client={client}><IntlTestProvider locale="en" messages={enMessages} onError={() => {}}><TestUiHost params={ROUTE} viewerId="viewer-1"><KortixWorkspaceProvider projectId="project-fixture"><SidebarProvider><SessionChat sessionId="ses_runtime_fixture" projectId="project-fixture" projectSessionId="project-session-fixture" /></SidebarProvider></KortixWorkspaceProvider></TestUiHost></IntlTestProvider></QueryClientProvider>;
+  let mounted: ReturnType<typeof create> | undefined;
+  try {
+    await act(async () => { mounted = create(tree); });
+    expect(JSON.stringify(mounted?.toJSON())).toContain('synthetic provider exhausted');
+    await act(async () => { composerProps?.onModelChange?.({ providerID: 'kortix', modelID: 'model-b' }); });
+    expect(JSON.stringify(mounted?.toJSON())).not.toContain('synthetic provider exhausted');
+  } finally {
+    await act(async () => mounted?.unmount());
+    client.clear();
+    globalThis.fetch = originalFetch;
+    fixtureMessages = baseFixtureMessages;
+    persistedOutcome = {};
+  }
 });

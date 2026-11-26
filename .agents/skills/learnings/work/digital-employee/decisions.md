@@ -64,3 +64,14 @@
 
 - **D2** Legal review of Claude plan passthrough against Anthropic's terms
   before it is sold as an employee feature.
+
+## Decided: one employee first (2026-11-26)
+
+- **2026-11-26 (Marko, recommended)** Start with one general employee per
+  company. It builds its own agents, automations, triggers and skills, and
+  they belong to it: they act under its identity, its permissions and its
+  budget, and report into its memory. They are its tools, never separate
+  colleagues.
+- A second employee is a second workspace, added only for a real boundary:
+  different permissions or audit (finance), a different face to outsiders
+  (support), a separate budget, or memory that must not mix between teams.

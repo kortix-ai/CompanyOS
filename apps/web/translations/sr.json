@@ -27474,7 +27474,11 @@
     "bannerTitle": "{left, plural, one {Ostao je # korak podešavanja} few {Ostala su # koraka podešavanja} other {Ostalo je # koraka podešavanja}}",
     "bannerNamed": "{action} da završiš podešavanje",
     "bannerStart": "Započni podešavanje",
-    "bannerContinue": "Nastavi podešavanje"
+    "bannerContinue": "Nastavi podešavanje",
+    "sectionOptional": "Opcioni konektori",
+    "skip": "Preskoči",
+    "skipNamed": "Preskoči {name}",
+    "showSkipped": "Prikaži preskočene konektore"
   },
   "sessionSpaces": {
     "title": "Простори",

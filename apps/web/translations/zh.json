@@ -27474,7 +27474,11 @@
     "bannerTitle": "{left, plural, other {还有 # 个设置步骤未完成}}",
     "bannerNamed": "{action}以完成设置",
     "bannerStart": "开始设置",
-    "bannerContinue": "继续设置"
+    "bannerContinue": "继续设置",
+    "sectionOptional": "可选连接器",
+    "skip": "跳过",
+    "skipNamed": "跳过 {name}",
+    "showSkipped": "显示已跳过的连接器"
   },
   "sessionSpaces": {
     "title": "空间",

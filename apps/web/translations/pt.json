@@ -27474,7 +27474,11 @@
     "bannerTitle": "{left, plural, one {Falta # etapa de configuração} other {Faltam # etapas de configuração}}",
     "bannerNamed": "{action} para concluir a configuração",
     "bannerStart": "Iniciar configuração",
-    "bannerContinue": "Continuar configuração"
+    "bannerContinue": "Continuar configuração",
+    "sectionOptional": "Conectores opcionais",
+    "skip": "Ignorar",
+    "skipNamed": "Ignorar {name}",
+    "showSkipped": "Mostrar conectores ignorados"
   },
   "sessionSpaces": {
     "title": "Espaços",

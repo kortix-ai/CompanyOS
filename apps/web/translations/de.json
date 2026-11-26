@@ -27474,7 +27474,11 @@
     "bannerTitle": "{left, plural, one {# Einrichtungsschritt ist offen} other {# Einrichtungsschritte sind offen}}",
     "bannerNamed": "{action}, um die Einrichtung abzuschließen",
     "bannerStart": "Einrichtung starten",
-    "bannerContinue": "Einrichtung fortsetzen"
+    "bannerContinue": "Einrichtung fortsetzen",
+    "sectionOptional": "Optionale Verbindungen",
+    "skip": "Überspringen",
+    "skipNamed": "{name} überspringen",
+    "showSkipped": "Übersprungene Verbindungen anzeigen"
   },
   "sessionSpaces": {
     "title": "Spaces",

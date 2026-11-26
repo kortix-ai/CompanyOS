@@ -36,6 +36,8 @@ import { getSessionContextMetrics, sessionStartedAt } from './session-context-me
 import type { ServedModelNotice } from '../turn/served-model';
 import { SubSessionSection } from './session-context-sub-sessions';
 import { SpawnedSessionSection } from './session-context-spawned-sessions';
+import { detectSkillEnvelope } from './detect-command';
+import { isRecord } from '@kortix/shared/guards';
 
 // ============================================================================
 // Context breakdown estimation
@@ -156,6 +158,54 @@ export function estimateBreakdown(
   };
   const total = scaled.system + scaled.user + scaled.assistant + scaled.tool;
   return buildSegments({ ...scaled, other: Math.max(0, input - total) }, input);
+}
+
+/** The first non-empty string among `keys` of a tool call's input object. */
+function inputString(input: unknown, keys: readonly string[]): string | undefined {
+  if (!isRecord(input)) return undefined;
+  for (const key of keys) {
+    const value = input[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
+/** `<dir>/SKILL.md` names the skill `<dir>`. */
+const SKILL_FILE = /(?:^|[/\\])([^/\\]+)[/\\]SKILL\.md$/;
+
+/**
+ * The skill a block loaded into context: a `skill` tool call (OpenCode), a read
+ * of a `SKILL.md` (pi loads a skill as a file) or pi's `/skill` user message.
+ */
+function skillOf(role: SessionLogMessage['role'], b: SessionLogBlock): string | undefined {
+  if (b.type === 'text') return role === 'user' ? detectSkillEnvelope(b.text)?.name : undefined;
+  if (b.type !== 'tool_call') return undefined;
+  if (b.name === 'skill') return inputString(b.input, ['name']);
+  if (b.kind !== 'read') return undefined;
+  return SKILL_FILE.exec(inputString(b.input, ['filePath', 'file_path', 'path']) ?? '')?.[1];
+}
+
+export interface SkillUsage {
+  name: string;
+  tokens: number;
+  uses: number;
+}
+
+/** The skills a session loaded and what each one put in context, largest first. */
+export function estimateSkills(messages: SessionLogMessage[]): SkillUsage[] {
+  const chars = new Map<string, { chars: number; uses: number }>();
+  for (const msg of messages) {
+    for (const b of msg.blocks) {
+      const name = skillOf(msg.role, b);
+      if (!name) continue;
+      const size = b.type === 'tool_call' ? toolCallChars(b) : b.type === 'text' ? textChars(b) : 0;
+      const prev = chars.get(name) ?? { chars: 0, uses: 0 };
+      chars.set(name, { chars: prev.chars + size, uses: prev.uses + 1 });
+    }
+  }
+  return [...chars]
+    .map(([name, s]) => ({ name, tokens: estimateTokens(s.chars), uses: s.uses }))
+    .sort((a, b) => b.tokens - a.tokens);
 }
 
 // ============================================================================
@@ -296,6 +346,7 @@ function SessionContextModalBody({
   const counts = metrics.messages;
 
   const breakdown = useMemo(() => (ctx?.input ? estimateBreakdown(log, ctx.input) : []), [ctx, log]);
+  const skills = useMemo(() => estimateSkills(log), [log]);
 
   const usageFraction = ctx?.limit ? Math.min(1, ctx.total / ctx.limit) : null;
 
@@ -433,6 +484,27 @@ function SessionContextModalBody({
                   </li>
                 ))}
               </ul>
+            )}
+            {/* The skills behind those tokens: what each SKILL.md the agent
+                loaded put in context, estimated the same way as the rows above. */}
+            {skills.length > 0 && (
+              <div className="space-y-2 border-t pt-3">
+                <span className="text-foreground text-xs font-medium">{t.raw('skillsUsedLabel')}</span>
+                <ul className="space-y-2">
+                  {skills.map((skill) => (
+                    <li key={skill.name} className="flex items-center gap-2 text-xs">
+                      <span className="text-foreground min-w-0 truncate">{skill.name}</span>
+                      {skill.uses > 1 && (
+                        <span className="text-muted-foreground shrink-0 tabular-nums">×{skill.uses}</span>
+                      )}
+                      <span className="text-muted-foreground ml-auto shrink-0 tabular-nums">
+                        {fmt.number(skill.tokens)}
+                        {ctx?.input ? ` · ${Math.round((skill.tokens / ctx.input) * 1000) / 10}%` : ''}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
           </section>
 

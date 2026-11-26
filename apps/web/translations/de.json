@@ -8229,6 +8229,7 @@
       "legendAssistant": "Antworten",
       "legendTool": "Tool-Ergebnisse",
       "legendOther": "Sonstiges",
+      "skillsUsedLabel": "Verwendete Skills",
       "subAgentsLabel": "Sub-Agenten",
       "subAgentsNote": "Helfer, die in dieser Sitzung liefen. Ihre Kosten sind Teil der Kosten dieser Sitzung.",
       "combinedMessages": "Nachrichten gesamt",

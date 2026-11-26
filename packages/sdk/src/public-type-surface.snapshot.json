@@ -4878,9 +4878,12 @@
   ],
   "./internal/diagnostics-store": [
     "DiagnosticSeverity",
+    "DiagnosticsState",
     "LspDiagnostic",
     "RawDiagnostic",
+    "buildDiagnosticCountsMap",
     "findDiagnosticsForFile",
+    "getRelativePath",
     "parseDiagnosticsFromToolOutput",
     "useDiagnosticsStore"
   ],
@@ -4889,7 +4892,9 @@
     "createSafeJSONStorage",
     "createSafeSessionJSONStorage",
     "pruneAllRegisteredCaches",
+    "pruneDisposableCaches",
     "registerDisposableFamily",
+    "registerDisposableKey",
     "safeGetItem",
     "safeLocalStorage",
     "safeRemoveItem",

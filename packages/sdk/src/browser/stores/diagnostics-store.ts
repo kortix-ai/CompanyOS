@@ -21,7 +21,7 @@ export interface LspDiagnostic {
   source?: string;
 }
 
-interface DiagnosticsState {
+export interface DiagnosticsState {
   /** All diagnostics keyed by file path (may be absolute or relative) */
   byFile: Record<string, LspDiagnostic[]>;
 
@@ -111,6 +111,102 @@ export function findDiagnosticsForFile(
   }
 
   return undefined;
+}
+
+/**
+ * Build a map from relative file path → { errors, warnings } by iterating
+ * the diagnostics store. Uses the last N segments of each store key so that
+ * both `sidebar-explorer` (uses `node.path` which is relative) and
+ * `file-browser` can compute diagnostic counts.
+ *
+ * Returns a map where keys are every possible suffix of the store keys
+ * (e.g. for `/workspace/project/src/app.ts` it includes entries for
+ * `src/app.ts`, `project/src/app.ts`, `app.ts`, etc.) This is O(totalKeys * avgDepth)
+ * but in practice the number of files with diagnostics is small.
+ */
+export function buildDiagnosticCountsMap(
+  byFile: Record<string, LspDiagnostic[]>,
+): Record<string, { errors: number; warnings: number }> {
+  const map: Record<string, { errors: number; warnings: number }> = {};
+
+  for (const [key, diags] of Object.entries(byFile)) {
+    if (!diags || diags.length === 0) continue;
+
+    let errors = 0;
+    let warnings = 0;
+    for (const d of diags) {
+      if (d.severity === 1) errors++;
+      else if (d.severity === 2) warnings++;
+    }
+    if (errors === 0 && warnings === 0) continue;
+
+    const counts = { errors, warnings };
+
+    // Register under every suffix of the path so both absolute and
+    // relative lookups work.
+    const cleanKey = key.replace(/^file:\/\//, '');
+    const parts = cleanKey.split('/').filter(Boolean);
+
+    // Full path (with leading slash removed)
+    map[parts.join('/')] = counts;
+
+    // Also register with leading slash for absolute lookups
+    if (cleanKey.startsWith('/')) {
+      map[cleanKey] = counts;
+    }
+
+    // Progressive suffixes: src/app.ts, app.ts
+    for (let i = 1; i < parts.length; i++) {
+      const suffix = parts.slice(i).join('/');
+      // Don't overwrite — first match (longest key) wins
+      if (!map[suffix]) {
+        map[suffix] = counts;
+      }
+    }
+  }
+
+  return map;
+}
+
+/** Common project-root directory names, checked left-to-right in a path. */
+const PROJECT_ROOT_MARKERS = new Set([
+  'src',
+  'lib',
+  'app',
+  'pages',
+  'components',
+  'public',
+  'test',
+  'tests',
+  'pkg',
+  'cmd',
+  'internal',
+]);
+
+/**
+ * Extract the relative filename from a diagnostic's file path.
+ * Used by the diagnostics panel to show short names.
+ */
+export function getRelativePath(absPath: string): string {
+  const clean = absPath.replace(/^file:\/\//, '');
+  // If it looks absolute, try common sandbox prefixes
+  if (clean.startsWith('/')) {
+    // Strip /workspace/desktop/.../ or /home/user/project/.../ patterns
+    // Strategy: find the deepest "project root" heuristic and strip it
+    // Common patterns: /workspace/X/Y/ where Y is the project
+    const parts = clean.split('/').filter(Boolean);
+    for (let i = 0; i < parts.length; i++) {
+      if (PROJECT_ROOT_MARKERS.has(parts[i])) {
+        return parts.slice(i).join('/');
+      }
+    }
+    // If no marker found, take the last 3 segments max
+    if (parts.length > 3) {
+      return parts.slice(-3).join('/');
+    }
+    return parts.join('/');
+  }
+  return clean;
 }
 
 // ============================================================================

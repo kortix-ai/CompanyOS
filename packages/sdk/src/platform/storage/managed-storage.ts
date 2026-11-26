@@ -34,6 +34,8 @@ import { createJSONStorage, type StateStorage } from 'zustand/middleware';
 
 /** Registered prefixes for caches that are safe to evict to reclaim quota. */
 const disposableFamilies = new Set<string>();
+/** Registered exact keys (single-blob caches) that are safe to evict. */
+const disposableKeys = new Set<string>();
 
 /**
  * Register a `<prefix>:<scope>` key family as disposable. Entries under it may
@@ -41,6 +43,16 @@ const disposableFamilies = new Set<string>();
  */
 export function registerDisposableFamily(prefix: string): void {
   disposableFamilies.add(prefix);
+}
+
+/**
+ * Register a single exact key (a self-contained cache blob, e.g. an internally
+ * LRU'd map) as disposable. These are evicted only as a LAST resort — after
+ * every scoped-family entry — since they tend to be already-bounded and more
+ * valuable than a stale per-sandbox snapshot. Idempotent.
+ */
+export function registerDisposableKey(key: string): void {
+  disposableKeys.add(key);
 }
 
 /**
@@ -108,6 +120,11 @@ function entryTimestamp(raw: string | null): number {
 function disposableEntriesOldestFirst(storage: Storage): Array<{ key: string; t: number }> {
   const entries: Array<{ key: string; t: number }> = [];
   for (const key of allKeys(storage)) {
+    if (disposableKeys.has(key)) {
+      // Exact-key blobs are evicted last (sort to the end).
+      entries.push({ key, t: Number.MAX_SAFE_INTEGER });
+      continue;
+    }
     for (const family of disposableFamilies) {
       if (keyBelongsToFamily(key, family)) {
         entries.push({ key, t: entryTimestamp(safeGetItem(key)) });
@@ -274,6 +291,18 @@ export class ScopedCache<T> {
       .slice(this.maxScopes) // everything past the cap
       .forEach((e) => safeRemoveItem(e.key));
   }
+}
+
+/**
+ * Prune every registered disposable family back to its cap and drop foreign /
+ * legacy un-stamped entries within those families. Call once on boot to reclaim
+ * space left by older builds that never evicted; cheap and idempotent.
+ *
+ * Pass the live ScopedCache instances so each family's own `maxScopes` is
+ * respected.
+ */
+export function pruneDisposableCaches(caches: ReadonlyArray<ScopedCache<unknown>>): void {
+  for (const cache of caches) cache.prune();
 }
 
 /**

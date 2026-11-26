@@ -3139,6 +3139,7 @@
     },
     "unified": {
       "welcome": "Benvenuto su {name}",
+      "sessionEnded": "Sei stato disconnesso. Accedi di nuovo per continuare.",
       "email": "Email",
       "emailPlaceholder": "Inserisci il tuo indirizzo email…",
       "password": "Password",

@@ -3139,6 +3139,7 @@
     },
     "unified": {
       "welcome": "欢迎使用 {name}",
+      "sessionEnded": "您已退出登录。请重新登录以继续。",
       "email": "邮箱",
       "emailPlaceholder": "输入你的邮箱地址…",
       "password": "密码",

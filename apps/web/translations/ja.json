@@ -3139,6 +3139,7 @@
     },
     "unified": {
       "welcome": "{name}へようこそ",
+      "sessionEnded": "サインアウトされました。続行するには、もう一度サインインしてください。",
       "email": "メールアドレス",
       "emailPlaceholder": "メールアドレスを入力…",
       "password": "パスワード",

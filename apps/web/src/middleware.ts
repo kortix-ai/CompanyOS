@@ -25,6 +25,11 @@ import {
   resolveMiddlewareIdentity,
   type MiddlewareUser,
 } from '@/lib/supabase/middleware-identity';
+import {
+  SESSION_ENDED_COOKIE,
+  SESSION_ENDED_MAX_AGE,
+  SESSION_ENDED_REASON,
+} from '@/lib/auth/session-expiry';
 import { readUnverifiedSession } from '@/lib/supabase/session-cookie';
 import { authCookieOptions, hasPanelMarker, panelAuthUrl } from '@/lib/supabase/panel-cookies';
 import { redirectPreservingCookies } from '@/lib/supabase/redirect-preserving-session';
@@ -771,6 +776,12 @@ export async function middleware(request: NextRequest) {
   let authError: Error | null = null;
 
   const isAuthRoute = pathname === '/auth' || pathname.startsWith('/auth/');
+  // Read before the identity check: a bounce below says whether the request
+  // still carried a session, so /auth can explain that it ended (KRTX-1978).
+  const cookieSession = readUnverifiedSession(
+    request.cookies.getAll(),
+    KORTIX_SUPABASE_AUTH_COOKIE,
+  );
 
   if (!isAuthRoute) {
     // What the cookie alone says, before any auth client exists. Creating the
@@ -791,10 +802,6 @@ export async function middleware(request: NextRequest) {
     // the cookie is left untouched, and the browser client — the one writer
     // that always sees its own rotation — refreshes the session on /auth and
     // carries the user back to `redirect`.
-    const cookieSession = readUnverifiedSession(
-      request.cookies.getAll(),
-      KORTIX_SUPABASE_AUTH_COOKIE,
-    );
     const plan = cookieIdentityPlan(
       typeof cookieSession?.expires_at === 'number' ? cookieSession.expires_at : null,
       Date.now(),
@@ -881,6 +888,14 @@ export async function middleware(request: NextRequest) {
         });
       }
     }
+    // This response can be a prefetch the router drops (KRTX-1978).
+    supabaseResponse.cookies.set(SESSION_ENDED_COOKIE, '1', {
+      httpOnly: true,
+      maxAge: SESSION_ENDED_MAX_AGE,
+      path: '/',
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+    });
     user = null;
   }
 
@@ -957,6 +972,9 @@ export async function middleware(request: NextRequest) {
       url.pathname = '/auth';
       const redirectTarget = `${pathname}${request.nextUrl.search || ''}`;
       url.searchParams.set('redirect', redirectTarget);
+      if (cookieSession || request.cookies.has(SESSION_ENDED_COOKIE)) {
+        url.searchParams.set('reason', SESSION_ENDED_REASON);
+      }
       // Must preserve the self-heal cookie-clear above — without it, the
       // browser bounces to /auth still carrying the poisoned cookie, and the
       // auth page's own client-side session check has to rediscover the same

@@ -44,7 +44,7 @@ export function renderSupabaseProject(name: string, worktreePath: string, projec
   const rewritten = rewriteConfigToml(srcToml, projectId, ports);
   writeFileSync(join(sbDir, 'config.toml'), rewritten);
 
-  for (const sub of ['seed.sql', 'functions']) {
+  for (const sub of ['seed.sql', 'functions', 'templates']) {
     const target = join(worktreePath, 'supabase', sub);
     const link = join(sbDir, sub);
     if (existsSync(target) && !existsSync(link)) {

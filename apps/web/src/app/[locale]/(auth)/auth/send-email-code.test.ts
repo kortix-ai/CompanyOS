@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { beforeEach, expect, mock, test } from 'bun:test';
 import { createTranslator } from 'next-intl';
 import messages from '../../../../../translations/en.json';
@@ -8,6 +9,7 @@ let cookieFailure = false;
 let translationFailureAfterDelivery = false;
 let mode = 'signin';
 let sendError: { code: string; message: string; status: number } | null = null;
+const setCookie = mock((_key: string, _value: string, _options: unknown) => {});
 const send = mock(async (_input: unknown) => {
   delivered = !sendError;
   return { error: sendError };
@@ -16,7 +18,7 @@ mock.module('next/headers', () => ({
   headers: async () => new Headers(),
   cookies: async () => {
     if (delivered && cookieFailure) throw new Error('cookie store unavailable');
-    return { get: (key: string) => key.endsWith('-code-verifier') ? { value: 'base64-synthetic' } : undefined };
+    return { set: setCookie, get: (key: string) => key.endsWith('-code-verifier') ? { value: 'base64-synthetic' } : undefined };
   },
 }));
 mock.module('@/lib/public-env-server', () => ({
@@ -45,7 +47,7 @@ const form = () => {
 };
 beforeEach(() => {
   delivered = false; cookieFailure = false; translationFailureAfterDelivery = false;
-  mode = 'unknown'; sendError = null; send.mockClear(); captured.mockClear();
+  mode = 'unknown'; sendError = null; send.mockClear(); setCookie.mockClear(); captured.mockClear();
 });
 test('delivered send stays successful if the verifier cookie store fails', async () => {
   cookieFailure = true;
@@ -138,6 +140,38 @@ test('a closed-signup 429 whose code the copy helper does not know still surface
 test('a rejected transport does not fabricate delivery success', async () => {
   send.mockImplementationOnce(async () => { throw new Error('transport failed'); });
   await expect(sendEmailCode(null, form())).rejects.toThrow('transport failed');
+});
+
+test('mobile signup binds the emailed callback to a private browser cookie', async () => {
+  const input = form();
+  input.set('mobileCallback', 'true');
+  input.set('mobileCallbackState', 'synthetic-mobile-state');
+  expect(await sendEmailCode(null, input)).toMatchObject({ success: true });
+  expect(setCookie).toHaveBeenCalledWith(
+    expect.stringContaining('-mobile-signup'),
+    expect.any(String),
+    expect.objectContaining({ httpOnly: true }),
+  );
+  const [name, secret, options] = setCookie.mock.calls[0];
+  expect(name).toEndWith('-mobile-signup');
+  expect(secret).toHaveLength(64);
+  expect(options).toEqual({
+    httpOnly: true,
+    secure: false,
+    sameSite: 'lax',
+    path: '/auth/mobile/callback',
+    maxAge: 86400,
+  });
+  expect(send).toHaveBeenCalledWith(
+    expect.objectContaining({
+      options: expect.objectContaining({
+        emailRedirectTo: expect.stringContaining(
+          `browser_binding=${createHash('sha256').update(secret).digest('hex')}`,
+        ),
+      }),
+    }),
+  );
+  expect(JSON.stringify(send.mock.calls)).not.toContain(secret);
 });
 
 // KRTX-3753: when the SMTP relay refuses (a provider quota), GoTrue answers

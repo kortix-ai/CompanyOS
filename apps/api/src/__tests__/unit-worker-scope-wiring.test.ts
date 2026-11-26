@@ -58,6 +58,7 @@ const WORKERS: Record<string, string> = {
   'space-watcher': 'worker/jobs/space-watcher.ts',
   'goal-reconciler': 'worker/jobs/goal-reconciler.ts',
   'eval-runner': 'worker/jobs/eval-runner.ts',
+  'workspace-cache-builder': 'worker/jobs/workspace-cache-builder.ts',
   'session-lifecycle': 'projects/session-lifecycle/drain.ts',
   'tunnel-cleanup': 'worker/jobs/tunnel-cleanup.ts',
   'tunnel-forward-expiry': 'worker/jobs/tunnel-forward-expiry.ts',

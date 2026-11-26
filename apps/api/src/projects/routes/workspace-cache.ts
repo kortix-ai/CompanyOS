@@ -19,6 +19,7 @@ import {
 import { workspaceIdParam } from '../../shared/route-params';
 import { assertProjectCapability, loadProjectForUser, loadVisibleSession, sessionIsTombstoned } from '../lib/access';
 import { projectsApp } from '../lib/app';
+import { recordWorkspaceCacheBuilder } from '../workspace-cache/builder';
 
 const EntrySchema = z.object({
   id: z.string(),
@@ -87,7 +88,8 @@ export function registerWorkspaceCacheRoutes(): void {
       summary: 'Save a session’s /workspace as the project’s workspace cache',
       description:
         'Commits the session’s /workspace volume and saves that commit under `key` (`ws-…`, immutable): every new session of the project then ' +
-        'starts with a copy of it. Save only a workspace prepared for that: whatever it holds, every later session gets, so never one with ' +
+        'starts with a copy of it, and a daily rebuild runs the project\'s `scripts/workspace-cache-build` in a session of the same agent, as you. ' +
+        'Save only a workspace prepared for that: whatever it holds, every later session gets, so never one with ' +
         'secrets in it. Needs project settings rights, and a person: a session token gets 403 `forbidden`. A key already saved is 409 ' +
         '`cache_key_exists`; a workspace over the budget is 413 `cache_too_large`. Flag `platinum_cache`.',
       ...auth,
@@ -114,6 +116,12 @@ export function registerWorkspaceCacheRoutes(): void {
           sessionId: input.session_id,
           sessionMetadata: visible.row.metadata,
           key: input.key,
+        });
+        // The daily rebuild (workspace-cache/builder.ts) builds the same way: this session's agent, as this person.
+        await recordWorkspaceCacheBuilder(loaded.row.projectId, {
+          agent: visible.row.agentName,
+          user_id: loaded.userId,
+          named_at: new Date().toISOString(),
         });
         return c.json(saved, 201);
       } catch (err) {

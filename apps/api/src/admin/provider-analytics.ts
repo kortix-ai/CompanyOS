@@ -60,11 +60,17 @@ export function summarizeProviderAnalytics(rows: ProviderEventRow[], days: numbe
   // Session resume (KRTX-1642): a `wake` row holds the provider phases up to the
   // rows going active; the session's first `wake-ready` row after it holds the
   // last phase, until the runtime answered. Their sum is the resume a user waits.
+  const readyBySession = new Map<string | null, ProviderEventRow[]>();
+  for (const r of [...wakeReady].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())) {
+    const list = readyBySession.get(r.sessionId);
+    if (list) list.push(r);
+    else readyBySession.set(r.sessionId, [r]);
+  }
   const firstReadyAfter = (w: ProviderEventRow) => {
     const at = w.createdAt.getTime();
-    return wakeReady
-      .filter((r) => r.sessionId === w.sessionId && r.createdAt.getTime() >= at && r.createdAt.getTime() - at <= RESUME_READY_WINDOW_MS)
-      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())[0];
+    return readyBySession
+      .get(w.sessionId)
+      ?.find((r) => r.createdAt.getTime() >= at && r.createdAt.getTime() - at <= RESUME_READY_WINDOW_MS);
   };
   const wakes = namesOf(wake).map((p) => {
     const evs = wake.filter((r) => r.provider === p);

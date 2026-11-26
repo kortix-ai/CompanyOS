@@ -231,13 +231,20 @@ describe('kortix_schedules', () => {
   test('create without an agent is a reminder to this session; with one, each run starts its session', async () => {
     // Each schedule value is one --flag=value word, so it can never read as an option (CWE-88).
     fakeKortix(`'triggers add Check the report --runtime --in=2h') echo 'trigger.abc123' ;;
-  'triggers add Send the summary --runtime --cron=0 9 * * 1 --timezone=Europe/Berlin --agent=researcher') echo 'Created trigger.def456' ;;`)
+  'triggers add Send the summary --runtime --cron=0 9 * * 1 --timezone=Europe/Berlin --agent=researcher') echo 'Created trigger.def456' ;;
+  'triggers pause trigger.def456') echo 'Paused trigger.def456 (paused)' ;;`)
     const reminder = await run('kortix_schedules', { action: 'create', prompt: 'Check the report', in: '2h' })
     expect(reminder.card.title).toBe('Reminder set: in 2h')
     expect(reminder.data).toMatchObject({ id: 'trigger.abc123', agent: null })
     const weekly = await run('kortix_schedules', { action: 'create', prompt: 'Send the summary', cron: '0 9 * * 1', timezone: 'Europe/Berlin', agent: 'researcher' })
-    expect(weekly.data).toMatchObject({ id: 'trigger.def456', agent: 'researcher' })
-    expect(argvs()).toHaveLength(2)
+    // An agent's schedule is saved paused until it is tested; a reminder to this session stays live.
+    expect(weekly.data).toMatchObject({ id: 'trigger.def456', agent: 'researcher', state: 'paused' })
+    expect(weekly.card.rows).toEqual([{ title: 'Not running yet', detail: 'Test it with run_now, then resume it to put it live' }])
+    expect(argvs()).toEqual([
+      'triggers add Check the report --runtime --in=2h',
+      'triggers add Send the summary --runtime --cron=0 9 * * 1 --timezone=Europe/Berlin --agent=researcher',
+      'triggers pause trigger.def456',
+    ])
   })
 
   test('an option-shaped id never reaches the CLI, so pause cannot fall through to the project-wide switch (CWE-88)', async () => {

@@ -484,15 +484,20 @@ async function create(args: Record<string, any>, context: PlatformToolContext) {
   // A schedule into this session is a loop (`reminder.<hex>`); one that starts an agent is `trigger.<hex>`.
   const id = made.text.match(/(?:trigger|reminder)\.[0-9a-f]+/)?.[0] ?? made.text.split('\n').pop() ?? ''
   const spoken = schedule.spoken
+  // An agent's schedule is an automation: saved paused, like `automate`, until run_now tested it and resume
+  // puts it live (QualiLoop on dev: create went live at once, and the agent paused it by hand after its test).
+  // The runtime create takes no `enabled`, so it is paused right after; a paused trigger still runs on run_now.
+  const paused = agent && /^trigger\.[0-9a-f]+$/.test(id) ? !('error' in (await cliRun(['triggers', 'pause', id], context))) : false
   return ok(
     TOOL,
     'create',
     {
       title: agent ? `${agent} runs ${spoken}` : `Reminder set: ${spoken}`,
       subtitle: prompt.length > 140 ? `${prompt.slice(0, 137)}…` : prompt,
+      ...(agent ? { rows: [paused ? { title: 'Not running yet', detail: 'Test it with run_now, then resume it to put it live' } : { title: 'Live now', detail: 'It could not be saved paused; pause it if it is not tested' }] } : {}),
       links: [{ label: 'Triggers', href: adminHref(context.env, 'triggers') }],
     },
-    { id, agent, prompt, schedule: spoken },
+    { id, agent, prompt, schedule: spoken, ...(agent ? { state: paused ? 'paused' : 'active', next: paused ? 'run_now, then resume' : null } : {}) },
   )
 }
 
@@ -829,7 +834,7 @@ export default {
     'If it answers that Loops are not enabled, tell the person and ask them or a workspace admin to turn Loops on in Workspace settings → Feature flags. ' +
     'Actions: `follow_up` (text + ONE of in "3h", at ISO time, every "4h" (min 5m), cron "0 9 * * 1-5" + timezone; with several, the first of at, in, cron, every is used); ' +
     '`wake_on` (text + on); `events` (connector); `list` (this session\'s follow-ups and wake-ons, and the project schedules, with ids); ' +
-    '`create` (prompt + agent + one schedule: each run starts a new session of that agent); `pause`, `resume`, `run_now`, `remove` (each needs `id` as list shows it; `delete` = remove). ' +
+    '`create` (prompt + agent + one schedule: each run starts a new session of that agent; with an agent it is saved paused: run_now tests it, resume puts it live); `pause`, `resume`, `run_now`, `remove` (each needs `id` as list shows it; `delete` = remove). ' +
     'AUTOMATIONS (work that starts by itself whenever something happens, with no one asking: each new email from a customer, each new issue, each form submission, each failed build, every weekday at 9): `automate` (name + on + agent + prompt; on=connector_event: connector + event (+ config), run `events` first; an automation runs only on the shared sign-in of the workspace, so when the app still needs one, call kortix_connectors connect with for_trigger=true once (one card, never a private one first); webhook: secret_env, give the outside system the returned URL; app_event: app (+ event); schedule: every or cron + timezone). ' +
     'No event fits (none, or too coarse): have a colleague build a watcher App that posts App events, then `automate` its check (on=schedule + every + target_app + target_path "/tick": calls the App, no session, no model) and its work (on=app_event, with expect_event_within of a few check intervals). To tell the person in this chat instead, the work is `wake_on` on=app_event with expect_event_within. ' +
     'Do it well: 1) `filter` at the source so noise never starts a run (skip bots and Kortix itself, keep only the actions that matter: { "body.action": ["opened"], "body.sender.login": { "not": "kortix-bot" } }); ' +

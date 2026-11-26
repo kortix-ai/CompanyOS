@@ -29,17 +29,19 @@ const marks = (...phases: [string, number][]) => {
 };
 
 /** The boot a wake started, as both of its rows carry it. */
-const boot = (atMs: number) => ({ bootEpochMs: t0 + atMs });
+const boot = (epochMs: number) => ({ bootEpochMs: t0 + epochMs });
 
 describe('provider analytics: session resume (KRTX-1642)', () => {
   const rows: Row[] = [
     // Resume A: a cold-storage restore, runtime answered 5 s after the box ran.
     event({ kind: 'wake', outcome: 'ok', sessionId: 'a', totalMs: 40_000, marks: [...marks(['archive-restore', 38_000], ['provider-running', 1_500], ['rows-active', 500]), boot(39_500)] }, 40_000),
     event({ kind: 'wake-ready', outcome: 'ok', sessionId: 'a', totalMs: 5_000, marks: [...marks(['runtime-ready', 5_000]), boot(39_500)] }, 44_500),
-    // Resume B: its runtime answered while the wake still ran its billing
-    // awaits, so the ready row was inserted first; the boot still pairs them.
-    event({ kind: 'wake-ready', outcome: 'ok', sessionId: 'b', totalMs: 3_000, marks: [...marks(['runtime-ready', 3_000]), boot(61_800)] }, 64_800),
-    event({ kind: 'wake', outcome: 'ok', sessionId: 'b', totalMs: 2_000, marks: [...marks(['provider-start', 1_200], ['provider-running', 600], ['rows-active', 200]), boot(61_800)] }, 70_000),
+    // Resume B: the box ran 1 s into the wake and its runtime answered 1 s
+    // later, while the wake still ran its recovery and billing awaits until
+    // 10 s. The ready row was inserted first; the boot still pairs them, and the
+    // user waited 2 s, not the wake's 10 s plus the runtime's 1 s.
+    event({ kind: 'wake-ready', outcome: 'ok', sessionId: 'b', totalMs: 1_000, marks: [...marks(['runtime-ready', 1_000]), boot(61_000)] }, 62_000),
+    event({ kind: 'wake', outcome: 'ok', sessionId: 'b', totalMs: 10_000, marks: [...marks(['provider-start', 600], ['provider-running', 400], ['rows-active', 200]), boot(61_000)] }, 70_000),
     // Session C woke twice: the first wake's runtime never answered, the second
     // one's did. The one ready row belongs to the second wake only.
     event({ kind: 'wake', outcome: 'ok', sessionId: 'c', totalMs: 3_000, marks: [...marks(['provider-start', 1_800], ['provider-running', 900], ['rows-active', 300]), boot(2_700)] }, 3_000),
@@ -65,16 +67,17 @@ describe('provider analytics: session resume (KRTX-1642)', () => {
       {
         provider: 'platinum',
         wakes: 5, ok: 4, error: 1, stopped: 0, successRate: 80,
-        p50Ms: 3_000, p95Ms: 3_000, avgMs: 12_000,
+        p50Ms: 3_000, p95Ms: 10_000, avgMs: 14_000,
         phases: [
           { label: 'archive-restore', avgMs: 38_000 },
-          { label: 'provider-running', avgMs: 975 },
+          { label: 'provider-running', avgMs: 925 },
           { label: 'rows-active', avgMs: 325 },
-          { label: 'provider-start', avgMs: 1_600 },
-          { label: 'runtime-ready', avgMs: 4_000 },
+          { label: 'provider-start', avgMs: 1_400 },
+          { label: 'runtime-ready', avgMs: 3_333 },
         ],
-        // A: 40 s + 5 s; B: 2 s + 3 s; C's second wake: 3 s + 4 s.
-        resumes: 3, resumeP50Ms: 7_000, resumeP95Ms: 7_000,
+        // Each wake until its box ran, plus that boot's runtime answer:
+        // A 39.5 s + 5 s; B 1 s + 1 s; C's second wake 2.7 s + 4 s.
+        resumes: 3, resumeP50Ms: 6_700, resumeP95Ms: 6_700,
       },
     ]);
   });
@@ -85,11 +88,15 @@ describe('provider analytics: session resume (KRTX-1642)', () => {
   };
 
   test('a ready row inserted before its wake row still pairs with that wake', () => {
-    expect(resumesOf('b')).toEqual({ resumes: 1, resumeP50Ms: 5_000 });
+    expect(resumesOf('b').resumes).toBe(1);
+  });
+
+  test('a resume ends when the runtime answers, even when the wake finalizes later', () => {
+    expect(resumesOf('b').resumeP50Ms).toBe(2_000);
   });
 
   test('a session that woke twice pairs its one ready row with the wake that booted it', () => {
-    expect(resumesOf('c')).toEqual({ resumes: 1, resumeP50Ms: 7_000 });
+    expect(resumesOf('c')).toEqual({ resumes: 1, resumeP50Ms: 6_700 });
   });
 
   test('wake rows stay out of the provisioning numbers', () => {

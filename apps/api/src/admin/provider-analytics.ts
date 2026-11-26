@@ -54,16 +54,26 @@ export function summarizeProviderAnalytics(rows: ProviderEventRow[], days: numbe
     return { provider: p, provisions: evs.length, ...outcomeStats(evs) };
   });
 
-  // Session resume (KRTX-1642): a `wake` row holds the provider phases up to the
-  // rows going active; the `wake-ready` row of the same boot holds the last phase,
-  // until the runtime answered. Their sum is the resume a user waits. Both rows
-  // carry that boot (`{ bootEpochMs }` in their marks: the wake's provider-running
-  // confirmation), so a ready row pairs with exactly the wake that booted it,
-  // whichever row was inserted first.
+  // Session resume (KRTX-1642): a `wake` row holds the provider phases; the
+  // `wake-ready` row of the same boot holds the last phase, from the box running
+  // to the runtime's first answer. Both rows carry that boot (`{ bootEpochMs }`
+  // in their marks: the wake's provider-running confirmation), so a ready row
+  // pairs with exactly the wake that booted it, whichever row was inserted
+  // first. The resume a user waits is the wake up to its `provider-running`
+  // mark plus the ready row, not the wake's total: the wake's recovery and
+  // billing awaits run after that mark, alongside the runtime's boot.
   const bootOf = (r: ProviderEventRow): string | null => {
     for (const m of r.marks ?? []) {
       if (typeof m === 'object' && m !== null && 'bootEpochMs' in m && typeof m.bootEpochMs === 'number') {
         return `${r.sessionId}:${m.bootEpochMs}`;
+      }
+    }
+    return null;
+  };
+  const runningAtMs = (r: ProviderEventRow): number | null => {
+    for (const m of r.marks ?? []) {
+      if (typeof m === 'object' && m !== null && 'label' in m && m.label === 'provider-running' && 'atMs' in m && typeof m.atMs === 'number') {
+        return m.atMs;
       }
     }
     return null;
@@ -80,9 +90,10 @@ export function summarizeProviderAnalytics(rows: ProviderEventRow[], days: numbe
       .flatMap((w) => {
         const boot = bootOf(w);
         const ready = boot === null ? undefined : readyByBoot.get(boot);
-        return ready ? [{ wake: w, ready }] : [];
+        const bootAtMs = runningAtMs(w);
+        return ready && bootAtMs !== null ? [{ bootAtMs, ready }] : [];
       });
-    const resumeMs = resumes.map((r) => (r.wake.totalMs ?? 0) + (r.ready.totalMs ?? 0));
+    const resumeMs = resumes.map((r) => r.bootAtMs + (r.ready.totalMs ?? 0));
     return {
       provider: p,
       wakes: evs.length,

@@ -10,15 +10,17 @@ import { adminHref, capRows, cliJson, cliRun, fail, ok, cliArgProblem, type Plat
 const TOOL = 'kortix_connectors' as const
 const ACTIONS = ['list', 'find', 'add', 'connect'] as const
 
-interface Profile {
+/** One row of `kortix connectors ls --json` (`{ connectors: [...] }`, the API's connector list). */
+interface ListedConnector {
   slug?: string
   name?: string | null
   display_name?: string | null
-  provider?: string | null
-  status?: string | null
-  connected?: boolean
+  state?: 'disabled' | 'error' | 'needs_account' | 'connected' | null
+  state_reason?: string | null
   accounts?: unknown[]
 }
+
+const STATE_WORDS: Record<string, string> = { connected: 'connected', needs_account: 'not signed in', disabled: 'disabled' }
 
 interface CatalogRow {
   id?: string
@@ -38,19 +40,20 @@ function rowsOf<T>(value: unknown, key: string): T[] {
 async function list(context: PlatformToolContext) {
   const read = await cliJson(['connectors', 'ls', '--json'], context)
   if ('error' in read) return fail(TOOL, 'list', 'Could not list the connectors', read.error, context)
-  const profiles = rowsOf<Profile>(read.value, 'profiles')
+  const connectors = rowsOf<ListedConnector>(read.value, 'connectors')
   return ok(
     TOOL,
     'list',
     {
-      title: profiles.length === 1 ? '1 connector' : `${profiles.length} connectors`,
+      title: connectors.length === 1 ? '1 connector' : `${connectors.length} connectors`,
       rows: capRows(
-        profiles.map((profile) => {
-          const signedIn = profile.connected === true || (Array.isArray(profile.accounts) && profile.accounts.length > 0)
+        connectors.map((connector) => {
+          const signedIn = Array.isArray(connector.accounts) && connector.accounts.length > 0
+          const state = connector.state ?? (signedIn ? 'connected' : 'needs_account')
           return {
-            title: profile.display_name || profile.name || profile.slug || 'connector',
-            ...(profile.slug ? { detail: profile.slug } : {}),
-            badge: profile.status || (signedIn ? 'connected' : 'not signed in'),
+            title: connector.display_name || connector.name || connector.slug || 'connector',
+            ...(connector.slug ? { detail: connector.slug } : {}),
+            badge: STATE_WORDS[state] ?? (connector.state_reason ? `${state}: ${connector.state_reason}` : state),
           }
         }),
       ),
@@ -108,6 +111,10 @@ async function add(app: string, context: PlatformToolContext) {
 async function connect(slug: string, shared: boolean, forTrigger: boolean, context: PlatformToolContext) {
   const started = await cliRun(['connectors', 'connect', slug, '--owner', shared ? 'project' : 'me'], context)
   if ('error' in started) {
+    // The API answers 404 for a slug the workspace has not added; say how to add it.
+    if (started.error.kind === 'not_found') {
+      return fail(TOOL, 'connect', `${slug} is not added yet`, { kind: 'not_found', message: `No connector "${slug}" in this workspace. Add it first (find, then add with the app id find returns, e.g. kortix:${slug}), then connect.` }, context)
+    }
     const title = forTrigger ? `A workspace manager must sign in to ${slug} for triggers` : `Could not start the sign-in for ${slug}`
     return fail(TOOL, 'connect', title, started.error, context)
   }

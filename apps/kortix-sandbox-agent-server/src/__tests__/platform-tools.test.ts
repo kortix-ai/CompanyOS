@@ -180,6 +180,27 @@ describe('kortix_agents', () => {
 })
 
 describe('kortix_connectors', () => {
+  // QualiLoop on dev, 59 calls: `connectors ls --json` prints `connectors`, the tool read `profiles`,
+  // so every card said "0 connectors" and My Kortix told the person nothing was connected.
+  test('list: one row per connector the CLI prints, with its state in words', async () => {
+    fakeKortix(`'connectors ls --json') echo '{"connectors":[{"state":"needs_account","state_reason":"no account connected","slug":"gmail","name":"Gmail","provider":"mcp","status":"needs_auth","accounts":[]},{"state":"connected","slug":"notion","name":"Notion","provider":"mcp","status":"active","accounts":[{"id":"acc_1"}]},{"state":"error","state_reason":"its tools could not be loaded","slug":"crm","name":"CRM","provider":"openapi","status":"active","accounts":[{"id":"acc_2"}]}]}' ;;`)
+    const result = await run('kortix_connectors', { action: 'list' })
+    expect(result.card.title).toBe('3 connectors')
+    expect(result.card.rows).toEqual([
+      { title: 'Gmail', detail: 'gmail', badge: 'not signed in' },
+      { title: 'Notion', detail: 'notion', badge: 'connected' },
+      { title: 'CRM', detail: 'crm', badge: 'error: its tools could not be loaded' },
+    ])
+  })
+
+  // QualiLoop on dev: connect before add answered "not a supported connect connector" (17 calls).
+  test('connect on a connector the workspace has not added says to add it first', async () => {
+    fakeKortix(`'connectors connect gmail --owner me') echo '{"kortix_error":{"kind":"failed","status":404,"message":"not a supported connect connector"}}' >&2; exit 1 ;;`)
+    const result = await run('kortix_connectors', { action: 'connect', slug: 'gmail' })
+    expect(result.card.title).toBe('gmail is not added yet')
+    expect(result.error?.message).toContain('Add it first')
+  })
+
   test('connect: the sign-in link is the card action and the person must act', async () => {
     fakeKortix(`'connectors connect gmail --owner me') echo 'Open this link to sign in: https://auth.example.com/connect?x=1' ;;`)
     const result = await run('kortix_connectors', { action: 'connect', slug: 'gmail' })
@@ -550,6 +571,15 @@ describe('kortix_people and kortix_access', () => {
     expect(result.card.title).toBe('You are a member of this workspace')
     expect(result.card.rows).toContainEqual({ title: 'Workspace role', detail: 'member' })
     expect(JSON.stringify(result.card)).not.toMatch(/Account role|Project role/)
+  })
+
+  // QualiLoop on dev, 19 calls: `access pending --json` prints `pending` with `project_role`, the tool
+  // read `invites`, so every card said "0 open invitations" and My Kortix invited the same person again.
+  test('pending: one row per open invitation the CLI prints, with its role', async () => {
+    fakeKortix(`'access pending --json') echo '{"pending":[{"invite_id":"inv_1","email":"sam@example.com","project_role":"member","invited_by_email":"ada@example.com","invite_expires_at":"2026-12-09T15:22:04.661Z","invite_expired":false}]}' ;;`)
+    const result = await run('kortix_people', { action: 'pending' })
+    expect(result.card.title).toBe('1 open invitation')
+    expect(result.card.rows).toEqual([{ title: 'sam@example.com', badge: 'member' }])
   })
 
   test('people list shows one workspace role per person', async () => {

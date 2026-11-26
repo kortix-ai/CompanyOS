@@ -105,7 +105,9 @@ export type FeatureFlagKey =
   | 'session_log_restore'
   /** @deprecated Graduated — the Kortix connectors catalog is the only connectors path. Removed in the next major. */
   | 'connectors_v2'
-  /** Chat: a Slack-style chat with Kortix. Every message is a thread, Kortix's newest reply shows under it, Kortix can start threads, and spaces are shared with people. Experimental, off by default. */
+  /** Channels: Slack-style channels and a 1:1 chat with each of the workspace's agents, in one chat sidebar (Agents and Channels). Every channel message starts a thread. Experimental, off by default. */
+  | 'channels'
+  /** Chat: the channels and DMs. Merged into `channels` (2026-11): the API resolves it equal to `channels` and no longer lists it in the catalog. */
   | 'chat'
   /** @deprecated Withdrawn — merged into `chat` (2026-11). The API sends it equal to `chat` and writes `chat` for it; it is not in the catalog. Read `chat`. Removed in the next major. */
   | 'project_channels'
@@ -200,6 +202,7 @@ export const FEATURE_FLAG_KEYS: readonly FeatureFlagKey[] = [
   'reminders',
   'us_region',
   'event_triggers',
+  'channels',
   'chat',
   'shared_drives',
   'goals',

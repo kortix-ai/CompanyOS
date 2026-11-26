@@ -1315,8 +1315,12 @@
           "name": "电子邮件渠道",
           "description": "为智能体提供一个 Resend 邮箱：收到的邮件会启动并延续会话，智能体从该邮箱阅读、回复和发送邮件。使用你自己的 Resend API 密钥和域名。"
         },
+        "channels": {
+          "name": "频道",
+          "description": "Slack 风格的频道，以及与工作区每个智能体的聊天，集中在一个侧边栏中：智能体和频道。频道中的每条消息都会开启一个线程。取代会话列表；现有会话会移到 #general。"
+        },
         "chat": {
-          "name": "Slack 风格空间",
+          "name": "Slack 风格频道",
           "description": "使用 Slack 风格的频道和私信，每条消息都会开启一个线程。将侧边栏切换为聊天布局。此功能独立于用于分组会话、文件和标签页的空间。"
         },
         "session_groups": {
@@ -1336,16 +1340,16 @@
           "description": "整个团队都能使用的云盘：管理员创建云盘并为其添加智能体。这些智能体的每个会话都会挂载它，任何可以使用其中某个智能体的人都能打开它。关闭时，每个人只有“我的文件”。"
         },
         "chat_input": {
-          "name": "Spaces-ChatInput",
+          "name": "Channels-ChatInput",
           "description": "输入框下方的一个控件，决定由谁回答以及如何回答：选择智能体后，其他所有设置都保持自动，继承自该智能体。打开某一行即可为本会话覆盖模型、思考强度、密钥、提供商密钥或沙盒，并一键恢复为自动。"
         },
         "chat_front": {
-          "name": "Spaces-Router",
-          "description": "开启 Slack 风格空间后，你在话题中对话的智能体是一个路由器：快速的工作它自己完成（一个回答、一段短文、查看话题文件），较长的工作交给空间的智能体。它像人一样用简短消息回复。智能体把完整结果保存为话题中的文件，路由器链接该文件，而不是重新输入。消息下方的“查看工作”会打开背后的工作。需要在 kortix.yaml 中开启 My Kortix。"
+          "name": "Channels-Router",
+          "description": "开启 Slack 风格频道后，你在话题中对话的智能体是一个路由器：快速的工作它自己完成（一个回答、一段短文、查看话题文件），较长的工作交给频道的智能体。它像人一样用简短消息回复。智能体把完整结果保存为话题中的文件，路由器链接该文件，而不是重新输入。消息下方的“查看工作”会打开背后的工作。需要在 kortix.yaml 中开启 My Kortix。"
         },
         "spaces_proactive": {
-          "name": "Spaces-Proactive",
-          "description": "开启 Slack 风格空间后，空间可以自己留意动态：在空间详情中打开“主动”，一个智能体会阅读这里发生的事（完成的话题、未回答的问题、新加入的人），只在重要时在聊天中发言：值得分享的结果、需要你做的决定或逾期事项。它也可以开启一个话题来完成工作。可选每天 9:00 的简报。"
+          "name": "Channels-Proactive",
+          "description": "开启 Slack 风格频道后，频道可以自己留意动态：在频道详情中打开“主动”，一个智能体会阅读这里发生的事（完成的话题、未回答的问题、新加入的人），只在重要时在聊天中发言：值得分享的结果、需要你做的决定或逾期事项。它也可以开启一个话题来完成工作。可选每天 9:00 的简报。"
         },
         "program_agents": {
           "name": "程序智能体",
@@ -1377,13 +1381,13 @@
         }
       },
       "channelsSwitch": {
-        "onTitle": "为 {project} 开启 Slack 风格空间？",
-        "onBody": "此工作区中的所有人都会看到Slack 风格空间，而不是会话列表。所有现有会话都会移到 #general。你可以随时关闭；不会删除任何内容。",
-        "drive": "同时开启云盘，让空间拥有文件。",
+        "onTitle": "为 {project} 开启 Slack 风格频道？",
+        "onBody": "此工作区中的所有人都会看到Slack 风格频道，而不是会话列表。所有现有会话都会移到 #general。你可以随时关闭；不会删除任何内容。",
+        "drive": "同时开启云盘，让频道拥有文件。",
         "turnOn": "开启",
         "cancel": "取消",
-        "offTitle": "关闭 Slack 风格空间？",
-        "offBody": "空间、记忆、文件和链接都会保留。所有人都会重新看到会话列表。",
+        "offTitle": "关闭 Slack 风格频道？",
+        "offBody": "频道、记忆、文件和链接都会保留。所有人都会重新看到会话列表。",
         "turnOff": "关闭"
       },
       "wip": "Work in progress",
@@ -1937,16 +1941,17 @@
     "searchArtifacts": "搜索工件",
     "appsNoMatches": "无匹配项",
     "spaces": {
-      "channels": "空间",
-      "addChannel": "新建空间",
-      "loadError": "无法加载空间。",
+      "channels": "频道",
+      "addChannel": "新建频道",
+      "loadError": "无法加载频道。",
       "newAgent": "新建智能体",
       "review": "审核",
       "personal": "你的空间",
       "personalNamed": "{name} 的空间",
       "private": "私密",
       "noMessages": "还没有消息",
-      "more": "更多"
+      "more": "更多",
+      "title": "频道"
     },
     "calendar": "日历",
     "running": "运行中",
@@ -1956,7 +1961,15 @@
     "runningFailed": "无法读取正在运行的内容。",
     "runningRetry": "重试",
     "runningIn": "在 {title} 中",
-    "runningFirst": "显示前 {count} 个。"
+    "runningFirst": "显示前 {count} 个。",
+    "agents": {
+      "title": "智能体",
+      "paused": "已暂停",
+      "off": "已关闭",
+      "noMessages": "暂无消息",
+      "newAgent": "新建智能体",
+      "newAgentPrompt": "我想要一个新的智能体。先问我它应该负责什么，以及我们如何判断它已完成。然后提出方案，在我同意后，把它作为拥有工作区所有应用（connectors: all）的智能体添加到 kortix.yaml。"
+    }
   },
   "dashboard": {
     "title": "仪表板",
@@ -2249,8 +2262,6 @@
     "turn": {
       "autoRetried": "Kortix 在此失败前已自动重试该模型 {count, plural, other {# 次}}。",
       "typing": "{name} 正在输入…",
-      "showWork": "查看过程",
-      "hideWork": "隐藏过程",
       "starting": "启动中…",
       "workingFor": "处理中 · {time}",
       "agentWorking": "正在处理",
@@ -2274,6 +2285,30 @@
       "finishedCount": "已完成 {count} 个",
       "running": "进行中",
       "resizePane": "调整窗格大小"
+    },
+    "changeRequest": {
+      "merge": "合并",
+      "merging": "正在合并…",
+      "moreActions": "更多操作",
+      "close": "关闭变更请求",
+      "openInReview": "在审阅中打开",
+      "resolveConflict": "解决冲突",
+      "open": "待处理",
+      "merged": "已合并",
+      "closed": "已关闭",
+      "conflicts": "{count, plural, other {# 个冲突}}",
+      "mergedToast": "变更请求 #{number} 已合并",
+      "closedToast": "变更请求 #{number} 已关闭",
+      "mergeFailed": "无法合并变更请求。",
+      "closeFailed": "无法关闭变更请求。",
+      "files": "{count, plural, other {# 个文件}}",
+      "into": "合并到 {branch}",
+      "number": "变更请求 #{number}",
+      "openedAgo": "创建于{time}",
+      "mergeInto": "合并到 {branch}",
+      "readyToMerge": "可以合并",
+      "mergedInto": "已合并到 {branch}",
+      "closedNote": "未合并即关闭"
     }
   },
   "agents": {
@@ -21650,7 +21685,7 @@
     "copyFailed": "无法复制到剪贴板",
     "threads": "话题",
     "recentThreads": "最近的话题",
-    "searchChannels": "搜索空间、话题、命令..."
+    "searchChannels": "搜索频道、话题、命令..."
   },
   "personalWelcome": {
     "dismiss": "关闭",
@@ -21871,9 +21906,9 @@
     "perDay": "每天",
     "noLimit": "不限",
     "postTo": "发布到",
-    "postToHint": "每次运行都会在那里开始一个新话题。未选择空间时，运行会进入 #{channel}。",
-    "postToNone": "无空间",
-    "postToUnavailable": "不可用的空间",
+    "postToHint": "每次运行都会在那里开始一个新话题。未选择频道时，运行会进入 #{channel}。",
+    "postToNone": "无频道",
+    "postToUnavailable": "不可用的频道",
     "postToPrivate": "私有：触发器无法发布到这里",
     "appLabel": "应用",
     "appPlaceholder": "选择应用",
@@ -21974,14 +22009,14 @@
     "loadErrorBody": "请检查网络连接后重试。"
   },
   "sessionOversight": {
-    "label": "管理员可以打开每个会话和空间",
-    "description": "工作区所有者和管理员可以打开此工作区中的任何会话和空间，包括私有的。以这种方式打开的每个会话都会记录在审计日志中。",
-    "ownerOnlyDescription": "工作区所有者和管理员可以打开此工作区中的任何会话和空间，包括私有的。只有工作区所有者可以更改此设置。",
+    "label": "管理员可以打开每个会话和频道",
+    "description": "工作区所有者和管理员可以打开此工作区中的任何会话和频道，包括私有的。以这种方式打开的每个会话都会记录在审计日志中。",
+    "ownerOnlyDescription": "工作区所有者和管理员可以打开此工作区中的任何会话和频道，包括私有的。只有工作区所有者可以更改此设置。",
     "enableTitle": "允许管理员打开所有会话？",
-    "enableDescription": "工作区所有者和管理员将能够打开此工作区中的每个会话和空间，包括成员设为私有的。成员会在共享对话框中看到提示。以这种方式打开的每个会话都会记录在审计日志中。",
+    "enableDescription": "工作区所有者和管理员将能够打开此工作区中的每个会话和频道，包括成员设为私有的。成员会在共享对话框中看到提示。以这种方式打开的每个会话都会记录在审计日志中。",
     "enableConfirm": "开启",
     "disableTitle": "不再允许管理员打开所有会话？",
-    "disableDescription": "私有会话和空间将恢复为仅其所有者和被共享者可见。管理员只保留对与其共享内容的访问权限。",
+    "disableDescription": "私有会话和频道将恢复为仅其所有者和被共享者可见。管理员只保留对与其共享内容的访问权限。",
     "disableConfirm": "关闭",
     "enabledToast": "管理员现在可以打开所有会话",
     "disabledToast": "私密会话已恢复为仅所有者可见",
@@ -24873,7 +24908,7 @@
       "off": "Off",
       "on": "On",
       "projectWide": "工作区范围",
-      "spaceValue": "Space: {space}",
+      "spaceValue": "频道：{space}",
       "startPrimary": "People start it",
       "startSubagent": "Agents call it",
       "startBoth": "成员和智能体均可启动",
@@ -24903,8 +24938,8 @@
       "accessKindConnectors": "Connectors",
       "accessKindSecrets": "Secrets",
       "accessKindActions": "Permissions",
-      "newSpace": "New space…",
-      "newSpacePlaceholder": "space-name",
+      "newSpace": "新建频道…",
+      "newSpacePlaceholder": "channel-name",
       "managersOnly": "Managers only",
       "projectModelsLink": "工作区的模型、提供商和路由在<link>工作区管理</link>中。",
       "reviewLead": "智能体需要你处理的事项：决策、审批和已完成的工作。",
@@ -24949,7 +24984,7 @@
       "showInPickersHelp": "成员启动会话时可以选择它。",
       "whoStarts": "谁可以启动",
       "modeDefault": "工作区默认",
-      "space": "Space",
+      "space": "频道",
       "model": "Model",
       "tools": "Tools",
       "workspace": "Workspace",
@@ -25066,7 +25101,7 @@
       "models": "模型",
       "tabCapabilities": "能力",
       "summaryExcept": "{all} except {list}",
-      "spaceHelp": "此智能体工作的空间：使用 engineering 或 sales 等标识符。留空表示整个工作区。",
+      "spaceHelp": "此智能体工作的频道：使用 engineering 或 sales 等标识符。留空表示整个工作区。",
       "spacePlaceholder": "例如 engineering"
     },
     "myKortix": {
@@ -25092,8 +25127,8 @@
           "help": "启动一个目标协调会话，负责该目标直到验证者确认，并每天检查一次。"
         },
         "spaces": {
-          "label": "构建空间",
-          "help": "通过变更请求在 kortix.yaml 中添加并排列空间的区块。"
+          "label": "构建频道",
+          "help": "通过变更请求在 kortix.yaml 中添加并排列频道的区块。"
         }
       },
       "access": {
@@ -25359,7 +25394,7 @@
     "embedConvert": "转换为链接",
     "embedCopy": "复制链接",
     "embedDelete": "删除",
-    "moveTo": "移至空间",
+    "moveTo": "移至频道",
     "projectWide": "工作区范围",
     "moved": "产物已移动",
     "moveFailed": "无法移动产物",
@@ -25697,41 +25732,41 @@
       }
     },
     "create": {
-      "title": "创建空间",
+      "title": "创建频道",
       "description": "空间用于整理一个工作领域，例如市场、招聘或运营。成员和智能体在它的话题中协作。",
       "nameLabel": "名称",
       "namePlaceholder": "市场",
-      "slugPlaceholder": "space-name",
+      "slugPlaceholder": "channel-name",
       "descriptionLabel": "描述（可选）",
-      "descriptionPlaceholder": "这个空间的用途",
-      "submit": "创建空间",
-      "created": "空间已创建",
+      "descriptionPlaceholder": "这个频道的用途",
+      "submit": "创建频道",
+      "created": "频道已创建",
       "nameRequired": "请添加名称。",
       "invalidName": "名称中至少要有一个字母或数字。",
       "slugTaken": "<link>#{slug}</link> 已存在。",
-      "failed": "无法创建空间。请重试。",
-      "renameTitle": "重命名空间",
-      "renameDescription": "空间链接会随名称一起改变。",
+      "failed": "无法创建频道。请重试。",
+      "renameTitle": "重命名频道",
+      "renameDescription": "频道链接会随名称一起改变。",
       "save": "保存",
-      "renamed": "空间已重命名",
-      "renameFailed": "无法重命名空间。请重试。",
-      "descriptionPrivate": "只有你添加的人可以查看和使用该空间。",
+      "renamed": "频道已重命名",
+      "renameFailed": "无法重命名频道。请重试。",
+      "descriptionPrivate": "只有你添加的人可以查看和使用该频道。",
       "privateLabel": "私密",
       "privateHint": "只有受邀成员可以看到它。",
-      "privateUnavailable": "此工作区尚未开放私密空间。",
-      "privateLimits": "私密会对其他人隐藏该空间。代码更改（git 分支）和代理自身的工具不是私密的。",
+      "privateUnavailable": "此工作区尚未开放私密频道。",
+      "privateLimits": "私密会对其他人隐藏该频道。代码更改（git 分支）和代理自身的工具不是私密的。",
       "name": "名称",
-      "taken": "空间 #{slug} 已存在。",
+      "taken": "频道 #{slug} 已存在。",
       "about": "描述",
-      "aboutPlaceholder": "此空间的用途",
+      "aboutPlaceholder": "此频道的用途",
       "template": "初始标签页",
-      "error": "无法创建空间"
+      "error": "无法创建频道"
     },
     "view": {
       "welcomeTitle": "欢迎来到 #{name}",
       "welcomeEmpty": "空间用于整理一个工作领域。成员和智能体在这里按话题协作：每条消息都会开启一个话题。",
       "welcomeStart": "这里是 #{name} 的开始。",
-      "dmIntro": "只有你和 {agent} 能看到这个空间。",
+      "dmIntro": "只有你和 {agent} 能看到这个聊天。",
       "today": "今天",
       "yesterday": "昨天",
       "openThread": "打开话题",
@@ -25745,24 +25780,24 @@
       "messageAgent": "发消息给 {agent}",
       "threadsEmptyTitle": "还没有话题",
       "threadsEmpty": "你开始的话题会显示在这里。",
-      "loadError": "无法加载此空间。",
+      "loadError": "无法加载此频道。",
       "threadsLoadError": "无法加载话题。",
       "retry": "重试",
-      "notFound": "此空间不存在。",
-      "notFoundHint": "链接可能有误，或者有人重命名了该空间。",
+      "notFound": "此频道不存在。",
+      "notFoundHint": "链接可能有误，或者有人重命名了该频道。",
       "openDefault": "打开 #{name}",
       "archivedTitle": "#{name} 已归档。",
       "archivedHint": "取消归档后，可以再次在这里阅读和开始话题。",
       "archivedLocked": "只有频道创建者或工作区管理员可以取消归档。",
-      "unarchive": "取消归档空间",
-      "unarchived": "空间已取消归档",
-      "unarchiveFailed": "无法取消归档空间。请重试。",
+      "unarchive": "取消归档频道",
+      "unarchived": "频道已取消归档",
+      "unarchiveFailed": "无法取消归档频道。请重试。",
       "dmFailed": "无法打开此对话。",
-      "archive": "归档空间",
+      "archive": "归档频道",
       "archiveTitle": "归档 #{name}？",
       "archiveDescription": "该空间会从所有成员的侧边栏中消失。它的话题会保留，空间创建者或工作区管理员可以取消归档。",
-      "archived": "空间已归档",
-      "archiveFailed": "无法归档空间。请重试。",
+      "archived": "频道已归档",
+      "archiveFailed": "无法归档频道。请重试。",
       "threadTitle": "话题",
       "closeThread": "关闭话题",
       "sendFailed": "无法开始话题。请重试。",
@@ -25827,8 +25862,8 @@
         "titlePlaceholder": "它是什么",
         "invalidUrl": "请输入有效的链接，例如 example.com。",
         "addFailed": "无法添加链接，请重试。",
-        "limit": "此空间已固定 200 个链接。请先取消固定一个。",
-        "addLimit": "此空间已添加 200 个链接。请先移除一个。",
+        "limit": "此频道已固定 200 个链接。请先取消固定一个。",
+        "addLimit": "此频道已添加 200 个链接。请先移除一个。",
         "added": "添加时间",
         "remove": "移除链接",
         "removeTitle": "移除此链接？",
@@ -25848,7 +25883,7 @@
         "all": "全部",
         "sharedBy": "分享者",
         "earlier": "更早",
-        "pinHint": "固定它。空间中的每个智能体都会读取已固定的链接。",
+        "pinHint": "固定它。频道中的每个智能体都会读取已固定的链接。",
         "unpinHint": "取消固定。智能体将不再读取它。",
         "copyLink": "复制链接",
         "linkCopied": "已复制链接",
@@ -25904,9 +25939,9 @@
         "rememberHint": "每个智能体都会读的笔记"
       },
       "allAgents": "所有智能体",
-      "join": "加入空间",
+      "join": "加入频道",
       "joined": "你已加入 #{name}。",
-      "joinFailed": "无法加入空间，请重试。",
+      "joinFailed": "无法加入频道，请重试。",
       "openFullSession": "Open full session",
       "tabEdit": {
         "kind": {
@@ -25917,10 +25952,10 @@
           "link": "Link"
         },
         "add": "Add tab",
-        "full": "A space holds at most {max} tabs. Remove one first.",
+        "full": "一个频道最多可容纳 {max} 个标签页。请先移除一个。",
         "noArtifacts": "No artifacts yet",
         "noApps": "此工作区中没有 Apps",
-        "spaceFiles": "This space’s files",
+        "spaceFiles": "此频道的文件",
         "otherFolder": "Another folder…",
         "fileItem": "文件…",
         "linkItem": "Link…",
@@ -25956,17 +25991,51 @@
           "description": "它已被删除或重命名，或未与你共享。"
         }
       },
-      "spaceDetails": "{name} 详情"
+      "spaceDetails": "{name} 详情",
+      "moreActions": "更多操作",
+      "copyMessage": "复制消息",
+      "copyMarkdown": "复制为 Markdown",
+      "deleteMessage": "删除消息",
+      "messageCopied": "消息已复制",
+      "memberJoined": "已加入",
+      "findInThread": "在会话中查找",
+      "findPlaceholder": "查找",
+      "findCount": "第 {index} 个，共 {count} 个",
+      "findNone": "无匹配",
+      "findPrevious": "上一个匹配",
+      "findNext": "下一个匹配",
+      "closeFind": "关闭查找",
+      "openInNewWindow": "在新窗口中打开",
+      "copyThreadText": "复制为纯文本",
+      "copyJson": "复制为 JSON",
+      "threadCopied": "已复制",
+      "jump": {
+        "label": "{day}，跳转到日期",
+        "title": "跳转到",
+        "today": "今天",
+        "yesterday": "昨天",
+        "week": "一周前",
+        "month": "一个月前",
+        "first": "第一条消息",
+        "pick": "选择日期…"
+      },
+      "activity": {
+        "joined": "<b>{name}</b> 已加入",
+        "added": "<b>{actor}</b> 添加了 <b>{name}</b>",
+        "addedUnknown": "<b>{name}</b> 已被添加",
+        "removed": "<b>{actor}</b> 移除了 <b>{name}</b>",
+        "removedUnknown": "<b>{name}</b> 已被移除"
+      }
     },
     "details": {
       "about": "关于",
       "members": "成员",
-      "name": "空间名称",
+      "name": "频道名称",
       "description": "描述",
       "noDescription": "添加描述",
       "created": "创建于",
       "editField": "编辑{field}",
-      "archiveTitle": "归档此空间",
+      "archiveTitle": "归档此频道",
       "archiveHint": "它会从所有成员的侧边栏中移除。其中的话题会保留。",
       "archive": "归档",
       "find": "查找成员或智能体",
@@ -25990,9 +26059,9 @@
       "peopleFailed": "无法更新成员，请重试。",
       "personMenu": "{person} 选项",
       "removePerson": "从 #{name} 移除",
-      "leave": "退出空间",
+      "leave": "退出频道",
       "left": "你已退出 #{name}。",
-      "leaveTitle": "退出此空间",
+      "leaveTitle": "退出此频道",
       "leaveHint": "退出后仍可阅读，并可随时重新加入。",
       "visibilityPrivate": "仅限成员",
       "privateNote": "只有成员可以看到 #{name}。",
@@ -26006,7 +26075,7 @@
       "leaveHintPrivate": "你将失去对其线程、文件和记忆的访问权限，包括你自己的线程。需要成员重新添加你。",
       "leavePrivateTitle": "退出 #{name}？",
       "addMembers": "添加成员",
-      "privateLimits": "私密会对其他人隐藏该空间。代码更改（git 分支）和代理自身的工具不是私密的。",
+      "privateLimits": "私密会对其他人隐藏该频道。代码更改（git 分支）和代理自身的工具不是私密的。",
       "agentAdded": "已将 {agent} 添加到 #{name}。"
     },
     "folder": {
@@ -26020,18 +26089,18 @@
       }
     },
     "onboarding": {
-      "reenabled": "空间关闭期间开始的会话都在这里。",
+      "reenabled": "频道关闭期间开始的会话都在这里。",
       "intro": {
-        "title": "欢迎使用空间",
-        "channels": "空间按团队组织工作。",
+        "title": "欢迎使用频道",
+        "channels": "频道按团队组织工作。",
         "threads": "每条新消息都会开始一个话题。",
-        "memory": "智能体会记住每个空间达成的共识。",
+        "memory": "智能体会记住每个频道达成的共识。",
         "gotIt": "知道了",
-        "tabs": "每个空间都有自己的标签页。你可以添加、重命名和重新排序，也可以让 Kortix 来做。"
+        "tabs": "每个频道都有自己的标签页。你可以添加、重命名和重新排序，也可以让 Kortix 来做。"
       },
       "getStarted": {
         "dismiss": "关闭",
-        "channel": "为团队创建一个空间",
+        "channel": "为团队创建一个频道",
         "done": "已完成"
       }
     },
@@ -26060,9 +26129,9 @@
       "noMatches": "没有与“{query}”匹配的项。"
     },
     "privateNotIn": {
-      "row": "你未加入的私有空间",
-      "title": "你未加入的私有空间",
-      "description": "你可以重命名、归档和添加成员。只有成员能阅读空间内容，因此你无法将自己加入。",
+      "row": "你未加入的私有频道",
+      "title": "你未加入的私有频道",
+      "description": "你可以重命名、归档和添加成员。只有成员能阅读频道内容，因此你无法将自己加入。",
       "meta": "{count, plural, =0 {没有成员} other {# 名成员}} · 由 {name} 创建",
       "metaNoCreator": "{count, plural, =0 {没有成员} other {# 名成员}}",
       "archived": "已归档",
@@ -26085,13 +26154,13 @@
     "templates": {
       "board": {
         "brief": "概述",
-        "text": "此空间的用途以及如何提供帮助。",
+        "text": "此频道的用途以及如何提供帮助。",
         "label": "看板和目标",
         "description": "用于简介和链接的看板，然后是目标。"
       },
       "standard": {
         "label": "目标、应用和产物",
-        "description": "关联到此空间的内容。"
+        "description": "关联到此频道的内容。"
       }
     },
     "tabs": {
@@ -26106,7 +26175,7 @@
     },
     "addTab": "添加标签页",
     "gone": {
-      "title": "此空间已不存在",
+      "title": "此频道已不存在",
       "hint": "有人将其从 kortix.yaml 中移除了，或者链接有误。",
       "back": "返回工作区"
     },
@@ -26114,9 +26183,9 @@
     "loadError": "无法加载此标签页",
     "retry": "重试",
     "empty": {
-      "goals": "关联到此空间的目标会显示在这里",
-      "apps": "关联到此空间的应用会显示在这里",
-      "artifacts": "关联到此空间的产物会显示在这里",
+      "goals": "关联到此频道的目标会显示在这里",
+      "apps": "关联到此频道的应用会显示在这里",
+      "artifacts": "关联到此频道的产物会显示在这里",
       "folder": "此文件夹为空",
       "board": "此看板上的区块会显示在这里",
       "boardHint": "让 My Kortix 添加区块：笔记、应用、文件或嵌入页面。"
@@ -26145,7 +26214,7 @@
     },
     "add": {
       "linkTitle": "添加链接",
-      "linkHint": "此空间的成员经常打开的页面。",
+      "linkHint": "此频道的成员经常打开的页面。",
       "folderTitle": "添加文件夹",
       "folderHint": "按路径指定的工作区文件夹。",
       "url": "URL",
@@ -26166,25 +26235,25 @@
       "remove": "移除 {name}"
     },
     "nav": {
-      "title": "空间",
-      "new": "新建空间",
+      "title": "频道",
+      "new": "新建频道",
       "unread": "{count, plural, other {# 条未读消息}}"
     },
     "leave": "离开 {name}",
-    "agents": "此空间中的智能体",
+    "agents": "此频道中的智能体",
     "openAgent": "打开 {name}",
     "needsYou": "需要你处理",
     "newSession": "新会议",
     "askMyKortix": "询问 My Kortix",
-    "askPrompt": "我想修改 {name} 空间（kortix.yaml 中的 `spaces.{slug}`）：它的标签页、标题或其中的智能体。请问我想修改什么。",
+    "askPrompt": "我想修改 {name} 频道（kortix.yaml 中的 `spaces.{slug}`）：它的标签页、标题或其中的智能体。请问我想修改什么。",
     "intro": {
       "title": "这里是 #{name} 的起点",
-      "body": "供所有在此空间工作的人使用的地方。",
+      "body": "供所有在此频道工作的人使用的地方。",
       "agents": "{count, plural, other {{names} 在这里发布更新。}}",
-      "noAgents": "添加到此空间的智能体会在这里发布更新。",
+      "noAgents": "添加到此频道的智能体会在这里发布更新。",
       "addTab": "使用 + 添加标签页，即可在此固定目标、应用、文件或看板。"
     },
-    "filter": "按空间筛选",
+    "filter": "按频道筛选",
     "all": "全部",
     "projectWide": "工作区范围",
     "panel": {
@@ -26194,7 +26263,7 @@
       "private": "私密",
       "rename": "重命名并添加描述",
       "personalDescription": "你与 My Kortix 的私密空间。只有你能看到。",
-      "privateDescription": "只有其中的成员和智能体能看到这个空间。",
+      "privateDescription": "只有其中的成员和智能体能看到这个频道。",
       "noDescription": "还没有描述。",
       "agents": "智能体",
       "addAgent": "添加智能体",
@@ -26203,20 +26272,18 @@
       "people": "成员",
       "addPeople": "添加成员",
       "you": "你",
-      "tabs": "标签页",
-      "addTab": "添加标签页",
       "routines": "例行任务",
       "addRoutine": "添加例行任务",
-      "routinesPrivate": "私密空间暂不支持例行任务。",
+      "routinesPrivate": "私密频道暂不支持例行任务。",
       "proactive": "主动",
-      "proactiveWatch": "留意这个空间",
+      "proactiveWatch": "留意这个频道",
       "proactiveWatchHint": "智能体会阅读这里发生的事，只在重要时发言。",
       "proactiveBrief": "每日简报",
       "proactiveBriefHint": "有新动态的日子在 9:00 发送简短总结。",
       "proactiveFailed": "设置未保存，请重试。",
       "allSettings": "所有设置",
-      "askHint": "你也可以在聊天中直接说：“在这里添加一个智能体”、“把发布文档固定为标签页”。",
-      "noAgentsToAdd": "工作区的所有智能体都已在此空间中。"
+      "noAgentsToAdd": "工作区的所有智能体都已在此频道中。",
+      "members": "成员"
     },
     "profile": {
       "viewProfile": "查看 {name} 的资料",
@@ -26225,7 +26292,7 @@
       "openProfile": "打开资料",
       "you": "(你)",
       "message": "发消息",
-      "messageFailed": "无法打开私密空间。请重试。",
+      "messageFailed": "无法打开私密频道。请重试。",
       "dmSpaceName": "{a} 和 {b}",
       "heading": "资料",
       "close": "关闭资料",
@@ -26237,14 +26304,21 @@
       "projectDefault": "工作区默认",
       "projectDefaultYes": "回复未指定智能体的新话题",
       "email": "邮箱",
-      "sharedSpaces": "共同的空间",
-      "yourSpaces": "你的空间",
+      "sharedSpaces": "共同的频道",
+      "yourSpaces": "你的频道",
       "addTo": "添加到 {space}",
       "addedTo": "已将 {agent} 添加到 {space}",
       "addFailed": "无法添加智能体。请重试。",
-      "spacesIn": "所在空间",
-      "spacesInNone": "尚未加入任何空间",
-      "default": "默认"
+      "spacesIn": "所在频道",
+      "spacesInNone": "尚未加入任何频道",
+      "default": "默认",
+      "paused": "已暂停",
+      "off": "已关闭",
+      "copyLink": "复制链接",
+      "linkCopied": "链接已复制",
+      "roleOwner": "工作区所有者",
+      "roleAdmin": "工作区管理员",
+      "roleMember": "工作区成员"
     },
     "mentions": {
       "people": "成员",
@@ -26255,8 +26329,39 @@
       "askAdd": "将 {agent} 添加到 {space}？",
       "askAddConfirm": "添加",
       "askNotNow": "暂不",
-      "askAdmin": "{agent} 不在 {space} 中。请让空间管理员添加。",
+      "askAdmin": "{agent} 不在 {space} 中。请让频道管理员添加。",
       "dismiss": "关闭"
+    },
+    "agentChat": {
+      "pausedBar": "{name} 已暂停。在你恢复之前，计划和事件不会启动它。",
+      "resume": "恢复",
+      "resumeFailed": "无法恢复 {name}。",
+      "settings": {
+        "settingsButton": "智能体设置",
+        "status": "状态",
+        "active": "运行中",
+        "paused": "已暂停",
+        "off": "已关闭",
+        "pauseFailed": "无法更改智能体的状态。",
+        "description": "描述",
+        "save": "保存",
+        "saveFailed": "无法保存描述。",
+        "model": "模型",
+        "allSettings": "智能体的全部设置",
+        "general": "常规",
+        "appsTab": "应用",
+        "routines": "例程",
+        "workspaceDefault": "工作区默认",
+        "modelDefault": "工作区默认",
+        "modelDefaultNamed": "工作区默认（{model}）",
+        "cancel": "取消",
+        "searchApps": "搜索应用",
+        "noApps": "此工作区还没有连接器。",
+        "noAppsMatch": "没有与“{query}”匹配的应用。",
+        "appsUnavailable": "此智能体的应用在其智能体页面中设置。",
+        "appsFailed": "无法更改智能体的应用。",
+        "role": "角色"
+      }
     }
   },
   "imageGen": {

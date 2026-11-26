@@ -1031,6 +1031,7 @@ test('FEATURE_FLAG_KEYS lists every flag key exactly once', () => {
     'reminders',
     'us_region',
     'event_triggers',
+    'channels',
     'chat',
     'shared_drives',
     'goals',

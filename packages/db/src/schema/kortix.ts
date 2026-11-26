@@ -1662,6 +1662,36 @@ export const projectSpaceMembers = kortixSchema.table(
   ],
 );
 
+/**
+ * A channel's agent changes, for the lines its timeline shows ("Kortix was
+ * added by <person>"). People's joins need no row here: `project_space_members`
+ * keeps `added_by` and `added_at`. Written by the agents PATCH
+ * (`projects/lib/project-space-activity.ts`); read by
+ * `GET /spaces/:spaceId/activity`. Best effort: a failed write is logged,
+ * never a failed PATCH.
+ */
+export const projectSpaceActivity = kortixSchema.table(
+  'project_space_activity',
+  {
+    activityId: uuid('activity_id').primaryKey().defaultRandom(),
+    spaceId: uuid('space_id')
+      .notNull()
+      .references(() => projectSpaces.spaceId, { onDelete: 'cascade' }),
+    /** `agent_added` or `agent_removed`. */
+    kind: text('kind').notNull(),
+    /** The agent's name in kortix.yaml. */
+    agentName: text('agent_name').notNull(),
+    /** Who changed the agent list. Null: not known. */
+    actorUserId: uuid('actor_user_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    check('project_space_activity_kind_check', sql`${table.kind} in ('agent_added', 'agent_removed')`),
+    // The timeline reads one channel's newest lines.
+    index('idx_project_space_activity_space').on(table.spaceId, table.createdAt.desc()),
+  ],
+);
+
 // ─── Space watcher (flag `spaces_proactive`) ────────────────────────────────
 // A space's proactive watcher: one hidden session per space that reads what
 // happened in the space (`project_space_events`) and decides to stay quiet,

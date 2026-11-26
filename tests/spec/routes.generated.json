@@ -1,7 +1,7 @@
 {
   "generatedAt": "static",
-  "count": 1834,
-  "aliases": 716,
+  "count": 1840,
+  "aliases": 719,
   "routes": [
     {
       "method": "GET",
@@ -2497,6 +2497,16 @@
     },
     {
       "method": "GET",
+      "path": "/v1/projects/:workspaceId/agent-directory",
+      "aliasOf": "/v1/workspaces/:workspaceId/agent-directory"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/agent-directory/:name/pause",
+      "aliasOf": "/v1/workspaces/:workspaceId/agent-directory/:name/pause"
+    },
+    {
+      "method": "GET",
       "path": "/v1/projects/:workspaceId/agent-identities",
       "aliasOf": "/v1/workspaces/:workspaceId/agent-identities"
     },
@@ -4810,6 +4820,11 @@
     },
     {
       "method": "GET",
+      "path": "/v1/projects/:workspaceId/spaces/:spaceId/activity",
+      "aliasOf": "/v1/workspaces/:workspaceId/spaces/:spaceId/activity"
+    },
+    {
+      "method": "GET",
       "path": "/v1/projects/:workspaceId/spaces/:spaceId/apps",
       "aliasOf": "/v1/workspaces/:workspaceId/spaces/:spaceId/apps"
     },
@@ -5518,6 +5533,14 @@
     {
       "method": "POST",
       "path": "/v1/workspaces/:workspaceId/access/pending-invites/:inviteId/resend"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/agent-directory"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/agent-directory/:name/pause"
     },
     {
       "method": "GET",
@@ -7814,6 +7837,10 @@
     {
       "method": "PATCH",
       "path": "/v1/workspaces/:workspaceId/spaces/:spaceId"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/spaces/:spaceId/activity"
     },
     {
       "method": "GET",

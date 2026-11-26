@@ -41,6 +41,7 @@ import type { PiConfigReleases } from './config-release'
 import type { ExtensionStatus, InlineExtension, PiSession, RunnerRef } from './extensions/host'
 import { CODEMODE_TOOL, type CodemodeMode } from './codemode'
 import { SUBAGENT_SPEC_REQUIRED, TASK_STOP_TOOL, type KortixHost, type SpawnSessionInput, type SpawnSessionResult } from './extensions/subagents'
+import { AGENT_CHAT_NOTE } from './agent-chat'
 import { FRONT_AGENTS_TTL_MS, FRONT_PROMPT, FRONT_TOOLS, FRONT_WORKER_NOTE, fetchFrontAgents, frontAgentsSection, frontThreadFilesFrom, type FrontAgent, type FrontThreadFiles } from './front'
 import { WATCHER_PROMPT } from './watcher'
 import { frontSpaceAgentsFrom, frontSpaceRoster, frontSpaceRosterSection } from './front-space'
@@ -2871,6 +2872,7 @@ export class PiRuntime {
     // People write to the root; a subagent's task comes from its parent agent.
     if (!child) parts.push(PROMPT_AUTHOR_SECTION)
     if (!child && this.subagentContext.frontThread) parts.push(FRONT_WORKER_NOTE)
+    if (!child && this.subagentContext.agentChat) parts.push(AGENT_CHAT_NOTE)
     return parts.join('\n\n')
   }
 

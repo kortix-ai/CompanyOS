@@ -319,6 +319,7 @@ describe('useFeatureFlags', () => {
     'reminders',
     'us_region',
     'event_triggers',
+    'channels',
     'chat',
     'shared_drives',
     'goals',

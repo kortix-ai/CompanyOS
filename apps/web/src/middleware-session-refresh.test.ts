@@ -112,9 +112,11 @@ describe('middleware leaves session refresh to the browser', () => {
   // cookie at all — and must still tell /auth the session ended.
   test('a navigation after a dropped self-heal response still says the session ended', async () => {
     const { request } = sessionRequest(3600);
+    // What auth-js 2.x returns for GoTrue's `session_not_found`: it rethrows it
+    // as AuthSessionMissingError (400, no code) and clears the cookie itself.
     getUser.mockResolvedValue({
       data: { user: null },
-      error: Object.assign(new Error('Session not found'), { code: 'session_not_found', status: 403 }),
+      error: Object.assign(new Error('Auth session missing!'), { name: 'AuthSessionMissingError', status: 400 }),
     });
     const prefetch = await middleware(request);
 

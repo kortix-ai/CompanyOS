@@ -29,10 +29,9 @@ export function isSessionExpired(session: SessionExpiryLike | null | undefined):
 export const SESSION_ENDED_REASON = 'session_ended';
 
 /**
- * Set when the middleware clears a dead session. The response that cleared it
- * can be a prefetch the router drops, so the next navigation arrives with no
- * session cookie; this marker lets that bounce still say the session ended.
- * It only has to outlive the idle time before that next click.
+ * Set by the middleware bounce of a request that carried a session. That
+ * response can be a prefetch the router drops while auth-js's Set-Cookie still
+ * clears the session, so the next navigation arrives with no session cookie;
+ * this marker lets that bounce still say the session ended.
  */
 export const SESSION_ENDED_COOKIE = 'kortix_session_ended';
-export const SESSION_ENDED_MAX_AGE = 60 * 60;

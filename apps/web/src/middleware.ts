@@ -27,7 +27,6 @@ import {
 } from '@/lib/supabase/middleware-identity';
 import {
   SESSION_ENDED_COOKIE,
-  SESSION_ENDED_MAX_AGE,
   SESSION_ENDED_REASON,
 } from '@/lib/auth/session-expiry';
 import { readUnverifiedSession } from '@/lib/supabase/session-cookie';
@@ -888,14 +887,6 @@ export async function middleware(request: NextRequest) {
         });
       }
     }
-    // This response can be a prefetch the router drops (KRTX-1978).
-    supabaseResponse.cookies.set(SESSION_ENDED_COOKIE, '1', {
-      httpOnly: true,
-      maxAge: SESSION_ENDED_MAX_AGE,
-      path: '/',
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
-    });
     user = null;
   }
 
@@ -980,6 +971,18 @@ export async function middleware(request: NextRequest) {
       // auth page's own client-side session check has to rediscover the same
       // invalidity from scratch before it can show a usable form.
       const bounceResponse = redirectPreservingSession(url);
+      // This bounce can answer a prefetch the router drops, while its
+      // Set-Cookie still clears the session (KRTX-1978): remember that it
+      // ended until the next click, which arrives with no session cookie.
+      if (cookieSession) {
+        bounceResponse.cookies.set(SESSION_ENDED_COOKIE, '1', {
+          httpOnly: true,
+          maxAge: 60 * 60,
+          path: '/',
+          sameSite: 'lax',
+          secure: process.env.NODE_ENV === 'production',
+        });
+      }
       // Attach WHO was bounced. `redirect` alone says where, and the auth flows
       // downstream cannot tell an expired session returning to its own project
       // from a different account picking up the previous one's path.

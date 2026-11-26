@@ -37,7 +37,8 @@ let second: SeededProject;
 let unreachable: SeededProject;
 let sent: EmailMessage[] = [];
 // Addresses whose delivery fails with this provider status ('*': every address), the way the transport reports it: a result, not a throw.
-let failing = new Map<string, number>();
+// 'reserved': the transport itself refuses the address, without a provider call.
+let failing = new Map<string, number | 'reserved'>();
 // Every address a send was attempted to, delivered or not.
 let attempted: string[] = [];
 // A send to `held.to` waits until the test settles `held.status` (0: delivered, else the provider status).
@@ -75,6 +76,7 @@ beforeAll(async () => {
       hold.reached();
     }
     const status = (await hold?.status) || failing.get(message.to[0]!) || failing.get('*');
+    if (status === 'reserved') return { ok: false, skipped: true, reason: 'reserved_recipient' };
     if (status) return { ok: false, provider: 'mailpit', status, error: 'rejected' };
     sent.push(message);
     return { ok: true, provider: 'mailpit', status: 200 };
@@ -347,13 +349,13 @@ describe('repeated sweeps of one notice', () => {
     expect(sent).toEqual([]);
   });
 
-  test('an address the provider rejects is recorded as undelivered once, not retried every hour', async () => {
+  test('an address the transport refuses is recorded as undelivered once, not retried every hour', async () => {
     const rows: Subprocessor[] = [{ ...ROWS[1]!, addedOn: '2026-11-05' }];
     const owner = await seedUser('reject-owner');
     const admin = await seedUser('reject-admin');
     const account = await seedAccount('subproc-reject', 'credits', [[owner, 'owner'], [admin, 'admin']]);
 
-    failing = new Map([[email(admin, 'reject-admin'), 422]]);
+    failing = new Map([[email(admin, 'reject-admin'), 'reserved']]);
     await runSubprocessorNoticeSweep(new Date('2026-11-05T09:00:00Z'), rows);
     expect(emailsTo(email(owner, 'reject-owner'))).toHaveLength(1);
     const [audit] = await audits(account.account_id, '2026-11-05');
@@ -363,6 +365,24 @@ describe('repeated sweeps of one notice', () => {
     await runSubprocessorNoticeSweep(new Date('2026-11-05T10:00:00Z'), rows);
     expect(attempted).toEqual([]);
     expect(await audits(account.account_id, '2026-11-05')).toHaveLength(1);
+  });
+
+  test('a provider 422 does not prove the address is bad: the account stays open and the next sweep delivers', async () => {
+    const rows: Subprocessor[] = [{ ...ROWS[1]!, addedOn: '2026-11-13' }];
+    const owner = await seedUser('invalid-owner');
+    const account = await seedAccount('subproc-invalid', 'credits', [[owner, 'owner']]);
+
+    // A payload or provider validation error (missing field, invalid parameter) answers 422 for every send.
+    failing = new Map([['*', 422]]);
+    await runSubprocessorNoticeSweep(new Date('2026-11-13T09:00:00Z'), rows);
+    expect(attempted).toContain(email(owner, 'invalid-owner'));
+    expect(await audits(account.account_id, '2026-11-13')).toEqual([]);
+
+    failing = new Map();
+    await runSubprocessorNoticeSweep(new Date('2026-11-13T10:00:00Z'), rows);
+    expect(emailsTo(email(owner, 'invalid-owner'))).toHaveLength(1);
+    const [audit] = await audits(account.account_id, '2026-11-13');
+    expect(audit!.outputSummary).toMatchObject({ recipients: 1, previously_notified: 0, undelivered: 0 });
   });
 
   test('a privacy@ report that fails is sent by a later sweep, once, with the notice period of the first email', async () => {

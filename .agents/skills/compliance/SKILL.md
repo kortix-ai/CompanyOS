@@ -57,9 +57,10 @@ runs hourly in the billing worker, on prod only (`INTERNAL_KORTIX_ENV=prod`).
 - An account that turns paid later in the window is covered by a later sweep.
   A manager who already has the notice gets no second email.
 - A delivery failure is retried by the next sweep for that recipient only.
-  The exception is a refused address (reserved, or a 422 from the provider):
-  it is not retried and is counted as `undelivered`. A provider-wide error
-  (paused sending, bad credentials, 5xx, 429) is always retried.
+  The one exception is an address the transport itself refuses (a reserved
+  address): it is not retried and is counted as `undelivered`. Every provider
+  error (any status, a 422 included, since it does not prove the address is
+  bad) is retried hourly until the notice takes effect.
 - Each covered account gets one audit event `legal.subprocessor_notice.sent`
   (`resource_id` = `addedOn`, `output_summary` = `recipients` delivered,
   `previously_notified` = managers who had it from an earlier sweep,

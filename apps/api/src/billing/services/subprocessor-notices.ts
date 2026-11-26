@@ -29,7 +29,6 @@ import {
 import { and, count, eq, inArray, isNotNull, like, lt, notInArray, sql } from 'drizzle-orm';
 import { config } from '../../config';
 import { renderEmail, renderText, S, actionButton } from '../../lib/email/template';
-import type { EmailSendResult } from '../../lib/email/types';
 import { logger } from '../../lib/logger';
 import { db } from '../../shared/db';
 import { recordAuditEvent } from '../../shared/audit';
@@ -121,16 +120,6 @@ const isHeld = async (key: string) =>
   (await db.select({ eventId: chatEventDedup.eventId }).from(chatEventDedup).where(eq(chatEventDedup.eventId, key)).limit(1)).length > 0;
 
 /**
- * A failed send a retry cannot fix: the address itself is refused (reserved,
- * or 422 from the provider). Every other failure (5xx, 429, a 400/403 from a
- * paused or misconfigured provider, no transport) is temporary.
- */
-function failedForGood(result: EmailSendResult): boolean {
-  if (result.ok) return false;
-  return result.skipped ? result.reason === 'reserved_recipient' : result.status === 422;
-}
-
-/**
  * The hourly sweep: email each open notice once per person, listing the paid
  * workspaces it covers. A later sweep emails only people who do not have the
  * notice yet, and retries a temporary delivery failure for its recipient only.
@@ -197,7 +186,10 @@ export async function runSubprocessorNoticeSweep(
         continue;
       }
       await release(claim);
-      const final = failedForGood(result);
+      // Only the transport's own refusal of a reserved address is final. A
+      // provider status (a 422 included) does not prove the address is bad, so
+      // every provider failure is retried by the next sweep.
+      const final = 'reason' in result && result.reason === 'reserved_recipient';
       if (!final) retry.add(to);
       logger.warn('[subprocessor-notices] notice failed', { claim, final, error: 'error' in result ? result.error : result.reason });
     }

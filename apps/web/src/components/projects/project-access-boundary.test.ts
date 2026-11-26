@@ -86,13 +86,17 @@ describe('gateStateForError', () => {
 
 describe('gateStateForRequestResult', () => {
   // Exhaustiveness is a compile-time guarantee, not a runtime one: the function
-  // switches over the SDK's WorkspaceAccessWaiting with no default, so a new
-  // waiting status fails `tsc` here rather than falling through to undefined.
+  // switches over RequestProjectAccessResult['status'] with no default, so a
+  // fourth SDK status fails `tsc` here rather than falling through to null.
   test('distinguishes a new request from one that was already waiting', () => {
     // The previous screen collapsed these two, so a user with a pending request
     // was told "Request sent." again on every attempt.
     expect(gateStateForRequestResult('created')).toBe('sent');
     expect(gateStateForRequestResult('pending')).toBe('alreadyRequested');
+  });
+
+  test('returns null for already_has_access so the caller re-fetches the project', () => {
+    expect(gateStateForRequestResult('already_has_access')).toBeNull();
   });
 });
 

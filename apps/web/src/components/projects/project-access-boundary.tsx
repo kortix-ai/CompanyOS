@@ -21,9 +21,9 @@ import { PROJECT_LANDING_PATH } from '@kortix/ui/internal/lib/onboarding/landing
 import { forgetLastProjectId } from '@kortix/ui/internal/lib/onboarding/last-project-cookie';
 import { useAppHome } from '@kortix/ui/internal/lib/onboarding/use-app-home';
 import { focusWithoutScroll } from '@kortix/ui/internal/lib/utils/focus-without-scroll';
-import type { WorkspaceState } from '@kortix/sdk';
+import type { RequestWorkspaceAccessResult, WorkspaceState } from '@kortix/sdk';
 import { formatWorkspaceDate } from '@kortix/ui/workspace/project-selector/project-selector-model';
-import { errorStatus, prefetchSessionOpen, prefetchWorkspaceShell, useAdminImpersonate, useRestoreWorkspace, useWorkspaceAccess, type WorkspaceAccess, type WorkspaceAccessWaiting } from '@kortix/sdk/react';
+import { errorStatus, prefetchSessionOpen, prefetchWorkspaceShell, useAdminImpersonate, useRestoreWorkspace, useWorkspaceAccess, type WorkspaceAccess } from '@kortix/sdk/react';
 import { prefetchSessionRouteReads } from '@kortix/ui/session/status/session-route-prefetch';
 import { useHomeTypingBuffer } from '@/components/projects/use-home-typing-buffer';
 
@@ -81,15 +81,18 @@ export function gateStateForError(error: unknown): AccessGateState {
 }
 
 /**
- * Maps a waiting access request to its screen. `already_has_access` never
- * waits: `useWorkspaceAccess` re-reads the project, which is readable now.
+ * Maps `requestProjectAccess`'s three-way result to the next screen.
+ * `already_has_access` returns null: the caller re-fetches instead, because the
+ * project is readable now and the right screen is the project itself.
  */
-export function gateStateForRequestResult(status: WorkspaceAccessWaiting): WaitingGateState {
+export function gateStateForRequestResult(status: RequestWorkspaceAccessResult['status']): WaitingGateState | null {
   switch (status) {
     case 'created':
       return 'sent';
     case 'pending':
       return 'alreadyRequested';
+    case 'already_has_access':
+      return null;
   }
 }
 

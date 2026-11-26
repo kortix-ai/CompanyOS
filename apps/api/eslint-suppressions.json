@@ -353,7 +353,7 @@
       "count": 1
     }
   },
-  "src/channels/install-store.ts": {
+  "src/channels/core/install-secrets.ts": {
     "kortix-api/projects-surface": {
       "count": 1
     }

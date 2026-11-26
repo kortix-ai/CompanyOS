@@ -283,12 +283,6 @@ function OAuthConsent() {
     return <AuthPendingScreen />;
   }
 
-  // Remembered consent is being submitted — nothing to decide, so no Allow
-  // screen. `remembered` flips back to false if that submit fails.
-  if (consentRequest.remembered) {
-    return <AuthPendingScreen />;
-  }
-
   const submitting = decision !== null;
 
   return (

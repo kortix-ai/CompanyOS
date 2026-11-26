@@ -76,3 +76,18 @@ describe('readWeeklyBriefs', () => {
     expect(await readWeeklyBriefs(github({ version: 1, weeks: { '2026-W42': { highlights: [{ text: 42 }, null] } } }).impl)).toEqual({});
   });
 });
+
+test('announcement-only weeks survive the real GitHub reader and bad siblings do not', async () => {
+  const announcement = {
+    title: 'Synthetic launch', text: 'Available now.',
+    cover: { url: 'https://ke4pydspzeg0nm0o.public.blob.vercel-storage.com/changelog/test.png', alt: 'Launch cover', width: 1200, height: 630 },
+    guide_url: 'https://kortix.com/docs', tags: ['v0.16.0'],
+  };
+  const briefs = await readWeeklyBriefs(github({ version: 1, weeks: {
+    '2026-W42': { announcements: [announcement, { ...announcement, cover: null }] },
+    '2026-W41': { highlights: [{ text: 'Legacy' }] },
+  } }).impl);
+  expect(briefs['2026-W42']?.announcements).toHaveLength(1);
+  expect(briefs['2026-W42']?.highlights).toEqual([]);
+  expect(briefs['2026-W41']).toEqual({ highlights: ['Legacy'], media: undefined });
+});

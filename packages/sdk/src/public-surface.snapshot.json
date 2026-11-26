@@ -2757,5 +2757,9 @@
     "toWorkspaceSearchEntry",
     "workspaceEntryMatchesQuery",
     "workspaceQueryLooksPathLike"
+  ],
+  "./iam-actions": [
+    "PROJECT_ACTIONS",
+    "WORKSPACE_ACTION_BY_LEGACY"
   ]
 }

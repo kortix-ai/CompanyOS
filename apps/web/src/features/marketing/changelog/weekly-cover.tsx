@@ -21,6 +21,20 @@ export function WeeklyCover({ media }: { media: WeeklyMedia }) {
         className="h-auto w-full rounded-lg"
         onError={() => setFailedUrl(media.cover.url)}
       />
+      {media.videoUrl && (
+        <video
+          controls
+          playsInline
+          preload="none"
+          poster={media.cover.url}
+          width={media.cover.width}
+          height={media.cover.height}
+          aria-label={media.cover.alt}
+          className="mt-3 h-auto w-full rounded-lg"
+        >
+          <source src={media.videoUrl} />
+        </video>
+      )}
       {media.demoUrl && (
         <figcaption className="mt-3 text-sm">
           <a

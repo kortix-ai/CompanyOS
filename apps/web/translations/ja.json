@@ -27617,5 +27617,22 @@
     "community": "Discord コミュニティ",
     "whatsNew": "新機能",
     "fullChangelog": "すべての変更履歴"
+  },
+  "questionPrompt": {
+    "submitted": "回答を送信しました",
+    "submitting": "回答を送信中…",
+    "removeCustom": "自由回答を削除：{answer}",
+    "custom": "自由回答",
+    "placeholder": "自分の回答を入力",
+    "submitOne": "回答を送信",
+    "add": "回答を追加",
+    "next": "次の質問",
+    "submitAll": "すべての回答を送信",
+    "clarify": "説明を求める",
+    "discuss": "回答せずに質問について相談する",
+    "send": "説明の依頼を送信",
+    "submitError": "回答を送信できませんでした。回答はここに保存されています。もう一度お試しください。",
+    "clarifyError": "説明の依頼を送信できませんでした。もう一度お試しください。",
+    "review": "回答を確認"
   }
 }

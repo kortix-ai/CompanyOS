@@ -27617,5 +27617,22 @@
     "community": "Discord-Community",
     "whatsNew": "Neuigkeiten",
     "fullChangelog": "Vollständiges Changelog"
+  },
+  "questionPrompt": {
+    "submitted": "Antworten gesendet",
+    "submitting": "Antworten werden gesendet…",
+    "removeCustom": "Eigene Antwort entfernen: {answer}",
+    "custom": "Eigene Antwort",
+    "placeholder": "Eigene Antwort eingeben",
+    "submitOne": "Antwort senden",
+    "add": "Antwort hinzufügen",
+    "next": "Nächste Frage",
+    "submitAll": "Antworten senden",
+    "clarify": "Um Klärung bitten",
+    "discuss": "Die Frage besprechen, ohne sie zu beantworten",
+    "send": "Rückfrage senden",
+    "submitError": "Antworten konnten nicht gesendet werden. Deine Antworten bleiben hier gespeichert. Versuche es erneut.",
+    "clarifyError": "Rückfrage konnte nicht gesendet werden. Versuche es erneut.",
+    "review": "Antworten prüfen"
   }
 }

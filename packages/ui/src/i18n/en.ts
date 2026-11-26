@@ -10868,6 +10868,23 @@ const catalog = {
     "remove": "Remove",
     "share": "Share",
     "notMember": "Share a session only with members of this workspace."
+  },
+  "questionPrompt": {
+    "submitted": "Answers submitted",
+    "submitting": "Submitting answers…",
+    "removeCustom": "Remove custom answer: {answer}",
+    "custom": "Custom answer",
+    "placeholder": "Type your own answer",
+    "submitOne": "Submit answer",
+    "add": "Add answer",
+    "next": "Next question",
+    "submitAll": "Submit answers",
+    "clarify": "Ask for clarification",
+    "discuss": "Discuss the question without answering it",
+    "send": "Send clarification",
+    "submitError": "Could not submit answers. Your answers are saved here. Try again.",
+    "clarifyError": "Could not send clarification. Try again.",
+    "review": "Review answers"
   }
 };
 

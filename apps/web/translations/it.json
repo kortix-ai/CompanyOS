@@ -27617,5 +27617,22 @@
     "community": "Community Discord",
     "whatsNew": "Novità",
     "fullChangelog": "Changelog completo"
+  },
+  "questionPrompt": {
+    "submitted": "Risposte inviate",
+    "submitting": "Invio delle risposte…",
+    "removeCustom": "Rimuovi risposta personalizzata: {answer}",
+    "custom": "Risposta personalizzata",
+    "placeholder": "Scrivi la tua risposta",
+    "submitOne": "Invia risposta",
+    "add": "Aggiungi risposta",
+    "next": "Domanda successiva",
+    "submitAll": "Invia risposte",
+    "clarify": "Chiedi chiarimenti",
+    "discuss": "Discuti la domanda senza rispondere",
+    "send": "Invia richiesta di chiarimento",
+    "submitError": "Impossibile inviare le risposte. Le risposte sono salvate qui. Riprova.",
+    "clarifyError": "Impossibile inviare la richiesta di chiarimento. Riprova.",
+    "review": "Rivedi le risposte"
   }
 }

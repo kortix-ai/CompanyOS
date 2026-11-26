@@ -27617,5 +27617,22 @@
     "community": "Discord zajednica",
     "whatsNew": "Šta je novo",
     "fullChangelog": "Ceo dnevnik izmena"
+  },
+  "questionPrompt": {
+    "submitted": "Odgovori su poslati",
+    "submitting": "Slanje odgovora…",
+    "removeCustom": "Ukloni prilagođeni odgovor: {answer}",
+    "custom": "Prilagođeni odgovor",
+    "placeholder": "Unesi svoj odgovor",
+    "submitOne": "Pošalji odgovor",
+    "add": "Dodaj odgovor",
+    "next": "Sledeće pitanje",
+    "submitAll": "Pošalji odgovore",
+    "clarify": "Zatraži pojašnjenje",
+    "discuss": "Razgovaraj o pitanju bez odgovaranja",
+    "send": "Pošalji zahtev za pojašnjenje",
+    "submitError": "Odgovori nisu poslati. Tvoji odgovori su sačuvani ovde. Pokušaj ponovo.",
+    "clarifyError": "Zahtev za pojašnjenje nije poslat. Pokušaj ponovo.",
+    "review": "Pregledaj odgovore"
   }
 }

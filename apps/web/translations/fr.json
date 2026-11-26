@@ -27617,5 +27617,22 @@
     "community": "Communauté Discord",
     "whatsNew": "Nouveautés",
     "fullChangelog": "Journal des modifications complet"
+  },
+  "questionPrompt": {
+    "submitted": "Réponses envoyées",
+    "submitting": "Envoi des réponses…",
+    "removeCustom": "Supprimer la réponse personnalisée : {answer}",
+    "custom": "Réponse personnalisée",
+    "placeholder": "Saisissez votre propre réponse",
+    "submitOne": "Envoyer la réponse",
+    "add": "Ajouter une réponse",
+    "next": "Question suivante",
+    "submitAll": "Envoyer les réponses",
+    "clarify": "Demander une précision",
+    "discuss": "Discuter de la question sans y répondre",
+    "send": "Envoyer la demande de précision",
+    "submitError": "Impossible d’envoyer les réponses. Elles sont conservées ici. Réessayez.",
+    "clarifyError": "Impossible d’envoyer la demande de précision. Réessayez.",
+    "review": "Vérifier les réponses"
   }
 }

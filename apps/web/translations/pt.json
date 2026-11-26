@@ -27617,5 +27617,22 @@
     "community": "Comunidade no Discord",
     "whatsNew": "Novidades",
     "fullChangelog": "Changelog completo"
+  },
+  "questionPrompt": {
+    "submitted": "Respostas enviadas",
+    "submitting": "Enviando respostas…",
+    "removeCustom": "Remover resposta personalizada: {answer}",
+    "custom": "Resposta personalizada",
+    "placeholder": "Digite sua própria resposta",
+    "submitOne": "Enviar resposta",
+    "add": "Adicionar resposta",
+    "next": "Próxima pergunta",
+    "submitAll": "Enviar respostas",
+    "clarify": "Pedir esclarecimento",
+    "discuss": "Discutir a pergunta sem respondê-la",
+    "send": "Enviar pedido de esclarecimento",
+    "submitError": "Não foi possível enviar as respostas. Suas respostas estão salvas aqui. Tente novamente.",
+    "clarifyError": "Não foi possível enviar o pedido de esclarecimento. Tente novamente.",
+    "review": "Revisar respostas"
   }
 }

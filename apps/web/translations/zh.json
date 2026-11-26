@@ -27617,5 +27617,22 @@
     "community": "Discord 社区",
     "whatsNew": "新功能",
     "fullChangelog": "完整更新日志"
+  },
+  "questionPrompt": {
+    "submitted": "回答已提交",
+    "submitting": "正在提交回答…",
+    "removeCustom": "删除自定义回答：{answer}",
+    "custom": "自定义回答",
+    "placeholder": "输入你自己的回答",
+    "submitOne": "提交回答",
+    "add": "添加回答",
+    "next": "下一个问题",
+    "submitAll": "提交所有回答",
+    "clarify": "请求澄清",
+    "discuss": "讨论问题但不作答",
+    "send": "发送澄清请求",
+    "submitError": "无法提交回答。你的回答已保存在此处，请重试。",
+    "clarifyError": "无法发送澄清请求，请重试。",
+    "review": "检查回答"
   }
 }

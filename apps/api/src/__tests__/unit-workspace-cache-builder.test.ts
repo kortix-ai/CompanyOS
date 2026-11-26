@@ -10,9 +10,18 @@
  */
 import { describe, expect, test } from 'bun:test';
 
-const { builderCommand, keyFromBuilderOutput, workspaceCacheBuilderOf, REBUILD_AFTER_MS, BUILD_TIMEOUT_MS } = await import(
-  '../projects/workspace-cache/builder'
-);
+const {
+  builderCommand,
+  buildPollCommand,
+  parseBuildPoll,
+  keyFromBuilderOutput,
+  workspaceCacheBuilderOf,
+  REBUILD_AFTER_MS,
+  BUILD_TIMEOUT_MS,
+} = await import('../projects/workspace-cache/builder');
+const { mkdtempSync, writeFileSync } = await import('node:fs');
+const { join } = await import('node:path');
+const { tmpdir } = await import('node:os');
 
 const NS = 'proj:05b9519d-ca06-4cdd-9825-3cbc3ac3c389:ws';
 
@@ -42,6 +51,44 @@ describe('builderCommand', () => {
   test('the generated script parses as bash', async () => {
     const proc = Bun.spawn(['bash', '-n', '-c', cmd]);
     expect(await proc.exited).toBe(0);
+  });
+});
+
+describe('build poll', () => {
+  const poll = async (files: { exit?: string; out?: string }) => {
+    const dir = mkdtempSync(join(tmpdir(), 'wcb-poll-'));
+    const exitPath = join(dir, 'exit');
+    const outPath = join(dir, 'out');
+    if (files.exit !== undefined) writeFileSync(exitPath, files.exit);
+    if (files.out !== undefined) writeFileSync(outPath, files.out);
+    const proc = Bun.spawn(['bash', '-c', buildPollCommand(exitPath, outPath)], { stdout: 'pipe' });
+    const stdout = await new Response(proc.stdout).text();
+    await proc.exited;
+    return parseBuildPoll(stdout);
+  };
+
+  test('a running builder (no exit file yet) is in flight, not failed', async () => {
+    // 2026-11-26: the old `cat exit; echo ---` read failed every build on its first poll.
+    expect((await poll({ out: 'workspace-cache-build: on origin/dev 8850e34cdd11\n' })).exit).toBeNull();
+    expect((await poll({})).exit).toBeNull();
+    expect((await poll({ exit: '', out: 'x\n' })).exit).toBeNull();
+  });
+
+  test('a finished builder gives its exit code and output, and the key parses', async () => {
+    const r = await poll({ exit: '0\n', out: '--- noise ---\n---\nworkspace-cache-key: ws-c05e329afa10-a47567a3-202611261400\n' });
+    expect(r.exit).toBe('0');
+    expect(keyFromBuilderOutput(r.out)).toBe('ws-c05e329afa10-a47567a3-202611261400');
+  });
+
+  test('a failed builder gives its code', async () => {
+    const r = await poll({ exit: '1\n', out: 'workspace-cache-build: fetch of origin/dev failed\n' });
+    expect(r.exit).toBe('1');
+    expect(r.out).toContain('fetch of origin/dev failed');
+  });
+
+  test('a reply that is not a poll is in flight, never a failure', () => {
+    expect(parseBuildPoll('').exit).toBeNull();
+    expect(parseBuildPoll('---\nsomething').exit).toBeNull();
   });
 });
 

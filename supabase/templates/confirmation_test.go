@@ -18,7 +18,16 @@ func TestConfirmation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, target := range []string{"kortix://auth/callback?state=native-state", "https://app.example.test/auth/callback", "https://app.example.test/auth/callback?returnUrl=%2Fworkspaces&terms_accepted=true"} {
+	for _, target := range []string{
+		"https://other.example.test/auth/callback",
+		"https://app.example.test",
+		"https://app.example.test/",
+		"https://app.example.test/dashboard?next=home",
+		"https://app.example.test/auth/callback-extra",
+		"https://app.example.test/auth/mobile/callback?state=browser-state",
+		"kortix://auth/callback?state=native-state",
+		"https://app.example.test/auth/callback",
+		"https://app.example.test/auth/callback?returnUrl=%2Fworkspaces&terms_accepted=true"} {
 		t.Run(target, func(t *testing.T) {
 			confirmation := "https://auth.example.test/verify?token=synthetic&type=signup"
 			var b bytes.Buffer
@@ -30,9 +39,13 @@ func TestConfirmation(t *testing.T) {
 			start := strings.Index(html, `href="`) + 6
 			end := strings.Index(html[start:], `"`) + start
 			link := strings.ReplaceAll(html[start:end], "&amp;", "&")
-			if strings.HasPrefix(target, "kortix:") {
+			targetURL, err := url.Parse(target)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if targetURL.Host != "app.example.test" || (targetURL.Path != "/auth/callback" && targetURL.Path != "/auth/mobile/callback") {
 				if link != confirmation {
-					t.Fatalf("native link = %s", link)
+					t.Fatalf("fallback link = %s", link)
 				}
 				return
 			}

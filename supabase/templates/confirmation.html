@@ -1,5 +1,9 @@
 <h2>Confirm your signup</h2>
-{{ if or (eq (printf "%.8s" .RedirectTo) "https://") (eq (printf "%.7s" .RedirectTo) "http://") }}
+{{ $web := printf "%s/auth/callback" .SiteURL }}
+{{ $mobile := printf "%s/auth/mobile/callback" .SiteURL }}
+{{ $webQuery := printf "%s?" $web }}
+{{ $mobileQuery := printf "%s?" $mobile }}
+{{ if or (eq .RedirectTo $web) (eq .RedirectTo $mobile) (eq (printf "%.*s" (len $webQuery) .RedirectTo) $webQuery) (eq (printf "%.*s" (len $mobileQuery) .RedirectTo) $mobileQuery) }}
 <p><a href="{{ .SiteURL }}/auth/confirm?redirect_to={{ .RedirectTo }}&token_hash={{ .TokenHash }}">Confirm your email address</a></p>
 {{ else }}
 <p><a href="{{ .ConfirmationURL }}">Confirm your email address</a></p>

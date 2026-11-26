@@ -283,11 +283,9 @@ async function save(action: 'create' | 'update', name: string, args: Record<stri
     // subagent and kept out of the pickers until the person promotes it (the agent
     // properties' "Who can start it"). A `mode` here is the person's own ask.
     const behavior = (block.behavior ?? {}) as Record<string, unknown>
-    if (!behavior.mode) {
-      behavior.mode = 'subagent'
-      behavior.hidden = true
-      block.behavior = behavior
-    }
+    behavior.mode ??= 'subagent'
+    if (behavior.mode === 'subagent') behavior.hidden = true
+    block.behavior = behavior
   }
   // The CLI reads the block from a file: its flag parser takes `-` for a missing value.
   const saved = await withJsonFile(block, (file) => cliJson<{ block?: Record<string, unknown> }>(['agents', 'config', name, '--file', file, '--json'], context))

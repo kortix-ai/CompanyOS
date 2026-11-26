@@ -80,6 +80,16 @@ describe('kortix_agents', () => {
     expect(result.card.changes).toContainEqual({ field: 'mode', before: null, after: 'subagent' })
   })
 
+  test.each(['subagent', 'primary', 'all'] as const)('create: explicit %s role controls picker visibility', async (mode) => {
+    fakeKortix(`'agents config explicit-writer --json') echo '{"kortix_error":{"kind":"failed","status":404,"message":"No agent explicit-writer"}}' >&2; exit 1 ;;
+  'agents config explicit-writer --file '*' --json') cp "$5" ${JSON.stringify(join(bin, 'explicit.json'))}; echo '{"ok":true,"agent":"explicit-writer","block":{}}' ;;`)
+    const result = await run('kortix_agents', { action: 'create', name: 'explicit-writer', description: 'Explicit role', mode })
+    expect(result.ok).toBe(true)
+    expect(JSON.parse(readFileSync(join(bin, 'explicit.json'), 'utf8'))).toEqual({
+      behavior: { description: 'Explicit role', mode, ...(mode === 'subagent' ? { hidden: true } : {}) },
+    })
+  })
+
   test('create: the person asked for a primary agent — no subagent default, nothing hidden', async () => {
     fakeKortix(`'agents config primary-writer --json') echo '{"kortix_error":{"kind":"failed","status":404,"message":"No agent primary-writer"}}' >&2; exit 1 ;;
   'agents config primary-writer --file '*' --json') cp "$5" ${JSON.stringify(join('$BIN', 'primary.json'))}; echo '{"ok":true,"agent":"primary-writer","block":{}}' ;;`.replaceAll('$BIN', bin))

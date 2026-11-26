@@ -8229,6 +8229,7 @@
       "legendAssistant": "応答",
       "legendTool": "ツール結果",
       "legendOther": "その他",
+      "skillsUsedLabel": "使用したスキル",
       "subAgentsLabel": "サブエージェント",
       "subAgentsNote": "このセッション内で実行された補助エージェントです。その費用はこのセッションの費用に含まれます。",
       "combinedMessages": "合計メッセージ",

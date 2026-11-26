@@ -84,6 +84,12 @@ describe('only released code ships', () => {
 describe('store API calls survive one dropped connection', () => {
   const noWait = async () => {};
 
+  test('the default fetch forwards the URL and request options', async () => {
+    const response = await fetchWithRetry('data:text/plain,release-probe', { method: 'GET' });
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe('release-probe');
+  });
+
   test('retries a network error and returns the next response', async () => {
     let calls = 0;
     const fetchFn = async () => {

@@ -1,5 +1,4 @@
 import { Badge } from '@kortix/ui/badge';
-import Link from 'next/link';
 import type { Announcement } from './announcements';
 import { WeeklyCover } from './weekly-cover';
 
@@ -19,7 +18,7 @@ export function AnnouncementsView({ announcements }: { announcements?: Announcem
           <div className="flex flex-wrap gap-2">
             {announcement.tags.map((tag) => (
               <Badge key={tag} size="sm" variant="outline" asChild>
-                <Link href={`/changelog#${encodeURIComponent(tag)}`}>{tag}</Link>
+                <a href={`/changelog#${encodeURIComponent(tag)}`}>{tag}</a>
               </Badge>
             ))}
           </div>

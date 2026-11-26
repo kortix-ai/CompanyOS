@@ -302,7 +302,12 @@ async function handleSubscriptionChange(snapshot: Stripe.Subscription) {
   await withAccountLock(accountId, () => syncSubscriptionState(accountId, subscription));
 }
 
-async function syncSubscriptionState(accountId: string, subscription: Stripe.Subscription) {
+/**
+ * Write the account's plan from the subscription as Stripe holds it. The
+ * webhook and the client re-sync (`syncSubscription`, on the portal return)
+ * both land here, so either one moves the plan.
+ */
+export async function syncSubscriptionState(accountId: string, subscription: Stripe.Subscription) {
   const account = await getCreditAccount(accountId);
   if (isClosedBillingAccount(account)) {
     logger.info(`[Webhook] syncSubscriptionState: skipping closed account ${accountId} (sub=${subscription.id})`);
@@ -376,6 +381,13 @@ async function syncSubscriptionState(accountId: string, subscription: Stripe.Sub
   }
   if (resolvedTier && subIsPaying) {
     updates.tier = resolvedTier;
+  }
+  // The portal's downgrade switches the item to the $0 Free price: the paid
+  // amount and a scheduled cut end with the paid plan.
+  if (resolvedTier === 'free' && subIsPaying) {
+    updates.planMonthlyUsd = null;
+    updates.scheduledMonthlyUsd = null;
+    updates.scheduledTierChangeDate = null;
   }
 
   if (subscription.cancel_at_period_end) {

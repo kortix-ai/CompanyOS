@@ -1,3 +1,4 @@
+import type { Announcement } from './announcements';
 import type { WeeklyMedia } from './weekly-media';
 
 export interface GitHubRelease {
@@ -57,6 +58,7 @@ export interface ChangelogWeek {
    *  `null` until the Monday trigger has written them. Shown instead of `highlights`. */
   summary: string[] | null;
   media?: WeeklyMedia;
+  announcements?: Announcement[];
   /** Every New / Improved / Fixed bullet across the week's releases. */
   counts: { new: number; improved: number; fixed: number };
 }

@@ -30,6 +30,8 @@ mock.module('@/i18n/get-translations', () => ({ getTranslations: async () => ({
     return translator.raw(key);
   },
 }) }));
+const captured = mock((_message: string, _context: unknown) => {});
+mock.module('@sentry/nextjs', () => ({ captureMessage: captured }));
 mock.module('@/lib/supabase/server', () => ({ createClient: async () => ({ auth: { signInWithOtp: send } }) }));
 const { sendEmailCode } = await import('./actions');
 const form = () => {
@@ -43,7 +45,7 @@ const form = () => {
 };
 beforeEach(() => {
   delivered = false; cookieFailure = false; translationFailureAfterDelivery = false;
-  mode = 'unknown'; sendError = null; send.mockClear();
+  mode = 'unknown'; sendError = null; send.mockClear(); captured.mockClear();
 });
 test('delivered send stays successful if the verifier cookie store fails', async () => {
   cookieFailure = true;
@@ -136,4 +138,29 @@ test('a closed-signup 429 whose code the copy helper does not know still surface
 test('a rejected transport does not fabricate delivery success', async () => {
   send.mockImplementationOnce(async () => { throw new Error('transport failed'); });
   await expect(sendEmailCode(null, form())).rejects.toThrow('transport failed');
+});
+
+// KRTX-3753: when the SMTP relay refuses (a provider quota), GoTrue answers
+// 500 "Error sending confirmation email". That is an outage, not a bad
+// address: it must answer 503 and reach Better Stack, or the infra sweep
+// sees nothing and only a synthetic signup notices.
+const deliveryFailure = { code: 'unexpected_failure', message: 'Error sending confirmation email', status: 500 };
+const reported = { level: 'error', tags: { auth_error_code: 'unexpected_failure', auth_error_status: 500 } };
+test('an upstream mail delivery failure answers 503 and reports the class at error level', async () => {
+  sendError = deliveryFailure;
+  const result = await sendEmailCode(null, form());
+  expect(result).toMatchObject({ status: 503, message: deliveryFailure.message });
+  expect(captured).toHaveBeenCalledWith('[auth] email send failed', reported);
+  expect(JSON.stringify(captured.mock.calls)).not.toContain('synthetic@example.test');
+});
+test('a closed-signup delivery failure keeps the neutral body and still reports', async () => {
+  mode = 'closed';
+  sendError = deliveryFailure;
+  expect(await sendEmailCode(null, form())).toMatchObject({ success: true, mode: 'closed' });
+  expect(captured).toHaveBeenCalledWith('[auth] email send failed', reported);
+});
+test('a client-side refusal is not reported as a mail outage', async () => {
+  sendError = { code: 'email_address_invalid', message: 'Invalid email address', status: 400 };
+  expect(await sendEmailCode(null, form())).toHaveProperty('status', 400);
+  expect(captured).not.toHaveBeenCalled();
 });

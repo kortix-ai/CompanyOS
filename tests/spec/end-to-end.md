@@ -605,6 +605,12 @@ DB `project_session_groups`: a project's named folders of sessions, in one `posi
 
 ---
 
+
+### 7d. Workspace cache (`/projects/:id/workspace-cache`, behind `platinum_cache`)
+
+A project's saved `/workspace` on Platinum's cache that every new session starts from (`platform/services/workspace-volume.ts`), rebuilt daily by `workspace-cache-builder`. Saving and listing call Platinum; this stack has no Platinum, so the flow covers the gate and the refusals in front of it.
+`WSC-1` `ANON` → 401, a non-member → 403/404. Flag off (the default): `GET`/`POST /workspace-cache` and `POST /workspace-cache/build` → 403 `{code: feature_disabled, feature: platinum_cache}`. With the flag on, a build before any person saved → 409 `no_builder`; saving a session the project does not have → 404 `session_not_found`; a key under 4 characters → 400. Clearing the flag gates the routes again.
+
 ## 8. Sandbox lifecycle + snapshots
 
 `SNAP-1` `GET /projects/:id/snapshots` → `read` → list `kortix-snap-…` images per baseRef. **Session boot requires a `ready` snapshot of baseRef** (no shared fallback → session `failed` if none).

@@ -20,6 +20,7 @@ import {
 } from '@/lib/auth/unified-auth-flow';
 import { AUTH_BOUNCE_COOKIE, parseAuthBounceOwner } from '@kortix/ui/internal/lib/onboarding/landing-destination';
 import { getServerPublicEnv } from '@/lib/public-env-server';
+import * as Sentry from '@sentry/nextjs';
 import { AuthApiError } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/server';
 import { checkAccessEmail, submitAccessRequest } from '@kortix/sdk';
@@ -320,6 +321,17 @@ export async function sendEmailCode(prevState: any, formData: FormData) {
   );
 
   if (error) {
+    // KRTX-3753: a 5xx (or our own upstream `timeout`) is the mail path failing
+    // (an SMTP quota refusal reads "Error sending confirmation email"), never a
+    // bad address. Report the class, never the address, so the outage reaches
+    // Better Stack on every path, the closed-signup neutral body included.
+    const mailPathFailed = (error.status ?? 0) >= 500;
+    if (mailPathFailed) {
+      Sentry.captureMessage('[auth] email send failed', {
+        level: 'error',
+        tags: { auth_error_code: error.code ?? 'unknown', auth_error_status: error.status },
+      });
+    }
     // A closed-signup send answers neutrally unless the refusal is a shared
     // rate limit — ANY 429, not just the code `authRateLimitCopy` recognizes
     // (GoTrue maps every 429 it returns to `over_request_rate_limit`):
@@ -329,7 +341,7 @@ export async function sendEmailCode(prevState: any, formData: FormData) {
     if (!closedSignups || error.status === 429 || limitCopy) {
       return {
         ...authFailure(error, 'Could not send the link', tI18nComplete),
-        status: limitCopy || error.status === 429 ? 429 : error.status === 503 ? 503 : 400,
+        status: limitCopy || error.status === 429 ? 429 : mailPathFailed ? 503 : 400,
       };
     }
   }

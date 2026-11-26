@@ -68,6 +68,30 @@ describe('a catalogue entry', () => {
 });
 
 describe('connected join', () => {
+  test('the server authorization state controls the catalog across account changes', () => {
+    const entry = catalogEntryFromDiscover(connector({ slug: 'outlook', name: 'Outlook' }));
+    const installed = conn({
+      slug: 'outlook',
+      name: 'Outlook',
+      provider: 'composio',
+      status: 'active',
+      authSecret: 'credential',
+      secretSet: false,
+    });
+    const connected = (connector: AdminConnector) =>
+      isCatalogEntryConnected(entry, connectedCatalogKeys([connector]));
+    expect(connected({ ...installed, state: 'needs_account' })).toBe(false);
+    expect(connected({ ...installed, state: 'connected', secretSet: true })).toBe(true);
+    expect(connected({ ...installed, state: 'needs_account' })).toBe(false);
+  });
+
+  test('keyless connectors and account-free providers retain their catalog state', () => {
+    for (const provider of ['mcp', 'channel', 'computer'] as const) {
+      const entry = catalogEntryFromDiscover(connector());
+      expect(isCatalogEntryConnected(entry, connectedCatalogKeys([conn({ provider, state: 'connected' })]))).toBe(true);
+    }
+  });
+
   // The default add flow proposes a connection slug from the app's NAME, so a
   // catalogue slug of `google_sheets` becomes a connector slug of
   // `google-sheets`. Folding both sides is what makes that card show ✓.

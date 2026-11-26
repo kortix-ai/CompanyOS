@@ -448,13 +448,15 @@ describe('kortix_schedules follow-through', () => {
     expect(result.error?.message).toContain('`name` is a short id')
   })
 
-  test('remove routes by id: reminder.<id> → kortix loops, trigger.<id> → kortix triggers, a kortix.yaml slug → --apply; delete is an alias; pause and resume work for loops', async () => {
+  test('remove routes by id: reminder.<id> → kortix loops, trigger.<id> → kortix triggers, a kortix.yaml slug → --apply (remove, pause and resume); delete is an alias; pause and resume work for loops', async () => {
     fakeKortix(`'loops rm reminder.aaaaaaaaaaaa') echo 'Removed' ;;
   'triggers rm trigger.cccccccccccc') echo 'Removed' ;;
   'triggers rm weekly-digest --apply') echo 'Removed' ;;
   'loops pause reminder.aaaaaaaaaaaa') echo 'Paused' ;;
   'loops resume reminder.aaaaaaaaaaaa') echo 'Resumed' ;;
-  'loops run reminder.aaaaaaaaaaaa') echo 'Sent' ;;`)
+  'loops run reminder.aaaaaaaaaaaa') echo 'Sent' ;;
+  'triggers pause weekly-digest --apply') echo 'Disabled' ;;
+  'triggers resume weekly-digest --apply') echo 'Enabled' ;;`)
     expect((await run('kortix_schedules', { action: 'remove', id: 'reminder.aaaaaaaaaaaa' })).card.title).toBe('Removed')
     const alias = await run('kortix_schedules', { action: 'delete', id: 'trigger.cccccccccccc' })
     expect(alias.action).toBe('delete')
@@ -463,6 +465,8 @@ describe('kortix_schedules follow-through', () => {
     await run('kortix_schedules', { action: 'pause', id: 'reminder.aaaaaaaaaaaa' })
     await run('kortix_schedules', { action: 'resume', id: 'reminder.aaaaaaaaaaaa' })
     await run('kortix_schedules', { action: 'run_now', id: 'reminder.aaaaaaaaaaaa' })
+    expect((await run('kortix_schedules', { action: 'pause', id: 'weekly-digest' })).ok).toBe(true)
+    expect((await run('kortix_schedules', { action: 'resume', id: 'weekly-digest' })).ok).toBe(true)
     expect(argvs()).toEqual([
       'loops rm reminder.aaaaaaaaaaaa',
       'triggers rm trigger.cccccccccccc',
@@ -470,6 +474,8 @@ describe('kortix_schedules follow-through', () => {
       'loops pause reminder.aaaaaaaaaaaa',
       'loops resume reminder.aaaaaaaaaaaa',
       'loops run reminder.aaaaaaaaaaaa',
+      'triggers pause weekly-digest --apply',
+      'triggers resume weekly-digest --apply',
     ])
   })
 
@@ -716,7 +722,7 @@ describe('kortix_usage', () => {
 })
 
 describe('kortix_schedules automations', () => {
-  test('automate: a connector event becomes one live kortix.yaml trigger with its filter, one session per thread, a cap and a model, each as --flag=value', async () => {
+  test('automate: a connector event becomes one paused kortix.yaml trigger with its filter, one session per thread, a cap and a model, each as --flag=value', async () => {
     fakeKortix(`'triggers add issue-triage '*' --apply') printf 'Added issue-triage (live)\\n' ;;`)
     const result = await run('kortix_schedules', {
       action: 'automate',
@@ -733,13 +739,13 @@ describe('kortix_schedules automations', () => {
       model: 'kortix/deepseek-v4.1-flash',
     })
     expect(result.ok).toBe(true)
-    expect(result.card.title).toBe('Automation set: issue-triage')
+    expect(result.card.title).toBe('Automation saved, paused: issue-triage')
     expect(result.card.subtitle).toBe('triage runs on GITHUB_ISSUE_OPENED on github, one session per key')
     expect(argvs()).toEqual([
       'triggers add issue-triage --type=event --prompt=If this is not a real bug report, stop: do nothing and send no message. Otherwise label {{ event.data.title }}. ' +
         '--agent=triage --connector=github --event=GITHUB_ISSUE_OPENED --model=kortix/deepseek-v4.1-flash --config-json={"repo":"acme/site"} ' +
         '--filter=event.data.action:in=opened,reopened --filter=event.data.sender:not=kortix-bot --filter=event.data.draft:exists=false ' +
-        '--session-key={{ event.data.number }} --max-runs-per-day=20 --apply',
+        '--session-key={{ event.data.number }} --max-runs-per-day=20 --disabled --apply',
     ])
   })
 
@@ -752,7 +758,7 @@ describe('kortix_schedules automations', () => {
     expect(hook.card.rows).toContainEqual({ title: 'Webhook URL', detail: 'https://api.example.test/v1/webhooks/proj_1/form-leads' })
     const weekly = await run('kortix_schedules', { action: 'automate', name: 'weekly-digest', on: 'schedule', every: '1d', agent: 'writer', prompt: 'Write the digest.' })
     expect(weekly.ok).toBe(true)
-    expect(argvs()[1]).toBe('triggers add weekly-digest --type=cron --prompt=Write the digest. --agent=writer --every=1d --apply')
+    expect(argvs()[1]).toBe('triggers add weekly-digest --type=cron --prompt=Write the digest. --agent=writer --every=1d --disabled --apply')
   })
 
   test('automate refuses a bad name, source, filter, option-shaped value, missing source field or cap before any command runs (CWE-88)', async () => {
@@ -867,7 +873,7 @@ describe('kortix_schedules automate: an App as the event source', () => {
     fakeKortix(`'triggers add hn-watch-tick '*' --apply') printf 'Added hn-watch-tick (live)\\n' ;;`)
     const tick = await run('kortix_schedules', { action: 'automate', name: 'hn-watch-tick', on: 'schedule', every: '15m', target_app: 'hn-watch', target_path: '/tick' })
     expect(tick.ok).toBe(true)
-    expect(argvs()).toEqual(['triggers add hn-watch-tick --type=cron --target-app=hn-watch --target-path=/tick --every=15m --apply'])
+    expect(argvs()).toEqual(['triggers add hn-watch-tick --type=cron --target-app=hn-watch --target-path=/tick --every=15m --disabled --apply'])
     expect(tick.card.subtitle).toBe('Calls the App hn-watch (/tick) on every 15m')
     for (const bad of [{ target_app: '--all' }, { target_app: 'hn-watch', target_path: 'tick' }, { target_app: 'hn-watch', agent: 'writer' }]) {
       const result = await run('kortix_schedules', { action: 'automate', name: 'x', on: 'schedule', every: '15m', ...bad })

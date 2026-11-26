@@ -42,6 +42,39 @@ test('502 then 422 recovers the newly visible empty repo', async () => {
     expect(await createRepo(input)).toEqual(repo);
   } finally { sleep.mockRestore(); }
 });
+const structuredCollision = {
+  message: 'Repository creation failed.',
+  errors: [{ resource: 'Repository', code: 'custom', field: 'name', message: 'name already exists on this account' }],
+};
+test('structured 422 collision after an ambiguous POST reconciles the exact coordinate', async () => {
+  const sleep = spyOn(Bun, 'sleep').mockResolvedValue(undefined);
+  try {
+    const calls = responses([[502, {}], [404, {}], [422, structuredCollision], [200, repo]]);
+    expect(await createRepo(input)).toEqual(repo);
+    expect(calls).toEqual([
+      'POST https://api.github.com/orgs/managed-org/repos',
+      'GET https://api.github.com/repos/managed-org/sample',
+      'POST https://api.github.com/orgs/managed-org/repos',
+      'GET https://api.github.com/repos/managed-org/sample',
+    ]);
+  } finally { sleep.mockRestore(); }
+});
+test('initial structured 422 collision does not recover or retry', async () => {
+  const calls = responses([[422, structuredCollision]]);
+  await expect(createRepo(input)).rejects.toThrow('(422): Repository creation failed.');
+  expect(calls).toHaveLength(1);
+});
+test('unrelated structured 422 after a transient failure does not reconcile again', async () => {
+  const sleep = spyOn(Bun, 'sleep').mockResolvedValue(undefined);
+  try {
+    const calls = responses([[502, {}], [404, {}], [422, {
+      message: 'Repository creation failed.',
+      errors: [{ resource: 'Repository', code: 'custom', field: 'name', message: 'name is invalid' }],
+    }]]);
+    await expect(createRepo(input)).rejects.toThrow('(422): Repository creation failed.');
+    expect(calls).toHaveLength(3);
+  } finally { sleep.mockRestore(); }
+});
 for (const status of [401, 403, 404, 422]) test(`does not retry initial ${status}`, async () => {
   const calls = responses([[status, { message: 'refused' }]]);
   await expect(createRepo(input)).rejects.toThrow(`(${status}): refused`);

@@ -239,7 +239,7 @@ export async function createRepo(input: CreateRepoInput): Promise<GitHubRepo> {
     } catch (error) {
       if (!recoverable || !(error instanceof GitHubApiError)) throw error;
       const transient = [502, 503, 504].includes(error.status);
-      const collision = ambiguous && error.status === 422 && /already exists/i.test(error.message);
+      const collision = ambiguous && error.status === 422 && [error.message, ...error.validationMessages].some(message => /already exists/i.test(message));
       if (!transient && !collision) throw error;
       ambiguous = true;
       // A failed POST may have committed. Reconcile the exact coordinate before

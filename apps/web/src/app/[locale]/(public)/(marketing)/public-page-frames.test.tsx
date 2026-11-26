@@ -147,12 +147,12 @@ describe('full marketing pages render in the landing frame', () => {
   });
 });
 
-test('pricing explains the running computer before the purchase choices', () => {
+test('pricing puts computer billing in the existing hours section and FAQ', () => {
   const document = dom(renderToStaticMarkup(<PricingPage />));
-  const plans = document.querySelector('#plans');
-  const copy = plans?.textContent ?? '';
-  expect(copy).toContain('Each session runs a computer');
-  expect(copy).toContain('$0.11');
+  const hours = document.querySelector('#agent-hours');
+  expect(hours?.textContent).toContain('Each session, including connector tasks');
+  expect(document.querySelector('#plans')?.textContent).not.toContain('How billing works');
+  expect(document.querySelector('#computer')?.textContent).toContain('3 computers × 1 hour');
 });
 
 test('pricing model cards and FAQ distinguish provider bills, fee waivers, and compute', () => {

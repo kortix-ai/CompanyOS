@@ -2936,6 +2936,10 @@
         "enterprise": {
           "question": "エンタープライズについては？",
           "answer": "クレジットのすべてに加えて、SAML SSO、SCIM ディレクトリ同期（Okta、Microsoft Entra、JumpCloud）、高度な RBAC、監査ログ、SLA と DPA、クラウド / VPC / オンプレミスのデプロイが含まれます。ボリューム料金はお問い合わせください。"
+        },
+        "computer": {
+          "question": "When does a cloud computer use credits?",
+          "answer": "エージェントは、コネクターのみを使うタスクもこのコンピューターで実行します。ブラウザーやターミナルの使用中だけでなく、待機時間も含め、コンピューターの稼働中はコンピューティング料金が発生します。 既定のコンピューター（{spec}）：稼働1時間あたり約 {rate}（約 {credits} クレジット）。予約リソースに対して秒単位で課金されます。他のサイズでは料金が異なります。 稼働時間は合算されます：3台 × 1時間 = 3コンピューター時間、コンピューティング料金は約 {concurrent} です。モデル利用と保存ファイルは別料金です。 スリープでコンピューティング料金は止まります。保存ファイルには引き続きストレージ料金が発生する場合があります。チャットを閉じることは、コンピューターをスリープさせることとは異なります。"
         }
       },
       "hero": {
@@ -3009,7 +3013,10 @@
         "models": "モデル利用は別料金です。ChatGPT サブスクリプションを接続すると、Kortix のモデル呼び出し料金はかかりませんが、コンピューター料金は引き続き発生します。自分の API キーでは、プロバイダーの料金と、該当する場合は Kortix の BYOK 手数料を支払います。",
         "summary": "各セッションはコンピューターで実行されます。稼働1時間あたり約 {rate} 。",
         "separate": "標準構成。モデルとストレージは別料金です。",
-        "details": "料金の仕組み"
+        "details": "料金の仕組み",
+        "label": "Cloud computer",
+        "session": "Each session, including connector tasks, runs a cloud computer.",
+        "hourly": "≈ {rate} / running hour"
       }
     },
     "access": {

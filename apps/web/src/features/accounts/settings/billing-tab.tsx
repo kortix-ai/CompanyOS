@@ -195,12 +195,12 @@ export function BillingTab({
         </>
       ) : accountState ? (
         <>
-          <ComputeBillingExplainer />
           <PlanCard state={accountState} />
         </>
       ) : null}
 
       <SettingsRowGroup>
+        <ComputeBillingExplainer />
         <SettingsRow label={t('members')} description={t('unlimitedMembers')}>
           <span className="text-sm tabular-nums" aria-live="polite">
             {members.isLoading

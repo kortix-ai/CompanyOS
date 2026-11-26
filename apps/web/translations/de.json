@@ -2936,6 +2936,10 @@
         "enterprise": {
           "question": "Was ist mit Enterprise?",
           "answer": "Alles aus Credits plus SAML-SSO, SCIM-Verzeichnissynchronisierung (Okta, Microsoft Entra, JumpCloud), erweitertes RBAC, Audit-Logs, SLA und DPA sowie Cloud-/VPC-/On-Prem-Deployment. Sprich uns für Mengenpreise an."
+        },
+        "computer": {
+          "question": "When does a cloud computer use credits?",
+          "answer": "Dein Agent läuft auf diesem Computer, auch bei Aufgaben, die nur Konnektoren nutzen. Rechenleistung wird während der gesamten Laufzeit berechnet, auch im Leerlauf, nicht nur bei Browser- oder Terminalnutzung. Standardcomputer ({spec}): ≈ {rate} pro Betriebsstunde (≈ {credits} Credits). Sekundengenaue Abrechnung der reservierten Ressourcen; andere Computergrößen kosten unterschiedlich viel. Die Laufzeiten addieren sich: 3 Computer × 1 Stunde = 3 Computerstunden, ≈ {concurrent} für Rechenleistung. Modellnutzung und gespeicherte Dateien kosten extra. Der Ruhezustand stoppt die Rechenkosten. Für gespeicherte Dateien können weiterhin Speicherkosten anfallen. Den Chat zu schließen versetzt den Computer nicht in den Ruhezustand."
         }
       },
       "hero": {
@@ -3009,7 +3013,10 @@
         "models": "Modellnutzung wird separat berechnet. Mit einem verbundenen ChatGPT-Abo fällt keine Kortix-Gebühr für Modellaufrufe an; Computerkosten bleiben bestehen. Mit deinem eigenen API-Schlüssel zahlst du deinen Anbieter sowie gegebenenfalls die Kortix-BYOK-Gebühr.",
         "summary": "Jede Sitzung nutzt einen Computer. Ca. {rate} / Laufzeitstunde.",
         "separate": "Standardgröße. Modelle und Speicher werden separat berechnet.",
-        "details": "So funktioniert die Abrechnung"
+        "details": "So funktioniert die Abrechnung",
+        "label": "Cloud computer",
+        "session": "Each session, including connector tasks, runs a cloud computer.",
+        "hourly": "≈ {rate} / running hour"
       }
     },
     "access": {

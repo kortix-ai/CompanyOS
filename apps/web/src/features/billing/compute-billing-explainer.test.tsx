@@ -5,23 +5,24 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import en from '../../../translations/en.json';
 import { ComputeBillingExplainer } from './compute-billing-explainer';
 
-describe('computer billing explanation', () => {
-  test('keeps the hourly computer price visible and secondary detail collapsed', () => {
-    const text = renderToStaticMarkup(
+describe('computer billing rate row', () => {
+  test('shows one aligned hourly rate without a disclosure or paragraph wall', () => {
+    const html = renderToStaticMarkup(
       <NextIntlClientProvider locale="en" timeZone="UTC" messages={en}>
         <ComputeBillingExplainer />
       </NextIntlClientProvider>,
-    )
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s+/g, ' ');
-    const usd = (value: number) =>
-      new Intl.NumberFormat('en', { style: 'currency', currency: 'USD' }).format(value);
-    expect(text).toContain(usd(DEFAULT_COMPUTE_HOURLY_PRICE_USD));
-    expect(text).toContain('Each session runs a computer');
-    expect(text).toContain('Models and storage billed separately');
-    expect(text).toContain('How billing works');
-
-    expect(text).not.toContain('3 computers × 1 hour');
-    expect(text).not.toContain('including idle time');
+    );
+    const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+    const rate = new Intl.NumberFormat('en', { style: 'currency', currency: 'USD' }).format(
+      DEFAULT_COMPUTE_HOURLY_PRICE_USD,
+    );
+    expect(text).toContain(rate);
+    expect(text).toContain('Cloud computer');
+    expect(text).toContain('Each session, including connector tasks');
+    expect(html).not.toContain('<button');
+    expect(html).not.toContain('aria-expanded');
+    expect(text).not.toContain('How billing works');
+    expect(html).toContain('tabular-nums');
+    expect((html.match(/<p\b/g) ?? []).length).toBeLessThanOrEqual(1);
   });
 });

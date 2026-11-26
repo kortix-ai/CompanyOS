@@ -1,7 +1,5 @@
 'use client';
 
-import { ComputeBillingExplainer } from '@/features/billing/compute-billing-explainer';
-
 import Link from '@/components/site-link';
 import type { PricingPlan, PricingPlanId } from '@/features/billing/pricing-plans';
 import { usePricingPlans } from '@/features/billing/use-pricing-plans';
@@ -15,13 +13,12 @@ import { CreditLadder } from '@/features/marketing/pricing/credit-ladder';
 import { useLocale, useTranslations } from '@/i18n/use-translations';
 import { safeJsonForHtml } from '@/lib/security/safe-json';
 import { cn } from '@kortix/ui';
-import { Button } from '@kortix/ui/button';
-import { Disclosure, DisclosureContent, DisclosureTrigger } from '@kortix/ui/disclosure';
 import { useLocalizedUiCatalog } from '@kortix/ui/i18n';
 import {
   agentHoursForCredits,
   COMPUTE_RATES_USD,
   DEFAULT_COMPUTE_CREDITS_PER_HOUR,
+  DEFAULT_COMPUTE_HOURLY_PRICE_USD,
   DEFAULT_COMPUTE_SPEC,
   DEFAULT_TIER_USD,
   formatWholeUsd,
@@ -49,6 +46,7 @@ const PLAN_CTAS: Record<PricingPlanId, { cta: string; href: string }> = {
 const FAQ_IDS = [
   'free',
   'credit',
+  'computer',
   'amounts',
   'members',
   'rollover',
@@ -215,6 +213,9 @@ export default function PricingPage() {
   const facts = {
     freeCredits: new Intl.NumberFormat(locale).format(FREE_MONTHLY_CREDITS),
     creditsPerHour: DEFAULT_COMPUTE_CREDITS_PER_HOUR,
+    rate: formatRateUsd(DEFAULT_COMPUTE_HOURLY_PRICE_USD, locale),
+    credits: DEFAULT_COMPUTE_CREDITS_PER_HOUR,
+    concurrent: formatRateUsd(DEFAULT_COMPUTE_HOURLY_PRICE_USD * 3, locale),
     minutes: MINUTES_PER_CREDIT,
     spec: DEFAULT_COMPUTE_SPEC,
     fee: PLATFORM_FEE_PERCENT,
@@ -248,10 +249,6 @@ export default function PricingPage() {
           </h1>
         </div>
 
-        <div className="px-8 pb-10 lg:px-28">
-          <ComputeBillingExplainer />
-        </div>
-
         <Band className="divide-border grid grid-cols-1 divide-y lg:grid-cols-3 lg:divide-x lg:divide-y-0">
           {plans.map((plan) => (
             <PlanColumn
@@ -275,6 +272,7 @@ export default function PricingPage() {
         <BandHeading
           title={sentence(t('hours.title', facts))}
           titleMuted={sentence(t('hours.rate.value', facts))}
+          description={t('computer.session')}
         />
         <Band className="grid grid-cols-1 lg:grid-cols-12">
           <dl className="divide-border grid grid-cols-1 divide-y sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:col-span-7">
@@ -323,18 +321,9 @@ export default function PricingPage() {
                 <h3 className="text-foreground mt-6 text-lg font-medium tracking-tight text-balance">
                   {t(`models.${id}.title`)}
                 </h3>
-                <Disclosure>
-                  <DisclosureTrigger>
-                    <Button variant="ghost" size="sm">
-                      {t('computer.details')}
-                    </Button>
-                  </DisclosureTrigger>
-                  <DisclosureContent>
-                    <p className="text-muted-foreground mt-2 text-sm text-pretty">
-                      {t(`models.${id}.body`, facts)}
-                    </p>
-                  </DisclosureContent>
-                </Disclosure>
+                <p className="text-muted-foreground mt-2 text-sm text-pretty">
+                  {t(`models.${id}.body`, facts)}
+                </p>
               </li>
             ))}
           </ul>

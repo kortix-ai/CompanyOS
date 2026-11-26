@@ -2936,6 +2936,10 @@
         "enterprise": {
           "question": "What about Enterprise?",
           "answer": "Everything in Credits plus SAML SSO, SCIM directory sync (Okta, Microsoft Entra, JumpCloud), advanced RBAC, audit logs, an SLA and DPA, and Cloud / VPC / on-prem deployment. Talk to us for volume pricing."
+        },
+        "computer": {
+          "question": "When does a cloud computer use credits?",
+          "answer": "Your agent runs on this computer, including connector-only tasks. Compute is billed while the computer is running, including idle time, not only when it uses a browser or terminal. Default computer ({spec}): ≈ {rate} per running hour (≈ {credits} credits). Billed per second for reserved resources; other computer sizes cost differently. Running hours add up: 3 computers × 1 hour = 3 computer-hours, ≈ {concurrent} in compute. Model usage and stored files are extra. Sleep stops compute charges. Stored files can still incur storage charges. Closing the chat is not the same as sleeping the computer."
         }
       },
       "hero": {
@@ -2956,15 +2960,15 @@
         },
         "hour": {
           "value": "{creditsPerHour} credits = 1 hour",
-          "note": "Of the default agent computer ({spec}), including idle running time. Billed per second. Sleep stops compute; stored files can still incur storage charges."
+          "note": "Default size · {spec}"
         },
         "tier": {
           "value": "{tierUsd} a month ≈ {hours} hours",
-          "note": "Combined running computer-hours at the default size, before model usage, BYOK fees, and storage. Concurrent computers share this total."
+          "note": "Compute only · combined running hours"
         },
         "rates": {
           "title": "Compute rates",
-          "note": "Billed per second for the size you reserve. A stopped computer uses no compute. Its stored files are billed as storage.",
+          "note": "Reserved resources, billed per second.",
           "vcpu": {
             "label": "vCPU",
             "price": "{price} / hour"
@@ -3009,7 +3013,10 @@
         "models": "Model usage is separate. A connected ChatGPT subscription has no Kortix model-call charge; computer charges still apply. With your own API key, you pay your provider, plus any applicable Kortix BYOK fee.",
         "summary": "Each session runs a computer. ≈ {rate} / running hour.",
         "separate": "Default size. Models and storage billed separately.",
-        "details": "How billing works"
+        "details": "How billing works",
+        "label": "Cloud computer",
+        "session": "Each session, including connector tasks, runs a cloud computer.",
+        "hourly": "≈ {rate} / running hour"
       }
     },
     "access": {

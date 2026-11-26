@@ -391,7 +391,7 @@ describe('BillingTab — a canceled subscription with credits left', () => {
   });
 });
 
-test('the plan-first billing pane explains the running computer before purchase', () => {
+test('the plan-first billing pane includes one computer rate row', () => {
   accountStateData = {
     credits: { total: 2 },
     can_manage_billing: true,
@@ -407,7 +407,7 @@ test('the plan-first billing pane explains the running computer before purchase'
   )
     .replace(/<[^>]+>/g, ' ')
     .replace(/\s+/g, ' ');
-  expect(text).toContain('Each session runs a computer');
+  expect(text).toContain('Each session, including connector tasks, runs a cloud computer');
   expect(text).toContain('$0.11');
   expect(text).toContain('Subscribe');
 });

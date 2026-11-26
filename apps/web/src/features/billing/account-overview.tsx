@@ -1,7 +1,5 @@
 'use client';
 
-import { ComputeBillingExplainer } from '@/features/billing/compute-billing-explainer';
-
 import { AccountStorageCard } from './account-storage';
 import { COST_TYPE_COLOR } from './cost-explorer/cost-type-color';
 import type { UiTranslator } from '@/i18n/translator';
@@ -153,7 +151,6 @@ export function AccountOverviewView({ state }: { state: AccountState }) {
       </div>
 
       {usage ? <PeriodSpend usage={usage} locale={locale} /> : null}
-      <ComputeBillingExplainer />
     </section>
   );
 }

@@ -2936,6 +2936,10 @@
         "enterprise": {
           "question": "Et pour Enterprise ?",
           "answer": "Tout ce qui est dans Crédits, plus SAML SSO, synchronisation d'annuaire SCIM (Okta, Microsoft Entra, JumpCloud), RBAC avancé, journaux d'audit, SLA et DPA, et déploiement Cloud / VPC / sur site. Contactez-nous pour une tarification au volume."
+        },
+        "computer": {
+          "question": "When does a cloud computer use credits?",
+          "answer": "Votre agent utilise cet ordinateur, même pour les tâches utilisant uniquement des connecteurs. Le calcul est facturé tant que l'ordinateur fonctionne, même inactif, et pas seulement lorsqu'il utilise un navigateur ou un terminal. Ordinateur par défaut ({spec}) : ≈ {rate} par heure de fonctionnement (≈ {credits} crédits). Ressources réservées facturées à la seconde ; les autres tailles ont des coûts différents. Les heures s'additionnent : 3 ordinateurs × 1 heure = 3 heures-ordinateur, soit ≈ {concurrent} de calcul. L'usage des modèles et les fichiers stockés sont en supplément. La mise en veille arrête les frais de calcul. Les fichiers stockés peuvent toujours entraîner des frais de stockage. Fermer le chat ne met pas l'ordinateur en veille."
         }
       },
       "hero": {
@@ -3009,7 +3013,10 @@
         "models": "L'usage des modèles est séparé. Un abonnement ChatGPT connecté n'entraîne aucuns frais Kortix pour les appels de modèle ; les frais d'ordinateur restent dus. Avec votre clé API, vous payez votre fournisseur et les éventuels frais BYOK de Kortix.",
         "summary": "Chaque session utilise un ordinateur. ≈ {rate} / heure de fonctionnement.",
         "separate": "Configuration par défaut. Modèles et stockage facturés séparément.",
-        "details": "Comprendre la facturation"
+        "details": "Comprendre la facturation",
+        "label": "Cloud computer",
+        "session": "Each session, including connector tasks, runs a cloud computer.",
+        "hourly": "≈ {rate} / running hour"
       }
     },
     "access": {

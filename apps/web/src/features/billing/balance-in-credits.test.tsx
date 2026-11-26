@@ -102,9 +102,9 @@ for (const [name, View] of [
   ['billing overview', AccountOverviewView],
   ['credits settings', CreditsView],
 ] as const) {
-  test(`${name} explains running computer charges separately from models`, () => {
+  test(`${name} does not repeat the billing rate beside the balance`, () => {
     const out = text(render(<View state={state(5)} />));
-    expect(out).toContain('Each session runs a computer');
-    expect(out).toContain('$0.11');
+    expect(out).not.toContain('How billing works');
+    expect(out).not.toContain('/ running hour');
   });
 }

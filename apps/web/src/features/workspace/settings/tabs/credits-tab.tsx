@@ -1,7 +1,5 @@
 'use client';
 
-import { ComputeBillingExplainer } from '@/features/billing/compute-billing-explainer';
-
 /**
  * The Credits tab — what this account has left, where each part of it came
  * from, what is about to arrive, and what the current period cost.
@@ -274,7 +272,6 @@ export function CreditsView({
 
   return (
     <div className="space-y-8">
-      <ComputeBillingExplainer />
       {/* The number the tab exists to answer, at the top, at hero scale, with
           the composition under one hairline. No action beside it: "Add
           credits" is a whole card of its own further down, and a button up

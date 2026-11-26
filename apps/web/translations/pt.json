@@ -2936,6 +2936,10 @@
         "enterprise": {
           "question": "E o Enterprise?",
           "answer": "Tudo do Créditos mais SAML SSO, sincronização de diretório SCIM (Okta, Microsoft Entra, JumpCloud), RBAC avançado, logs de auditoria, SLA e DPA, e implantação em nuvem / VPC / local. Fale conosco sobre preços por volume."
+        },
+        "computer": {
+          "question": "When does a cloud computer use credits?",
+          "answer": "Seu agente usa este computador, inclusive em tarefas que usam apenas conectores. A computação é cobrada enquanto o computador está em execução, inclusive quando está ocioso, não apenas quando usa um navegador ou terminal. Computador padrão ({spec}): ≈ {rate} por hora em execução (≈ {credits} créditos). Recursos reservados cobrados por segundo; outros tamanhos de computador têm custos diferentes. As horas se somam: 3 computadores × 1 hora = 3 horas de computador, ≈ {concurrent} de computação. Uso de modelos e arquivos armazenados são cobrados à parte. A suspensão interrompe as cobranças de computação. Arquivos armazenados ainda podem gerar cobranças de armazenamento. Fechar o chat não é o mesmo que suspender o computador."
         }
       },
       "hero": {
@@ -3009,7 +3013,10 @@
         "models": "O uso de modelos é separado. Uma assinatura do ChatGPT conectada não tem cobrança da Kortix por chamadas de modelo; as cobranças do computador continuam. Com sua própria chave de API, você paga ao provedor e qualquer taxa BYOK aplicável da Kortix.",
         "summary": "Cada sessão usa um computador. ≈ {rate} / hora em execução.",
         "separate": "Configuração padrão. Modelos e armazenamento cobrados à parte.",
-        "details": "Como funciona a cobrança"
+        "details": "Como funciona a cobrança",
+        "label": "Cloud computer",
+        "session": "Each session, including connector tasks, runs a cloud computer.",
+        "hourly": "≈ {rate} / running hour"
       }
     },
     "access": {

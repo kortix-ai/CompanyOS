@@ -21415,7 +21415,11 @@
       "textf543a9f99ce7": "Barra de ações",
       "textca4067071fcf": "Seleção",
       "text4cea356a17a1": "Alterações não salvas",
-      "text2358f7b37c07": "A barra flutuante de um modo temporário: uma seleção, alterações não salvas, uma colagem pendente. Um título, uma descrição discreta, ações com atalhos de teclado e um botão de fechar."
+      "text2358f7b37c07": "A barra flutuante de um modo temporário: uma seleção, alterações não salvas, uma colagem pendente. Um título, uma descrição discreta, ações com atalhos de teclado e um botão de fechar.",
+      "textf14554abf742": "Retomada de sessão",
+      "text9b166fdc8348": "Tempo desde o despertar de um sandbox parado até a primeira resposta do runtime, com a média de cada fase.",
+      "text2c501fc3ba5b": "Retomadas",
+      "text421f441370b1": "Fases (média)"
     },
     "publicShareConfirm": {
       "title": "Criar um link público?",

@@ -21415,7 +21415,11 @@
       "textf543a9f99ce7": "Barra delle azioni",
       "textca4067071fcf": "Selezione",
       "text4cea356a17a1": "Modifiche non salvate",
-      "text2358f7b37c07": "La barra flottante di una modalità temporanea: una selezione, modifiche non salvate, un incolla in sospeso. Un titolo, una descrizione attenuata, azioni con scorciatoie da tastiera e un pulsante di chiusura."
+      "text2358f7b37c07": "La barra flottante di una modalità temporanea: una selezione, modifiche non salvate, un incolla in sospeso. Un titolo, una descrizione attenuata, azioni con scorciatoie da tastiera e un pulsante di chiusura.",
+      "textf14554abf742": "Ripresa della sessione",
+      "text9b166fdc8348": "Tempo dal risveglio di una sandbox arrestata fino alla prima risposta del suo runtime, con la media di ogni fase.",
+      "text2c501fc3ba5b": "Riprese",
+      "text421f441370b1": "Fasi (media)"
     },
     "publicShareConfirm": {
       "title": "Creare un link pubblico?",

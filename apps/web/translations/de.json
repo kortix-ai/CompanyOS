@@ -21415,7 +21415,11 @@
       "textf543a9f99ce7": "Aktionsleiste",
       "textca4067071fcf": "Auswahl",
       "text4cea356a17a1": "Ungespeicherte Änderungen",
-      "text2358f7b37c07": "Die schwebende Leiste für einen vorübergehenden Modus: eine Auswahl, ungespeicherte Änderungen, ein ausstehendes Einfügen. Ein Titel, eine gedämpfte Beschreibung, Aktionen mit Tastenhinweisen und eine Schließen-Schaltfläche."
+      "text2358f7b37c07": "Die schwebende Leiste für einen vorübergehenden Modus: eine Auswahl, ungespeicherte Änderungen, ein ausstehendes Einfügen. Ein Titel, eine gedämpfte Beschreibung, Aktionen mit Tastenhinweisen und eine Schließen-Schaltfläche.",
+      "textf14554abf742": "Sitzungsfortsetzung",
+      "text9b166fdc8348": "Zeit vom Aufwecken einer gestoppten Sandbox bis zur ersten Antwort ihrer Laufzeit, mit dem Durchschnitt jeder Phase.",
+      "text2c501fc3ba5b": "Fortsetzungen",
+      "text421f441370b1": "Phasen (Ø)"
     },
     "publicShareConfirm": {
       "title": "Öffentlichen Link erstellen?",

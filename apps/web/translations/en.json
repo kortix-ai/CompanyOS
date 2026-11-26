@@ -21460,7 +21460,11 @@
       "textf543a9f99ce7": "Action Bar",
       "textca4067071fcf": "Selection",
       "text4cea356a17a1": "Unsaved edits",
-      "text2358f7b37c07": "The floating bar for a temporary mode: a selection, unsaved edits, a pending paste. A title, a muted description, actions with key hints, and a close button."
+      "text2358f7b37c07": "The floating bar for a temporary mode: a selection, unsaved edits, a pending paste. A title, a muted description, actions with key hints, and a close button.",
+      "textf14554abf742": "Session resume",
+      "text9b166fdc8348": "Time from waking a stopped sandbox until its runtime answers, with the average of each phase.",
+      "text2c501fc3ba5b": "Resumes",
+      "text421f441370b1": "Phases (avg)"
     },
     "publicShareConfirm": {
       "title": "Create a public link?",

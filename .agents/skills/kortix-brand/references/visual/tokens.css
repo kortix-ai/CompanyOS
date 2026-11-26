@@ -25,7 +25,7 @@
   --accent-foreground: #1f1f1f;
   --destructive: #e7000b;
   --destructive-foreground: #fafafa;
-  --border: #e2e2e2;
+  --border: #dcdcdc;
   --input: #ededed;
   --ring: #0099ff;
   --hover: rgb(0 0 0 / 0.045);
@@ -153,7 +153,7 @@
   --accent-foreground: #ffffff;
   --destructive: #ff6467;
   --destructive-foreground: #fafafa;
-  --border: #262626;
+  --border: #2c2c2c;
   --input: #1c1c1c;
   --ring: #0099ff;
   --hover: rgb(255 255 255 / 0.06);
@@ -209,7 +209,7 @@
     --accent-foreground: #ffffff;
     --destructive: #ff6467;
     --destructive-foreground: #fafafa;
-    --border: #262626;
+    --border: #2c2c2c;
     --input: #1c1c1c;
     --ring: #0099ff;
     --hover: rgb(255 255 255 / 0.06);

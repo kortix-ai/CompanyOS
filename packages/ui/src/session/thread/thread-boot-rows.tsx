@@ -3,6 +3,7 @@
 import { useProjectSession, useSessionPrompts } from '@kortix/sdk/react';
 import { useContext, useMemo } from 'react';
 
+import { useIsPhone } from '../../hooks/use-mobile';
 import { AgentMark } from '../../internal/components/agent-mark';
 import { cn } from '../../lib/utils';
 import { errorToast } from '../../primitives/toast';
@@ -115,6 +116,7 @@ export function ThreadBootRows({
   composerPlaceholder?: string;
   readOnly?: boolean;
 }) {
+  const isPhone = useIsPhone();
   const rows = useContext(TranscriptRowsContext);
   const promptInbox = useSessionPrompts(projectId, sessionId);
   const { submitted, effectiveSubmission, extraSends, handleSend } = useInstantSessionSend({
@@ -171,7 +173,7 @@ export function ThreadBootRows({
               onRetry={(id) => void promptInbox.retry(id).catch((error) => errorToast(error.message))}
             />
           }
-          underbarPlacement="inline"
+          underbarPlacement={isPhone ? undefined : 'inline'}
           // The panel's rows run `px-5`, as `SessionChat`'s composer in the panel.
           parentClassName="max-w-none px-5 pb-4"
         />

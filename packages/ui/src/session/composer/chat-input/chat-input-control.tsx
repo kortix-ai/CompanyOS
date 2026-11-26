@@ -739,7 +739,7 @@ export function ChatInputControl({
           variant="ghost"
           size="sm"
           aria-label={[`${t('chatInput')}: ${agentLabel}`, ...spokenParts].join(' · ')}
-          className="text-muted-foreground data-[state=open]:text-foreground hit-area-y-3 min-w-0 rounded-lg"
+          className="text-muted-foreground data-[state=open]:text-foreground kx-chat-input-trigger hit-area-y-3 min-w-0 rounded-lg"
         >
           <AgentMark slug={displayedName ?? agentLabel} />
           <span className={cn('max-w-[7rem] truncate', triggerLabelClassName)}>{agentLabel}</span>
@@ -779,7 +779,7 @@ export function ChatInputControl({
         // The composer card's surface and corners: the panel reads as the
         // composer grown upward, not as a menu beside it.
         className={cn(
-          'bg-background overflow-hidden rounded-xl p-0',
+          'kx-chat-input-popover bg-background overflow-hidden rounded-xl p-0',
           PANEL_WIDTH,
           // A dialog opened from inside sits above: the panel steps out of its way.
           suspended && 'invisible',
@@ -830,13 +830,13 @@ export function ChatInputControl({
           // above the composer; the pane on the right scrolls inside that.
           className="flex max-h-[var(--radix-popover-content-available-height,32rem)] flex-col"
         >
-          <div className="flex min-h-[9.5rem] flex-1">
+          <div className="kx-chat-input-columns flex min-h-[9.5rem] flex-1">
             <div
               ref={listRef}
               role="tablist"
               aria-orientation="vertical"
               aria-label={t('chatInput')}
-              className="flex w-72 shrink-0 flex-col gap-px overflow-y-auto p-1.5"
+              className="kx-chat-input-list flex w-72 shrink-0 flex-col gap-px overflow-y-auto p-1.5"
             >
               {listIds.map((id) => {
                 if (id === MORE_ROW) {

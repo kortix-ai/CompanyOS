@@ -25,9 +25,10 @@ import { errorMessage } from '../../shared/error-message';
 import { enqueueSessionNotice } from '../session-notice-batch';
 
 /**
- * Fire the triggers each merged request matches, then tell `originSessionId`
- * (the session that opened `merged[0]`) that its request merged. Returns the
- * fires that reached a session. Never throws.
+ * Fire the triggers each merged request matches and tell `originSessionId`
+ * (the session that opened `merged[0]`) that its request merged; the notice
+ * waits only for the triggers into that session. Returns the fires that
+ * reached a session. Never throws.
  */
 export async function fireChangeRequestMergedTriggers(
   project: ProjectRow,
@@ -47,22 +48,26 @@ export async function fireChangeRequestMergedTriggers(
           isNull(projectTriggerRuntime.autoPausedAt),
         ),
       );
+    const fires = merged.flatMap((cr) =>
+      rows.map((row) => row.spec as unknown as GitTriggerSpec).filter((spec) => spec && changeRequestMatches(spec, cr)).map((spec) => ({ spec, cr })),
+    );
+    const paused = fires.length > 0 ? await automaticFirePauseReason(project) : null;
     let reached = 0;
-    if (rows.length > 0) {
-      const paused = await automaticFirePauseReason(project);
-      for (const cr of merged) {
-        for (const row of rows) {
-          const spec = row.spec as unknown as GitTriggerSpec;
-          if (!spec || !changeRequestMatches(spec, cr)) continue;
-          if (await fireOne(project, spec, cr, paused)) reached += 1;
-        }
+    const fire = async (intoOrigin: boolean) => {
+      for (const { spec, cr } of fires) {
+        if ((Boolean(originSessionId) && spec.pinnedSessionId === originSessionId) !== intoOrigin) continue;
+        if (await fireOne(project, spec, cr, paused)) reached += 1;
       }
-    }
+    };
+    // The origin's own triggers first, so its notice can see them; a trigger
+    // into another session can start a sandbox and never delays the notice.
+    await fire(true);
     if (originSessionId) {
       await notifyOriginSession(project, merged[0], originSessionId).catch((error: unknown) =>
         logger.warn('[cr-merge] origin session notice failed', { projectId: project.projectId, error: errorMessage(error) }),
       );
     }
+    await fire(false);
     return reached;
   } catch (error) {
     logger.warn('[triggers] change request fire failed', {

@@ -57,12 +57,14 @@ export type SecretExposure = 'enforced' | 'environment' | 'disabled';
  *  - `llm_gateway` — the LLM providers screen (`provider-connect.tsx`).
  *  - `connector`   — the connector binding, whose own control stays editable.
  *  - `git`         — the git-connection flow (`apps/api/src/projects/lib/git.ts`).
+ *  - `browser`     — a website login link; the sandbox browser types it
+ *                    (`apps/api/src/projects/lib/browser-logins.ts`).
  *
  * Offering any of them in the exposure picker would offer a choice that does
  * not exist, and saving would move the secret off the consumer the assigning
  * flow reads.
  */
-export type SecretUsage = 'agent' | 'llm_gateway' | 'connector' | 'git';
+export type SecretUsage = 'agent' | 'llm_gateway' | 'connector' | 'git' | 'browser';
 
 /** The stored `strategy` + `consumer` pair one exposure writes (spec §3). */
 export function secretExposureTarget(exposure: SecretExposure): {
@@ -108,6 +110,7 @@ export function secretUsage(
   if (consumer === 'llm_gateway') return 'llm_gateway';
   if (consumer === 'connector') return 'connector';
   if (consumer === 'git_proxy') return 'git';
+  if (consumer === 'browser') return 'browser';
   return 'agent';
 }
 
@@ -129,7 +132,7 @@ export function secretUsageIsAssigned(
   // connector-scoped setup link and never bound) has no owning flow to
   // disconnect: its owner picks its delivery.
   if (consumer === 'connector') return opts?.connectorBound ?? true;
-  return consumer === 'llm_gateway' || consumer === 'git_proxy';
+  return consumer === 'llm_gateway' || consumer === 'git_proxy' || consumer === 'browser';
 }
 
 /** What the row's surroundings say about its usage. */
@@ -287,6 +290,11 @@ const ASSIGNED_USAGE_PRESENTATIONS: Record<
   git: {
     label: 'Git',
     description: 'Spent for repository access. It never enters the sandbox.',
+    tone: 'secondary',
+  },
+  browser: {
+    label: 'Website login',
+    description: 'Typed by the session browser on its sites only. It never enters the environment.',
     tone: 'secondary',
   },
 };

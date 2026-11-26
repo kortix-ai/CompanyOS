@@ -14,7 +14,9 @@
  * The read, `GET /:projectId/sessions/:sessionId/log` (P4.2), is a session read: the
  * transcript route's gate, so a session-bound token (a box's `KORTIX_TOKEN`) reads every
  * session the v1 transcript route serves it. A read claims nothing; the restore claims.
- * Postgres only (`../session-log-read.ts`).
+ * The stored log (`../session-log-read.ts`), or with `live=1` the running box's own page
+ * (`../session-log-live.ts`), which the stored log lags by the journal. `source` names which.
+ * One endpoint: a client never reads the box's log itself.
  *
  * The switch preflight, `POST /:projectId/sessions/:sessionId/log/switch-preflight` (P7.1), has the
  * read's gate and changes nothing: the loss report of the stored log on another harness
@@ -61,6 +63,7 @@ import { projectsApp } from '../lib/app';
 import { parseBoundedPositiveInt } from '../lib/serializers';
 import { findSessionLogBlob, storeSessionLogBlob } from '../session-log-blobs';
 import { ingestSessionLogJournal, readSessionLogManifest, sessionExists, type SessionLogScope } from '../session-log-ingest';
+import { readLiveSessionLogPage } from '../session-log-live';
 import { readSessionLogPage } from '../session-log-read';
 import { claimSessionLog } from '../session-log-restore';
 import { sessionLogSwitchPreflight } from '../session-log-switch';
@@ -167,7 +170,7 @@ async function sessionReadGate(
   c: Context<AppEnv>,
   projectId: string,
   sessionId: string,
-): Promise<{ denied: Response } | { denied: null; projectMetadata: unknown }> {
+): Promise<{ denied: Response } | { denied: null; projectMetadata: unknown; userId: string }> {
   const binding = await resolveSessionBinding(c, projectId, sessionId, 'read');
   if (binding.kind === 'error') return { denied: binding.response };
   const { loaded } = binding;
@@ -183,7 +186,7 @@ async function sessionReadGate(
   // claim takes the session sandbox credential, not this gate, so a fresh box still claims.
   return !visible || sessionIsTombstoned(visible.row)
     ? { denied: c.json({ error: 'Not found' }, 404) }
-    : { denied: null, projectMetadata: loaded.row.metadata };
+    : { denied: null, projectMetadata: loaded.row.metadata, userId: loaded.userId };
 }
 
 export function registerSessionLogRoutes(): void {
@@ -370,7 +373,10 @@ export function registerSessionLogRoutes(): void {
       tags: ['sessions'],
       summary: 'Read a page of the session log',
       description:
-        'One page of one thread of the stored session log (`SessionLogPage`), from Postgres only. ' +
+        'One page of one thread of the session log (`SessionLogPage`). Without `live`, the stored log (Postgres). ' +
+        'With `live=1` and no `before_seq`, the running box\'s own newest page (`source: box`), ahead of the stored log ' +
+        'by the journal; the stored log (`source: store`) when the session has no running box, or the box does not ' +
+        'answer a whole page of the current generation within 2 s. The box is never woken. ' +
         '`thread` defaults to the root thread; `messages` are the newest `limit` (default 40, max 500) ' +
         'with `seq < before_seq`, ascending by seq, tombstoned messages left out. A page carries whole ' +
         'messages up to `SESSION_LOG_PAGE_MAX_BYTES` of stored payload (default 2 MiB): an over-budget ' +
@@ -384,7 +390,12 @@ export function registerSessionLogRoutes(): void {
       ...auth,
       request: {
         params,
-        query: z.object({ thread: z.string().optional(), before_seq: z.string().optional(), limit: z.string().optional() }),
+        query: z.object({
+          thread: z.string().optional(),
+          before_seq: z.string().optional(),
+          limit: z.string().optional(),
+          live: z.string().optional().openapi({ description: '`1` or `true`: the running box\'s page when it answers (`source: box`).' }),
+        }),
       },
       responses: {
         200: json(SessionLogPageSchema, 'One page of the session log'),
@@ -414,12 +425,24 @@ export function registerSessionLogRoutes(): void {
       const gate = await sessionReadGate(c, projectId, sessionId);
       if (gate.denied) return gate.denied as never;
 
-      const page = await readSessionLogPage({ sessionId, threadId: query.thread ?? null, beforeSeq, limit: limit.value });
+      const threadId = query.thread ?? null;
+      // The box's page answers for the newest messages only: an older page is the stored log's.
+      if ((query.live === '1' || query.live === 'true') && beforeSeq === null) {
+        const started = Date.now();
+        const live = await readLiveSessionLogPage({ sessionId, userId: gate.userId, threadId, limit: limit.value });
+        // Serialized once and shared by every caller of the same read.
+        if (live.body !== null) return c.body(live.body, 200, { 'Content-Type': 'application/json' }) as never;
+        // A session with no running box is the ordinary case; a box that did not answer is worth a line.
+        if (!live.reason.startsWith('sandbox_') && live.reason !== 'no_sandbox') {
+          logger.info('[session-log] live read answered the stored log', { sessionId, reason: live.reason, ms: Date.now() - started });
+        }
+      }
+      const page = await readSessionLogPage({ sessionId, threadId, beforeSeq, limit: limit.value });
       // The code tells a client this API serves the log and the session has nothing saved (a new
       // session): it stays on the log and reads it again at the next turn end (`useSessionLogSync`).
       if (!page) return c.json({ error: 'No session log for this session', code: 'session_log_missing' }, 404);
       if (page === 'unknown_thread') return c.json({ error: 'Unknown thread' }, 404);
-      return c.json(page, 200);
+      return c.json({ ...page, source: 'store' as const }, 200);
     },
   );
 

@@ -105,7 +105,9 @@ export type FeatureFlagKey =
   | 'session_log_restore'
   /** @deprecated Graduated — the Kortix connectors catalog is the only connectors path. Removed in the next major. */
   | 'connectors_v2'
-  /** Chat: a Slack-style chat with Kortix. Every message is a thread, Kortix's newest reply shows under it, Kortix can start threads, and spaces are shared with people. Experimental, off by default. */
+  /** Channels: Slack-style channels and a 1:1 chat with each of the workspace's agents, in one chat sidebar (Agents and Channels). Every channel message starts a thread. Experimental, off by default. */
+  | 'channels'
+  /** Chat: the channels and DMs. Merged into `channels` (2026-11): the API resolves it equal to `channels` and no longer lists it in the catalog. */
   | 'chat'
   /** @deprecated Withdrawn — merged into `chat` (2026-11). The API sends it equal to `chat` and writes `chat` for it; it is not in the catalog. Read `chat`. Removed in the next major. */
   | 'project_channels'
@@ -146,6 +148,10 @@ export type FeatureFlagKey =
   | 'review_swipe'
   /** Calendar: a shared calendar of dated items with the people on them and comments, plus the project's scheduled triggers (`kortix calendar`). Experimental, off by default. */
   | 'calendar'
+  /** Workspace cache: a new session's /workspace starts from the project's saved cache on Platinum (checkout, node_modules, pnpm store). Experimental, off by default. */
+  | 'platinum_cache'
+  /** Sidebar rail: a fixed icon rail (Home, Search, More) beside the sidebar panel on desktop. Client-only, off by default. */
+  | 'sidebar_rail'
   /** @deprecated Withdrawn — agents messaging people left the product. The API no longer lists, resolves, or accepts it. Removed in the next major. */
   | 'human_messaging';
 
@@ -196,6 +202,7 @@ export const FEATURE_FLAG_KEYS: readonly FeatureFlagKey[] = [
   'reminders',
   'us_region',
   'event_triggers',
+  'channels',
   'chat',
   'shared_drives',
   'goals',
@@ -211,6 +218,8 @@ export const FEATURE_FLAG_KEYS: readonly FeatureFlagKey[] = [
   'desktop_tabs',
   'calendar',
   'review_swipe',
+  'platinum_cache',
+  'sidebar_rail',
 ] as const;
 
 /**

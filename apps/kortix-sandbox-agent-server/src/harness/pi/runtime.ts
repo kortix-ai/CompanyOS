@@ -41,6 +41,7 @@ import type { PiConfigReleases } from './config-release'
 import type { ExtensionStatus, InlineExtension, PiSession, RunnerRef } from './extensions/host'
 import { CODEMODE_TOOL, type CodemodeMode } from './codemode'
 import { SUBAGENT_SPEC_REQUIRED, TASK_STOP_TOOL, type KortixHost, type SpawnSessionInput, type SpawnSessionResult } from './extensions/subagents'
+import { AGENT_CHAT_NOTE } from './agent-chat'
 import { FRONT_AGENTS_TTL_MS, FRONT_PROMPT, FRONT_TOOLS, FRONT_WORKER_NOTE, fetchFrontAgents, frontAgentsSection, frontThreadFilesFrom, type FrontAgent, type FrontThreadFiles } from './front'
 import { WATCHER_PROMPT } from './watcher'
 import { frontSpaceAgentsFrom, frontSpaceRoster, frontSpaceRosterSection } from './front-space'
@@ -2790,7 +2791,9 @@ export class PiRuntime {
       for (const diagnostic of diagnostics) if (diagnostic.type !== 'collision') logger.warn('[pi] skill diagnostic', diagnostic)
       // A flagged managed skill exists only while the project's flag is on.
       const withheld = await withheldManagedSkills(this.env)
-      return skills.filter((skill) => !withheld.includes(skill.name))
+      // By name: pi lists a folder in readdir order, which differs from one machine to the next,
+      // so the same agent's system prompt listed its skills in another order in every session.
+      return skills.filter((skill) => !withheld.includes(skill.name)).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
     } catch (err) {
       logger.warn('[pi] skill load failed', { err: (err as Error).message })
       return []
@@ -2871,6 +2874,7 @@ export class PiRuntime {
     // People write to the root; a subagent's task comes from its parent agent.
     if (!child) parts.push(PROMPT_AUTHOR_SECTION)
     if (!child && this.subagentContext.frontThread) parts.push(FRONT_WORKER_NOTE)
+    if (!child && this.subagentContext.agentChat) parts.push(AGENT_CHAT_NOTE)
     return parts.join('\n\n')
   }
 

@@ -189,7 +189,7 @@ export function isStaleSessionLogPage(state: SessionLogState, page: SessionLogPa
 /**
  * `beforeSeq`: the page answers `before_seq` (an older page); it then settles only below it.
  * Without it the page is the newest one of its thread.
- * `options.box`: the page is the box's own (`GET /kortix/runtime/log`), which answers for the
+ * `options.box`: the page is the box's own (`source: 'box'`: the API relayed `GET /kortix/runtime/log`), which answers for the
  * thread's tail; without it the page is the API's stored log, which lags the box.
  */
 export function applySessionLogPage(state: SessionLogState, page: SessionLogPage, beforeSeq?: number, options?: { box?: boolean }): SessionLogState {

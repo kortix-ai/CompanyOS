@@ -748,7 +748,7 @@ describe('BashTool command card de-nests on the panel (gate finding 5, fourth ca
   test('panel: the hairline BETWEEN the two panes stays — it is not the frame', () => {
     // The de-nest drops edges the row card can redraw. This one separates the
     // command from what it printed, which nothing outside the card can say.
-    expect(render('panel')).toContain('border-border/60 border-t');
+    expect(render('panel')).toContain('border-border border-t');
   });
 });
 

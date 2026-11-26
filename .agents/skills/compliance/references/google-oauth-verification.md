@@ -146,6 +146,13 @@ user, and remove both `GOOGLE_REVIEW_*` lines.
 Newest first. Add a line for every submission, Google email, CASA step and
 recertification.
 
+- 2026-11-25: replied to Google's 2026-11-21 email in the same thread,
+  answering all 7 checklist points, with the reviewer access (bypass link and
+  password pasted by hand; see "Reviewer access"). The 2026-11-23 privacy
+  text is live on kortix.com since v0.16.5. Checked before the reply: the
+  reviewer signs in on staging, has the `credits` tier ($24.84), and Gmail →
+  Connect opens Google's sign-in with the `kortix-connectors` client and the
+  7 Gmail scopes. Next: Google's review result or its CASA instructions.
 - 2026-11-21: Google's "[Action Needed] Your Google APIs Verification
   Request" email: an automated checklist (least privilege, video, reviewer
   access, privacy disclosures, Limited Use, AI training, CASA). The review

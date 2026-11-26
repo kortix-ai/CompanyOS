@@ -396,6 +396,21 @@ await s.answerQuestion(questions[0].id, [["Yes"]]); // null dismisses it
 await s.compact(); // only when health() lists `session.compact`
 ```
 
+### Agent directory
+
+Experimental, behind the workspace flag `channels`. The agent directory lists the agents from `kortix.yaml` that a person can message, each in their own chat. An entry is not a new record. Every agent except `mode: subagent` ones is listed, and My Kortix is one when the workspace runs it. An agent's chat is the person's DM space with the agent.
+
+```ts
+const directory = kortix.workspace(workspaceId).agentDirectory;
+const agents = await directory.list(); // [{ name, display_name, model, status, is_default, builtin, chat_space_id }]
+const chat = await kortix.workspace(workspaceId).spaces.dm(agents[0].name); // the person's chat, created on first call
+const { agent, stopped_sessions } = await directory.setPaused('marketing', true);
+```
+
+`status` is `active`, `paused` or `off` (kortix.yaml disables the agent). A paused agent still gets messages. No schedule, webhook, event or monitor starts it, and pausing stops its running tasks for every person. A person firing a trigger by hand still runs it. Pausing needs the trigger-update permission. Both calls reject with 403 `feature_disabled` while `channels` is off. The REST functions are `listWorkspaceAgentDirectory(workspaceId)` and `setWorkspaceAgentPaused(workspaceId, name, paused)`; the types are `WorkspaceAgentEntry` and `WorkspaceAgentPauseResult`.
+
+React: `useWorkspaceAgentDirectory(workspaceId, { enabled })` and `useSetWorkspaceAgentPaused(workspaceId)`. Opening a chat with `useOpenWorkspaceDm` refreshes the list's `chat_space_id`.
+
 ### Apps
 
 `kortix.project(projectId).apps` deploys immutable App releases behind one stable URL: releases, machines per process group, persistent volumes. New Apps use `private` access. Apps is generally available: every project can create and deploy them.
@@ -964,8 +979,13 @@ loaded image across surfaces. See the
 `getSessionLogPage(projectId, sessionId, query?)`, or `kortix.session(p, s).log(query?)`,
 reads one page of the stored session log (`SessionLogPage`: the session record,
 every thread head, a thread's newest messages by `seq`, `has_more`). `query` is
-`{ thread?, before_seq?, limit? }` (`SessionLogPageQuery`). It answers while the
+`{ thread?, before_seq?, limit?, live? }` (`SessionLogPageQuery`). It answers while the
 sandbox is stopped, and is `null` when the session has no stored log yet.
+`live: true` asks for the newest page as the session's running sandbox holds it: the
+API reads the sandbox, and answers its stored log when the sandbox is not running or
+does not answer within 2 s. The page's `source` (`'box'` or `'store'`) says which. The
+stored log lags a running sandbox by its journal (5 s during a turn, longer when the
+journal retries). `useSession` reads the session log only this way.
 `findSessionAttachments` reads session-log records as well as v1 messages.
 
 `toToolView`, `getChildSessionId`, `partOutcome`, `contextToolTrigger` and

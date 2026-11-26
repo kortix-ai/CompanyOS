@@ -23,6 +23,20 @@ const bucket = fakeSessionStorage();
 const realSupabase = await import('../shared/supabase');
 mock.module('../shared/supabase', () => ({ ...realSupabase, getSupabase: () => ({ storage: bucket.storage }) }));
 
+// The box's own page (`GET /kortix/runtime/log`), as `GET …/log?live=1` reads it. No box runs here.
+const realTransport = await import('../projects/lib/session-runtime-transport');
+type BoxQuery = { thread: string | null; limit: number };
+const boxReads: Array<{ externalId: string; query: BoxQuery }> = [];
+let boxAnswer: (query: BoxQuery, signal: AbortSignal) => Promise<{ ok: true; body: unknown } | { ok: false; reason: string; status: number | null }> =
+  async () => ({ ok: false, reason: 'no box in this test', status: null });
+mock.module('../projects/lib/session-runtime-transport', () => ({
+  ...realTransport,
+  fetchRuntimeLogPage: async (target: { externalId: string }, query: BoxQuery, signal: AbortSignal) => {
+    boxReads.push({ externalId: target.externalId, query });
+    return boxAnswer(query, signal);
+  },
+}));
+
 const { app } = await import('../index');
 const { createAccountToken } = await import('../repositories/account-tokens');
 const { ingestSessionLogJournal } = await import('../projects/session-log-ingest');
@@ -90,6 +104,12 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // `guard_session_sandbox_identity` refuses to delete the box row (with an external id) of a
+  // session that is not tombstoned: tombstone the sessions first.
+  await db
+    .update(projectSessions)
+    .set({ metadata: sql`coalesce(${projectSessions.metadata}, '{}'::jsonb) || '{"deletedAt":"cleanup"}'::jsonb` })
+    .where(eq(projectSessions.projectId, project.project_id));
   await db.delete(sessionSandboxes).where(eq(sessionSandboxes.accountId, project.account_id));
   await db.execute(sql`delete from kortix.account_tokens where account_id = ${project.account_id}`);
   await removeSeeded([project]);
@@ -234,6 +254,156 @@ describe('GET .../log', () => {
     expect(missing.status).toBe(404);
     expect(await missing.json()).toEqual({ error: 'No session log for this session', code: 'session_log_missing' });
     expect((await get(`${base()}/log`, null)).status).toBe(401);
+  });
+});
+
+describe('GET .../log?live=1: the running box answers, else the stored log', () => {
+  const EXT = 'sbx_live_read';
+  type Page = { generation: number; thread_id: string; messages: Array<{ message_id: string; thread_id: string }>; source?: string };
+  const boxPage = (over: Record<string, unknown> = {}) => ({
+    session: { schema: 'kortix.session/2', session_id: live },
+    generation: 0,
+    threads: [{ thread_id: ROOT }],
+    thread_id: ROOT,
+    messages: [{ message_id: 'msg_box_only', thread_id: ROOT, seq: 10_000 }],
+    has_more: true,
+    ...over,
+  });
+  const read = async (path: string, token: string | null = ownerToken) => {
+    const res = await get(path, token);
+    return { status: res.status, body: (await res.json()) as Page };
+  };
+  /** A session with a stored log and a running box of its own: its box row keeps its external id. */
+  let live = '';
+  const setBox = (status: string) => db.update(sessionSandboxes).set({ status } as never).where(eq(sessionSandboxes.sessionId, live));
+
+  beforeAll(async () => {
+    live = await seedSession(project, OWNER);
+    await storeInLog(live, 6);
+    await db.insert(sessionSandboxes).values({ sandboxId: live, sessionId: live, externalId: EXT, accountId: project.account_id, projectId: project.project_id, status: 'active', config: {}, metadata: {} });
+  });
+  afterAll(() => {
+    boxAnswer = async () => ({ ok: false, reason: 'no box in this test', status: null });
+  });
+
+  test('the box page answers with source box; the box is asked for the root thread and the limit', async () => {
+    boxAnswer = async () => ({ ok: true, body: boxPage() });
+    const before = boxReads.length;
+    const { status, body } = await read(`${base(live)}/log?live=1`);
+    expect(status).toBe(200);
+    expect(body.source).toBe('box');
+    expect(body.messages.map((m) => m.message_id)).toEqual(['msg_box_only']);
+    expect(boxReads.slice(before)).toEqual([{ externalId: EXT, query: { thread: null, limit: 40 } }]);
+  });
+
+  test('without live the stored log answers with source store, and the box is not asked', async () => {
+    const before = boxReads.length;
+    const { status, body } = await read(`${base(live)}/log`);
+    expect(status).toBe(200);
+    expect(body.source).toBe('store');
+    expect(body.messages.map((m) => m.message_id)).not.toContain('msg_box_only');
+    expect(boxReads.length).toBe(before);
+  });
+
+  test('thread= goes to the box; a box page of another thread is not served', async () => {
+    boxAnswer = async () => ({ ok: true, body: boxPage() });
+    const before = boxReads.length;
+    const { status, body } = await read(`${base(live)}/log?live=true&thread=${CHILD}`);
+    expect(status).toBe(200);
+    expect(boxReads.slice(before)).toEqual([{ externalId: EXT, query: { thread: CHILD, limit: 40 } }]);
+    expect(body.source).toBe('store');
+    expect(body.thread_id).toBe(CHILD);
+  });
+
+  test('a box that does not answer: the stored log, after at most the 2 s budget', async () => {
+    boxAnswer = (_query, signal) =>
+      new Promise((resolve) => signal.addEventListener('abort', () => resolve({ ok: false, reason: 'timeout', status: null }), { once: true }));
+    const started = Date.now();
+    const { status, body } = await read(`${base(live)}/log?live=1`);
+    const ms = Date.now() - started;
+    expect(status).toBe(200);
+    expect(body.source).toBe('store');
+    expect(body.thread_id).toBe(ROOT);
+    expect(ms).toBeGreaterThanOrEqual(1_900);
+    expect(ms).toBeLessThan(3_500);
+  });
+
+  // The budget covers the whole box read: resolving the box's address (a provider call on a cold
+  // cache) as well as the request to it.
+  test('a box read that does not settle within the budget, whatever it waits on: the stored log', async () => {
+    boxAnswer = () => new Promise((resolve) => setTimeout(() => resolve({ ok: true, body: boxPage() }), 4_000));
+    const started = Date.now();
+    const { status, body } = await read(`${base(live)}/log?live=1`);
+    const ms = Date.now() - started;
+    expect(status).toBe(200);
+    expect(body.source).toBe('store');
+    expect(ms).toBeLessThan(3_000);
+  });
+
+  test('a burst of live reads of one session shares one box read', async () => {
+    boxAnswer = () => new Promise((resolve) => setTimeout(() => resolve({ ok: true, body: boxPage() }), 300));
+    const before = boxReads.length;
+    const answers = await Promise.all(Array.from({ length: 20 }, () => read(`${base(live)}/log?live=1`)));
+    expect(answers.map((a) => `${a.status} ${a.body.source}`)).toEqual(Array.from({ length: 20 }, () => '200 box'));
+    expect(boxReads.length - before).toBe(1);
+  });
+
+  test('more than two different live reads of one session at once: the rest answer the stored log', async () => {
+    boxAnswer = () => new Promise((resolve) => setTimeout(() => resolve({ ok: true, body: boxPage() }), 300));
+    const before = boxReads.length;
+    const answers = await Promise.all([40, 30, 20, 10].map((limit) => read(`${base(live)}/log?live=1&limit=${limit}`)));
+    expect(answers.map((a) => a.body.source).sort()).toEqual(['box', 'box', 'store', 'store']);
+    expect(boxReads.length - before).toBe(2);
+  });
+
+  test('a box page that is not a whole page, or of an older generation than the stored log: the stored log', async () => {
+    boxAnswer = async () => ({ ok: true, body: { generation: 0, thread_id: ROOT, messages: [], has_more: false } });
+    expect((await read(`${base(live)}/log?live=1`)).body.source).toBe('store');
+    await db.update(sessionLogs).set({ generation: 2 }).where(eq(sessionLogs.sessionId, live));
+    try {
+      boxAnswer = async () => ({ ok: true, body: boxPage({ generation: 1 }) });
+      expect((await read(`${base(live)}/log?live=1`)).body.source).toBe('store');
+      boxAnswer = async () => ({ ok: true, body: boxPage({ generation: 2 }) });
+      expect((await read(`${base(live)}/log?live=1`)).body.source).toBe('box');
+    } finally {
+      await db.update(sessionLogs).set({ generation: 0 }).where(eq(sessionLogs.sessionId, live));
+    }
+  });
+
+  test('an older page (before_seq) and a session whose box is stopped read the stored log; the box is not asked', async () => {
+    boxAnswer = async () => ({ ok: true, body: boxPage() });
+    const before = boxReads.length;
+    const older = await read(`${base(live)}/log?live=1&before_seq=20`);
+    expect(older.status).toBe(200);
+    expect(older.body.source).toBe('store');
+    await setBox('stopped');
+    try {
+      const stopped = await read(`${base(live)}/log?live=1`);
+      expect(stopped.status).toBe(200);
+      expect(stopped.body.source).toBe('store');
+    } finally {
+      await setBox('active');
+    }
+    expect(boxReads.length).toBe(before);
+  });
+
+  test('a new session with no stored log: the running box answers; without live it is session_log_missing', async () => {
+    const fresh = await seedSession(project, OWNER);
+    await db.insert(sessionSandboxes).values({ sandboxId: fresh, sessionId: fresh, externalId: `${EXT}_fresh`, accountId: project.account_id, projectId: project.project_id, status: 'active', config: {}, metadata: {} });
+    boxAnswer = async () => ({ ok: true, body: boxPage({ session: { schema: 'kortix.session/2', session_id: fresh } }) });
+    const live = await read(`${base(fresh)}/log?live=1`);
+    expect(live.status).toBe(200);
+    expect(live.body.source).toBe('box');
+    const stored = await get(`${base(fresh)}/log`);
+    expect(stored.status).toBe(404);
+    expect(((await stored.json()) as { code?: string }).code).toBe('session_log_missing');
+  });
+
+  test('the read gate runs first: a caller without access never reaches the box', async () => {
+    boxAnswer = async () => ({ ok: true, body: boxPage() });
+    const before = boxReads.length;
+    expect((await get(`${base(live)}/log?live=1`, null)).status).toBe(401);
+    expect(boxReads.length).toBe(before);
   });
 });
 

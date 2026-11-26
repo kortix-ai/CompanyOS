@@ -777,7 +777,12 @@ Under `/kortix/runtime`, in session-log terms (bodies and answers:
 ### The box's log reads (`runtime.log.v1`)
 
 `RUNTIME_LOG_CAPABILITY` says the box's own log reads can stand in for the
-API's copy of the session log:
+API's copy of the session log. Clients read it through the API: `GET
+/v1/workspaces/:p/sessions/:s/log?live=1` (apps/api `projects/session-log-live.ts`)
+relays the box's newest page with `source: 'box'`, and answers the stored log
+(`source: 'store'`) when the box is not running, does not answer within 2 s, or
+answers an older generation. The web, desktop and mobile apps never read it
+themselves.
 
 - `GET /log` answers a whole `SessionLogPage`: the session record without
   threads, the generation, the thread heads and one page of a thread. The seqs

@@ -65,10 +65,15 @@ describe('secretUsage', () => {
     expect(secretUsage('broker', 'http_broker')).toBe('agent');
   });
 
-  test('the three assigned usages are named by their consumer', () => {
+  test('the four assigned usages are named by their consumer', () => {
     expect(secretUsage('broker', 'llm_gateway')).toBe('llm_gateway');
     expect(secretUsage('broker', 'connector')).toBe('connector');
     expect(secretUsage('broker', 'git_proxy')).toBe('git');
+    expect(secretUsage('broker', 'browser')).toBe('browser');
+  });
+
+  test('a website login reads as one, never as Disabled', () => {
+    expect(secretDeliveryPresentation('broker', 'browser').label).toBe('Website login');
   });
 
   test('a disabled secret has no spender', () => {
@@ -84,6 +89,9 @@ describe('secretUsageIsAssigned', () => {
     expect(secretUsageIsAssigned('llm_gateway')).toBe(true);
     expect(secretUsageIsAssigned('connector')).toBe(true);
     expect(secretUsageIsAssigned('git_proxy')).toBe(true);
+    // A website login is written by its login link and read by the sandbox
+    // browser only: the picker would move it into the env.
+    expect(secretUsageIsAssigned('browser')).toBe(true);
   });
 
   test('leaves the pickable consumers alone', () => {
@@ -293,7 +301,7 @@ describe('defaultSecretExposure', () => {
 });
 
 describe('secretDeliveryLegend', () => {
-  test('lists the three exposures first, then the three assigned usages', () => {
+  test('lists the three exposures first, then the four assigned usages', () => {
     expect(secretDeliveryLegend().map((entry) => [entry.kind, entry.key])).toEqual([
       ['exposure', 'environment'],
       ['exposure', 'enforced'],
@@ -301,6 +309,7 @@ describe('secretDeliveryLegend', () => {
       ['usage', 'llm_gateway'],
       ['usage', 'connector'],
       ['usage', 'git'],
+      ['usage', 'browser'],
     ]);
   });
 

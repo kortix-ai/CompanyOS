@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { createElement, useState, type ReactNode } from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
-import type { LoadSessionLogPage, SessionLogPage } from '../core/session-log/source';
+import type { LoadSessionLogPage, SessionLogPage, SessionLogPageQuery } from '../core/session-log/source';
 import type { SessionControlStreamOptions } from '../core/session/control-stream';
 import type { SessionLog } from '../core/session-log/types';
 
@@ -404,12 +404,31 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
     timers = [];
   });
   type LivePage = ((query: { limit: number }) => Promise<unknown>) | null;
-  function mount(options: { enabled?: boolean; loader?: LoadSessionLogPage | null; livePage?: LivePage }) {
-    const state = { dialect: '', setLivePage: (_: LivePage) => {} };
+  /**
+   * `livePage`: the box's page as the API reads it for `GET …/log?live=1`. With it the box is
+   * ready, and the loader answers a live read the way the API does: the box's page
+   * (`source: 'box'`), else (no page, a failure) its stored page (`source: 'store'`).
+   */
+  const viaApi = (loader: LoadSessionLogPage | null | undefined, livePage: LivePage): LoadSessionLogPage | null | undefined =>
+    !loader || !livePage
+      ? loader
+      : async (projectId, sessionId, query, signal) => {
+          if (!query.live) return loader(projectId, sessionId, query, signal);
+          const box = await livePage({ limit: query.limit ?? 40 }).catch(() => null);
+          // A cancelled request answers nothing: the API's fallback never reaches the client.
+          if (signal?.aborted) throw new DOMException('The read was cancelled', 'AbortError');
+          if (box) return { ...(box as SessionLogPage), source: 'box' };
+          const stored = await loader(projectId, sessionId, query, signal);
+          return stored && typeof stored === 'object' ? { ...(stored as SessionLogPage), source: 'store' } : stored;
+        };
+  function mount(options: { enabled?: boolean; loader?: LoadSessionLogPage | null; livePage?: LivePage; boxReady?: boolean }) {
+    const state = { dialect: '', setBoxReady: (_: boolean) => {} };
+    // Built once: a new loader on each render would restart the read.
+    const loader = viaApi(options.loader, options.livePage ?? null);
     render(() => {
-      const [livePage, setLivePage] = useState<LivePage>(() => options.livePage ?? null);
-      state.setLivePage = (next) => setLivePage(() => next);
-      state.dialect = useSessionLogSync(PROJECT, SESSION, { enabled: options.enabled ?? true, loader: options.loader, livePage: livePage as never, joinStream, schedule });
+      const [boxReady, setBoxReady] = useState(options.boxReady ?? !!options.livePage);
+      state.setBoxReady = setBoxReady;
+      state.dialect = useSessionLogSync(PROJECT, SESSION, { enabled: options.enabled ?? true, loader, boxReady, joinStream, schedule });
       return null;
     });
     return state;
@@ -431,24 +450,6 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
   const heldMessages = () => Object.values(useSyncStore.getState().sessionLogs[SESSION]?.messages ?? {}).flat();
   const ended = (token: string) => ({ type: 'kortix.control.turn', payload: { last_ended: { turn_token: token } } });
 
-  test('KRTX-4973: delayed same-generation API fallback cannot settle over a newer runtime page', async () => {
-    let apiReads = 0;
-    const pending = deferredPage();
-    let liveWorks = false;
-    const loader: LoadSessionLogPage = async () => ++apiReads === 1 ? page() : pending.promise;
-    mount({ loader, livePage: async () => liveWorks ? page() : null });
-    await flush();
-    const stream = latestStream();
-    act(() => stream.onRuntimeResync());
-    await flush();
-    liveWorks = true;
-    act(() => stream.onRuntimeResync());
-    await flush();
-    await act(async () => pending.resolve(userPage()));
-    await flush();
-    expect(heldMessages()).toEqual(page().messages);
-  });
-
   // Replies vanish until a hard refresh: the box page delivered the newest turns, a box read
   // then failed, and each re-read (a resync, a reconnect, a visible tab, a turn end) fell back
   // to the API page, which lags the box by the journal. That page settled every newer reply away.
@@ -458,8 +459,9 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
     let shown: ReturnType<typeof useSessionLogThread> = null;
     const loader: LoadSessionLogPage = async () => lagging();
     const livePage = async () => (boxUp ? page() : null);
+    const api = viaApi(loader, livePage);
     render(() => {
-      useSessionLogSync(PROJECT, SESSION, { enabled: true, loader, livePage, joinStream, schedule });
+      useSessionLogSync(PROJECT, SESSION, { enabled: true, loader: api, boxReady: true, joinStream, schedule });
       shown = useSessionLogThread({ projectId: PROJECT, sessionId: SESSION });
       return null;
     });
@@ -489,17 +491,16 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
     expect(heldMessages()).toEqual(page().messages.slice(0, -1));
   });
 
-  test('a stale box page (an older generation) counts as a failed box read: the re-read falls back to the API page', async () => {
-    let apiReads = 0;
-    const loader: LoadSessionLogPage = async () => { apiReads++; return { ...page(), generation: 2 }; };
+  // The API answers the stored log in place of a box page of an older generation (a zombie box);
+  // a stale page that reaches the client anyway changes nothing.
+  test('a stale box page (an older generation) answering a live read changes nothing', async () => {
+    const loader: LoadSessionLogPage = async () => ({ ...page(), generation: 2 });
     const livePage = async () => ({ ...page(), generation: 1, messages: page().messages.slice(0, -1) });
     mount({ loader, livePage });
     await flush();
     expect(heldMessages()).toEqual(page().messages);
-    const before = apiReads;
     act(() => latestStream().onRuntimeResync());
     await flush();
-    expect(apiReads).toBe(before + 1);
     expect(heldMessages()).toEqual(page().messages);
   });
 
@@ -540,12 +541,14 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
   });
 
   test('KRTX-4973: failed and incomplete turn-end reads recover the assistant in the thread hook', async () => {
+    // The turn-end read fails once; every read before the journal commits is incomplete.
     let reads = 0;
+    let committed = false;
     let shown: ReturnType<typeof useSessionLogThread> = null;
     const loader: LoadSessionLogPage = async () => {
       reads++;
       if (reads === 2) throw new Error('temporary read failure');
-      return reads < 4 ? userPage() : page();
+      return committed ? page() : userPage();
     };
     render(() => {
       useSessionLogSync(PROJECT, SESSION, { enabled: true, loader, joinStream, schedule });
@@ -560,6 +563,7 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
     expect(roles()).not.toContain('assistant');
     await runTimers();
     expect(roles()).not.toContain('assistant');
+    committed = true;
     await runTimers();
     expect(roles()).toContain('assistant');
   });
@@ -632,15 +636,18 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
       let reads = 0;
       let liveReads = 0;
       let switchSession: (id: string) => void = () => { throw new Error('not mounted'); };
+      // The old session's reads: the new session's own reads (and the API's fallback for them) are not the subject.
       const loader: LoadSessionLogPage = async (_project, id) => {
+        if (id !== SESSION) return page();
         reads++;
-        return id === SESSION && source === 'api' && reads > 1 ? pending.promise : page();
+        return source === 'api' && reads > 1 ? pending.promise : page();
       };
       const livePage = async () => ++liveReads === 1 ? page() : pending.promise;
+      const api = source === 'runtime' ? viaApi(loader, livePage) : loader;
       render(() => {
         const [id, setId] = useState(SESSION);
         switchSession = setId;
-        useSessionLogSync(PROJECT, id, { enabled: true, loader, livePage: source === 'runtime' ? livePage : null, joinStream, schedule });
+        useSessionLogSync(PROJECT, id, { enabled: true, loader: api, boxReady: source === 'runtime', joinStream, schedule });
         return null;
       });
       await flush();
@@ -877,6 +884,157 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
     expect(joined.at(-1)!.options.schema).toBe('v2');
   });
 
+  // One read endpoint: `GET …/log?live=1` answers the running box's page (`source: 'box'`) or,
+  // when the box does not answer in time, the stored log (`source: 'store'`). The API decides.
+  describe('one read endpoint: GET …/log?live=1 answers the box page or the stored log', () => {
+    const missing = () => Object.assign(new Error('No session log for this session'), { status: 404, code: 'session_log_missing' });
+    const asBox = (p: SessionLogPage): SessionLogPage => ({ ...p, source: 'box' });
+    const asStore = (p: SessionLogPage): SessionLogPage => ({ ...p, source: 'store' });
+    const lagging = (): SessionLogPage => ({ ...page(), messages: page().messages.slice(0, -4) });
+
+    test('with a ready box the first read is the stored log, the next one is live, and every re-read is live', async () => {
+      const queries: SessionLogPageQuery[] = [];
+      mount({ boxReady: true, loader: async (_p, _s, query) => { queries.push(query); return query.live ? asBox(page()) : asStore(page()); } });
+      await flush();
+      expect(queries.map((q) => q.live === true)).toEqual([false, true]);
+      act(() => latestStream().onRuntimeResync());
+      await flush();
+      expect(queries.map((q) => q.live === true)).toEqual([false, true, true]);
+    });
+
+    test('a page the box served answers for the tail: a reply the box no longer holds leaves', async () => {
+      let box = page();
+      mount({ boxReady: true, loader: async (_p, _s, query) => (query.live ? asBox(box) : asStore(page())) });
+      await flush();
+      expect(heldMessages()).toEqual(page().messages);
+      box = { ...page(), messages: page().messages.slice(0, -1) };
+      act(() => latestStream().onRuntimeResync());
+      await flush();
+      expect(heldMessages()).toEqual(page().messages.slice(0, -1));
+    });
+
+    test('the stored log answering a live read (the box did not answer) keeps every reply after its last seq', async () => {
+      let boxUp = true;
+      mount({ boxReady: true, loader: async (_p, _s, query) => (query.live && boxUp ? asBox(page()) : asStore(lagging())) });
+      await flush();
+      expect(heldMessages()).toEqual(page().messages);
+      boxUp = false;
+      act(() => latestStream().onRuntimeResync());
+      await flush();
+      act(() => latestStream().onControl(ended('first')));
+      act(() => latestStream().onControl(ended('second')));
+      await flush();
+      await runTimers();
+      expect(heldMessages()).toEqual(page().messages);
+    });
+
+    // An API from before `live` ignores the parameter and answers its stored page with no source.
+    test('a page with no source is the stored log: the replies a saved copy holds after its last seq stay', async () => {
+      const data = new Map<string, string>();
+      const copies = createSavedCopyStore({ storage: { getItem: (k) => data.get(k) ?? null, setItem: (k, v) => void data.set(k, v), removeItem: (k) => void data.delete(k) }, userId: 'u1' });
+      await copies.write(PROJECT, SESSION, page());
+      setSavedCopyStore(copies);
+      mount({ loader: async () => lagging() });
+      await flush();
+      expect(heldMessages()).toEqual(page().messages);
+    });
+
+    test('a new session the API holds no log for: the box getting ready reads the page at once and turns v2', async () => {
+      let boxUp = false;
+      const state = { dialect: '', setBoxReady: (_: boolean) => {} };
+      render(() => {
+        const [boxReady, setBoxReady] = useState(false);
+        state.setBoxReady = setBoxReady;
+        state.dialect = useSessionLogSync(PROJECT, SESSION, {
+          enabled: true,
+          loader: async (_p, _s, query) => {
+            if (query.live && boxUp) return asBox(page());
+            throw missing();
+          },
+          boxReady,
+          joinStream,
+          schedule,
+        });
+        return null;
+      });
+      await flush();
+      expect(state.dialect).toBe('missing');
+      boxUp = true;
+      act(() => state.setBoxReady(true));
+      await flush();
+      expect(state.dialect).toBe('v2');
+      expect(heldMessages()).toEqual(page().messages);
+      expect(latestStream().schema).toBe('v2');
+    });
+
+    test('overlapping re-read triggers share one live read', async () => {
+      let liveReads = 0;
+      let release = () => {};
+      mount({
+        boxReady: true,
+        loader: async (_p, _s, query) => {
+          if (!query.live) return asStore(page());
+          liveReads++;
+          return liveReads === 1 ? asBox(page()) : new Promise((resolve) => { release = () => resolve(asBox(page())); });
+        },
+      });
+      await flush();
+      expect(liveReads).toBe(1);
+      act(() => latestStream().onRuntimeResync());
+      act(() => latestStream().onRuntimeResync());
+      act(() => latestStream().onConnectionChange(false));
+      act(() => latestStream().onConnectionChange(true));
+      await flush();
+      expect(liveReads).toBe(2);
+      release();
+      await flush();
+    });
+    test('a live read with no page this client can read (an unknown record, the network) reads the stored log instead', async () => {
+      let live: 'ok' | 'invalid' | 'error' = 'ok';
+      const queries: SessionLogPageQuery[] = [];
+      mount({
+        boxReady: true,
+        loader: async (_p, _s, query) => {
+          queries.push(query);
+          if (!query.live) return asStore(page());
+          if (live === 'error') throw new Error('network');
+          return live === 'invalid' ? { ...asBox(page()), messages: [{ seq: 'x' }] } : asBox(page());
+        },
+      });
+      await flush();
+      for (const failure of ['invalid', 'error'] as const) {
+        live = failure;
+        const before = queries.length;
+        act(() => latestStream().onRuntimeResync());
+        await flush();
+        expect(queries.slice(before).map((q) => q.live === true)).toEqual([true, false]);
+      }
+      expect(heldMessages()).toEqual(page().messages);
+    });
+
+    test('the box getting ready while a live read is on the wire reads again once that read settles', async () => {
+      let liveReads = 0;
+      const first = deferredPage();
+      const state = mount({
+        boxReady: false,
+        loader: async (_p, _s, query) => {
+          if (!query.live) return asStore(page());
+          liveReads++;
+          return liveReads === 1 ? first.promise : asBox(page());
+        },
+      });
+      await flush();
+      act(() => latestStream().onRuntimeResync());
+      await flush();
+      expect(liveReads).toBe(1);
+      act(() => state.setBoxReady(true));
+      await flush();
+      await act(async () => first.resolve(asStore(page())));
+      await flush();
+      expect(liveReads).toBe(2);
+    });
+  });
+
   describe('a box that serves its log (runtime.log.v1): the box page is the newest page', () => {
     const missing = () => Object.assign(new Error('No session log for this session'), { status: 404, code: 'session_log_missing' });
     /** The box's page: the API's, plus the reply it streams and a prompt waiting behind it. */
@@ -950,59 +1108,11 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
       expect([apiReads, boxReads]).toEqual([1, 2]);
     });
 
-    test('the box loader arriving after the first read (the box got ready later) reads the box page then, and a missing log turns v2', async () => {
-      let boxReads = 0;
-      const state = mount({ loader: async () => { throw missing(); } });
-      await flush();
-      expect(state.dialect).toBe('missing');
-      expect(joined.map((j) => j.options.schema)).toEqual([undefined]);
-      act(() => state.setLivePage(async () => { boxReads++; return boxPage(); }));
-      await flush();
-      expect(boxReads).toBe(1);
-      expect(state.dialect).toBe('v2');
-      expect(joined.at(-1)!.options.schema).toBe('v2');
-    });
-
     test('a box read that fails changes nothing: the API page stays, and the stream stays on schema v2', async () => {
       mount({ loader: async () => page(), livePage: async () => { throw new Error('daemon 503'); } });
       await flush();
       expect(held()).toEqual(page().messages.map((m) => m.message_id));
       expect(joined.at(-1)!.options.schema).toBe('v2');
-    });
-
-    test('three consecutive box failures stop the box reads for 10 min (a wedged box answers every read 502 after the proxy budget); a success or a new box resets', async () => {
-      let boxReads = 0;
-      let boxAnswers = false;
-      mount({
-        loader: async () => page(),
-        livePage: async () => { boxReads++; if (!boxAnswers) throw new Error('connect timeout'); return boxPage(); },
-      });
-      await flush();
-      expect(boxReads).toBe(1); // the first read failed once
-      const v2 = joined.at(-1)!;
-      const reconnect = async () => {
-        act(() => v2.options.onConnectionChange(false));
-        act(() => v2.options.onConnectionChange(true));
-        await flush();
-      };
-      await reconnect();
-      await reconnect();
-      expect(boxReads).toBe(3); // three consecutive failures arm the skip
-      await reconnect();
-      expect(boxReads).toBe(3); // the box page is skipped; the API page still re-read
-      // The window passes: the box is asked again (and fails, so the skip re-arms).
-      setSystemTime(Date.now() + 10 * 60_000 + 1_000);
-      await reconnect();
-      expect(boxReads).toBe(4);
-      // The box answers again: the skip is gone and stays gone while it answers.
-      setSystemTime(Date.now() + 10 * 60_000 + 1_000);
-      boxAnswers = true;
-      await reconnect();
-      expect(boxReads).toBe(5);
-      await reconnect();
-      await reconnect();
-      expect(boxReads).toBe(7);
-      setSystemTime(); // restore the real clock
     });
 
     test('overlapping reload triggers share one in-flight box read', async () => {
@@ -1038,27 +1148,6 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
       expect(boxReads).toBe(3);
     });
 
-    test('a different box loader (a failover) never inherits the old box\'s skip', async () => {
-      let boxReads = 0;
-      const state = mount({ loader: async () => page(), livePage: async () => { boxReads++; throw new Error('connect timeout'); } });
-      await flush();
-      const v2 = joined.at(-1)!;
-      act(() => v2.options.onConnectionChange(false));
-      act(() => v2.options.onConnectionChange(true));
-      await flush();
-      act(() => v2.options.onConnectionChange(false));
-      act(() => v2.options.onConnectionChange(true));
-      await flush();
-      expect(boxReads).toBe(3); // armed
-      // A failover: the session moved to a new box, so a new loader arrives.
-      act(() => state.setLivePage(async () => { boxReads++; return boxPage(); }));
-      await flush();
-      act(() => v2.options.onConnectionChange(false));
-      act(() => v2.options.onConnectionChange(true));
-      await flush();
-      expect(boxReads).toBe(4); // the new box's first read runs despite the old box's skip
-      expect(state.dialect).toBe('v2');
-    });
   });
 
   test('session_log_missing while a turn runs: the page is read again within seconds, one pending read at a time, not only at the turn end', async () => {
@@ -1157,31 +1246,6 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
     await flush();
     expect(boxReads).toBe(3);
     expect(reply()).toEqual(finished);
-  });
-
-  test('F-012: a turn end during a box read that then fails reads the API page, not the box again', async () => {
-    const turn = (token: string) => ({ type: 'kortix.control.turn', cseq: 1, cepoch: 'c', at: 1, payload: { known: true, turns: [], last_ended: { turn_token: token } } });
-    let boxReads = 0;
-    let apiReads = 0;
-    let failStale: (error: unknown) => void = () => {};
-    const livePage = () => {
-      boxReads++;
-      if (boxReads === 1) return Promise.resolve(page());
-      return new Promise((_, reject) => { failStale = reject; });
-    };
-    mount({ loader: async () => { apiReads++; return page(); }, livePage });
-    await flush();
-    const v2 = joined.at(-1)!.options;
-    act(() => v2.onControl(turn('t1')));
-    act(() => v2.onRuntimeResync());
-    await flush();
-    expect([boxReads, apiReads]).toEqual([2, 1]);
-    act(() => v2.onControl(turn('t2')));
-    // The wedged box answers 502 after the proxy budget: the turn end reads the API page once.
-    await act(async () => failStale(new Error('502')));
-    await flush();
-    expect(boxReads).toBe(2);
-    expect(apiReads).toBe(3);
   });
 
   test('a kortix.resync on the v2 connection re-reads the page once, with no duplicate messages', async () => {
@@ -1431,7 +1495,7 @@ describe('useSessionLogThread on v2: a sub-agent thread loads its first page', (
       return null;
     });
     await flush();
-    expect(calls).toEqual([[PROJECT, SESSION, { thread: CHILD, limit: 40 }]]);
+    expect(calls).toEqual([[PROJECT, SESSION, { thread: CHILD, limit: 40, live: true }]]);
     expect(seen.at(-1)!.messages.map((m) => m.message_id)).toEqual(log.threads[1]!.messages.map((m) => m.message_id));
   });
 

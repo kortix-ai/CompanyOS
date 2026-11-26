@@ -40,6 +40,11 @@ export { sessionSpaceAgents } from './lib/front-thread';
 // first tick, not at import: the runner reaches provisioning and account
 // deletion, and a static re-export put that whole graph into every module that
 // loads this surface (the sandbox-proxy boot order, session-sandbox).
+export async function runWorkspaceCacheBuilderTick(now?: Date): Promise<number> {
+  const { runWorkspaceCacheBuilderTick: tick } = await import('./workspace-cache/builder');
+  return tick(now);
+}
+
 export async function runEvalRunnerTick(now?: Date): Promise<number> {
   const { runEvalRunnerTick: tick } = await import('./evals/runner');
   return tick(now);
@@ -109,6 +114,7 @@ export { approvalTargetSession, expireDueApprovals } from './lib/connector-appro
 export { projectsApp } from './lib/app';
 export { decryptProjectSecret, encryptProjectSecret } from './secrets/envelope';
 export { listProjectSecretNamesForConsumer, listResolvedProjectSecrets, resolveProjectSecretForConsumer } from './secrets';
+export { browserLoginSavedPrompt, saveBrowserLoginsFromLink } from './lib/browser-logins';
 // App events (`type: app` triggers): apps/event-routes.ts appends through these.
 export {
   APP_EVENT_LOG_STATUSES,
@@ -281,3 +287,6 @@ export { sessionSharedThroughSpace } from './lib/session-group-viewer';
 
 export { type ConnectorPolicyAction, type ConnectorPolicySpec, extractConnectors } from './connectors';
 export { type DefaultMode, type ProjectPolicySpec, extractProjectPolicies, projectPoliciesToManifestEntries, projectPolicySettingsToManifest } from './policies';
+
+// One QualiLoop test turn against the real agent (consumed by ../qualiloop).
+export { runQualiloopTurn, QualiloopTurnError } from './qualiloop/turn';

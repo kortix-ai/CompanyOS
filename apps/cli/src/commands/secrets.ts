@@ -22,6 +22,7 @@ import {
 } from './secrets-audience.ts';
 import { IDENTIFIER_RE, secretsCall, secretsDelivery } from './secrets-delivery.ts';
 import { secretsLs } from './secrets-ls.ts';
+import { secretsBrowserPlugin, secretsLogins } from './secrets-logins.ts';
 
 
 const HELP = help`Usage: kortix secrets <subcommand> [options]
@@ -88,6 +89,16 @@ Subcommands:
                                     it as an env var. Pass connector for a
                                     key only a connector spends (server-side
                                     only, never in the sandbox env).
+    --login --site <host>           Ask for a WEBSITE LOGIN (username and
+                                    password) instead. The sandbox browser
+                                    types it on <host>; you never see it.
+                                    Repeat --site for each host of the
+                                    sign-in flow.
+  logins                            List website logins: names, sites, and
+                                    whether this agent may use each. --json.
+                                    Sign in with: agent-browser auth login
+                                    <profile> --credential-provider kortix
+                                    --item NAME --url <sign-in page URL>
   sync                              Re-push secrets into sandboxes. In an agent
                                     session: pulls THIS session's secrets and
                                     grant now (the per-prompt sync, on
@@ -206,6 +217,11 @@ export async function runSecrets(argv: string[]): Promise<number> {
       return secretsGrant(rest, ctxOpts, json);
     case 'share':
       return secretsShare(rest, ctxOpts, json);
+    case 'logins':
+      return secretsLogins(ctxOpts, json);
+    // Hidden: agent-browser runs it as the `kortix` credential plugin.
+    case 'browser-plugin':
+      return secretsBrowserPlugin(ctxOpts);
     default:
       process.stderr.write(`${status.err(`unknown subcommand "${sub}"`)}\n\n${HELP}`);
       return 2;

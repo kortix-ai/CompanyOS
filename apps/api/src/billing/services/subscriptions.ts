@@ -1,9 +1,6 @@
 import { createHostedCheckout } from './hosted-checkout';
 import { getStripe } from '../../shared/stripe';
-import {
-  getCreditAccount,
-  updateCreditAccount,
-} from '../repositories/credit-accounts';
+import { getCreditAccount } from '../repositories/credit-accounts';
 import { getCustomerByAccountId, upsertCustomer, deleteCustomerByStripeId } from '../repositories/customers';
 import { BillingError, SubscriptionError } from '../../errors';
 import {
@@ -16,6 +13,7 @@ import {
 import { isDeadSubscriptionStatus } from './billing-state';
 import { applyStripeSync } from './account-write-owner';
 import { grantForPaidProrationInvoice } from './proration-grants';
+import { withAccountLock } from './webhook-concurrency';
 import Stripe from 'stripe';
 
 /**
@@ -408,10 +406,10 @@ export async function syncSubscription(accountId: string) {
     throw new BillingError('Subscription not found in the current Stripe account', 404);
   });
 
-  await updateCreditAccount(accountId, {
-    stripeSubscriptionStatus: subscription.status,
-    billingCycleAnchor: new Date(subscription.billing_cycle_anchor * 1000).toISOString(),
-  });
+  // The same write the customer.subscription.updated webhook makes, so the
+  // plan follows a portal change without waiting for that webhook.
+  const { syncSubscriptionState } = await import('./webhooks');
+  await withAccountLock(accountId, () => syncSubscriptionState(accountId, subscription));
 
   return { success: true, message: 'Subscription synced' };
 }

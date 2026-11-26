@@ -275,7 +275,7 @@ const triggerCreatedSql = sql`(jsonb_typeof(${projectSessions.metadata} -> 'sour
  * No person owns the row: `created_by` is empty or names a service account of
  * the row's account. The SQL twin of `sessionOwnerIsMachine`.
  */
-const machineOwnedSql = sql`(${projectSessions.createdBy} is null or exists (
+const machineOwnedSql = sql`(${qualifiedColumn(projectSessions.createdBy)} is null or exists (
   select 1 from ${serviceAccounts} as owner_sa
    where owner_sa.service_account_id = ${qualifiedColumn(projectSessions.createdBy)}
      and owner_sa.account_id = ${qualifiedColumn(projectSessions.accountId)}))`;

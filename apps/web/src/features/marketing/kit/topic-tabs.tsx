@@ -5,8 +5,8 @@ import { useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 export type Topic = {
   readonly id: string;
   readonly title: string;
-  readonly description: string;
-  readonly body: readonly string[];
+  readonly description: ReactNode;
+  readonly body: readonly ReactNode[];
 };
 
 /**
@@ -16,12 +16,14 @@ export type Topic = {
  */
 export function TopicTabs({
   topics,
-  panels,
+  panels = {},
   label,
   idPrefix = 'topic',
+  renderedPanels,
 }: {
   topics: { readonly title: string; readonly titleMuted: string; readonly tabs: readonly Topic[] };
-  panels: Record<string, () => ReactNode>;
+  panels?: Record<string, () => ReactNode>;
+  renderedPanels?: readonly ReactNode[];
   label: string;
   idPrefix?: string;
 }) {
@@ -96,13 +98,13 @@ export function TopicTabs({
             >
               <div className="flex flex-col gap-3">
                 <h3 className="text-foreground text-xl font-medium tracking-tight">{tab.title}</h3>
-                {tab.body.map((line) => (
-                  <p key={line} className="text-muted-foreground text-base text-pretty">
+                {tab.body.map((line, index) => (
+                  <p key={typeof line === 'string' ? line : index} className="text-muted-foreground text-base text-pretty">
                     {line}
                   </p>
                 ))}
               </div>
-              {Panel ? <Panel /> : null}
+              {renderedPanels ? renderedPanels[selected] : Panel ? <Panel /> : null}
             </div>
           </div>
         </div>

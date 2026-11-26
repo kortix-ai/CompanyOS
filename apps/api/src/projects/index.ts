@@ -35,6 +35,7 @@ import { registerRepositoryReplacementRoutes } from './routes/repository-replace
 import { registerSecretBrokerRoutes } from './routes/secret-broker';
 import { registerSecretRelayRoutes } from './routes/secret-relay';
 import { registerSetupLinksRoutes } from './routes/setup-links';
+import { registerBrowserLoginsRoutes } from './routes/browser-logins';
 import { registerConnectionsRoutes } from './routes/connections';
 import { registerConnectionActionsRoutes } from './routes/connection-actions';
 import { registerComputersRoutes } from './routes/computers';
@@ -62,7 +63,9 @@ import { registerGroupGrantsRoutes } from './routes/group-grants';
 import { registerProviderSecretPoolsRoutes } from './routes/provider-secret-pools';
 import { registerProjectSessionsRoutes, registerSessionLookupRoutes } from './routes/project-sessions';
 import { registerChatThreadRoutes } from './routes/chat-threads';
+import { registerAgentDirectoryRoutes } from './routes/agent-directory';
 import { registerSpaceProactiveRoutes } from './routes/space-proactive';
+import { registerWorkspaceCacheRoutes } from './routes/workspace-cache';
 import { registerSessionTranscriptsRoutes } from './routes/session-transcripts';
 import { registerSessionAttachmentsRoutes } from './routes/session-attachments';
 import { registerSessionOpenBundleRoutes } from './routes/session-open-bundle';
@@ -143,6 +146,7 @@ export function registerAllProjectRoutes(): void {
   registerSecretBrokerRoutes();
   registerSecretRelayRoutes();
   registerSetupLinksRoutes();
+  registerBrowserLoginsRoutes();
   registerConnectionsRoutes();
   registerConnectionActionsRoutes();
   registerComputersRoutes();
@@ -170,7 +174,9 @@ export function registerAllProjectRoutes(): void {
   registerProviderSecretPoolsRoutes();
   registerProjectSessionsRoutes();
   registerChatThreadRoutes();
+  registerAgentDirectoryRoutes();
   registerSpaceProactiveRoutes();
+  registerWorkspaceCacheRoutes();
   registerSessionTranscriptsRoutes();
   registerSessionAttachmentsRoutes();
   registerSessionOpenBundleRoutes();

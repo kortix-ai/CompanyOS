@@ -36,8 +36,10 @@ let second: SeededProject;
 // A paid account nobody can be emailed for yet.
 let unreachable: SeededProject;
 let sent: EmailMessage[] = [];
-// Addresses whose delivery fails the way the transport reports it: a result, not a throw.
-let failing = new Set<string>();
+// Addresses whose delivery fails with this provider status ('*': every address), the way the transport reports it: a result, not a throw.
+let failing = new Map<string, number>();
+// Every address a send was attempted to, delivered or not.
+let attempted: string[] = [];
 const customerEmails = () => sent.filter((m) => !m.subject.startsWith('[Kortix compliance]'));
 const privacyReports = () => sent.filter((m) => m.subject.startsWith('[Kortix compliance]'));
 const savedEnv = config.INTERNAL_KORTIX_ENV;
@@ -64,7 +66,9 @@ beforeAll(async () => {
     { accountId: unreachable.account_id, tier: 'credits' },
   ]);
   setOwnerAlertSenderForTest(async (message) => {
-    if (message.to.some((to) => failing.has(to))) return { ok: false, provider: 'mailpit', status: 503, error: 'unavailable' };
+    attempted.push(...message.to);
+    const status = failing.get(message.to[0]!) ?? failing.get('*');
+    if (status) return { ok: false, provider: 'mailpit', status, error: 'rejected' };
     sent.push(message);
     return { ok: true, provider: 'mailpit', status: 200 };
   });
@@ -72,7 +76,8 @@ beforeAll(async () => {
 
 beforeEach(() => {
   sent = [];
-  failing = new Set();
+  failing = new Map();
+  attempted = [];
   config.INTERNAL_KORTIX_ENV = 'prod';
 });
 
@@ -138,7 +143,7 @@ describe('the subprocessor notice sweep', () => {
     const [report] = privacyReports();
     expect(report!.to).toEqual(['privacy@kortix.com']);
     expect(report!.subject).toBe('[Kortix compliance] Subprocessor notice sent to 2 accounts');
-    expect(report!.text).toContain('takes effect November 24, 2026, 34 days from now');
+    expect(report!.text).toContain('takes effect November 24, 2026, 34 days after the first notice email');
 
     sent = [];
     expect(await runSubprocessorNoticeSweep(new Date('2026-10-20T10:00:00Z'), ROWS)).toEqual({ accountsNotified: 0 });
@@ -210,7 +215,7 @@ describe('the subprocessor notice sweep', () => {
     await runSubprocessorNoticeSweep(new Date('2026-10-20T09:00:00Z'), rows);
     const [report] = privacyReports();
     expect(report!.subject).toBe('[Kortix compliance] Subprocessor notice gave only 17 days');
-    expect(report!.text).toContain('Send no customer data to these subprocessors until 30 days from now');
+    expect(report!.text).toContain('Send no customer data to these subprocessors until 30 days after that email');
   });
 
   test('outside prod the sweep emails nobody', async () => {
@@ -312,13 +317,13 @@ describe('repeated sweeps of one notice', () => {
     const admin = await seedUser('retry-admin');
     const account = await seedAccount('subproc-retry', 'credits', [[owner, 'owner'], [admin, 'admin']]);
 
-    failing = new Set([email(admin, 'retry-admin')]);
+    failing = new Map([[email(admin, 'retry-admin'), 503]]);
     await runSubprocessorNoticeSweep(new Date('2026-11-04T09:00:00Z'), rows);
     expect(emailsTo(email(owner, 'retry-owner'))).toHaveLength(1);
     // Not covered yet: no audit event claims the admin was notified.
     expect(await audits(account.account_id, '2026-11-04')).toEqual([]);
 
-    failing = new Set();
+    failing = new Map();
     sent = [];
     await runSubprocessorNoticeSweep(new Date('2026-11-04T10:00:00Z'), rows);
     expect(customerEmails().filter((m) => [email(owner, 'retry-owner'), email(admin, 'retry-admin')].includes(m.to[0]!)).map((m) => m.to[0])).toEqual([
@@ -327,10 +332,81 @@ describe('repeated sweeps of one notice', () => {
     // The retry does not repeat the privacy@ record of the first sweep.
     expect(privacyReports()).toEqual([]);
     const [audit] = await audits(account.account_id, '2026-11-04');
-    expect(audit!.outputSummary).toMatchObject({ recipients: 2, previously_notified: 1 });
+    expect(audit!.outputSummary).toMatchObject({ recipients: 2, previously_notified: 1, undelivered: 0 });
 
     sent = [];
     expect(await runSubprocessorNoticeSweep(new Date('2026-11-04T11:00:00Z'), rows)).toEqual({ accountsNotified: 0 });
     expect(sent).toEqual([]);
+  });
+
+  test('an address the provider rejects is recorded as undelivered once, not retried every hour', async () => {
+    const rows: Subprocessor[] = [{ ...ROWS[1]!, addedOn: '2026-11-05' }];
+    const owner = await seedUser('reject-owner');
+    const admin = await seedUser('reject-admin');
+    const account = await seedAccount('subproc-reject', 'credits', [[owner, 'owner'], [admin, 'admin']]);
+
+    failing = new Map([[email(admin, 'reject-admin'), 422]]);
+    await runSubprocessorNoticeSweep(new Date('2026-11-05T09:00:00Z'), rows);
+    expect(emailsTo(email(owner, 'reject-owner'))).toHaveLength(1);
+    const [audit] = await audits(account.account_id, '2026-11-05');
+    expect(audit!.outputSummary).toMatchObject({ recipients: 1, previously_notified: 0, undelivered: 1 });
+
+    attempted = [];
+    await runSubprocessorNoticeSweep(new Date('2026-11-05T10:00:00Z'), rows);
+    expect(attempted).toEqual([]);
+    expect(await audits(account.account_id, '2026-11-05')).toHaveLength(1);
+  });
+
+  test('a privacy@ report that fails is sent by a later sweep, once, with the notice period of the first email', async () => {
+    // Added 2026-11-06, effective 2026-12-13: the first email, at 09:00 that day, gave 36 days.
+    const rows: Subprocessor[] = [{ ...ROWS[1]!, addedOn: '2026-11-06' }];
+    failing = new Map([['privacy@kortix.com', 503]]);
+    await runSubprocessorNoticeSweep(new Date('2026-11-06T09:00:00Z'), rows);
+    expect(customerEmails().length).toBeGreaterThan(0);
+    expect(privacyReports()).toEqual([]);
+
+    // Ten days later (27 days left) privacy@ is reachable again: the report is not flagged late.
+    failing = new Map();
+    sent = [];
+    await runSubprocessorNoticeSweep(new Date('2026-11-16T09:00:00Z'), rows);
+    expect(customerEmails()).toEqual([]);
+    expect(privacyReports().map((m) => m.subject)).toEqual([expect.stringMatching(/^\[Kortix compliance\] Subprocessor notice sent to [1-9]\d* accounts$/)]);
+    expect(privacyReports()[0]!.text).toContain('36 days after the first notice email');
+
+    sent = [];
+    await runSubprocessorNoticeSweep(new Date('2026-11-16T10:00:00Z'), rows);
+    expect(sent).toEqual([]);
+  });
+
+  test('a provider-wide rejection is temporary: no account is closed, the next sweep delivers', async () => {
+    const rows: Subprocessor[] = [{ ...ROWS[1]!, addedOn: '2026-11-07' }];
+    const owner = await seedUser('outage-owner');
+    const account = await seedAccount('subproc-outage', 'credits', [[owner, 'owner']]);
+
+    // A paused or misconfigured provider answers 403 for every address, privacy@ included.
+    failing = new Map([['*', 403]]);
+    expect(await runSubprocessorNoticeSweep(new Date('2026-11-07T09:00:00Z'), rows)).toEqual({ accountsNotified: 0 });
+    expect(attempted).toContain(email(owner, 'outage-owner'));
+    expect(sent).toEqual([]);
+    expect(await audits(account.account_id, '2026-11-07')).toEqual([]);
+
+    failing = new Map();
+    await runSubprocessorNoticeSweep(new Date('2026-11-07T10:00:00Z'), rows);
+    expect(emailsTo(email(owner, 'outage-owner'))).toHaveLength(1);
+    const [audit] = await audits(account.account_id, '2026-11-07');
+    expect(audit!.outputSummary).toMatchObject({ recipients: 1, undelivered: 0 });
+    expect(privacyReports().map((m) => m.subject)).toEqual([expect.stringContaining('Subprocessor notice sent to')]);
+  });
+
+  test('a notice whose coverage started before per-report claims existed gets no new report', async () => {
+    const rows: Subprocessor[] = [{ ...ROWS[1]!, addedOn: '2026-11-08' }];
+    // An earlier release claimed one account and reported it; it left no report claim.
+    await db.execute(sql`insert into kortix.chat_event_dedup (event_id, expires_at) values (${`legal:subprocessor-notice:2026-11-08:${paid.account_id}`}, now() + interval '1 day')`);
+    const owner = await seedUser('upgrade-owner');
+    await seedAccount('subproc-upgrade', 'credits', [[owner, 'owner']]);
+
+    await runSubprocessorNoticeSweep(new Date('2026-11-30T09:00:00Z'), rows);
+    expect(emailsTo(email(owner, 'upgrade-owner'))).toHaveLength(1);
+    expect(privacyReports()).toEqual([]);
   });
 });

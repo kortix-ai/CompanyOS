@@ -51,17 +51,21 @@ runs hourly in the billing worker, on prod only (`INTERNAL_KORTIX_ENV=prod`).
   SHA-256 of the address, and per report) keep every email once-only across
   sweeps, replicas and retries.
 - An account that turns paid later in the window is covered by a later sweep.
-  A manager who already has the notice gets no second email. A failed delivery
-  is retried by the next sweep for that recipient only.
-- Each covered account gets an audit event `legal.subprocessor_notice.sent`
-  once every manager has the notice (`resource_id` = `addedOn`,
-  `output_summary` = recipient count, `previously_notified` = managers who had
-  it from an earlier sweep, effective date, vendor names). The customer sees
-  it in the account's audit log.
-- privacy@kortix.com gets one report per notice, from the sweep that first
-  delivers it. Subject "Subprocessor notice gave only N days" means the
-  release took more than 7 days: hold the vendor until 30 days after that
-  report and move `addedOn`.
+  A manager who already has the notice gets no second email.
+- A delivery failure is retried by the next sweep for that recipient only.
+  The exception is a refused address (reserved, or a 422 from the provider):
+  it is not retried and is counted as `undelivered`. A provider-wide error
+  (paused sending, bad credentials, 5xx, 429) is always retried.
+- Each covered account gets one audit event `legal.subprocessor_notice.sent`
+  (`resource_id` = `addedOn`, `output_summary` = `recipients` delivered,
+  `previously_notified` = managers who had it from an earlier sweep,
+  `undelivered`, effective date, vendor names). It is written once no
+  temporary failure is left. The customer sees it in the account's audit log.
+- privacy@kortix.com gets one report per notice, for the sweep that started
+  its coverage (the `report-due` claim row keeps that time). A failed report
+  is retried by later sweeps with the same notice period. Subject "Subprocessor
+  notice gave only N days" means the release took more than 7 days: hold the
+  vendor until 30 days after the first notice email and move `addedOn`.
 
 ## Evidence for an auditor
 

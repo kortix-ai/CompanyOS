@@ -27465,6 +27465,10 @@
     "completeDescription": "Ako si podešavanje pokrenuo u terminalu, tamo se nastavlja samo.",
     "slackName": "Slack",
     "sectionOpen": "Čeka tebe",
+    "sectionOptional": "Opcioni konektori",
+    "skip": "Preskoči",
+    "skipNamed": "Preskoči {name}",
+    "showSkipped": "Prikaži preskočene konektore",
     "doneSummary": "{count} već podešeno",
     "done": "Gotovo",
     "connect": "Poveži {name}",
@@ -27617,5 +27621,22 @@
     "community": "Discord zajednica",
     "whatsNew": "Šta je novo",
     "fullChangelog": "Ceo dnevnik izmena"
+  },
+  "questionPrompt": {
+    "submitFailed": "Odgovori nisu poslati. Sačuvani su ovde. Pokušajte ponovo.",
+    "submitted": "Odgovori su poslati",
+    "submitting": "Slanje odgovora…",
+    "review": "Pregledajte odgovore",
+    "removeCustom": "Ukloni sopstveni odgovor: {answer}",
+    "customAnswer": "Sopstveni odgovor",
+    "customPlaceholder": "Unesite svoj odgovor",
+    "submitAnswer": "Pošalji odgovor",
+    "addAnswer": "Dodaj odgovor",
+    "nextQuestion": "Sledeće pitanje",
+    "submitAnswers": "Pošalji odgovore",
+    "askClarification": "Zatraži pojašnjenje",
+    "clarificationFailed": "Pojašnjenje nije poslato. Pokušajte ponovo.",
+    "discussionLabel": "Razgovarajte o pitanju bez odgovaranja",
+    "sendClarification": "Pošalji pojašnjenje"
   }
 }

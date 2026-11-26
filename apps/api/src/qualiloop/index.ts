@@ -11,7 +11,7 @@
  * valid JSON. A failed turn ends the body as `{"error": ...}`, with no `reply`.
  */
 import { timingSafeEqual } from 'node:crypto';
-import { z } from '@hono/zod-openapi';
+import { createRoute, z } from '@hono/zod-openapi';
 import { config } from '../config';
 import { logger } from '../lib/logger';
 import { makeOpenApiApp } from '../openapi';
@@ -36,7 +36,36 @@ function secretMatches(given: string, expected: string): boolean {
 }
 
 export function registerQualiloopRoutes(): void {
-  qualiloopApp.post('/chat', async (c) => {
+  qualiloopApp.openapi(
+    createRoute({
+      method: 'post',
+      path: '/chat',
+      tags: ['qualiloop'],
+      summary: 'Run an external agent evaluation turn',
+      description:
+        'QualiLoop protocol endpoint. Requires X-Agent-Secret and configured evaluation project. Leading JSON whitespace keeps the response alive until the turn completes.',
+      security: [],
+      request: {
+        headers: z.object({ 'x-agent-secret': z.string().optional() }),
+      },
+      responses: {
+        200: {
+          description:
+            'Whitespace-prefixed JSON containing reply, or error if the turn fails',
+          content: {
+            'application/json': {
+              schema: z.union([
+                z.object({ reply: z.string() }),
+                z.object({ error: z.string() }),
+              ]),
+            },
+          },
+        },
+        400: { description: 'Invalid conversation request' },
+        401: { description: 'Invalid evaluation secret' },
+        404: { description: 'Evaluation endpoint is disabled' },
+      },
+    }), async (c) => {
     const secret = config.QUALILOOP_AGENT_SECRET;
     if (!secret || !config.QUALILOOP_KORTIX_PROJECT_ID) return c.json({ error: 'Not found' }, 404);
     if (!secretMatches(c.req.header('x-agent-secret') ?? '', secret)) return c.json({ error: 'Unauthorized' }, 401);

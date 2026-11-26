@@ -27465,6 +27465,10 @@
     "completeDescription": "Wenn du die Einrichtung im Terminal gestartet hast, läuft sie dort von selbst weiter.",
     "slackName": "Slack",
     "sectionOpen": "Braucht dich",
+    "sectionOptional": "Optionale Verbindungen",
+    "skip": "Überspringen",
+    "skipNamed": "{name} überspringen",
+    "showSkipped": "Übersprungene Verbindungen anzeigen",
     "doneSummary": "{count} bereits eingerichtet",
     "done": "Erledigt",
     "connect": "{name} verbinden",
@@ -27617,5 +27621,22 @@
     "community": "Discord-Community",
     "whatsNew": "Neuigkeiten",
     "fullChangelog": "Vollständiges Changelog"
+  },
+  "questionPrompt": {
+    "submitFailed": "Antworten konnten nicht gesendet werden. Sie bleiben hier gespeichert. Versuche es erneut.",
+    "submitted": "Antworten gesendet",
+    "submitting": "Antworten werden gesendet…",
+    "review": "Antworten prüfen",
+    "removeCustom": "Eigene Antwort entfernen: {answer}",
+    "customAnswer": "Eigene Antwort",
+    "customPlaceholder": "Antwort eingeben",
+    "submitAnswer": "Antwort senden",
+    "addAnswer": "Antwort hinzufügen",
+    "nextQuestion": "Nächste Frage",
+    "submitAnswers": "Antworten senden",
+    "askClarification": "Nachfragen",
+    "clarificationFailed": "Nachfrage konnte nicht gesendet werden. Versuche es erneut.",
+    "discussionLabel": "Die Frage besprechen, ohne sie zu beantworten",
+    "sendClarification": "Nachfrage senden"
   }
 }

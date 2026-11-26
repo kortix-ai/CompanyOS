@@ -27621,5 +27621,22 @@
     "community": "Discord community",
     "whatsNew": "What's new",
     "fullChangelog": "Full changelog"
+  },
+  "questionPrompt": {
+    "submitFailed": "Could not submit answers. Your answers are saved here. Try again.",
+    "submitted": "Answers submitted",
+    "submitting": "Submitting answers…",
+    "review": "Review answers",
+    "removeCustom": "Remove custom answer: {answer}",
+    "customAnswer": "Custom answer",
+    "customPlaceholder": "Type your own answer",
+    "submitAnswer": "Submit answer",
+    "addAnswer": "Add answer",
+    "nextQuestion": "Next question",
+    "submitAnswers": "Submit answers",
+    "askClarification": "Ask for clarification",
+    "clarificationFailed": "Could not send clarification. Try again.",
+    "discussionLabel": "Discuss the question without answering it",
+    "sendClarification": "Send clarification"
   }
 }

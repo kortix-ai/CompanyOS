@@ -27465,6 +27465,10 @@
     "completeDescription": "Se hai avviato la configurazione da un terminale, lì prosegue da sola.",
     "slackName": "Slack",
     "sectionOpen": "Da fare",
+    "sectionOptional": "Connettori facoltativi",
+    "skip": "Salta",
+    "skipNamed": "Salta {name}",
+    "showSkipped": "Mostra connettori saltati",
     "doneSummary": "{count} già configurati",
     "done": "Fatto",
     "connect": "Connetti {name}",
@@ -27617,5 +27621,22 @@
     "community": "Community Discord",
     "whatsNew": "Novità",
     "fullChangelog": "Changelog completo"
+  },
+  "questionPrompt": {
+    "submitFailed": "Impossibile inviare le risposte. Sono salvate qui. Riprova.",
+    "submitted": "Risposte inviate",
+    "submitting": "Invio delle risposte…",
+    "review": "Rivedi le risposte",
+    "removeCustom": "Rimuovi risposta personalizzata: {answer}",
+    "customAnswer": "Risposta personalizzata",
+    "customPlaceholder": "Scrivi la tua risposta",
+    "submitAnswer": "Invia risposta",
+    "addAnswer": "Aggiungi risposta",
+    "nextQuestion": "Domanda successiva",
+    "submitAnswers": "Invia risposte",
+    "askClarification": "Chiedi un chiarimento",
+    "clarificationFailed": "Impossibile inviare la richiesta di chiarimento. Riprova.",
+    "discussionLabel": "Discuti la domanda senza rispondere",
+    "sendClarification": "Invia chiarimento"
   }
 }

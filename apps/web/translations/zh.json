@@ -27465,6 +27465,10 @@
     "completeDescription": "如果你是在终端中开始设置的，终端中的设置会自动继续。",
     "slackName": "Slack",
     "sectionOpen": "待处理",
+    "sectionOptional": "可选连接器",
+    "skip": "跳过",
+    "skipNamed": "跳过{name}",
+    "showSkipped": "显示已跳过的连接器",
     "doneSummary": "{count} 项已设置",
     "done": "已完成",
     "connect": "连接 {name}",
@@ -27617,5 +27621,22 @@
     "community": "Discord 社区",
     "whatsNew": "新功能",
     "fullChangelog": "完整更新日志"
+  },
+  "questionPrompt": {
+    "submitFailed": "无法提交回答。回答已保存在此处，请重试。",
+    "submitted": "回答已提交",
+    "submitting": "正在提交回答…",
+    "review": "检查回答",
+    "removeCustom": "移除自定义回答：{answer}",
+    "customAnswer": "自定义回答",
+    "customPlaceholder": "输入你的回答",
+    "submitAnswer": "提交回答",
+    "addAnswer": "添加回答",
+    "nextQuestion": "下一个问题",
+    "submitAnswers": "提交回答",
+    "askClarification": "请求说明",
+    "clarificationFailed": "无法发送说明请求，请重试。",
+    "discussionLabel": "讨论问题而不作答",
+    "sendClarification": "发送说明请求"
   }
 }

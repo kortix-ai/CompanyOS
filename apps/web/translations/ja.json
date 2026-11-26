@@ -27465,6 +27465,10 @@
     "completeDescription": "ターミナルでセットアップを開始した場合、そちらで自動的に続行されます。",
     "slackName": "Slack",
     "sectionOpen": "対応が必要",
+    "sectionOptional": "任意のコネクター",
+    "skip": "スキップ",
+    "skipNamed": "{name}をスキップ",
+    "showSkipped": "スキップしたコネクターを表示",
     "doneSummary": "{count} 件は設定済み",
     "done": "完了",
     "connect": "{name} を接続",
@@ -27617,5 +27621,22 @@
     "community": "Discord コミュニティ",
     "whatsNew": "新機能",
     "fullChangelog": "すべての変更履歴"
+  },
+  "questionPrompt": {
+    "submitFailed": "回答を送信できませんでした。回答はここに保存されています。もう一度お試しください。",
+    "submitted": "回答を送信しました",
+    "submitting": "回答を送信中…",
+    "review": "回答を確認",
+    "removeCustom": "自由回答を削除: {answer}",
+    "customAnswer": "自由回答",
+    "customPlaceholder": "回答を入力",
+    "submitAnswer": "回答を送信",
+    "addAnswer": "回答を追加",
+    "nextQuestion": "次の質問",
+    "submitAnswers": "回答を送信",
+    "askClarification": "説明を求める",
+    "clarificationFailed": "説明の依頼を送信できませんでした。もう一度お試しください。",
+    "discussionLabel": "回答せずに質問について話し合う",
+    "sendClarification": "説明の依頼を送信"
   }
 }

@@ -27465,6 +27465,10 @@
     "completeDescription": "Si vous avez lancé la configuration dans un terminal, elle y continue toute seule.",
     "slackName": "Slack",
     "sectionOpen": "À faire",
+    "sectionOptional": "Connecteurs facultatifs",
+    "skip": "Ignorer",
+    "skipNamed": "Ignorer {name}",
+    "showSkipped": "Afficher les connecteurs ignorés",
     "doneSummary": "{count} déjà configurés",
     "done": "Terminé",
     "connect": "Connecter {name}",
@@ -27617,5 +27621,22 @@
     "community": "Communauté Discord",
     "whatsNew": "Nouveautés",
     "fullChangelog": "Journal des modifications complet"
+  },
+  "questionPrompt": {
+    "submitFailed": "Impossible d’envoyer les réponses. Elles sont conservées ici. Réessayez.",
+    "submitted": "Réponses envoyées",
+    "submitting": "Envoi des réponses…",
+    "review": "Vérifier les réponses",
+    "removeCustom": "Supprimer la réponse personnalisée : {answer}",
+    "customAnswer": "Réponse personnalisée",
+    "customPlaceholder": "Saisissez votre réponse",
+    "submitAnswer": "Envoyer la réponse",
+    "addAnswer": "Ajouter une réponse",
+    "nextQuestion": "Question suivante",
+    "submitAnswers": "Envoyer les réponses",
+    "askClarification": "Demander une précision",
+    "clarificationFailed": "Impossible d’envoyer la demande de précision. Réessayez.",
+    "discussionLabel": "Discuter de la question sans y répondre",
+    "sendClarification": "Envoyer la demande"
   }
 }

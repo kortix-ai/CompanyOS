@@ -106,6 +106,7 @@ const PER_PROCESS: Record<string, string> = {
 
 /** Files with a `setInterval` that is not a background job over tenant state. */
 const NOT_WORKERS: Record<string, string> = {
+  'qualiloop/index.ts': 'keepalive whitespace for one open QualiLoop response; cleared when that turn settles',
   'apps/public-proxy-handler.ts': 'stamps app activity while one proxied request streams; runs inside that request',
   'apps/ws-proxy.ts': 'stamps app activity for one open WebSocket; runs inside that connection',
   'channels/discord/gateway.ts': 'heartbeat of the one Discord Gateway WebSocket the leader holds; runs inside that connection',

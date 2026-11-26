@@ -26,6 +26,7 @@ import type { AuditRouteLabel } from './audit-labels';
 
 // biome-ignore format: one route per line, so a diff names exactly the route that changed
 export const AUDIT_ROUTE_LABELS: Readonly<Record<string, AuditRouteLabel | string>> = {
+  'POST /v1/qualiloop/chat': { action: 'qualiloop.chat.create', title: 'Started a QualiLoop turn' },
   'GET /.well-known/oauth-authorization-server': { action: 'oauth.server_metadata.read', title: 'Read OAuth server metadata' },
   'GET /.well-known/oauth-protected-resource': { action: 'mcp.resource_metadata.read', title: 'Read MCP resource metadata' },
   'GET /.well-known/oauth-protected-resource/v1/mcp': { action: 'mcp.server_metadata.read', title: 'Read MCP server metadata' },

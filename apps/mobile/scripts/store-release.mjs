@@ -126,6 +126,11 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  * A retried POST that the server already applied answers 409; the caller
  * fails loud and a rerun of the idempotent release picks up from there.
  */
+/**
+ * @param {string} url
+ * @param {RequestInit} init
+ * @param {{ attempts?: number, fetchFn?: (url: string, init: RequestInit) => Promise<Response>, wait?: (ms: number) => Promise<void> }} [options]
+ */
 export async function fetchWithRetry(url, init, { attempts = 4, fetchFn = fetch, wait = sleep } = {}) {
   for (let attempt = 1; ; attempt += 1) {
     try {

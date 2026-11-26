@@ -75,6 +75,7 @@ import { normalizeJsonObject } from '../../shared/json';
 import { isUuid } from '../../shared/validate';
 import {
   canonicalConnectorAlias,
+  isSessionChannelConnector,
   parseSessionConnectorBindings,
   sessionConnectorBindingsRequirePrivateVisibility,
   validateSessionConnectorBindings,
@@ -1083,8 +1084,10 @@ async function validateSessionConnectorsForAgent(params: {
   const { input, accountId, projectId, agentName, loadedAgents, parsedConnectorBindings, visibility } = params;
   const { userId } = input;
   // Every connector this session binds explicitly must be granted to the
-  // session's agent. Nothing is required any more: an unconnected connector no
-  // longer refuses the create, it denies at the call with a connect link.
+  // session's agent, except the connector of the channel that creates it (an
+  // email thread binds its inbox): an agent with `connectors: none` still
+  // answers on its channel. Nothing is required any more: an unconnected
+  // connector no longer refuses the create, it denies at the call with a connect link.
   const grantCheckAliases = new Set<string>(
     parsedConnectorBindings.bindings ? Object.keys(parsedConnectorBindings.bindings) : [],
   );
@@ -1092,7 +1095,10 @@ async function validateSessionConnectorsForAgent(params: {
   if (grantCheckAliases.size > 0) {
     loadedAgentGrant = grantFromLoadedAgents(agentName, loadedAgents);
     for (const alias of grantCheckAliases) {
-      if (!agentMayUseConnector(loadedAgentGrant, canonicalConnectorAlias(alias))) {
+      if (
+        !agentMayUseConnector(loadedAgentGrant, canonicalConnectorAlias(alias)) &&
+        !(await isSessionChannelConnector(projectId, alias, input.metadata?.source))
+      ) {
         return {
           error: {
             status: 403,

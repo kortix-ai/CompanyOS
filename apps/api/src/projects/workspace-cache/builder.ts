@@ -6,7 +6,9 @@
  * the agent whose box built it and the person who saved it. From then on this
  * job rebuilds it once a day, the same way: a session of that agent, as that
  * person, with no model turn; the project's own `scripts/workspace-cache-build`
- * (from the session's served config) run in its box as the runtime user; and,
+ * (from the session's served config) run in its box as the runtime user, detached
+ * with the eval runner's launch/poll (a plain `nohup … &` dies with the exec call
+ * that started it); and,
  * when it prints `workspace-cache-key: ws-…` and exits 0, a save of that
  * session's /workspace under that key. The save is the API's own, so a session
  * never decides what later sessions start from.
@@ -31,7 +33,7 @@ import {
 import { resolveSessionPlacement } from '../../platform/services/sandbox-region';
 import { db } from '../../shared/db';
 import { metadataMergeSubtree, projectsView, updateProjectRowsReturning } from '../../workspaces/rows';
-import { boxOps, boxReady, sessionBox } from '../evals/box';
+import { boxReady, launch, poll, readTextFile, sessionBox } from '../evals/box';
 import { createSession } from '../session-lifecycle';
 import { abortRuntimeTurn } from '../session-lifecycle/abort-runtime-turn';
 import { stopSession } from '../session-lifecycle/stop';
@@ -44,8 +46,10 @@ export const WORKSPACE_CACHE_BUILD_KEY = 'workspace_cache_build';
 export const REBUILD_AFTER_MS = 24 * 3600_000;
 export const BUILD_TIMEOUT_MS = 45 * 60_000;
 const BUILDER = 'scripts/workspace-cache-build';
-const OUT = '/tmp/workspace-cache-build.out';
-const EXIT = '/tmp/workspace-cache-build.exit';
+/** The build's output, outside /tmp (tmpfs on Platinum). */
+const BUILD_OUTPUT = '/var/tmp/kortix-workspace-cache/build.out';
+/** The detached run's id for launch/poll: one per build session. */
+const buildRunId = (sessionId: string): string => `workspace-cache-${sessionId}`;
 /** The box's runtime user: the builder's files must be the sessions' own. */
 const RUNTIME_USER = 'kortix';
 
@@ -81,14 +85,20 @@ export async function recordWorkspaceCacheBuilder(projectId: string, builder: Wo
   });
 }
 
-/** The command a build runs in the box, as root: the builder as the runtime user, detached, its exit code kept. */
-export function builderCommand(namespace: string): string {
-  const env = `KORTIX_WORKSPACE_CACHE=${shellQuote(namespace)} npm_config_store_dir=${WORKSPACE_CACHE_PNPM_STORE} PATH=/usr/local/bin:/opt/supabase:/usr/bin:/bin`;
-  const run =
-    `cfg="$(ls -dt /opt/kortix/config/*/ 2>/dev/null | head -1)"; ` +
-    `if [ -z "$cfg" ] || [ ! -x "\${cfg}${BUILDER}" ]; then echo "no ${BUILDER} in the served config" > ${OUT}; echo 127 > ${EXIT}; exit 0; fi; ` +
-    `"\${cfg}${BUILDER}" > ${OUT} 2>&1; echo $? > ${EXIT}`;
-  return `rm -f ${OUT} ${EXIT}; nohup runuser -u ${RUNTIME_USER} -- env ${env} bash -c ${shellQuote(run)} >/dev/null 2>&1 </dev/null &`;
+/**
+ * What a build runs in the box, as root, detached by `launch`: the project's own builder from the newest
+ * served config, as the runtime user, with the cache's env. Exit 127 when the project ships no builder.
+ */
+export function builderRunCommand(namespace: string): string {
+  return [
+    // runuser lives in /usr/sbin, which the exec channel's PATH need not carry.
+    'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
+    'cfg="$(ls -dt /opt/kortix/config/*/ 2>/dev/null | head -1)"',
+    `b="\${cfg}${BUILDER}"`,
+    `if [ -z "$cfg" ] || [ ! -x "$b" ]; then echo "no ${BUILDER} in the served config"; exit 127; fi`,
+    `exec runuser -u ${RUNTIME_USER} -- env HOME=/home/${RUNTIME_USER} KORTIX_WORKSPACE_CACHE=${shellQuote(namespace)} ` +
+      `npm_config_store_dir=${WORKSPACE_CACHE_PNPM_STORE} PATH=/usr/local/bin:/opt/supabase:/usr/bin:/bin "$b"`,
+  ].join('\n');
 }
 
 /** The key the builder printed last, when its output ends with a valid one. */
@@ -135,7 +145,10 @@ async function latestBuild(projectId: string) {
   return row ?? null;
 }
 
-/** Advance one project's build by one step. Returns true when it did something. */
+/**
+ * Advance one project's build by one step. Returns true when it did something or a build is in flight,
+ * so the job keeps looking every minute until the build ends.
+ */
 export async function advanceWorkspaceCacheBuild(project: ProjectRow, now: Date): Promise<boolean> {
   const builder = workspaceCacheBuilderOf(project.metadata);
   if (!builder || !resolveFeatureFlag(project.metadata, 'platinum_cache')) return false;
@@ -214,20 +227,30 @@ async function advanceRunning(
   const volume = recordedWorkspaceVolume(sessionId, sessionMetadata);
   if (!volume?.cache) return fail('the build session has no workspace cache (flag turned off, or no volume)');
   const found = await sessionBox(sessionId);
-  if (!found?.box || !(await boxReady(found.box))) return false;
+  // Still booting: in flight, look again next minute.
+  if (!found?.box || !(await boxReady(found.box))) return true;
   const box = found.box;
+  const runId = buildRunId(sessionId);
   if (record.state === 'starting') {
-    const started = await boxOps().exec(box, builderCommand(volume.cache.namespace), 30_000);
-    if (started.exitCode !== 0) return fail(`builder did not start: ${started.stderr.slice(0, 200)}`);
+    try {
+      await launch(box, runId, {
+        command: builderRunCommand(volume.cache.namespace),
+        cwd: '/workspace',
+        env: {},
+        timeoutSec: Math.floor(BUILD_TIMEOUT_MS / 1000),
+        outputPath: BUILD_OUTPUT,
+      });
+    } catch (err) {
+      return fail(`builder did not start: ${err instanceof Error ? err.message : String(err)}`);
+    }
     await writeBuild(sessionId, { ...record, state: 'running' });
     return true;
   }
-  const read = await boxOps().exec(box, `cat ${EXIT} 2>/dev/null; echo ---; tail -c 6000 ${OUT} 2>/dev/null`, 30_000);
-  const [exitPart, ...rest] = read.stdout.split('\n---\n');
-  const exit = exitPart.trim();
-  if (!exit) return false;
-  const out = rest.join('\n---\n');
-  if (exit !== '0') return fail(`builder exited ${exit}: ${out.trim().split('\n').slice(-3).join(' | ')}`);
+  const run = await poll(box, runId);
+  if (run.state === 'running') return true;
+  if (run.state === 'missing') return fail('the build is not on the box: it never started, or the box was replaced');
+  const out = (await readTextFile(box, BUILD_OUTPUT, 6000).catch(() => null)) ?? '';
+  if (run.exitCode !== 0) return fail(`builder exited ${run.exitCode}: ${out.trim().split('\n').slice(-3).join(' | ')}`);
   const key = keyFromBuilderOutput(out);
   if (!key) return fail('builder printed no workspace-cache-key line');
   try {

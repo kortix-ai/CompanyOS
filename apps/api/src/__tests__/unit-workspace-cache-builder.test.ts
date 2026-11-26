@@ -10,38 +10,43 @@
  */
 import { describe, expect, test } from 'bun:test';
 
-const { builderCommand, keyFromBuilderOutput, workspaceCacheBuilderOf, REBUILD_AFTER_MS, BUILD_TIMEOUT_MS } = await import(
+const { builderRunCommand, keyFromBuilderOutput, workspaceCacheBuilderOf, REBUILD_AFTER_MS, BUILD_TIMEOUT_MS } = await import(
   '../projects/workspace-cache/builder'
 );
+const { existsSync } = await import('node:fs');
 
 const NS = 'proj:05b9519d-ca06-4cdd-9825-3cbc3ac3c389:ws';
 
-describe('builderCommand', () => {
-  const cmd = builderCommand(NS);
+describe('builderRunCommand', () => {
+  // Run detached by the eval runner's launch (projects/evals/box.ts): a plain `nohup … &` died with the exec
+  // call that started it, so the first live build never ran (dev.kortix.com, 2026-11-26).
+  const cmd = builderRunCommand(NS);
 
-  test('runs the served config builder as the runtime user, detached, with the cache env', () => {
-    expect(cmd).toContain('nohup runuser -u kortix -- env ');
-    expect(cmd).toContain(`KORTIX_WORKSPACE_CACHE='${NS}'`);
-    expect(cmd).toContain('npm_config_store_dir=/workspace/.pnpm-store');
+  test('runs the newest served config builder as the runtime user, with the cache env', () => {
     expect(cmd).toContain('ls -dt /opt/kortix/config/*/');
     expect(cmd).toContain('scripts/workspace-cache-build');
-    expect(cmd.trim().endsWith('&')).toBe(true);
+    expect(cmd).toContain('exec runuser -u kortix -- env HOME=/home/kortix ');
+    expect(cmd).toContain(`KORTIX_WORKSPACE_CACHE='${NS}'`);
+    expect(cmd).toContain('npm_config_store_dir=/workspace/.pnpm-store');
   });
 
-  test('keeps the exit code and the output, and says so when the project ships no builder', () => {
-    expect(cmd).toContain('echo $? > /tmp/workspace-cache-build.exit');
-    expect(cmd).toContain('> /tmp/workspace-cache-build.out 2>&1');
-    expect(cmd).toContain('echo 127 > /tmp/workspace-cache-build.exit');
-    expect(cmd.startsWith('rm -f /tmp/workspace-cache-build.out /tmp/workspace-cache-build.exit;')).toBe(true);
+  test('finds runuser whatever PATH the exec channel gives root', () => {
+    expect(cmd.split('\n')[0]).toBe('export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin');
   });
 
   test('a namespace cannot break out of its quotes', () => {
-    expect(builderCommand("a'; rm -rf / #")).toContain(`KORTIX_WORKSPACE_CACHE='a'\\''; rm -rf / #'`);
+    expect(builderRunCommand("a'; rm -rf / #")).toContain(`KORTIX_WORKSPACE_CACHE='a'\\''; rm -rf / #'`);
   });
 
-  test('the generated script parses as bash', async () => {
-    const proc = Bun.spawn(['bash', '-n', '-c', cmd]);
-    expect(await proc.exited).toBe(0);
+  test('parses as bash', async () => {
+    expect(await Bun.spawn(['bash', '-n', '-c', cmd]).exited).toBe(0);
+  });
+
+  test.skipIf(existsSync('/opt/kortix/config'))('without a served builder it says so and exits 127', async () => {
+    const proc = Bun.spawn(['bash', '-c', cmd], { stdout: 'pipe' });
+    const out = await new Response(proc.stdout).text();
+    expect(await proc.exited).toBe(127);
+    expect(out.trim()).toBe('no scripts/workspace-cache-build in the served config');
   });
 });
 

@@ -40,6 +40,8 @@ let sent: EmailMessage[] = [];
 let failing = new Map<string, number>();
 // Every address a send was attempted to, delivered or not.
 let attempted: string[] = [];
+// A send to `held.to` waits until the test settles `held.status` (0: delivered, else the provider status).
+let held: { to: string; reached: () => void; status: Promise<number> } | null = null;
 const customerEmails = () => sent.filter((m) => !m.subject.startsWith('[Kortix compliance]'));
 const privacyReports = () => sent.filter((m) => m.subject.startsWith('[Kortix compliance]'));
 const savedEnv = config.INTERNAL_KORTIX_ENV;
@@ -67,7 +69,12 @@ beforeAll(async () => {
   ]);
   setOwnerAlertSenderForTest(async (message) => {
     attempted.push(...message.to);
-    const status = failing.get(message.to[0]!) ?? failing.get('*');
+    const hold = held?.to === message.to[0] ? held : null;
+    if (hold) {
+      held = null;
+      hold.reached();
+    }
+    const status = (await hold?.status) || failing.get(message.to[0]!) || failing.get('*');
     if (status) return { ok: false, provider: 'mailpit', status, error: 'rejected' };
     sent.push(message);
     return { ok: true, provider: 'mailpit', status: 200 };
@@ -78,6 +85,7 @@ beforeEach(() => {
   sent = [];
   failing = new Map();
   attempted = [];
+  held = null;
   config.INTERNAL_KORTIX_ENV = 'prod';
 });
 
@@ -408,5 +416,65 @@ describe('repeated sweeps of one notice', () => {
     await runSubprocessorNoticeSweep(new Date('2026-11-30T09:00:00Z'), rows);
     expect(emailsTo(email(owner, 'upgrade-owner'))).toHaveLength(1);
     expect(privacyReports()).toEqual([]);
+  });
+
+  // Sweep 1 is mid-send to a manager when their other workspace turns paid and sweep 2 runs.
+  async function raceWithInFlightSend(addedOn: string, label: string, firstSendStatus: number) {
+    const rows: Subprocessor[] = [{ ...ROWS[1]!, addedOn }];
+    const person = await seedUser(label);
+    const first = await seedAccount(`subproc-${label}-first`, 'credits', [[person, 'owner']]);
+    let settle = (_status: number) => {};
+    const reached = new Promise<void>((resolve) => {
+      held = { to: email(person, label), reached: resolve, status: new Promise((done) => (settle = done)) };
+    });
+    const sweep1 = runSubprocessorNoticeSweep(new Date(`${addedOn}T09:00:00Z`), rows);
+    await reached;
+
+    const later = await seedAccount(`subproc-${label}-later`, 'tier_2_20', [[person, 'admin']]);
+    await runSubprocessorNoticeSweep(new Date(`${addedOn}T09:30:00Z`), rows);
+    // An email still in flight is not a delivered one: no evidence for the new account yet, no second send.
+    expect(await audits(later.account_id, addedOn)).toEqual([]);
+    expect(attempted.filter((to) => to === email(person, label))).toHaveLength(1);
+
+    settle(firstSendStatus);
+    await sweep1;
+    sent = [];
+    await runSubprocessorNoticeSweep(new Date(`${addedOn}T10:00:00Z`), rows);
+    return { rows, person, first, later };
+  }
+
+  test('a send that fails while another sweep runs is retried for the account that sweep found, not recorded as delivered', async () => {
+    const { rows, person, first, later } = await raceWithInFlightSend('2026-11-09', 'inflight-owner', 503);
+    const [notice] = emailsTo(email(person, 'inflight-owner'));
+    expect(emailsTo(email(person, 'inflight-owner'))).toHaveLength(1);
+    expect(notice!.text).toContain('subproc-inflight-owner-first-account and subproc-inflight-owner-later-account');
+    for (const { account_id } of [first, later]) {
+      const [audit] = await audits(account_id, '2026-11-09');
+      expect(audit!.outputSummary).toMatchObject({ recipients: 1, previously_notified: 0, undelivered: 0 });
+    }
+
+    sent = [];
+    expect(await runSubprocessorNoticeSweep(new Date('2026-11-09T11:00:00Z'), rows)).toEqual({ accountsNotified: 0 });
+    expect(sent).toEqual([]);
+  });
+
+  test('a send that succeeds while another sweep runs covers that sweep\'s account on the next sweep, with no second email', async () => {
+    const { person, later } = await raceWithInFlightSend('2026-11-11', 'landed-owner', 0);
+    expect(emailsTo(email(person, 'landed-owner'))).toEqual([]);
+    const [audit] = await audits(later.account_id, '2026-11-11');
+    expect(audit!.outputSummary).toMatchObject({ recipients: 1, previously_notified: 1, undelivered: 0 });
+  });
+
+  test('a send claim left by a sweep that died mid-send is taken over once it is stale', async () => {
+    const rows: Subprocessor[] = [{ ...ROWS[1]!, addedOn: '2026-11-12' }];
+    const owner = await seedUser('crash-owner');
+    const account = await seedAccount('subproc-crash', 'credits', [[owner, 'owner']]);
+    const claim = `legal:subprocessor-notice:2026-11-12:to:${new Bun.CryptoHasher('sha256').update(email(owner, 'crash-owner')).digest('hex')}`;
+    await db.execute(sql`insert into kortix.chat_event_dedup (event_id, expires_at) values (${claim}, now() - interval '1 minute')`);
+
+    await runSubprocessorNoticeSweep(new Date('2026-11-12T09:00:00Z'), rows);
+    expect(emailsTo(email(owner, 'crash-owner'))).toHaveLength(1);
+    const [audit] = await audits(account.account_id, '2026-11-12');
+    expect(audit!.outputSummary).toMatchObject({ recipients: 1, previously_notified: 0 });
   });
 });

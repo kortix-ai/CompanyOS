@@ -49,7 +49,11 @@ runs hourly in the billing worker, on prod only (`INTERNAL_KORTIX_ENV=prod`).
   objection. Claim rows in `kortix.chat_event_dedup`
   (`legal:subprocessor-notice:<addedOn>:…`, per account, per person as a
   SHA-256 of the address, and per report) keep every email once-only across
-  sweeps, replicas and retries.
+  sweeps, replicas and retries. A person has a short send claim while a sweep
+  sends (taken over after 15 minutes if that sweep died) and a `:sent` row once
+  delivered; only the `:sent` row counts as notified. An account whose
+  manager's email is still in flight in another sweep is left to the next
+  sweep.
 - An account that turns paid later in the window is covered by a later sweep.
   A manager who already has the notice gets no second email.
 - A delivery failure is retried by the next sweep for that recipient only.

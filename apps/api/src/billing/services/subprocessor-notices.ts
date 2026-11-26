@@ -26,7 +26,7 @@ import {
   SUBPROCESSORS_OPTIONAL,
   type Subprocessor,
 } from '@kortix/shared/subprocessors';
-import { and, count, eq, inArray, isNotNull, like, notInArray, sql } from 'drizzle-orm';
+import { and, count, eq, inArray, isNotNull, like, lt, notInArray, sql } from 'drizzle-orm';
 import { config } from '../../config';
 import { renderEmail, renderText, S, actionButton } from '../../lib/email/template';
 import type { EmailSendResult } from '../../lib/email/types';
@@ -82,14 +82,17 @@ function compose(notice: SubprocessorNotice, scope: string) {
 
 /**
  * The claim keys of one notice in `chat_event_dedup`. The account key is held
- * once the account is covered (its audit event exists); the person key once
- * that inbox has the email; the report key once privacy@ has the record.
+ * once the account is covered (its audit event exists); the person key while
+ * a sweep sends to that inbox; the delivered key once that inbox has the
+ * email; the report key once privacy@ has the record.
  */
+// A hash, so the dedup table holds no address.
+const inbox = (notice: SubprocessorNotice, to: string) =>
+  `legal:subprocessor-notice:${notice.addedOn}:to:${createHash('sha256').update(to.toLowerCase()).digest('hex')}`;
 const claimKey = {
   account: (notice: SubprocessorNotice, accountId: string) => `legal:subprocessor-notice:${notice.addedOn}:${accountId}`,
-  // A hash, so the dedup table holds no address.
-  person: (notice: SubprocessorNotice, to: string) =>
-    `legal:subprocessor-notice:${notice.addedOn}:to:${createHash('sha256').update(to.toLowerCase()).digest('hex')}`,
+  person: inbox,
+  delivered: (notice: SubprocessorNotice, to: string) => `${inbox(notice, to)}:sent`,
   report: (notice: SubprocessorNotice) => `legal:subprocessor-notice:${notice.addedOn}:report`,
   // Held from the sweep that started the notice's coverage; its expiry encodes that time.
   reportDue: (notice: SubprocessorNotice) => `legal:subprocessor-notice:${notice.addedOn}:report-due`,
@@ -97,7 +100,25 @@ const claimKey = {
 // Longer than any notice window (37 days), so the report-due row outlives the notice.
 const REPORT_DUE_TTL_MS = 60 * 86_400_000;
 
+// Longer than any one send: a send claim older than this belongs to a sweep that died mid-send.
+const SEND_CLAIM_MS = 15 * 60_000;
+
 const release = (key: string) => db.delete(chatEventDedup).where(eq(chatEventDedup.eventId, key));
+
+/** Take the send claim of an inbox: free, or left behind by a sweep that died mid-send. */
+async function claimSend(key: string): Promise<boolean> {
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + SEND_CLAIM_MS);
+  const claimed = await db
+    .insert(chatEventDedup)
+    .values({ eventId: key, expiresAt })
+    .onConflictDoUpdate({ target: chatEventDedup.eventId, set: { expiresAt }, setWhere: lt(chatEventDedup.expiresAt, now) })
+    .returning({ eventId: chatEventDedup.eventId });
+  return claimed.length > 0;
+}
+
+const isHeld = async (key: string) =>
+  (await db.select({ eventId: chatEventDedup.eventId }).from(chatEventDedup).where(eq(chatEventDedup.eventId, key)).limit(1)).length > 0;
 
 /**
  * A failed send a retry cannot fix: the address itself is refused (reserved,
@@ -154,18 +175,24 @@ export async function runSubprocessorNoticeSweep(
     for (const { accountName, emails } of claimed) {
       for (const to of emails) inboxes.set(to, [...(inboxes.get(to) ?? []), accountName]);
     }
-    // A person claim taken by an earlier or concurrent sweep means that inbox has the notice.
+    // Only a delivered row means that inbox has the notice. A send still in
+    // flight in a concurrent sweep may fail: its accounts are retried.
     const sentNow = new Set<string>();
     const sentBefore = new Set<string>();
     const retry = new Set<string>();
     for (const [to, workspaces] of inboxes) {
-      const claim = claimKey.person(notice, to);
-      if (!(await claimOnce(claim))) {
+      if (await isHeld(claimKey.delivered(notice, to))) {
         sentBefore.add(to);
+        continue;
+      }
+      const claim = claimKey.person(notice, to);
+      if (!(await claimSend(claim))) {
+        retry.add(to);
         continue;
       }
       const result = await sendAlertEmail({ ...compose(notice, workspaceScope(workspaces, paid.length)), to: [to] });
       if (result.ok) {
+        await claimOnce(claimKey.delivered(notice, to));
         sentNow.add(to);
         continue;
       }
@@ -175,8 +202,9 @@ export async function runSubprocessorNoticeSweep(
       logger.warn('[subprocessor-notices] notice failed', { claim, final, error: 'error' in result ? result.error : result.reason });
     }
     // Evidence: one audit event per account. An account with a temporary
-    // failure is released instead: the next sweep retries that inbox, and the
-    // person claims keep everyone else from a second email.
+    // failure, or a send still in flight in another sweep, is released
+    // instead: the next sweep retries that inbox, and the delivered rows keep
+    // everyone else from a second email.
     let covered = 0;
     for (const { accountId, emails } of claimed) {
       if (emails.some((to) => retry.has(to))) {

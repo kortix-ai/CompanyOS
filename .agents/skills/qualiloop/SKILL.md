@@ -83,7 +83,7 @@ once that change runs on dev:
    the session's log (`GET /v1/projects/<project_id>/sessions/<session_id>/log?limit=100`
    as the test account) and keep the text of the first `role: system` message.
    The session's id is the `kortix.session_id` attribute of its turn span.
-2. `bun .agents/skills/qualiloop/scripts/knowledge.ts <file> > knowledge.json`.
+2. `bun apps/kortix-sandbox-agent-server/scripts/qualiloop-knowledge.ts <file> > knowledge.json`.
    The script replaces the session and project ids with placeholders and
    builds the tools and documents from the code. It fails when the prompt
    registers a tool it does not build: add that tool to the script.

@@ -32,6 +32,7 @@ export const AUDIT_ROUTE_LABELS: Readonly<Record<string, AuditRouteLabel | strin
   'GET /.well-known/openid-configuration': { action: 'oauth.openid_configuration.read', title: 'Read OpenID configuration' },
   'GET /.well-known/security.txt': { action: 'system.security_txt.read', title: 'Read the security contact file' },
   'GET /v1/system/confirmed-signups': { action: 'system.confirmed_signup.list', title: 'Listed confirmed signups' },
+  'POST /v1/qualiloop/chat': { action: 'qualiloop.chat.create', title: 'Ran an agent evaluation turn' },
   'GET /health': { action: 'system.health.read', title: 'Checked API health' },
   'GET /health/live': { action: 'system.health.liveness.read', title: 'Checked API liveness' },
   'GET /health/ready': { action: 'system.health.readiness.read', title: 'Checked API readiness' },

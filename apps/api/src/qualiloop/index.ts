@@ -14,7 +14,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { z } from '@hono/zod-openapi';
 import { config } from '../config';
 import { logger } from '../lib/logger';
-import { makeOpenApiApp } from '../openapi';
+import { errors, json, makeOpenApiApp } from '../openapi';
 import { QualiloopTurnError, runQualiloopTurn } from '../projects/surface';
 
 export const qualiloopApp = makeOpenApiApp();
@@ -36,6 +36,18 @@ function secretMatches(given: string, expected: string): boolean {
 }
 
 export function registerQualiloopRoutes(): void {
+  qualiloopApp.openAPIRegistry.registerPath({
+    method: 'post',
+    path: '/chat',
+    summary: 'Run an agent evaluation turn',
+    description: 'Requires X-Agent-Secret. Disabled unless the evaluation secret and project are configured. Leading whitespace keeps the response alive until the turn finishes.',
+    security: [],
+    request: { body: { content: { 'application/json': { schema: ChatBody } } } },
+    responses: {
+      200: json(z.union([z.object({ reply: z.string() }), z.object({ error: z.string() })]), 'Evaluation result'),
+      ...errors(400, 401, 404),
+    },
+  });
   qualiloopApp.post('/chat', async (c) => {
     const secret = config.QUALILOOP_AGENT_SECRET;
     if (!secret || !config.QUALILOOP_KORTIX_PROJECT_ID) return c.json({ error: 'Not found' }, 404);

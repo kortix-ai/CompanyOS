@@ -11,20 +11,20 @@
  * - documentation: the SKILL.md of every skill the prompt lists in
  *   `<available_skills>`, from packages/starter/templates.
  *
- * Usage: bun .agents/skills/qualiloop/scripts/knowledge.ts <system-prompt.txt>
+ * Usage: bun apps/kortix-sandbox-agent-server/scripts/qualiloop-knowledge.ts <system-prompt.txt>
  */
 import { existsSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { createQuestionTool, createWorkspaceTools } from '../../../../apps/kortix-sandbox-agent-server/src/harness/pi/tools'
-import { KORTIX_TOOLS, PLATFORM_TOOLS } from '../../../../apps/kortix-sandbox-agent-server/src/services/tools/host'
-import { messaging } from '../../../../apps/kortix-sandbox-agent-server/src/harness/pi/extensions/messaging'
-import { subagents } from '../../../../apps/kortix-sandbox-agent-server/src/harness/pi/extensions/subagents'
-import { workflow } from '../../../../apps/kortix-sandbox-agent-server/src/harness/pi/extensions/workflow'
+import { createQuestionTool, createWorkspaceTools } from '../src/harness/pi/tools'
+import { KORTIX_TOOLS, PLATFORM_TOOLS } from '../src/services/tools/host'
+import { messaging } from '../src/harness/pi/extensions/messaging'
+import { subagents } from '../src/harness/pi/extensions/subagents'
+import { workflow } from '../src/harness/pi/extensions/workflow'
 
-const ROOT = resolve(import.meta.dir, '../../../..')
+const ROOT = resolve(import.meta.dir, '../../..')
 const file = process.argv[2]
 if (!file) {
-  console.error('Usage: bun .agents/skills/qualiloop/scripts/knowledge.ts <system-prompt.txt>')
+  console.error('Usage: bun apps/kortix-sandbox-agent-server/scripts/qualiloop-knowledge.ts <system-prompt.txt>')
   process.exit(2)
 }
 

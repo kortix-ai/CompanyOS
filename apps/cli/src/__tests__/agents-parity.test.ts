@@ -100,7 +100,7 @@ const THREE_AGENTS: FakeAgent[] = [
 
 function startServer(
   agents: FakeAgent[] = DEFAULT_AGENTS,
-  opts: { detailStatus?: number } = {},
+  opts: { detailStatus?: number; picker?: object } = {},
 ): string {
   let defaultAgent = 'default';
   const agentModelPins: Record<string, string> = {};
@@ -123,6 +123,11 @@ function startServer(
             agents,
           },
         });
+      }
+      // GET /projects/:id/model-picker: what the caller can run, so what a
+      // pin can name. Unset: the route 404s like an older API.
+      if (p === '/model-picker' && req.method === 'GET' && opts.picker) {
+        return Response.json(opts.picker);
       }
       if (p === '/default-agent' && req.method === 'PUT') {
         const wanted = (body as { agent: string }).agent;
@@ -661,6 +666,92 @@ describe('kortix agents — default, scope, config', () => {
     expect(r.code).toBe(0);
     expect(r.stdout).toContain('No agents declared in this workspace.');
     expect(r.stdout).not.toContain('Agents (');
+  });
+
+  describe('the pin hint follows what the workspace can serve (KRTX-1665)', () => {
+    const PIN_HINT = 'Pin one: kortix agents model <agent> <model-id>';
+    const NONE_SERVED = 'No model can be pinned yet';
+
+    test('no runnable model: ls names how to get one instead of a pin that 409s', async () => {
+      // Free tier, no provider connected: the picker serves nothing, so
+      // PUT /model-defaults answers 409 model_not_servable for every id.
+      const config = writeConfig(startServer(THREE_AGENTS, { picker: { models: {} } }));
+      const r = await runCli(['agents', 'ls', '--project', PROJECT], config);
+      expect(r.code).toBe(0);
+      expect(r.stdout).toContain('No per-agent model pins — every agent follows the default.');
+      expect(r.stdout).not.toContain(PIN_HINT);
+      expect(r.stdout).toContain(NONE_SERVED);
+      expect(r.stdout).toContain('kortix providers set <provider>');
+      expect(r.stdout).toContain('upgrade');
+    });
+
+    test('a served model whose provider is not connected does not count as pinnable', async () => {
+      const config = writeConfig(
+        startServer(THREE_AGENTS, {
+          picker: { models: { 'openai/gpt-5.5': { available: false } } },
+        }),
+      );
+      const r = await runCli(['agents', 'ls', '--project', PROJECT], config);
+      expect(r.code).toBe(0);
+      expect(r.stdout).not.toContain(PIN_HINT);
+      expect(r.stdout).toContain(NONE_SERVED);
+    });
+
+    test('no runnable model and no /detail: the pre-detail output gets the same guidance', async () => {
+      const config = writeConfig(
+        startServer(THREE_AGENTS, { detailStatus: 500, picker: { models: {} } }),
+      );
+      const r = await runCli(['agents', 'ls', '--project', PROJECT], config);
+      expect(r.code).toBe(0);
+      expect(r.stdout).not.toContain(PIN_HINT);
+      expect(r.stdout).toContain(NONE_SERVED);
+    });
+
+    test('a runnable model keeps the pin hint', async () => {
+      const config = writeConfig(
+        startServer(THREE_AGENTS, {
+          picker: { models: { 'glm-5.3-flash': {}, 'openai/gpt-5.5': { available: false } } },
+        }),
+      );
+      const r = await runCli(['agents', 'ls', '--project', PROJECT], config);
+      expect(r.code).toBe(0);
+      expect(r.stdout).toContain(PIN_HINT);
+      expect(r.stdout).not.toContain(NONE_SERVED);
+    });
+
+    test('a connected Claude account makes its enabled models pinnable', async () => {
+      const claude = (connected: boolean, enabled: boolean) => ({
+        models: {},
+        claudeSubscription: {
+          connected,
+          models: [{ id: 'claude-agent/opus', connected, enabled }],
+        },
+      });
+      const on = await runCli(
+        ['agents', 'ls', '--project', PROJECT],
+        writeConfig(startServer(THREE_AGENTS, { picker: claude(true, true) })),
+      );
+      expect(on.stdout).toContain(PIN_HINT);
+      server?.stop(true);
+      for (const [connected, enabled] of [
+        [false, true],
+        [true, false],
+      ]) {
+        const off = await runCli(
+          ['agents', 'ls', '--project', PROJECT],
+          writeConfig(startServer(THREE_AGENTS, { picker: claude(connected, enabled) })),
+        );
+        expect(off.stdout).toContain(NONE_SERVED);
+        server?.stop(true);
+      }
+    });
+
+    test('an unreadable picker fails open to the pin hint', async () => {
+      const config = writeConfig(startServer(THREE_AGENTS));
+      const r = await runCli(['agents', 'ls', '--project', PROJECT], config);
+      expect(r.code).toBe(0);
+      expect(r.stdout).toContain(PIN_HINT);
+    });
   });
 
   describe('when /detail is unavailable (fail open to the pre-detail output)', () => {

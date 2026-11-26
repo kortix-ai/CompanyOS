@@ -202,6 +202,37 @@ function renderAgent(
   return `  ${pad(agent.name, width)}   ${C.dim}${where}${C.reset}   ${modelText}${tail}\n`;
 }
 
+/** What `ls` says when no agent is pinned. "Pin one" only when the caller can
+ *  run a model: otherwise PUT /model-defaults refuses every id with 409
+ *  model_not_servable (a free-tier account with no provider, KRTX-1665), so
+ *  name what unlocks one, as the web picker does. Runnable = the picker's
+ *  gateway models whose provider is connected, or an enabled Claude
+ *  subscription model on a connected Claude account. An unreadable picker
+ *  fails open to "Pin one". */
+async function noPinsHint(ctx: ProjectCtx): Promise<string> {
+  let runnable = true;
+  try {
+    // The part of GET /projects/:id/model-picker a pin can name.
+    const picker = await ctx.client.get<{
+      models?: Record<string, { available?: boolean }>;
+      claudeSubscription?: { models?: Array<{ connected?: boolean; enabled?: boolean }> };
+    }>(`/workspaces/${ctx.projectId}/model-picker`);
+    runnable =
+      Object.values(picker.models ?? {}).some((model) => model.available !== false) ||
+      (picker.claudeSubscription?.models ?? []).some(
+        (model) => model.connected && model.enabled !== false,
+      );
+  } catch {
+    // fail open
+  }
+  const next = runnable
+    ? `  ${C.dim}Pin one: ${C.reset}${C.cyan}kortix agents model <agent> <model-id>${C.reset}\n\n`
+    : `  ${C.dim}No model can be pinned yet: this workspace serves none you can run. Connect one with ${C.reset}` +
+      `${C.cyan}kortix providers set <provider>${C.reset}${C.dim} or ${C.reset}${C.cyan}kortix providers login <provider>${C.reset}` +
+      `${C.dim}, or upgrade to a paid plan.${C.reset}\n\n`;
+  return `  ${C.dim}No per-agent model pins — every agent follows the default.${C.reset}\n${next}`;
+}
+
 async function agentsLs(ctx: ProjectCtx, json: boolean): Promise<number> {
   const d = await ctx.client.get<ModelDefaultsResponse>(
     `/workspaces/${ctx.projectId}/model-defaults`,
@@ -248,10 +279,7 @@ async function agentsLs(ctx: ProjectCtx, json: boolean): Promise<number> {
   if (agents === null) {
     const entries = Object.entries(pins).sort((a, b) => a[0].localeCompare(b[0]));
     if (entries.length === 0) {
-      process.stdout.write(
-        `  ${C.dim}No per-agent model pins — every agent follows the default.${C.reset}\n` +
-          `  ${C.dim}Pin one: ${C.reset}${C.cyan}kortix agents model <agent> <model-id>${C.reset}\n\n`,
-      );
+      process.stdout.write(await noPinsHint(ctx));
       return 0;
     }
     const width = Math.max(...entries.map(([name]) => name.length), 5);
@@ -288,10 +316,7 @@ async function agentsLs(ctx: ProjectCtx, json: boolean): Promise<number> {
       `  ${C.dim}Clear one: ${C.reset}${C.cyan}kortix agents model <agent> --clear${C.reset}\n\n`,
     );
   } else if (Object.keys(pins).length === 0) {
-    process.stdout.write(
-      `  ${C.dim}No per-agent model pins — every agent follows the default.${C.reset}\n` +
-        `  ${C.dim}Pin one: ${C.reset}${C.cyan}kortix agents model <agent> <model-id>${C.reset}\n\n`,
-    );
+    process.stdout.write(await noPinsHint(ctx));
   }
   return 0;
 }

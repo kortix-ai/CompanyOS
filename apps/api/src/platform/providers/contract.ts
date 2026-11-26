@@ -236,8 +236,10 @@ export interface SandboxStartOptions {
    * (a wake or restart lease) renews it here, so the claim does not lapse and
    * hand the box to cleanup while it is still coming up. Called at most every
    * 30 s, only while that work is observed in progress; a throw is ignored.
+   * `archive`: the box is restoring from cold storage; `wait`: any other wait
+   * (no host capacity yet, a start in flight, a relocation).
    */
-  onProgress?: () => Promise<void>;
+  onProgress?: (kind: 'archive' | 'wait') => Promise<void>;
 }
 
 export interface SandboxProvider {

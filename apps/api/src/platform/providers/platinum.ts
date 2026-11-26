@@ -1103,7 +1103,7 @@ export class PlatinumProvider implements SandboxProvider {
     const progress = async () => {
       if (!opts.onProgress || Date.now() - reportedAt < START_PROGRESS_INTERVAL_MS) return;
       reportedAt = Date.now();
-      await opts.onProgress().catch(() => undefined);
+      await opts.onProgress('wait').catch(() => undefined);
     };
     // true = the box is back on disk and gets a fresh /start. That /start
     // gets a fresh stop grace too: another waiter may win the race to it, and
@@ -1209,7 +1209,7 @@ export class PlatinumProvider implements SandboxProvider {
   private async waitForRestore(
     externalId: string,
     until: number,
-    onProgress?: () => Promise<void>,
+    onProgress?: SandboxStartOptions['onProgress'],
   ): Promise<boolean> {
     let reportedAt = Number.NEGATIVE_INFINITY;
     while (Date.now() < until) {
@@ -1222,7 +1222,7 @@ export class PlatinumProvider implements SandboxProvider {
       if (state && !state.includes('archiv')) return false;
       if (state && onProgress && Date.now() - reportedAt >= START_PROGRESS_INTERVAL_MS) {
         reportedAt = Date.now();
-        await onProgress().catch(() => undefined);
+        await onProgress('archive').catch(() => undefined);
       }
     }
     throw new Error(

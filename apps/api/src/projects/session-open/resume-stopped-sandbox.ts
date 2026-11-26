@@ -164,8 +164,8 @@ export async function resumeStoppedSandbox(
 
   const provider = getProvider(row.provider as SandboxProviderName);
   // Where the wake's time goes (KRTX-1642): one provider_events row per wake,
-  // read by the admin provider analytics. A start that reported progress waited
-  // on a cold-storage restore (SandboxStartOptions.onProgress).
+  // read by the admin provider analytics. A start that reported archive progress
+  // waited on a cold-storage restore (SandboxStartOptions.onProgress).
   const tl = new ProvisionTimeline(row.sandboxId, 'wake');
   let startPhase = 'provider-start';
   let failReason: string | null = null;
@@ -208,10 +208,10 @@ export async function resumeStoppedSandbox(
     },
     start: () =>
       provider.start(externalId, {
-        // A restore from cold storage runs inside start() and can outlast the
-        // lease; keep it, fenced to this wake.
-        onProgress: async () => {
-          startPhase = 'archive-restore';
+        // A restore from cold storage, or a wait for host capacity, runs inside
+        // start() and can outlast the lease; keep it, fenced to this wake.
+        onProgress: async (kind) => {
+          if (kind === 'archive') startPhase = 'archive-restore';
           await db
             .update(sessionSandboxes)
             .set({

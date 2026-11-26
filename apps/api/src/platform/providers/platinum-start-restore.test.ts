@@ -158,14 +158,15 @@ test("a long restore renews the caller's lease as it goes, and a failed renewal 
   getAdvancesMs = 20_000;
   starts = [restoring, ok('starting')];
   gets = [...Array(5).fill(ok('unarchiving')), ok('stopped')];
-  let renewals = 0;
+  const renewals: string[] = [];
   await (await provider()).start('sbx_1', {
-    onProgress: async () => {
-      renewals += 1;
-      if (renewals === 1) throw new Error('lease write failed');
+    onProgress: async (kind) => {
+      renewals.push(kind);
+      if (renewals.length === 1) throw new Error('lease write failed');
     },
   });
-  expect(renewals).toBe(3);
+  // Each renewal says it waited on the archive (KRTX-1642: the wake's phase).
+  expect(renewals).toEqual(['archive', 'archive', 'archive']);
   expect(events).toEqual([
     'POST 202',
     ...Array(5).fill('GET unarchiving'),
@@ -204,12 +205,12 @@ test('a start another caller is running past the stop grace is joined, not faile
   getAdvancesMs = 20_000;
   starts = [conflict];
   gets = [...Array(4).fill(ok('starting')), ok('running')];
-  let renewals = 0;
-  await (await provider()).start('sbx_1', { onProgress: async () => void (renewals += 1) });
+  const renewals: string[] = [];
+  await (await provider()).start('sbx_1', { onProgress: async (kind) => void renewals.push(kind) });
   expect(events).toEqual(['POST 409', ...Array(4).fill('GET starting'), 'GET running']);
   // The waiting caller keeps its lease: on the first read (t = 20 s), then
-  // per 30 s (t = 60 s).
-  expect(renewals).toBe(2);
+  // per 30 s (t = 60 s). Joining a start is a wait, not an archive restore.
+  expect(renewals).toEqual(['wait', 'wait']);
 }, 15_000);
 
 test('a 202 for a start in flight (or a relocation in progress) is waited on inside start()', async () => {
@@ -237,8 +238,12 @@ test('a host-saturated 503 is retried until the host has room', async () => {
     { status: 503, state: 'stopped', code: 'capacity' },
     ok('starting'),
   ];
-  await (await provider()).start('sbx_1');
+  const renewals: string[] = [];
+  await (await provider()).start('sbx_1', { onProgress: async (kind) => void renewals.push(kind) });
   expect(events).toEqual(['POST 503', 'POST 503', 'POST 200']);
+  // The caller's lease is kept, and the wait is not reported as an archive
+  // restore (KRTX-1642).
+  expect(renewals).toEqual(['wait']);
 }, 15_000);
 
 test('a 503 that is not a retry-later relocation fails the start at once', async () => {

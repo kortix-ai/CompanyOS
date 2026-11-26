@@ -16,6 +16,7 @@ import { sessionSandboxes } from '@kortix/db';
 import { eq, sql } from 'drizzle-orm';
 import * as realComputeMetering from '../billing/services/compute-metering';
 import * as realProviders from '../platform/providers';
+import type { SandboxStartOptions } from '../platform/providers';
 import * as realSandboxRuntimeRefresh from '../projects/lib/sandbox-runtime-refresh';
 import * as realSessionAttachments from '../projects/lib/session-attachments';
 import { db } from '../shared/db';
@@ -29,7 +30,7 @@ let onProviderRemove: () => Promise<void> = async () => {};
 let providerStatus = 'stopped';
 let providerStarts = 0;
 /** What the provider start waits on. A resume case gates it to race a writer. */
-let onProviderStart: (opts?: { onProgress?: () => Promise<void> }) => Promise<void> = async () => {};
+let onProviderStart: (opts?: SandboxStartOptions) => Promise<void> = async () => {};
 /** Compute meters (re)opened: one per runtime that became active. */
 let computeReopens = 0;
 /** `getProvider` throws synchronously for a provider the deployment cannot build. */
@@ -39,7 +40,7 @@ mock.module('../platform/providers', () => ({
   getProvider: () => {
     if (providerUnbuildable) throw new Error('PLATINUM_API_KEY is not set');
     return {
-      start: async (_externalId: string, opts?: { onProgress?: () => Promise<void> }) => {
+      start: async (_externalId: string, opts?: SandboxStartOptions) => {
         providerStarts += 1;
         await onProviderStart(opts);
       },
@@ -668,7 +669,7 @@ describe('resume (resumeStoppedSandbox)', () => {
     try {
       onProviderStart = async (opts) => {
         // The provider reports a cold-storage restore in progress.
-        await opts?.onProgress?.();
+        await opts?.onProgress?.('archive');
         providerStatus = 'running';
       };
       expect(await resumeStoppedSandbox(row)).toBe(true);
@@ -687,6 +688,26 @@ describe('resume (resumeStoppedSandbox)', () => {
       expect(marks.map((m) => m.label)).toEqual(['archive-restore', 'provider-running', 'rows-active']);
       for (const m of marks) expect(m.deltaMs).toBeGreaterThanOrEqual(0);
       expect(event!.total_ms).toBeGreaterThanOrEqual(marks.at(-1)!.atMs);
+    } finally {
+      onProviderStart = async () => {};
+      providerStatus = 'stopped';
+    }
+  });
+
+  test('a resume that only waited for host capacity is not counted as an archive restore', async () => {
+    const { f, row } = await stoppedFixture();
+    try {
+      onProviderStart = async (opts) => {
+        // Platinum's host is full: start() renews the lease while it retries.
+        await opts?.onProgress?.('wait');
+        providerStatus = 'running';
+      };
+      expect(await resumeStoppedSandbox(row)).toBe(true);
+      await until(async () => (await wakeEvents(f)).length > 0);
+      const [event] = await wakeEvents(f);
+      expect(event!.outcome).toBe('ok');
+      const labels = (event!.marks as { label?: string }[]).flatMap((m) => m.label ?? []);
+      expect(labels).toEqual(['provider-start', 'provider-running', 'rows-active']);
     } finally {
       onProviderStart = async () => {};
       providerStatus = 'stopped';

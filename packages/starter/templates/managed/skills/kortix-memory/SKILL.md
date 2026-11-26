@@ -165,7 +165,12 @@ kortix cr open \
   --description "What changed and why."
 ```
 
-The user reviews and merges. Don't merge your own CR.
+By default, the user reviews and merges. An explicit instruction to proceed
+without change-request approval applies for the rest of the session, until
+revoked: memory content edits follow the code-change contract in `kortix-system`.
+Merge the CR with `workspace.gitops.merge`; on `CR_SELF_MERGE_REFUSED`, report
+the missing permission once and do not ask again. Keep configuration changes
+(`kortix.yaml`, agents, skills, triggers, connectors) for the user to merge.
 
 </writing>
 

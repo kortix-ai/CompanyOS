@@ -70,9 +70,10 @@ change request (CR) is the only way to the default branch. Do every step:
 6. Tell the user the CR number and title. The web app shows a **Review**
    button under your reply. Name `kortix cr merge <n>` only to a CLI or
    channel user.
-7. Wait. Merge your own CR only when the user asks. The API refuses a
-   self-merge (`403 CR_SELF_MERGE_REFUSED`) unless your agent holds
-   `workspace.gitops.merge`.
+7. Default: wait for the user to merge. Explicit approval-free instructions hold for the rest of the session, until revoked:
+   open and merge code-change CRs, then continue. Do not ask again per change.
+   Self-merge needs `workspace.gitops.merge`; on `403 CR_SELF_MERGE_REFUSED`, report it once, never bypass it.
+   Keep configuration changes (`kortix.yaml`, agents, skills, triggers, connectors) for the user to merge.
 - Never push to the default branch, even when your grant allows it
   (`workspace.gitops.ref.any`): the push skips review.
 - "Committed on my branch" is not persisted. Never ask the user to copy files

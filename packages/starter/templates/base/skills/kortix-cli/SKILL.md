@@ -47,7 +47,7 @@ kortix connectors call <connector> <action> '…' # run a configured connector a
 kortix apps deploy apps/<slug> --slug <slug> --listed  # deploy an App's folder; --listed only for an App people open
 kortix tools ls                                 # the tools this project's sessions get, and removed Kortix tools
 kortix tools eject <name>                       # copy a Kortix tool to tools/<name>.ts to change it
-kortix cr open --title "…"                       # propose landing your branch on main (the user merges)
+kortix cr open --title "…"                       # propose landing your branch on main (see the session grant below)
 kortix loop "<what to check, what to do, end date>" --in 3h --every 4h  # after you send or start anything: come back and check (kortix-system <scheduling>)
 kortix capture search "<words>"                # the Capture timeline of the person this session acts for (Capture on for the account)
 ```
@@ -93,7 +93,7 @@ another system skill.
 ## Landing work on `main`
 
 A session runs on its own branch; the **only** sanctioned path to `main` is a
-change request, and you open it — the user reviews and merges:
+change request, and you open it. By default, the user reviews and merges:
 
 ```bash
 kortix validate                                   # schema + repository size warnings
@@ -104,7 +104,10 @@ kortix cr open --title "…" --description "…"     # head + session auto-detec
 Never commit big static assets (video, datasets, build output): every session
 downloads them, and above 512 MiB compressed a running session stops picking
 up agent config changes from the base branch. Put them in object storage
-instead. Never merge your own CR. Full CR lifecycle: `kortix skills get kortix-system`.
+instead. When the user explicitly grants approval-free code changes, honor
+that for the rest of the session, until revoked: open and merge the CR without
+asking again, subject to your permissions. Keep configuration changes for the
+user to review and merge. Full contract: `kortix skills get kortix-system`.
 
 ### Durable session model controls
 

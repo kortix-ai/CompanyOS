@@ -1370,6 +1370,10 @@
         "platinum_cache": {
           "name": "Workspace-Cache",
           "description": "Neue Sessions starten mit /workspace aus dem gespeicherten Workspace-Cache dieses Projekts auf Platinum: ein vorbereiteter Checkout mit node_modules und pnpm-Store, in etwa einer Sekunde statt minutenlangem Setup. Ein Projekt-Admin speichert eine vorbereitete Session als Cache. Aus: Jede Session startet mit leerem /workspace."
+        },
+        "sidebar_rail": {
+          "name": "Icon-Leiste der Seitenleiste",
+          "description": "Auf dem Desktop steht eine feste Icon-Leiste neben der Seitenleiste: oben Startseite, Suchen und Mehr, unten Hilfe, Anpassen und der Schalter für das Panel. Mehr listet alle anderen Seiten auf, und die Nadel an einer Zeile legt diese Seite auf die Leiste. Bei eingeklapptem Panel zeigt ein Hover über Startseite, Spaces oder Anpassen das Panel mit dieser Liste."
         }
       },
       "channelsSwitch": {
@@ -1672,6 +1676,13 @@
     "pin": "Seitenleiste anheften",
     "resize": "Breite der Seitenleiste ändern",
     "resizeHelp": "Ziehen zum Ändern der Größe — doppelklicken zum Zurücksetzen",
+    "iconRail": {
+      "navigation": "Workspace-Navigation",
+      "home": "Startseite",
+      "more": "Mehr",
+      "pinTab": "Tab anzeigen",
+      "unpinTab": "Tab ausblenden"
+    },
     "customize": "Anpassen",
     "sessions": "Sitzungen",
     "sessionViewOptions": "Optionen der Sitzungsansicht",

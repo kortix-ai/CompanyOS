@@ -1370,6 +1370,10 @@
         "platinum_cache": {
           "name": "Cache de l'espace de travail",
           "description": "Les nouvelles sessions démarrent avec /workspace restauré depuis le cache enregistré de ce projet sur Platinum : un checkout préparé avec ses node_modules et le store pnpm, en une seconde environ au lieu de minutes d'installation. Un administrateur du projet enregistre une session préparée comme cache. Désactivé, chaque session démarre avec un /workspace vide."
+        },
+        "sidebar_rail": {
+          "name": "Barre d'icônes latérale",
+          "description": "Sur ordinateur, une barre d'icônes fixe se place à côté de la barre latérale : Accueil, Rechercher et Plus en haut ; Aide, Personnaliser et le bouton du panneau en bas. Plus liste toutes les autres pages, et l'épingle d'une ligne place cette page sur la barre. Panneau réduit, survoler Accueil, Espaces ou Personnaliser affiche le panneau sur cette liste."
         }
       },
       "channelsSwitch": {
@@ -1672,6 +1676,13 @@
     "pin": "Épingler la barre latérale",
     "resize": "Redimensionner la barre latérale",
     "resizeHelp": "Faites glisser pour redimensionner — double-cliquez pour réinitialiser",
+    "iconRail": {
+      "navigation": "Navigation de l'espace de travail",
+      "home": "Accueil",
+      "more": "Plus",
+      "pinTab": "Afficher l'onglet",
+      "unpinTab": "Masquer l'onglet"
+    },
     "customize": "Personnaliser",
     "sessions": "Sessions",
     "sessionViewOptions": "Options d'affichage des sessions",

@@ -6,6 +6,7 @@ import { ProjectGoalsNavItem } from './footer/project-goals-nav';
 import { ProjectArtifactsNavItem } from './footer/project-artifacts-nav';
 import { ProjectFilesNavItem } from './footer/project-files-nav';
 import { ProjectReviewNavItem } from './footer/project-review-nav';
+import { PinnableRow, type PinnablePage } from './rail-pins';
 import {
   CustomizeGlyph,
   useCapabilityAccess,
@@ -36,12 +37,33 @@ const NAV_ROWS = ['review', 'customize', 'files', 'apps', 'calendar', 'goals', '
 type NavRowId = (typeof NAV_ROWS)[number];
 
 /** `review={false}`: the host shows the Review row elsewhere (`chat` on: first in `ProjectSpacesNav`). */
-export function ProjectNavItems({ projectId, review = true }: { projectId: string; review?: boolean }) {
+export function ProjectNavItems({
+  projectId,
+  review = true,
+  customize = true,
+  pin,
+  counts = true,
+}: {
+  projectId: string;
+  review?: boolean;
+  /** False: Customize has its own control (the icon rail's, `sidebar_rail`). */
+  customize?: boolean;
+  /** The rail's More menu: each row gets a pin button that shows the page on the rail. */
+  pin?: { pins: readonly PinnablePage[]; toggle: (id: PinnablePage) => void };
+  /** False (the rail's More menu): no count badges. */
+  counts?: boolean;
+}) {
   return (
     <>
-      {NAV_ROWS.filter((id) => review || id !== 'review').map((id) => (
-        <NavItem key={id} id={id} projectId={projectId} />
-      ))}
+      {NAV_ROWS.filter((id) => (review || id !== 'review') && (customize || id !== 'customize')).map((id) =>
+        pin && id !== 'customize' ? (
+          <PinnableRow key={id} pinned={pin.pins.includes(id)} onToggle={() => pin.toggle(id)}>
+            <NavItem id={id} projectId={projectId} counts={counts} />
+          </PinnableRow>
+        ) : (
+          <NavItem key={id} id={id} projectId={projectId} counts={counts} />
+        ),
+      )}
     </>
   );
 }
@@ -51,10 +73,10 @@ export function ProjectNavItems({ projectId, review = true }: { projectId: strin
  * it (approve a change request, answer an agent). The Customize access rule's
  * `review` tab, the rule the mobile drawer's Review row applies too.
  */
-function ReviewNavEntry({ projectId }: { projectId: string }) {
+function ReviewNavEntry({ projectId, counts }: { projectId: string; counts: boolean }) {
   const access = useCapabilityAccess(projectId);
   if (!access.settled || !access.tabs.includes('review')) return null;
-  return <ProjectReviewNavItem projectId={projectId} />;
+  return <ProjectReviewNavItem projectId={projectId} bare={!counts} />;
 }
 
 /**
@@ -121,16 +143,16 @@ function CustomizeNavEntry({ projectId }: { projectId: string }) {
   );
 }
 
-function NavItem({ id, projectId }: { id: NavRowId; projectId: string }) {
+function NavItem({ id, projectId, counts }: { id: NavRowId; projectId: string; counts: boolean }) {
   switch (id) {
     case 'review':
-      return <ReviewNavEntry projectId={projectId} />;
+      return <ReviewNavEntry projectId={projectId} counts={counts} />;
     case 'customize':
       return <CustomizeNavEntry projectId={projectId} />;
     case 'apps':
       return <ProjectAppsNavItem projectId={projectId} />;
     case 'files':
-      return <ProjectFilesNavItem projectId={projectId} />;
+      return <ProjectFilesNavItem projectId={projectId} showCount={counts} />;
     case 'calendar':
       return <ProjectCalendarNavItem projectId={projectId} />;
     case 'goals':

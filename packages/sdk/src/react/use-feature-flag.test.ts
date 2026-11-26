@@ -335,6 +335,7 @@ describe('useFeatureFlags', () => {
     'calendar',
     'review_swipe',
     'platinum_cache',
+    'sidebar_rail',
     'volumes',
     'drives',
     'artifacts',

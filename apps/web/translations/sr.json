@@ -1370,6 +1370,10 @@
         "platinum_cache": {
           "name": "Keš radnog prostora",
           "description": "Nove sesije počinju sa /workspace vraćenim iz sačuvanog keša ovog projekta na Platinumu: pripremljen checkout sa node_modules i pnpm skladištem, za oko sekundu umesto minuta pripreme. Administrator projekta čuva pripremljenu sesiju kao keš. Isključeno, svaka sesija počinje sa praznim /workspace."
+        },
+        "sidebar_rail": {
+          "name": "Трака са иконама",
+          "description": "На рачунару, фиксна трака са иконама стоји поред бочне траке: Почетна, Претрага и Још на врху; Помоћ, Прилагоди и прекидач панела на дну. Још приказује све остале странице, а чиода на реду ставља ту страницу на траку. Када је панел скупљен, прелазак мишем преко Почетне, Простора или Прилагоди приказује панел са тим списком."
         }
       },
       "channelsSwitch": {
@@ -1672,6 +1676,13 @@
     "pin": "Закачи бочну траку",
     "resize": "Промени ширину бочне траке",
     "resizeHelp": "Превуците за промену ширине — кликните двапут за враћање",
+    "iconRail": {
+      "navigation": "Навигација радног простора",
+      "home": "Почетна",
+      "more": "Још",
+      "pinTab": "Прикажи картицу",
+      "unpinTab": "Сакриј картицу"
+    },
     "customize": "Прилагоди",
     "sessions": "Сесије",
     "sessionViewOptions": "Опције приказа сесија",

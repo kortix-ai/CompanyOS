@@ -1370,6 +1370,10 @@
         "platinum_cache": {
           "name": "Caché del espacio de trabajo",
           "description": "Las sesiones nuevas empiezan con /workspace restaurado desde la caché guardada de este proyecto en Platinum: un checkout preparado con sus node_modules y el almacén de pnpm, en un segundo en lugar de minutos de preparación. Un administrador del proyecto guarda una sesión preparada como caché. Desactivada, cada sesión empieza con /workspace vacío."
+        },
+        "sidebar_rail": {
+          "name": "Barra de iconos lateral",
+          "description": "En el escritorio, una barra fija de iconos se sitúa junto a la barra lateral: Inicio, Buscar y Más arriba; Ayuda, Personalizar y el botón del panel abajo. Más muestra todas las demás páginas, y el pin de una fila pone esa página en la barra. Con el panel contraído, pasar el cursor por Inicio, Espacios o Personalizar muestra el panel con esa lista."
         }
       },
       "channelsSwitch": {
@@ -1672,6 +1676,13 @@
     "pin": "Fijar barra lateral",
     "resize": "Cambiar tamaño de la barra lateral",
     "resizeHelp": "Arrastra para cambiar el tamaño — haz doble clic para restablecer",
+    "iconRail": {
+      "navigation": "Navegación del espacio de trabajo",
+      "home": "Inicio",
+      "more": "Más",
+      "pinTab": "Mostrar pestaña",
+      "unpinTab": "Ocultar pestaña"
+    },
     "customize": "Personalizar",
     "sessions": "Sesiones",
     "sessionViewOptions": "Opciones de vista de sesiones",

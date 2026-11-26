@@ -1370,6 +1370,10 @@
         "platinum_cache": {
           "name": "工作区缓存",
           "description": "新会话会从本项目保存在 Platinum 上的工作区缓存恢复 /workspace：一个已准备好的代码检出，包含 node_modules 和 pnpm 存储，大约一秒即可就绪，而不是数分钟的安装。项目管理员将准备好的会话保存为缓存。关闭时，每个会话都从空的 /workspace 开始。"
+        },
+        "sidebar_rail": {
+          "name": "侧边栏图标栏",
+          "description": "在桌面端，侧边栏旁会固定显示一条图标栏：顶部是首页、搜索和更多，底部是帮助、自定义和面板开关。更多列出其他所有页面，点击某一行的图钉即可把该页面放到图标栏上。面板折叠时，将鼠标悬停在首页、空间或自定义上，会显示对应列表的面板。"
         }
       },
       "channelsSwitch": {
@@ -1672,6 +1676,13 @@
     "pin": "固定侧边栏",
     "resize": "调整侧边栏大小",
     "resizeHelp": "拖动以调整大小 — 双击以重置",
+    "iconRail": {
+      "navigation": "工作区导航",
+      "home": "首页",
+      "more": "更多",
+      "pinTab": "显示标签页",
+      "unpinTab": "隐藏标签页"
+    },
     "customize": "自定义",
     "sessions": "会话",
     "sessionViewOptions": "会话视图选项",

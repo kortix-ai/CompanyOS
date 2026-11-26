@@ -1370,6 +1370,10 @@
         "platinum_cache": {
           "name": "Cache dello spazio di lavoro",
           "description": "Le nuove sessioni partono con /workspace ripristinato dalla cache salvata di questo progetto su Platinum: un checkout pronto con node_modules e lo store di pnpm, in circa un secondo invece di minuti di preparazione. Un amministratore del progetto salva una sessione pronta come cache. Disattivata, ogni sessione parte con /workspace vuoto."
+        },
+        "sidebar_rail": {
+          "name": "Barra di icone laterale",
+          "description": "Su desktop, una barra di icone fissa si trova accanto alla barra laterale: Home, Cerca e Altro in alto; Aiuto, Personalizza e il pulsante del pannello in basso. Altro elenca tutte le altre pagine, e la puntina su una riga mette quella pagina sulla barra. Con il pannello compresso, passare il mouse su Home, Spazi o Personalizza mostra il pannello su quell'elenco."
         }
       },
       "channelsSwitch": {
@@ -1672,6 +1676,13 @@
     "pin": "Fissa la barra laterale",
     "resize": "Ridimensiona la barra laterale",
     "resizeHelp": "Trascina per ridimensionare — fai doppio clic per reimpostare",
+    "iconRail": {
+      "navigation": "Navigazione dello spazio di lavoro",
+      "home": "Home",
+      "more": "Altro",
+      "pinTab": "Mostra scheda",
+      "unpinTab": "Nascondi scheda"
+    },
     "customize": "Personalizza",
     "sessions": "Sessioni",
     "sessionViewOptions": "Opzioni di visualizzazione delle sessioni",

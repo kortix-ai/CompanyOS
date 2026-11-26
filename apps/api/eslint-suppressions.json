@@ -692,7 +692,7 @@
   },
   "src/config-releases/release-tree.ts": {
     "kortix-api/projects-surface": {
-      "count": 2
+      "count": 1
     }
   },
   "src/config-releases/routes.ts": {
@@ -1606,11 +1606,6 @@
   "src/projects/lib/session-token-grant.ts": {
     "no-console": {
       "count": 6
-    }
-  },
-  "src/projects/lib/session-transcript.ts": {
-    "no-console": {
-      "count": 1
     }
   },
   "src/projects/lib/session-visibility.ts": {

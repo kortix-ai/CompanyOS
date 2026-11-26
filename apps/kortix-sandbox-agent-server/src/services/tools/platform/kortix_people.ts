@@ -59,8 +59,22 @@ async function resolveMember(who: string, context: PlatformToolContext) {
 }
 
 async function invite(email: string, role: string, context: PlatformToolContext) {
-  const sent = await cliRun(['access', 'invite', email, '--role', role], context)
+  const sent = await cliJson<{ email_sent?: boolean; email_skip_reason?: string; invite_url?: string }>(['access', 'invite', email, '--role', role, '--json'], context)
   if ('error' in sent) return fail(TOOL, 'invite', `Could not invite ${email}`, sent.error, context)
+  // No email provider (self-host, a failed send): the invitation exists, and its link is the only way in.
+  if (sent.value.email_sent === false) {
+    return ok(
+      TOOL,
+      'invite',
+      {
+        title: `Invited ${email}, but no email was sent`,
+        subtitle: `As ${role}. Send them the invitation link yourself${sent.value.email_skip_reason ? ` (${sent.value.email_skip_reason})` : ''}.`,
+        status: 'needs_you',
+        links: [...(sent.value.invite_url ? [{ label: 'Invitation link', href: sent.value.invite_url }] : []), { label: 'Members', href: membersHref(context.env) }],
+      },
+      { email, role, email_sent: false, invite_url: sent.value.invite_url ?? null },
+    )
+  }
   return ok(TOOL, 'invite', {
     title: `Invited ${email}`,
     subtitle: `As ${role}. The invitation is valid for 14 days.`,

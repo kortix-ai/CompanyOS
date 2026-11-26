@@ -1062,3 +1062,29 @@ test('kortix_agents create: a one-item ["all"] or ["none"] grant is written as t
   await run('kortix_agents', { action: 'create', name: 'helper', description: 'Helps', instructions: 'Help.', skills: ['all'], secrets: ['none'], connectors: ['gmail'] })
   expect(JSON.parse(readFileSync(join(bin, 'block.json'), 'utf8'))).toMatchObject({ skills: 'all', secrets: 'none', connectors: ['gmail'] })
 })
+
+describe('kortix_people invite', () => {
+  test('an invitation that sent its email reads as sent', async () => {
+    fakeKortix(`'access invite sam@example.com --role member --json') echo '{"status":"invited","email_sent":true}' ;;`)
+    const result = await run('kortix_people', { action: 'invite', email: 'sam@example.com', role: 'member' })
+    expect(result.card.title).toBe('Invited sam@example.com')
+  })
+
+  // The audit: with no email provider the API answers email_sent false and an invite_url; the card said "Invited" and the link was lost.
+  test('an invitation with no email sent says so and carries the link the person shares', async () => {
+    fakeKortix(`'access invite sam@example.com --role member --json') echo '{"status":"invited","email_sent":false,"email_skip_reason":"no email provider","invite_url":"https://app.example.com/invite/tok_1"}' ;;`)
+    const result = await run('kortix_people', { action: 'invite', email: 'sam@example.com', role: 'member' })
+    expect(result.card.title).toBe('Invited sam@example.com, but no email was sent')
+    expect(result.card.status).toBe('needs_you')
+    expect(result.card.links?.[0]).toEqual({ label: 'Invitation link', href: 'https://app.example.com/invite/tok_1' })
+  })
+})
+
+test('kortix_connectors add: the card names the next step the install returns', async () => {
+  fakeKortix(`'connectors catalog install curated/docs --json') echo '{"slug":"docs","next":"ready"}' ;;
+  'connectors catalog install composio:stripe --json') echo '{"slug":"stripe","next":"credential"}' ;;
+  'connectors catalog install curated/broken --json') echo '{"slug":"broken","next":"fix","error":"its tools could not be loaded"}' ;;`)
+  expect((await run('kortix_connectors', { action: 'add', app: 'curated/docs' })).card.subtitle).toBe('Ready: it needs no sign-in.')
+  expect((await run('kortix_connectors', { action: 'add', app: 'composio:stripe' })).card.subtitle).toContain('it needs a key')
+  expect((await run('kortix_connectors', { action: 'add', app: 'curated/broken' })).card.subtitle).toBe('It does not work yet: its tools could not be loaded.')
+})

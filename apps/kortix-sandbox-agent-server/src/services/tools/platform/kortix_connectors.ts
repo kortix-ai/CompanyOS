@@ -92,7 +92,7 @@ async function add(app: string, context: PlatformToolContext) {
   // Exit 3 with the install's JSON: the app is already installed. That is the person's goal, not a failure.
   if (run.code === 3 && value?.existing) {
     const slug = typeof value.slug === 'string' ? value.slug : app
-    return ok(TOOL, 'add', { title: `${slug} is already added`, links: [{ label: 'Connectors', href: adminHref(context.env, 'connectors') }] }, value)
+    return ok(TOOL, 'add', { title: `${slug} is already added`, subtitle: nextStep(value), links: [{ label: 'Connectors', href: adminHref(context.env, 'connectors') }] }, value)
   }
   if (run.code !== 0 || !value) return fail(TOOL, 'add', `Could not add ${app}`, run.code !== 0 ? cliError(run) : { kind: 'failed', message: 'The command answered with no JSON.' }, context)
   const made = { value }
@@ -100,9 +100,17 @@ async function add(app: string, context: PlatformToolContext) {
   return ok(
     TOOL,
     'add',
-    { title: `Added ${slug}`, subtitle: 'Next: sign in, so agents can use it.', links: [{ label: 'Connectors', href: adminHref(context.env, 'connectors') }] },
+    { title: `Added ${slug}`, subtitle: nextStep(made.value), links: [{ label: 'Connectors', href: adminHref(context.env, 'connectors') }] },
     made.value,
   )
+}
+
+/** What the install says comes next (`next` of `kortix connectors catalog install --json`). */
+function nextStep(installed: Record<string, unknown>): string {
+  if (installed.next === 'ready') return 'Ready: it needs no sign-in.'
+  if (installed.next === 'credential') return 'Next: it needs a key. Ask for it with a secret link, never in chat.'
+  if (installed.next === 'fix') return `It does not work yet${typeof installed.error === 'string' ? `: ${installed.error}` : ''}.`
+  return 'Next: sign in, so agents can use it.'
 }
 
 /**

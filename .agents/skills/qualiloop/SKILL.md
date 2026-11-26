@@ -72,7 +72,9 @@ Staging and prod stay unconfigured: leave the secret unset there.
    It deletes them, puts the repository back to the tag `qualiloop-baseline`
    (the tree the project had when it was created; set it once with `git tag`
    and `git push origin qualiloop-baseline` on a new test project) and exits
-   `1` when anything is left.
+   `1` when anything is left. It refuses while a QualiLoop run is open (a
+   reset then deletes the sessions of conversations still running), or when
+   the QualiLoop CLI cannot say, for example after its sign-in expired.
 2. `npx qualiloop connect check`: one real turn plus its trace. Every required
    item passes, or the endpoint, the deploy or a variable is broken.
 3. `npx qualiloop suites run core --wait --fail-on major`: the Core suite

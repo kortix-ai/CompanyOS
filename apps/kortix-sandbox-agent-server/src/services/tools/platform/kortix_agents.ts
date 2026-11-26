@@ -88,7 +88,7 @@ interface PickerModel {
 interface ModelPicker {
   models?: Record<string, PickerModel>
   defaultModel?: string
-  claudeSubscription?: { connected?: boolean; models?: Array<{ id: string; name?: string; description?: string; limit?: { context?: number }; efforts?: string[]; connected?: boolean }> }
+  claudeSubscription?: { connected?: boolean; models?: Array<{ id: string; name?: string; description?: string; limit?: { context?: number }; efforts?: string[]; connected?: boolean; enabled?: boolean }> }
 }
 
 /** A model a spawn may name, as the model reads it. */
@@ -148,7 +148,7 @@ function usableModels(picker: ModelPicker): UsableModel[] {
     })
   const claude = picker.claudeSubscription?.connected
     ? (picker.claudeSubscription.models ?? [])
-        .filter((model) => model.connected !== false)
+        .filter((model) => model.connected !== false && model.enabled !== false)
         .map((model): UsableModel => ({
           id: model.id,
           name: model.name || model.id,
@@ -318,7 +318,7 @@ async function setAccess(name: string, args: Record<string, any>, context: Platf
   const set = await cliJson<Record<string, unknown>>(['agents', 'scope', name, ...flags, '--json'], context)
   if ('error' in set) return fail(TOOL, 'set_access', `Could not change what ${name} may use`, set.error, context)
   const after = await cliJson<Record<string, unknown>>(['agents', 'scope', name, '--show', '--json'], context)
-  const now = 'error' in after ? set.value : after.value
+  const now = 'error' in after ? { ...set.value, secrets: set.value.secrets ?? set.value.env } : after.value
   return ok(
     TOOL,
     'set_access',

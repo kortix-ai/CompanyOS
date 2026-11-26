@@ -13,12 +13,13 @@ interface WorkspaceCost {
   credits?: { total?: string; llm?: string; compute?: string }
 }
 
+/** One row of `kortix billing costs --by session --json`. */
 interface SessionCost {
   session_id?: string
-  title?: string | null
-  name?: string | null
-  agent_name?: string | null
-  total_cost?: number
+  owner_name?: string | null
+  project_name?: string | null
+  credits?: { total?: string; llm?: string; compute?: string }
+  [field: string]: unknown
 }
 
 /** `--since` for the last `days` days, UTC. */
@@ -80,13 +81,15 @@ async function topSessions(days: number, context: PlatformToolContext) {
       title: `The sessions that used the most, last ${days} days`,
       rows: capRows(
         sessions.map((row) => ({
-          title: row.title || row.name || `Session ${(row.session_id ?? '').slice(0, 8)}`,
-          ...(row.agent_name ? { detail: row.agent_name } : {}),
+          title: `Session ${(row.session_id ?? '').slice(0, 8)}`,
+          ...(row.owner_name ? { detail: `Started by ${row.owner_name}` } : {}),
+          ...(row.credits?.total ? { badge: `${row.credits.total} credits` } : {}),
           ...(row.session_id ? { href: sessionHref(context.env, row.session_id) } : {}),
         })),
       ),
     },
-    read.value,
+    // Credits only: the `*_cost` fields are prices, and the model must never quote one.
+    { days, sessions: sessions.map((row) => ({ session_id: row.session_id ?? null, owner: row.owner_name ?? null, credits: row.credits ?? null })) },
   )
 }
 

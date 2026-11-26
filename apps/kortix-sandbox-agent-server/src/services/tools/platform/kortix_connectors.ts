@@ -5,7 +5,7 @@
  * `kortix_agents` `set_access`. A My Kortix platform tool (`platform.ts`):
  * every action is one `kortix connectors …` command.
  */
-import { adminHref, capRows, cliJson, cliRun, fail, ok, cliArgProblem, type PlatformToolContext } from './platform'
+import { adminHref, capRows, cliJson, cliRun, fail, ok, cliArgProblem, cliError, parseJson, runKortix, type PlatformToolContext } from './platform'
 
 const TOOL = 'kortix_connectors' as const
 const ACTIONS = ['list', 'find', 'add', 'connect'] as const
@@ -27,7 +27,8 @@ interface CatalogRow {
   name?: string | null
   description?: string | null
   installed_as?: string | null
-  installed?: string | null
+  /** The slugs this app is installed as; `[]` when it is not. */
+  installed?: string[] | string | null
 }
 
 function rowsOf<T>(value: unknown, key: string): T[] {
@@ -73,7 +74,7 @@ async function find(query: string, context: PlatformToolContext) {
     {
       title: apps.length === 0 ? `No app matches "${query}"` : `${apps.length} ${apps.length === 1 ? 'app' : 'apps'} for "${query}"`,
       rows: apps.map((app) => {
-        const installed = app.installed_as || app.installed
+        const installed = app.installed_as || (Array.isArray(app.installed) ? app.installed.length > 0 : app.installed)
         return {
           title: app.name || app.id || 'app',
           ...(app.description ? { detail: app.description } : {}),
@@ -86,12 +87,15 @@ async function find(query: string, context: PlatformToolContext) {
 }
 
 async function add(app: string, context: PlatformToolContext) {
-  const made = await cliJson<Record<string, unknown>>(['connectors', 'catalog', 'install', app, '--json'], context)
-  if ('error' in made) {
-    // Exit 3: the app is already installed. That is the person's goal, not a failure.
-    if (made.error.message.includes('already installed')) return ok(TOOL, 'add', { title: `${app} is already added` })
-    return fail(TOOL, 'add', `Could not add ${app}`, made.error, context)
+  const run = await runKortix(['connectors', 'catalog', 'install', app, '--json'], context)
+  const value = run.code === 0 || run.code === 3 ? parseJson<Record<string, unknown>>(run.stdout) : null
+  // Exit 3 with the install's JSON: the app is already installed. That is the person's goal, not a failure.
+  if (run.code === 3 && value?.existing) {
+    const slug = typeof value.slug === 'string' ? value.slug : app
+    return ok(TOOL, 'add', { title: `${slug} is already added`, links: [{ label: 'Connectors', href: adminHref(context.env, 'connectors') }] }, value)
   }
+  if (run.code !== 0 || !value) return fail(TOOL, 'add', `Could not add ${app}`, run.code !== 0 ? cliError(run) : { kind: 'failed', message: 'The command answered with no JSON.' }, context)
+  const made = { value }
   const slug = typeof made.value.slug === 'string' ? made.value.slug : app
   return ok(
     TOOL,

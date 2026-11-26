@@ -78,6 +78,14 @@ interface TriggerRow {
   source?: TriggerSource
   target?: { kind?: string; session_id?: string }
   next_fire_at?: string | null
+  /** `kortix triggers ls --json` (`trigger-draft.ts`): the kortix.yaml trigger's kind and schedule. */
+  type?: string | null
+  every_seconds?: number | null
+  run_at?: string | null
+  timezone?: string
+  app?: string | null
+  event?: { connector?: string; type?: string } | null
+  auto_paused_at?: string | null
 }
 
 /** One row of `kortix loops ls --json`: a loop, or a trigger that wakes this session. */
@@ -380,8 +388,13 @@ function rowsOf(value: unknown): TriggerRow[] {
 /** The schedule of a kortix.yaml or runtime agent trigger, when it names one. */
 function when(row: TriggerRow): string | undefined {
   if (row.source?.type && row.source.type !== 'schedule') return condition(row.source)
+  if (row.event) return `Wakes when ${condition({ type: 'event', connector: row.event.connector, event: row.event.type })}`
+  if (row.type === 'webhook' || row.type === 'app') return `Wakes when ${condition({ type: row.type, app: row.app ?? undefined })}`
+  if (row.cron) return row.cron
+  if (row.every_seconds) return schedule({ every: `${row.every_seconds}s` })
+  if (row.run_at) return schedule({ at: row.run_at })
   const on = (row.on ?? row.source ?? {}) as Record<string, unknown>
-  const value = row.schedule ?? row.cron ?? row.every ?? on.cron ?? on.every ?? on.at ?? on.schedule
+  const value = row.schedule ?? row.every ?? on.cron ?? on.every ?? on.at ?? on.schedule
   return typeof value === 'string' && value ? value : undefined
 }
 
@@ -409,7 +422,7 @@ async function list(context: PlatformToolContext) {
     schedule: when(row) ?? null,
     agent: row.agent ?? null,
     next_fire: row.next_fire_at ?? null,
-    state: row.enabled === false || row.paused || row.state === 'paused' ? 'paused' : (row.state ?? 'active'),
+    state: row.enabled === false || row.paused || row.auto_paused_at || row.state === 'paused' ? 'paused' : (row.state ?? 'active'),
   }))
 
   const rows: KortixCardRow[] = [

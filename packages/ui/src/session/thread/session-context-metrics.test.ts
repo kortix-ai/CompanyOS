@@ -356,6 +356,20 @@ describe('estimateSkills', () => {
     ];
     expect(estimateSkills(messages)).toEqual([{ name: 'pdf', tokens: 4, uses: 1 }]);
   });
+
+  test('scaled like the breakdown: a skill never shows more of the context than the context holds', () => {
+    // The reviewer's case: a 4000-char skill read when the model reported only
+    // 100 input tokens (history compacted or served from cache).
+    const messages = [
+      assistant({}, [tool({ name: 'read', kind: 'read', input: { path: 'skills/pdf/SKILL.md' }, result: done('p'.repeat(3984)) })]),
+    ];
+    const [skill] = estimateSkills(messages, 100);
+    const [tools] = estimateBreakdown(messages, 100);
+    expect(skill).toEqual({ name: 'pdf', tokens: 100, uses: 1, percent: 100 });
+    expect(skill?.tokens).toBe(tools?.tokens);
+    // Room to spare: the estimate stands as is.
+    expect(estimateSkills(messages, 4000)).toEqual([{ name: 'pdf', tokens: 1000, uses: 1, percent: 25 }]);
+  });
 });
 
 describe('sessionStartedAt', () => {

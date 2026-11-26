@@ -99,14 +99,8 @@ function toolCallChars(call: ToolCallBlock): number {
   return chars;
 }
 
-/** Pure context-breakdown estimation — exported for characterization tests. */
-export function estimateBreakdown(
-  messages: SessionLogMessage[],
-  input: number,
-  systemPrompt?: string,
-): BreakdownSegment[] {
-  if (!input) return [];
-
+/** What each role put in context, in estimated tokens, before any scaling to the reported input. */
+function rawTokens(messages: SessionLogMessage[], systemPrompt?: string) {
   const counts = messages.reduce(
     (acc, msg) => {
       if (msg.role === 'user') {
@@ -129,12 +123,23 @@ export function estimateBreakdown(
     { system: systemPrompt?.length ?? 0, user: 0, assistant: 0, tool: 0 },
   );
 
-  const tokens = {
+  return {
     system: estimateTokens(counts.system),
     user: estimateTokens(counts.user),
     assistant: estimateTokens(counts.assistant),
     tool: estimateTokens(counts.tool),
   };
+}
+
+/** Pure context-breakdown estimation — exported for characterization tests. */
+export function estimateBreakdown(
+  messages: SessionLogMessage[],
+  input: number,
+  systemPrompt?: string,
+): BreakdownSegment[] {
+  if (!input) return [];
+
+  const tokens = rawTokens(messages, systemPrompt);
   const estimated = tokens.system + tokens.user + tokens.assistant + tokens.tool;
 
   const buildSegments = (t: Record<string, number>, inp: number) => {
@@ -187,8 +192,15 @@ function skillOf(role: SessionLogMessage['role'], b: SessionLogBlock): string | 
   return SKILL_FILE.exec(inputString(b.input, ['filePath', 'file_path', 'path']) ?? '')?.[1];
 }
 
-/** The skills a session loaded and what each one put in context, largest first. */
-export function estimateSkills(messages: SessionLogMessage[]) {
+/**
+ * The skills a session loaded and what each one put in context, largest first.
+ * With the reported `input`, tokens scale down like the breakdown's rows, so a
+ * skill never shows more of the context than its row holds.
+ */
+export function estimateSkills(
+  messages: SessionLogMessage[],
+  input?: number,
+): { name: string; tokens: number; uses: number; percent?: number }[] {
   const chars = new Map<string, { chars: number; uses: number }>();
   for (const msg of messages) {
     for (const b of msg.blocks) {
@@ -199,8 +211,15 @@ export function estimateSkills(messages: SessionLogMessage[]) {
       chars.set(name, { chars: prev.chars + size, uses: prev.uses + 1 });
     }
   }
+  if (chars.size === 0) return [];
+  const raw = rawTokens(messages);
+  const estimated = raw.system + raw.user + raw.assistant + raw.tool;
+  const scale = input && estimated > input ? input / estimated : 1;
   return [...chars]
-    .map(([name, s]) => ({ name, tokens: estimateTokens(s.chars), uses: s.uses }))
+    .map(([name, s]) => {
+      const tokens = Math.floor(estimateTokens(s.chars) * scale);
+      return { name, tokens, uses: s.uses, percent: input ? Math.round((tokens / input) * 1000) / 10 : undefined };
+    })
     .sort((a, b) => b.tokens - a.tokens);
 }
 
@@ -342,7 +361,7 @@ function SessionContextModalBody({
   const counts = metrics.messages;
 
   const breakdown = useMemo(() => (ctx?.input ? estimateBreakdown(log, ctx.input) : []), [ctx, log]);
-  const skills = useMemo(() => estimateSkills(log), [log]);
+  const skills = useMemo(() => estimateSkills(log, ctx?.input), [ctx, log]);
 
   const usageFraction = ctx?.limit ? Math.min(1, ctx.total / ctx.limit) : null;
 
@@ -495,7 +514,7 @@ function SessionContextModalBody({
                       )}
                       <span className="text-muted-foreground ml-auto shrink-0 tabular-nums">
                         {fmt.number(skill.tokens)}
-                        {ctx?.input ? ` · ${Math.round((skill.tokens / ctx.input) * 1000) / 10}%` : ''}
+                        {skill.percent === undefined ? '' : ` · ${skill.percent}%`}
                       </span>
                     </li>
                   ))}

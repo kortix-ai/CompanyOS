@@ -18,7 +18,7 @@ import type { GitTriggerSpec } from '../triggers';
 import { type MergedChangeRequest, changeRequestMatches } from './runtime-triggers';
 import type { ProjectRow } from './serializers';
 import { raiseTriggerAlert } from './trigger-alerts';
-import { fireGitTrigger, markGitTriggerAttemptFailed, markGitTriggerFired } from './trigger-fire';
+import { existingTriggerSessions, fireGitTrigger, markGitTriggerAttemptFailed, markGitTriggerFired } from './trigger-fire';
 import { renderTriggerInput } from './trigger-payload';
 import { automaticFirePauseReason } from './trigger-scheduler-state';
 import { errorMessage } from '../../shared/error-message';
@@ -48,18 +48,28 @@ export async function fireChangeRequestMergedTriggers(
           isNull(projectTriggerRuntime.autoPausedAt),
         ),
       );
-    const fires = merged.flatMap((cr) =>
-      rows.map((row) => row.spec as unknown as GitTriggerSpec).filter((spec) => spec && changeRequestMatches(spec, cr)).map((spec) => ({ spec, cr })),
+    const now = new Date();
+    const fires = await Promise.all(
+      merged.flatMap((cr) =>
+        rows
+          .map((row) => row.spec as unknown as GitTriggerSpec)
+          .filter((spec) => spec && changeRequestMatches(spec, cr))
+          .map(async (spec) => {
+            const payload = firePayload(spec, cr, now);
+            // A pinned, keyed or reused trigger can land in the origin itself.
+            const intoOrigin = originSessionId ? (await existingTriggerSessions(project.projectId, spec, payload)).includes(originSessionId) : false;
+            return { spec, cr, payload, intoOrigin };
+          }),
+      ),
     );
     const paused = fires.length > 0 ? await automaticFirePauseReason(project) : null;
     let reached = 0;
     const fire = async (intoOrigin: boolean) => {
-      for (const { spec, cr } of fires) {
-        if ((Boolean(originSessionId) && spec.pinnedSessionId === originSessionId) !== intoOrigin) continue;
-        if (await fireOne(project, spec, cr, paused)) reached += 1;
+      for (const one of fires) {
+        if (one.intoOrigin === intoOrigin && (await fireOne(project, one, paused, now))) reached += 1;
       }
     };
-    // The origin's own triggers first, so its notice can see them; a trigger
+    // The triggers into the origin first, so its notice can see them; a trigger
     // into another session can start a sandbox and never delays the notice.
     await fire(true);
     if (originSessionId) {
@@ -78,14 +88,21 @@ export async function fireChangeRequestMergedTriggers(
   }
 }
 
-async function fireOne(project: ProjectRow, spec: GitTriggerSpec, cr: MergedChangeRequest, paused: string | null): Promise<boolean> {
-  const now = new Date();
-  const payload = {
+function firePayload(spec: GitTriggerSpec, cr: MergedChangeRequest, now: Date): Record<string, unknown> {
+  return {
     change_request: cr,
     // A kortix.yaml slug has no `.`; a runtime id does (`trigger.<hex>`).
     trigger: { slug: spec.slug, type: spec.type, kind: spec.slug.includes('.') ? 'runtime' : 'declared' },
     fired_at: now.toISOString(),
   };
+}
+
+async function fireOne(
+  project: ProjectRow,
+  { spec, cr, payload }: { spec: GitTriggerSpec; cr: MergedChangeRequest; payload: Record<string, unknown> },
+  paused: string | null,
+  now: Date,
+): Promise<boolean> {
   const run = { projectId: project.projectId, slug: spec.slug, source: 'change_request' as const, spec, payload, now };
   // A paused project or account records the merge as a skipped run, like a paused webhook.
   if (paused) {

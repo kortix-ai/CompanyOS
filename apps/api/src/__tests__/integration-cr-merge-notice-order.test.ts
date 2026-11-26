@@ -5,12 +5,15 @@
  * A trigger into another session can start a sandbox, so its fire is held here
  * at the `fireGitTrigger` boundary until the test releases it. Every query and
  * every other fire is real. Proves: the origin hears of the merge while the
- * other fire is still held; a trigger into the origin still fires before the
- * notice and stays the one prompt there.
+ * other fire is still held; a trigger into the origin, pinned or a reused or
+ * keyed session that is the origin, still fires before the notice and stays
+ * the one prompt there.
  */
 import { afterAll, beforeAll, describe, expect, mock, test } from 'bun:test';
 import { accountMembers, projectSessions, projects, sessionLifecycleCommands } from '@kortix/db';
 import { eq } from 'drizzle-orm';
+import { extractTriggers, parseManifestString } from '../projects/triggers';
+import { reconcileProjectTriggerRuntime } from '../projects/trigger-runtime-catalog';
 import { newRuntimeTriggerId, parseRuntimeTriggerBody, runtimeTriggerSpec } from '../projects/lib/runtime-triggers';
 import { insertSessionReminder } from '../projects/lib/session-reminders';
 import { setNoticeBatchHoldForTests } from '../projects/session-notice-batch';
@@ -44,6 +47,18 @@ async function heldTrigger(sessionId: string, crId: string, hold: boolean): Prom
   let release = () => {};
   if (hold) held.set(spec.slug, new Promise<void>((resolve) => { release = resolve; }));
   return { slug: spec.slug, release };
+}
+
+/** A kortix.yaml `change_request` trigger on `base` whose earlier fire made `sessionId` its session. */
+async function declaredTriggerOwning(sessionId: string, base: string, mode: string[]): Promise<void> {
+  const slug = `merged-${base}`;
+  const manifest = parseManifestString(
+    ['triggers:', `  - slug: ${slug}`, '    type: change_request', `    filter: { base: ${base} }`, '    agent: kortix', ...mode.map((line) => `    ${line}`), '    prompt: merged'].join('\n'),
+  );
+  const { specs, errors } = extractTriggers(manifest);
+  if (errors.length > 0) throw new Error(JSON.stringify(errors));
+  await reconcileProjectTriggerRuntime(seeded.project_id, specs);
+  await db.update(projectSessions).set({ metadata: { trigger_slug: slug, trigger_kind: 'git', trigger_session_key: 'feature' } }).where(eq(projectSessions.sessionId, sessionId));
 }
 
 async function projectRow() {
@@ -109,4 +124,22 @@ describe('merge notice order', () => {
     expect(await sourcesOf(origin)).toEqual(['trigger:reminder']);
     expect(await sourcesOf(other)).toEqual(['trigger:reminder']);
   });
+
+  for (const [mode, base] of [[['session_mode: reuse'], 'reuse'], [['session_key: "{{ change_request.head_ref }}"'], 'keyed']] as const) {
+    test(`a ${base} trigger whose session is the origin fires before the notice and stays its one prompt`, async () => {
+      const origin = await seedSession(seeded, OWNER);
+      const other = await seedSession(seeded, OWNER);
+      const cr = { cr_id: crypto.randomUUID(), number: 23, title: 'Reuse it', base_ref: base, head_ref: 'feature' };
+      await declaredTriggerOwning(origin, base, [...mode]);
+      const slow = await heldTrigger(other, cr.cr_id, true);
+
+      const firing = fireChangeRequestMergedTriggers(await projectRow(), [cr], origin);
+
+      expect(await awaitSources(origin, 1)).toEqual(['trigger:change_request']);
+      slow.release();
+      expect(await firing).toBe(2);
+      expect(await sourcesOf(origin)).toEqual(['trigger:change_request']);
+      expect(await sourcesOf(other)).toEqual(['trigger:reminder']);
+    });
+  }
 });

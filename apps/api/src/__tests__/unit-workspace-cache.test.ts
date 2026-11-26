@@ -164,7 +164,14 @@ describe('save', () => {
     };
     const saved = await saveWorkspaceCache({ projectId: PROJECT, sessionId, sessionMetadata: metadata, key: 'ws-k1' });
     expect(lines()).toEqual([`POST /v1/volumes/kws-${sessionId}/commit`, 'POST /v1/caches']);
-    expect(bodyOf('POST', '/v1/caches')).toEqual({ namespace: NS, key: 'ws-k1', volume: `kws-${sessionId}`, ref: 'vc_1' });
+    expect(bodyOf('POST', '/v1/caches')).toEqual({
+      namespace: NS,
+      key: 'ws-k1',
+      volume: `kws-${sessionId}`,
+      max_entries: 2,
+      ttl_seconds: 604_800,
+      ref: 'vc_1',
+    });
     expect(saved).toEqual({
       entry: { id: 'vce_1', key: 'ws-k1', size_bytes: 7_790_000_000, file_count: 576_000, hits: 0, created_at: '2026-11-26T12:00:00Z', last_hit_at: null, expires_at: '2026-12-03T12:00:00Z' },
       evicted: ['vce_0'],

@@ -96,6 +96,25 @@ test('a restore that outlives the inline wait gets its second /start when it lan
   ]);
 }, 15_000);
 
+// KRTX-1642: the wake records an archive-restore phase from these reports.
+test('a restore that lands before the first poll is still reported as a restore', async () => {
+  starts = [restoring, ok('starting')];
+  gets = [ok('stopped')];
+  const renewals: string[] = [];
+  await (await provider()).start('sbx_1', { onProgress: async (kind) => void renewals.push(kind) });
+  expect(events).toEqual(['POST 202', 'GET stopped', 'POST 200']);
+  expect(renewals).toEqual(['archive']);
+}, 15_000);
+
+test('a joined start that turns out to be a restore reports the restore at once', async () => {
+  starts = [conflict, ok('starting')];
+  gets = [ok('starting'), ok('unarchiving'), ok('stopped')];
+  const renewals: string[] = [];
+  await (await provider()).start('sbx_1', { onProgress: async (kind) => void renewals.push(kind) });
+  expect(events).toEqual(['POST 409', 'GET starting', 'GET unarchiving', 'GET stopped', 'POST 200']);
+  expect(renewals).toEqual(['wait', 'archive']);
+}, 15_000);
+
 test('a /start the client gave up on is followed through, not failed', async () => {
   // Platinum was still inside its inline wait when the call timed out; the
   // restore carries on server-side and needs its /start when it lands.
@@ -153,8 +172,8 @@ test('losing the race to the post-restore /start still sees the box up', async (
 }, 15_000);
 
 test("a long restore renews the caller's lease as it goes, and a failed renewal is not fatal", async () => {
-  // Each poll costs 20 fake seconds: renewals land on the first in-progress
-  // read and then once per 30 s, at t = 20, 60 and 100 s.
+  // Each poll costs 20 fake seconds: renewals land on the 202 (t = 0) and
+  // then once per 30 s, at t = 40 and 80 s.
   getAdvancesMs = 20_000;
   starts = [restoring, ok('starting')];
   gets = [...Array(5).fill(ok('unarchiving')), ok('stopped')];

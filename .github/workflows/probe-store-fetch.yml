@@ -1,88 +1,57 @@
 name: Probe store fetch (temporary, removed before PR)
 
-# Replays the Mobile Store sequence on the runner pool it uses: two Expo API
-# calls, a ~12 min blocking child process (as `eas build --wait`), a 20 s one
-# (as `eas submit --wait`), then the call that failed in 3 ms in every
-# automatic iOS release. Logs the full fetch error cause. No secrets.
+# Replays the Mobile Store sequence on its runner pool: two Expo API calls, a
+# 700 s child process, then the call that failed in 3 ms in every automatic
+# iOS release. `run` uses this branch's run() from store-release.mjs; `sync`
+# is the execFileSync control. No secrets.
 on:
   push:
     branches: [mobile-store-ios]
 
-permissions: {}
+permissions:
+  contents: read
 
 jobs:
   probe:
-    name: probe ${{ matrix.mode }} ${{ matrix.secs }}s
+    name: probe ${{ matrix.mode }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { mode: sync, secs: 700 }
-          - { mode: child-poll, secs: 700 }
-          - { mode: async, secs: 700 }
-          - { mode: sync, secs: 60 }
+        mode: [run, sync]
     runs-on: ${{ vars.CI_RUNNER_M || 'ubuntu-24.04' }}
     timeout-minutes: 25
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: apps/mobile/scripts
+          persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
-      - name: Network facts
-        run: |
-          node --version
-          cat /etc/resolv.conf || true
-          getent ahosts api.expo.dev || true
-          env | grep -i -E '^(https?|no)_proxy=' || echo "no proxy env"
       - name: Probe
         env:
           MODE: ${{ matrix.mode }}
-          SECS: ${{ matrix.secs }}
-          NODE_DEBUG: net
         run: |
-          cat > probe.mjs <<'EOF'
+          cat > "$RUNNER_TEMP/probe.mjs" <<'EOF'
           import { execFileSync } from 'node:child_process';
-          import dns from 'node:dns';
-          const mode = process.env.MODE;
-          const secs = Number(process.env.SECS);
+          import { run, describeError } from './apps/mobile/scripts/store-release.mjs';
           const url = 'https://api.expo.dev/graphql';
           const body = JSON.stringify({ query: '{ __typename }' });
-          const ts = () => new Date().toISOString();
-          const cause = (c) => c && {
-            name: c.name, code: c.code, message: c.message,
-            errors: c.errors?.map((x) => `${x.code} ${x.address ?? ''}:${x.port ?? ''} ${x.message}`),
-          };
           const call = async (label) => {
             const t = Date.now();
             try {
               const r = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body });
               await r.text();
-              console.log(`PROBE ${ts()} ${JSON.stringify({ label, status: r.status, ms: Date.now() - t })}`);
+              console.log(`PROBE ${new Date().toISOString()} ${label} ${r.status} ${Date.now() - t} ms`);
             } catch (e) {
-              console.log(`PROBE ${ts()} ${JSON.stringify({ label, ms: Date.now() - t, message: e.message, cause: cause(e.cause) })}`);
+              console.log(`PROBE ${new Date().toISOString()} ${label} FAILED ${describeError(e)} ${Date.now() - t} ms`);
             }
           };
-          const lookup = async (label) => {
-            try { console.log(`PROBE ${ts()} ${label} ${JSON.stringify(await dns.promises.lookup('api.expo.dev', { all: true }))}`); }
-            catch (e) { console.log(`PROBE ${ts()} ${label} ${e.code} ${e.message}`); }
-          };
-          await lookup('dns-start');
           await call('first');
           await call('second');
-          console.log(`PROBE ${ts()} block ${mode} ${secs}s`);
-          if (mode === 'sync') execFileSync('sleep', [String(secs)]);
-          if (mode === 'child-poll') {
-            execFileSync(process.execPath, ['-e', `
-              const end = Date.now() + ${secs} * 1000;
-              (async () => { while (Date.now() < end) {
-                await fetch('${url}', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '${body}' }).then((r) => r.text()).catch(() => {});
-                await new Promise((r) => setTimeout(r, 5000));
-              } })();`], { stdio: ['ignore', 'ignore', 'inherit'], env: { ...process.env, NODE_DEBUG: '' } });
-          }
-          if (mode === 'async') await new Promise((r) => setTimeout(r, secs * 1000));
-          if (mode !== 'async') execFileSync('sleep', ['20']);
+          if (process.env.MODE === 'run') await run('sleep', ['700']);
+          else execFileSync('sleep', ['700']);
           await call('after-block');
-          await new Promise((r) => setTimeout(r, 1000));
-          await call('one-second-later');
-          await lookup('dns-end');
           EOF
-          node probe.mjs 2>&1 | grep -E '^PROBE|^NET' | cut -c1-400
+          cp "$RUNNER_TEMP/probe.mjs" ./probe.mjs
+          node probe.mjs

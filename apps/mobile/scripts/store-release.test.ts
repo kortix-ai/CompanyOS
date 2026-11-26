@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import { compareVersions, main, releaseIos, fetchWithRetry, iosStep, pickBuild, shippedBuildIds } from './store-release.mjs';
+import { compareVersions, describeError, main, releaseIos, fetchWithRetry, iosStep, pickBuild, run, shippedBuildIds } from './store-release.mjs';
 
 const build = (id: string) => ({ id, appBuildVersion: id });
 
@@ -193,6 +193,65 @@ describe('App Store delivery gates', () => {
 
   test('an approved manual release is preserved, not released by automation', async () => {
     await expect(releaseIos(options, async () => apple('PENDING_DEVELOPER_RELEASE'))).rejects.toThrow('manual release');
+  });
+
+  // Apple answers 409 "You cannot create a new version of the App in the
+  // current state" while it still has an older version.
+  for (const state of ['WAITING_FOR_REVIEW', 'IN_REVIEW', 'PENDING_APPLE_RELEASE']) {
+    test(`a new version waits, unwritten, while Apple has the older one ${state}`, async () => {
+      await expect(releaseIos(options, async () => apple(state, '1.0.9'))).resolves.toBeUndefined();
+    });
+  }
+
+  test('a new version behind an older one held for manual release needs a person', async () => {
+    await expect(releaseIos(options, async () => apple('PENDING_DEVELOPER_RELEASE', '1.0.9'))).rejects.toThrow('release it in App Store Connect');
+  });
+
+  test('an older live version does not hold the new one back', async () => {
+    const writes: string[] = [];
+    const asc = async (method: string, path: string) => {
+      if (method !== 'GET') writes.push(`${method} ${path.split('?')[0]}`);
+      if (path.startsWith('/v1/apps/')) return { data: [{ id: 'old', attributes: { versionString: '1.0.9', appVersionState: 'READY_FOR_DISTRIBUTION' } }] };
+      if (path.startsWith('/v1/builds?')) return { data: [{ id: 'build', attributes: { processingState: 'VALID' } }] };
+      if (method === 'GET') return { data: [] };
+      if (path === '/v1/appStoreVersions') return { data: { id: 'new', attributes: { versionString: version, releaseType: 'AFTER_APPROVAL' } } };
+      if (path === '/v1/reviewSubmissions') return { data: { id: 'review' } };
+      return { data: {} };
+    };
+    await releaseIos(options, async () => asc);
+    expect(writes[0]).toBe('POST /v1/appStoreVersions');
+    expect(writes.at(-1)).toBe('PATCH /v1/reviewSubmissions/review');
+  });
+});
+
+describe('a long EAS command keeps the event loop running', () => {
+  test('timers fire while run() waits, and it returns stdout', async () => {
+    let ticks = 0;
+    const timer = setInterval(() => { ticks += 1; }, 50);
+    try {
+      const out = await run('sh', ['-c', 'sleep 0.5; echo done']);
+      expect(out.trim()).toBe('done');
+      // execFileSync would leave this at 0: fetch's idle timer could not run either.
+      expect(ticks).toBeGreaterThan(3);
+    } finally {
+      clearInterval(timer);
+    }
+  });
+
+  test('a failing command rejects with its exit code', async () => {
+    await expect(run('sh', ['-c', 'exit 3'])).rejects.toThrow('exited with 3');
+  });
+});
+
+describe('a failed release names the network error', () => {
+  test('describeError reports the cause fetch hides behind "fetch failed"', () => {
+    const perAddress = Object.assign(new AggregateError([
+      Object.assign(new Error('connect ETIMEDOUT'), { code: 'ETIMEDOUT', address: '192.0.2.1' }),
+      Object.assign(new Error('connect ENETUNREACH'), { code: 'ENETUNREACH', address: '2001:db8::1' }),
+    ], ''), { code: 'ETIMEDOUT' });
+    const error = new TypeError('fetch failed', { cause: perAddress });
+    expect(describeError(error)).toBe('fetch failed <- ETIMEDOUT [ETIMEDOUT 192.0.2.1, ENETUNREACH 2001:db8::1]');
+    expect(describeError(new Error('plain'))).toBe('plain');
   });
 });
 

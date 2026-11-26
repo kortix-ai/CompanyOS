@@ -68,6 +68,7 @@ export function createAgentPrompt(input: {
 }): string {
   const review =
     (input.title ? `Write \`title: ${JSON.stringify(input.title)}\` in its block: the name people see. The key stays "${input.name}". ` : '') +
+    'Declare it a helper: `mode: subagent` and `hidden: true`, so it stays out of the pickers until I promote it as a primary agent. ' +
     'Then open a change request so I can review and merge it.';
   const desc = input.description.trim();
   if (input.start === 'duplicate' && input.from) {
@@ -79,15 +80,13 @@ export function createAgentPrompt(input: {
   if (input.start === 'blank') {
     return (
       `Create a new agent named "${input.name}" in kortix.yaml${desc ? ` with the description "${desc}"` : ''}, ` +
-      `no grants (write \`tools: none\`) and empty instructions. ` +
-      `Declare it a helper: \`mode: subagent\` and \`hidden: true\`, so it stays out of the pickers until I promote it. ${review}`
+      `no grants (write \`tools: none\`) and empty instructions. ${review}`
     );
   }
   return (
     `Create a new agent named "${input.name}" in kortix.yaml. What it does: ${desc || 'ask me.'} ` +
     `Write its instructions and give it only the tools, skills, connectors, secrets and permissions this work needs. ` +
-    `Always write its \`tools:\` key: a list of the tools it needs, or \`"*"\` (quoted) for every tool. ` +
-    `Declare it a helper: \`mode: subagent\` and \`hidden: true\`, so it stays out of the pickers until I promote it as a primary agent. ${review}`
+    `Always write its \`tools:\` key: a list of the tools it needs, or \`"*"\` (quoted) for every tool. ${review}`
   );
 }
 

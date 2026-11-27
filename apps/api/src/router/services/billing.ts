@@ -29,6 +29,19 @@ async function debitForRouter(
 }
 
 /** Deduct credits for a Kortix tool call. */
+/**
+ * Debit an exact amount (USD) for a tool call whose price is only known per
+ * call (a Kortix Toolbox catalog call): the same ledger path, the same
+ * exemptions and the same result as {@link deductToolCredits}.
+ */
+export async function deductToolAmount(accountId: string, cost: number, description: string): Promise<BillingDeductResult> {
+  if (cost <= 0) return { success: true, cost: 0, newBalance: 0 };
+  if (!config.KORTIX_BILLING_INTERNAL_ENABLED || creditGateExemptEnv()) return { success: true, cost: 0, newBalance: 0 };
+  const result = await debitForRouter(accountId, cost, description, 'usage');
+  if (!result.ok) return { success: false, cost: 0, newBalance: 0, error: result.error, retryable: result.retryable };
+  return { success: true, cost: result.amount || cost, newBalance: result.balance || 0, transactionId: result.transactionId };
+}
+
 export async function deductToolCredits(
   accountId: string,
   toolName: string,

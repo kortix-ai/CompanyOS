@@ -41,6 +41,9 @@ export function registerAccountRoutes(): void {
     createRoute({
       method: 'get',
       path: '/',
+      operationId: 'accounts.list',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'agent',
       tags: ['accounts'],
       summary: "List the user's accounts",
       ...auth,
@@ -162,6 +165,9 @@ export function registerAccountRoutes(): void {
     createRoute({
       method: 'post',
       path: '/',
+      operationId: 'accounts.create',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'agent',
       tags: ['accounts'],
       summary: 'Create a new team account',
       ...auth,
@@ -229,6 +235,9 @@ export function registerAccountRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}',
+      operationId: 'accounts.get',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'agent',
       tags: ['accounts'],
       summary: 'Get account details',
       ...auth,
@@ -299,6 +308,9 @@ export function registerAccountRoutes(): void {
     createRoute({
       method: 'patch',
       path: '/{workspaceId}',
+      operationId: 'accounts.update',
+      'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['accounts'],
       summary: 'Rename an account',
       ...auth,

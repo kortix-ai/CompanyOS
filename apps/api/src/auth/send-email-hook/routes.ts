@@ -32,6 +32,9 @@ export function registerSendEmailHookRoutes(): void {
     createRoute({
       method: 'post',
       path: '/send-email',
+      operationId: 'webhooks.auth.send_email',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       tags: ['auth'],
       summary: 'Supabase Auth send-email hook (Standard Webhooks signature verified)',
       request: {

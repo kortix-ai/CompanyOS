@@ -1,3 +1,5 @@
+import { createRoute, z } from '@hono/zod-openapi';
+import type { Context } from 'hono';
 import { config } from '../config';
 import { makeOpenApiApp } from '../openapi';
 import { reconcileChannelConnectors } from '../connectors/sync';
@@ -212,24 +214,46 @@ function channelsUrl(projectId: string, status: TeamsInstallRedirectStatus): str
 }
 
 // The registered redirect URI. It installs nothing: see install-completion.ts.
-teamsOauthApp.get('/callback', async (c: any) => {
-  const rawState = c.req.query('state');
-  const state = verifyState(rawState);
-  if (!state) return c.redirect(`${frontendBase()}/?teams_error=expired`, 302);
-  const dest = (status: TeamsInstallRedirectStatus) => channelsUrl(state.projectId, status);
+teamsOauthApp.openapi(
+  createRoute({
+    method: 'get',
+    path: '/callback',
+    operationId: 'webhooks.teams.oauth.callback',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
+    tags: ['channels'],
+    summary: 'Microsoft Teams admin-consent callback (hands off to the web completion page)',
+    request: {
+      query: z.object({
+        code: z.string().optional(),
+        state: z.string().optional(),
+        error: z.string().optional(),
+        error_description: z.string().optional(),
+      }),
+    },
+    responses: {
+      302: { description: 'Redirect to the web completion page or the Channels settings' },
+    },
+  }),
+  async (c: Context) => {
+    const rawState = c.req.query('state');
+    const state = verifyState(rawState);
+    if (!rawState || !state) return c.redirect(`${frontendBase()}/?teams_error=expired`, 302);
+    const dest = (status: TeamsInstallRedirectStatus) => channelsUrl(state.projectId, status);
 
-  if (c.req.query('error')) {
-    console.warn('[teams-oauth] authorize error', {
-      error: c.req.query('error'),
-      description: c.req.query('error_description')?.slice(0, 200),
-    });
-    return c.redirect(dest('declined'), 302);
-  }
-  const code = c.req.query('code');
-  if (!code) return c.redirect(dest('declined'), 302);
-  if (!config.MICROSOFT_APP_ID) return c.redirect(dest('unconfigured'), 302);
-  return c.redirect(installHandoffUrl('teams', { projectId: state.projectId, code, state: rawState }), 302);
-});
+    if (c.req.query('error')) {
+      console.warn('[teams-oauth] authorize error', {
+        error: c.req.query('error'),
+        description: c.req.query('error_description')?.slice(0, 200),
+      });
+      return c.redirect(dest('declined'), 302);
+    }
+    const code = c.req.query('code');
+    if (!code) return c.redirect(dest('declined'), 302);
+    if (!config.MICROSOFT_APP_ID) return c.redirect(dest('unconfigured'), 302);
+    return c.redirect(installHandoffUrl('teams', { projectId: state.projectId, code, state: rawState }), 302);
+  },
+);
 
 /**
  * Finish a Teams org install for the signed-in caller. The caller must be the

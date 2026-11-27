@@ -81,6 +81,9 @@ export function registerDiscordOauthRoutes(): void {
     createRoute({
       method: 'get',
       path: '/callback',
+      operationId: 'webhooks.discord.oauth.callback',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'human',
       tags: ['channels'],
       summary: 'Discord OAuth install callback (hands off to the web completion page)',
       request: {

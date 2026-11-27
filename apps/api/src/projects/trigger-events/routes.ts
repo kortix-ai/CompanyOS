@@ -27,6 +27,9 @@ export function registerEventIngressRoutes(): void {
   projectWebhooksApp.openapi(createRoute({
     method: 'post',
     path: '/events/{provider}',
+    operationId: 'webhooks.events.receive',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['triggers'],
     summary: 'Receive a connector event',
     description:

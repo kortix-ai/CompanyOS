@@ -347,6 +347,9 @@ export function registerSlackWebhookRoutes(): void {
     createRoute({
       method: 'post',
       path: '/',
+      operationId: 'webhooks.slack.events.receive',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       tags: ['channels'],
       summary: 'Slack Events API webhook (signature verified)',
       request: {
@@ -384,6 +387,9 @@ export function registerSlackWebhookRoutes(): void {
     createRoute({
       method: 'post',
       path: '/interactivity',
+      operationId: 'webhooks.slack.interactivity.receive',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       tags: ['channels'],
       summary: 'Slack interactivity webhook (signature verified)',
       request: {
@@ -415,6 +421,9 @@ export function registerSlackWebhookRoutes(): void {
     createRoute({
       method: 'post',
       path: '/commands',
+      operationId: 'webhooks.slack.commands.receive',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       tags: ['channels'],
       summary: 'Slack slash command webhook (signature verified)',
       request: {
@@ -445,6 +454,9 @@ export function registerSlackWebhookRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}',
+      operationId: 'webhooks.slack.workspace_events.receive',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       tags: ['channels'],
       summary: 'Per-project (BYO app) Slack Events webhook (signature verified)',
       request: {
@@ -496,6 +508,9 @@ export function registerSlackWebhookRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/commands',
+      operationId: 'webhooks.slack.workspace_commands.receive',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       tags: ['channels'],
       summary: 'Per-project (BYO app) Slack slash command webhook (signature verified)',
       request: {
@@ -535,6 +550,9 @@ export function registerSlackWebhookRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/interactivity',
+      operationId: 'webhooks.slack.workspace_interactivity.receive',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       tags: ['channels'],
       summary: 'Per-project (BYO app) Slack interactivity webhook (signature verified)',
       request: {
@@ -575,6 +593,9 @@ export function registerSlackWebhookRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/manifest',
+      operationId: 'webhooks.slack.manifest.get',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: 'Per-project (BYO app) Slack app manifest (single source of truth)',
       request: {

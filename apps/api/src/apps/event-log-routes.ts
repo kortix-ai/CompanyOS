@@ -86,6 +86,9 @@ export function registerAppEventLogRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get', path: '/{workspaceId}/apps/{appId}/events', tags: ['apps'], summary: "List an App's events", ...auth,
+      operationId: 'apps.events.list',
+      'x-kortix-action': 'project.app.deploy',
+      'x-kortix-exposure': 'agent',
       description:
         'The events the App posted in the last 30 days, newest first, with what came of each: one row per trigger the event ' +
         'reached, or one `unmatched` row when no enabled trigger listens to the App. Needs project.app.deploy.',
@@ -122,6 +125,9 @@ export function registerAppEventLogRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post', path: '/{workspaceId}/apps/{appId}/events/test', tags: ['apps'], summary: 'Send a test App event', ...auth,
+      operationId: 'apps.events.test',
+      'x-kortix-action': 'project.app.deploy',
+      'x-kortix-exposure': 'agent',
       description:
         'Sends events as if the App posted them, through the same log, limits and triggers, to prove the wiring. Every id ' +
         'starts with `test-` (one is made when none is sent), so a real event with the same id still fires later; the prompt ' +

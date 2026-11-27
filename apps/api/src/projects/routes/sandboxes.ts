@@ -369,6 +369,9 @@ export function registerSandboxesRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/sandbox-health',
+      operationId: 'sandbox_health.get',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['sandboxes'],
       summary: 'Get project sandbox health',
       ...auth,

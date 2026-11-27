@@ -27,6 +27,9 @@ export function registerRepositoryReplacementRoutes(): void {
   projectsApp.openapi(createRoute({
     method: 'put',
     path: '/{workspaceId}/git/repository',
+    operationId: 'git.repository.replace',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_SETTINGS_WRITE,
+    'x-kortix-exposure': 'agent',
     tags: ['github'],
     summary: 'Replace the Git repository for an existing project',
     ...auth,

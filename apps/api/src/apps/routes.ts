@@ -310,6 +310,9 @@ export function registerAppsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get', path: '/{workspaceId}/apps', tags: ['apps'], summary: 'List Apps', ...auth,
+      operationId: 'apps.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_APP_READ,
+      'x-kortix-exposure': 'agent',
       description: 'Only the Apps the caller may open under each App\'s access policy (a project manager: every App). ' +
         'An App left out answers 404 on GET, the same as a missing one.',
       request: { params: z.object({ workspaceId: z.string().uuid() }) },
@@ -332,6 +335,9 @@ export function registerAppsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get', path: '/{workspaceId}/apps/{appId}/access', tags: ['apps'], summary: 'Get App access policy', ...auth,
+      operationId: 'apps.access.get',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_APP_WRITE,
+      'x-kortix-exposure': 'agent',
       request: { params: z.object({ workspaceId: z.string().uuid(), appId: z.string().uuid() }) },
       responses: { 200: json(AppAccessSchema, 'App access policy'), ...errors(403, 404) },
     }),
@@ -347,6 +353,9 @@ export function registerAppsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'patch', path: '/{workspaceId}/apps/{appId}/access', tags: ['apps'], summary: 'Update App access policy', ...auth,
+      operationId: 'apps.access.update',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_APP_WRITE,
+      'x-kortix-exposure': 'agent',
       request: {
         params: z.object({ workspaceId: z.string().uuid(), appId: z.string().uuid() }),
         body: { content: { 'application/json': { schema: z.object({
@@ -407,6 +416,9 @@ export function registerAppsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get', path: '/{workspaceId}/apps/{appId}/agents', tags: ['apps'], summary: 'List the agents granted this App in kortix.yaml', ...auth,
+      operationId: 'apps.agents.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_APP_READ,
+      'x-kortix-exposure': 'agent',
       request: { params: z.object({ workspaceId: z.string().uuid(), appId: z.string().uuid() }) },
       responses: {
         200: json(z.object({ agents: z.array(z.object({
@@ -444,6 +456,9 @@ export function registerAppsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post', path: '/{workspaceId}/apps/{appId}/access-session', tags: ['apps'], summary: 'Create an App browser access session', ...auth,
+      operationId: 'apps.access_sessions.create',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_APP_READ,
+      'x-kortix-exposure': 'agent',
       request: { params: z.object({ workspaceId: z.string().uuid(), appId: z.string().uuid() }) },
       responses: { 200: json(z.object({ url: z.string().url(), expires_at: z.string() }), 'App access session'), ...errors(403, 404) },
     }),
@@ -490,6 +505,9 @@ export function registerAppsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post', path: '/{workspaceId}/apps', tags: ['apps'], summary: 'Create an App', ...auth,
+      operationId: 'apps.create',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_APP_WRITE,
+      'x-kortix-exposure': 'agent',
       description: 'Account credits pay for App compute: there is no per-App budget. `external_url` (https) creates an ' +
         'external App: Kortix lists and frames that site and never deploys it. It runs no compute and does not count ' +
         'toward the App limit. A site that refuses framing (X-Frame-Options, CSP frame-ancestors) gets ' +
@@ -590,6 +608,9 @@ export function registerAppsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post', path: '/{workspaceId}/apps/artifacts', tags: ['apps'], summary: 'Register an App artifact', ...auth,
+      operationId: 'apps.artifacts.create',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_APP_DEPLOY,
+      'x-kortix-exposure': 'agent',
       request: {
         params: z.object({ workspaceId: z.string().uuid() }),
         body: { content: { 'application/json': { schema: z.discriminatedUnion('kind', [
@@ -641,6 +662,9 @@ export function registerAppsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post', path: '/{workspaceId}/apps/artifacts/{artifactId}/finalize', tags: ['apps'], summary: 'Finalize an uploaded artifact', ...auth,
+      operationId: 'apps.artifacts.finalize',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_APP_DEPLOY,
+      'x-kortix-exposure': 'agent',
       request: {
         params: z.object({ workspaceId: z.string().uuid(), artifactId: z.string().uuid() }),
         body: { content: { 'application/json': { schema: z.object({ sha256: z.string().regex(/^[a-f0-9]{64}$/), size_bytes: z.number().int().positive().max(MAX_ARCHIVE_BYTES) }) } } },
@@ -666,6 +690,9 @@ export function registerAppsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get', path: '/{workspaceId}/apps/{appId}', tags: ['apps'], summary: 'Get an App', ...auth,
+      operationId: 'apps.get',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_APP_READ,
+      'x-kortix-exposure': 'agent',
       request: { params: z.object({ workspaceId: z.string().uuid(), appId: z.string().uuid() }) },
       responses: { 200: json(AppObject, 'App'), ...errors(403, 404) },
     }),
@@ -681,6 +708,9 @@ export function registerAppsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'patch', path: '/{workspaceId}/apps/{appId}', tags: ['apps'], summary: 'Update an App', ...auth,
+      operationId: 'apps.update',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_APP_WRITE,
+      'x-kortix-exposure': 'agent',
       description:
         '`external_url` moves an external App to another https URL (409 for an App Kortix runs). `display` replaces where Kortix shows the App (`listed`, `preview`: live | none, `parent`: the App whose detail shows it as a tab, `space` and `agent`: where it is grouped); presentation only, never a grant. `uses` replaces the Apps (by slug) this App uses; each must be a live App of the project the caller can see (400 `app_not_found` otherwise, the same for a missing App and a hidden one). A refused PATCH changes nothing. ',
       request: {
@@ -760,6 +790,9 @@ export function registerAppsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'delete', path: '/{workspaceId}/apps/{appId}', tags: ['apps'], summary: 'Delete an App', ...auth,
+      operationId: 'apps.delete',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_APP_ADMIN,
+      'x-kortix-exposure': 'agent',
       description:
         'The App stops serving at once; its machines and images go. An App with volumes needs `project.app.admin`: ' +
         'each volume keeps a final snapshot for 7 days, then Kortix purges it. The project triggers that name the App ' +
@@ -853,6 +886,9 @@ export function registerAppsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post', path: '/{workspaceId}/apps/{appId}/deployments', tags: ['apps'], summary: 'Deploy an App', ...auth,
+      operationId: 'apps.deployments.create',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_APP_DEPLOY,
+      'x-kortix-exposure': 'agent',
       description:
         'Queue a release of an uploaded artifact (`artifact_id` + `source`); answers 202. `config` is the release ' +
         'config (processes, http_service, services, mounts, vm, deploy; the shorthands port, ' +
@@ -975,6 +1011,9 @@ export function registerAppsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get', path: '/{workspaceId}/apps/{appId}/deployments', tags: ['apps'], summary: 'List App deployments', ...auth,
+      operationId: 'apps.deployments.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_APP_DEPLOY,
+      'x-kortix-exposure': 'agent',
       request: { params: z.object({ workspaceId: z.string().uuid(), appId: z.string().uuid() }) },
       responses: { 200: json(z.object({ deployments: z.array(DeploymentObject) }), 'Deployments'), ...errors(403, 404) },
     }),
@@ -995,6 +1034,9 @@ export function registerAppsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get', path: '/{workspaceId}/apps/{appId}/deployments/{deploymentId}', tags: ['apps'], summary: 'Get App deployment', ...auth,
+      operationId: 'apps.deployments.get',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_APP_DEPLOY,
+      'x-kortix-exposure': 'agent',
       request: { params: z.object({ workspaceId: z.string().uuid(), appId: z.string().uuid(), deploymentId: z.string().uuid() }) },
       responses: { 200: json(z.object({ deployment: DeploymentObject, events: z.array(z.object({}).passthrough()) }), 'Deployment'), ...errors(403, 404) },
     }),
@@ -1022,6 +1064,9 @@ export function registerAppsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get', path: '/{workspaceId}/apps/{appId}/deployments/{deploymentId}/logs', tags: ['apps'], summary: 'Get App runtime logs', ...auth,
+      operationId: 'apps.deployments.logs.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_APP_DEPLOY,
+      'x-kortix-exposure': 'agent',
       request: { params: z.object({ workspaceId: z.string().uuid(), appId: z.string().uuid(), deploymentId: z.string().uuid() }), query: z.object({ after: z.string().optional(), limit: z.string().optional() }) },
       responses: { 200: json(z.object({}).passthrough(), 'Logs'), ...errors(403, 404, 409, 503) },
     }),
@@ -1072,6 +1117,9 @@ export function registerAppsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'delete', path: '/{workspaceId}/apps/{appId}/deployments/{deploymentId}', tags: ['apps'], summary: 'Delete an App deployment', ...auth,
+      operationId: 'apps.deployments.delete',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_APP_WRITE,
+      'x-kortix-exposure': 'agent',
       request: { params: z.object({ workspaceId: z.string().uuid(), appId: z.string().uuid(), deploymentId: z.string().uuid() }) },
       responses: {
         200: json(z.object({
@@ -1164,6 +1212,9 @@ export function registerAppsRoutes(): void {
     projectsApp.openapi(
       createRoute({
         method: 'post', path: `/{workspaceId}/apps/{appId}/${action}`, tags: ['apps'], summary: `${action} an App`, ...auth,
+        operationId: `apps.${action}`,
+        'x-kortix-action': PROJECT_ACTIONS.PROJECT_APP_DEPLOY,
+        'x-kortix-exposure': 'agent',
         request: { params: z.object({ workspaceId: z.string().uuid(), appId: z.string().uuid() }) },
         responses: { 200: json(AppObject, 'App'), ...errors(402, 403, 404, 409, 429, 503) },
       }),
@@ -1234,6 +1285,9 @@ export function registerAppsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post', path: '/{workspaceId}/apps/{appId}/rollback', tags: ['apps'], summary: 'Roll back an App', ...auth,
+      operationId: 'apps.rollback',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_APP_DEPLOY,
+      'x-kortix-exposure': 'agent',
       description:
         'Roll back to an earlier release: a NEW release (the next version) from that release\'s artifact and ' +
         'config, rolled out on its strategy like any deploy. Volumes keep their data. Answers 202 ' +

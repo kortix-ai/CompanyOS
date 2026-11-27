@@ -21,6 +21,9 @@ export function registerEmailWebhookRoutes(): void {
     createRoute({
       method: 'post',
       path: '/resend',
+      operationId: 'webhooks.email.resend.receive',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       tags: ['channels'],
       summary: 'Resend inbound email webhook (Svix signature verified)',
       request: {

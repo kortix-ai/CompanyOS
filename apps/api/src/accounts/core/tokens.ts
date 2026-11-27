@@ -345,6 +345,9 @@ accountsRouter.openapi(
   createRoute({
     method: 'get',
     path,
+    operationId: path === '/tokens' ? 'accounts.tokens.list' : 'tokens.list',
+    'x-kortix-action': ACCOUNT_ACTIONS.TOKEN_READ,
+    'x-kortix-exposure': 'agent',
     tags: ['accounts'],
     summary: path === '/tokens' ? 'List CLI PATs for the active account' : 'List CLI PATs of a workspace',
     ...auth,
@@ -410,6 +413,9 @@ accountsRouter.openapi(
   createRoute({
     method: 'post',
     path,
+    operationId: path === '/tokens' ? 'accounts.tokens.create' : 'tokens.create',
+    'x-kortix-action': ACCOUNT_ACTIONS.TOKEN_CREATE,
+    'x-kortix-exposure': 'human',
     tags: ['accounts'],
     summary: path === '/tokens' ? 'Mint a key (deprecated: mint workspace keys under /v1/workspaces/{workspaceId}/tokens)' : 'Mint a workspace key (plaintext returned once)',
     ...(path === '/tokens'
@@ -465,6 +471,9 @@ accountsRouter.openapi(
   createRoute({
     method: 'delete',
     path,
+    operationId: path === '/tokens/{tokenId}' ? 'accounts.tokens.delete' : 'tokens.delete',
+    'x-kortix-action': ACCOUNT_ACTIONS.TOKEN_REVOKE,
+    'x-kortix-exposure': 'human',
     tags: ['accounts'],
     summary: 'Revoke a PAT, or explicitly delete a revoked personal key',
     ...auth,

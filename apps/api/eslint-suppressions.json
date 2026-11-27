@@ -536,9 +536,6 @@
   "src/channels/teams-oauth.ts": {
     "no-console": {
       "count": 6
-    },
-    "no-restricted-syntax": {
-      "count": 1
     }
   },
   "src/channels/teams-webhook.ts": {

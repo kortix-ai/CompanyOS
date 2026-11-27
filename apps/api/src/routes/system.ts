@@ -108,7 +108,23 @@ const readinessHandler = (c: any) => {
   }
   return c.json({ status: 'ok' });
 };
-app.get('/health/ready', readinessHandler);
+const ReadinessSchema = z.object({ status: z.string(), reason: z.string().optional() });
+app.openapi(
+  createRoute({
+    method: 'get',
+    path: '/health/ready',
+    operationId: 'health.ready_unversioned',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
+    tags: ['system'],
+    summary: 'Readiness (unversioned, the load balancer target health check): 503 until boot finishes and while draining',
+    responses: {
+      200: json(ReadinessSchema, 'Ready'),
+      503: json(ReadinessSchema, 'Starting or draining'),
+    },
+  }),
+  readinessHandler,
+);
 app.get('/v1/health/ready', readinessHandler);
 
 // Sign in with Kortix — RFC 8414 discovery at the API root. The issuer is the

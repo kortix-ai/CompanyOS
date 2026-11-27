@@ -77,6 +77,9 @@ export function registerAppEventRoutes(): void {
   appEventsApp.openapi(
     createRoute({
       method: 'post', path: '/{workspaceId}/apps/{appId}/events', tags: ['apps'],
+      operationId: 'apps.events.emit',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       summary: 'Emit App events',
       description:
         'Fires every enabled `type: app` trigger that names this App. Send one event, or `{ "events": [...] }` (at most 50). ' +
@@ -120,6 +123,9 @@ export function registerAppEventRoutes(): void {
   appEventsApp.openapi(
     createRoute({
       method: 'post', path: '/{workspaceId}/apps/{appId}/runs', tags: ['apps'], summary: 'Ask Kortix to call the App later',
+      operationId: 'apps.runs.create',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       description:
         'Kortix calls `method path` on this App once, after `run_after` or at `run_at`, waking it first. The call goes through ' +
         'the trigger engine: a failed call (no answer, 429 or 5xx) is retried. At most 1000 pending runs per App. Authenticate with `$KORTIX_APP_TOKEN`.',
@@ -149,6 +155,9 @@ export function registerAppEventRoutes(): void {
   appEventsApp.openapi(
     createRoute({
       method: 'delete', path: '/{workspaceId}/apps/{appId}/runs/{runId}', tags: ['apps'], summary: 'Cancel a pending App run',
+      operationId: 'apps.runs.cancel',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       description: 'Cancels a run this App scheduled that has not fired. Authenticate with `$KORTIX_APP_TOKEN`.',
       ...auth,
       request: { params: z.object({ workspaceId: z.string().uuid(), appId: z.string().uuid(), runId: z.string() }) },

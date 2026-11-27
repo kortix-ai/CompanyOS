@@ -1,4 +1,6 @@
+import { createRoute, z } from '@hono/zod-openapi';
 import type { Context } from 'hono';
+import { errors } from '../../openapi';
 import { teamsWebhookApp } from './app';
 import { teamsConfigured } from '../teams-auth';
 
@@ -85,24 +87,59 @@ async function processActivity(
   return c.body(null, 200);
 }
 
+/**
+ * What an activity route answers. No body schema: the handler reads the
+ * activity itself and answers a malformed one with its own 400.
+ */
+const ACTIVITY_RESPONSES = {
+  200: { description: 'Accepted, or the invoke response Bot Framework expects' },
+  ...errors(400, 401, 403, 404, 503),
+};
+
 export function registerTeamsWebhookRoutes(): void {
   // Shared multi-tenant endpoint: the project is unknown until the activity's
   // tenant + conversation resolve to an install (dispatch, handleTeamsActivity).
-  teamsWebhookApp.post('/messages', async (c) => {
-    if (!teamsConfigured()) return c.json({ error: 'teams not configured' }, 503);
-    return processActivity(c);
-  });
+  teamsWebhookApp.openapi(
+    createRoute({
+      method: 'post',
+      path: '/messages',
+      operationId: 'webhooks.teams.messages.receive',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
+      tags: ['channels'],
+      summary: 'Microsoft Teams activities for the Kortix bot (Bot Framework JWT verified)',
+      responses: ACTIVITY_RESPONSES,
+    }),
+    async (c: Context) => {
+      if (!teamsConfigured()) return c.json({ error: 'teams not configured' }, 503);
+      return processActivity(c);
+    },
+  );
 
   // Bring-your-own-bot endpoint: the project is in the path. It answers only
   // for a project with its own bot app; the token's audience is that app.
-  teamsWebhookApp.post('/:workspaceId/messages', async (c) => {
-    const projectId = workspaceIdParam(c);
-    // UNAUTHENTICATED surface: a path that names no project with its own bot is
-    // a plain 404, the same answer for a project that does not exist. A 503 made
-    // Bot Framework retry and paged on scanner noise.
-    if (!isUuid(projectId)) return c.json({ error: 'Not found' }, 404);
-    const appId = await loadTeamsAppIdForProject(projectId);
-    if (!appId) return c.json({ error: 'Not found' }, 404);
-    return processActivity(c, { projectId, appId });
-  });
+  teamsWebhookApp.openapi(
+    createRoute({
+      method: 'post',
+      path: '/{workspaceId}/messages',
+      operationId: 'webhooks.teams.workspace_messages.receive',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
+      tags: ['channels'],
+      summary: "Microsoft Teams activities for a workspace's own bot (Bot Framework JWT verified)",
+      // No uuid(): a non-UUID id answers the handler's own 404, not a 400.
+      request: { params: z.object({ workspaceId: z.string() }) },
+      responses: ACTIVITY_RESPONSES,
+    }),
+    async (c: Context) => {
+      const projectId = workspaceIdParam(c);
+      // UNAUTHENTICATED surface: a path that names no project with its own bot is
+      // a plain 404, the same answer for a project that does not exist. A 503 made
+      // Bot Framework retry and paged on scanner noise.
+      if (!isUuid(projectId)) return c.json({ error: 'Not found' }, 404);
+      const appId = await loadTeamsAppIdForProject(projectId);
+      if (!appId) return c.json({ error: 'Not found' }, 404);
+      return processActivity(c, { projectId, appId });
+    },
+  );
 }

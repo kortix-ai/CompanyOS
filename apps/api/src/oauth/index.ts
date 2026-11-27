@@ -449,6 +449,9 @@ oauthApp.openapi(
   createRoute({
     method: 'get',
     path: '/.well-known/oauth-authorization-server',
+    operationId: 'oauth.metadata.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['oauth'],
     summary: 'RFC 8414 authorization-server metadata (mirror of the API-root document)',
     responses: {
@@ -469,6 +472,9 @@ oauthApp.openapi(
   createRoute({
     method: 'get',
     path: '/authorize',
+    operationId: 'oauth.authorize.start',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['oauth'],
     summary: 'OAuth 2.1 authorization endpoint (PKCE) — redirects to consent',
     request: {
@@ -578,6 +584,9 @@ oauthApp.openapi(
   createRoute({
     method: 'get',
     path: '/authorize/consent/{requestId}',
+    operationId: 'oauth.authorize.consent.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['oauth'],
     summary: 'Fetch a pending authorization request for the consent screen',
     ...auth,
@@ -647,6 +656,9 @@ oauthApp.openapi(
   createRoute({
     method: 'post',
     path: '/authorize/consent',
+    operationId: 'oauth.authorize.consent.submit',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['oauth'],
     summary: 'Approve or deny a pending authorization request',
     ...auth,
@@ -781,6 +793,9 @@ oauthApp.openapi(
   createRoute({
     method: 'post',
     path: '/register',
+    operationId: 'oauth.clients.register',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['oauth'],
     summary: 'RFC 7591 dynamic client registration (public PKCE clients, e.g. MCP clients)',
     request: { body: { content: { 'application/json': { schema: z.any() } } } },
@@ -880,6 +895,9 @@ oauthApp.openapi(
   createRoute({
     method: 'post',
     path: '/token',
+    operationId: 'oauth.tokens.exchange',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['oauth'],
     summary: 'OAuth 2.1 token endpoint (authorization_code / refresh_token grants)',
     request: {
@@ -1154,6 +1172,9 @@ oauthApp.openapi(
   createRoute({
     method: 'post',
     path: '/revoke',
+    operationId: 'oauth.tokens.revoke',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['oauth'],
     summary: 'Revoke an access or refresh token (RFC 7009)',
     request: {
@@ -1289,6 +1310,9 @@ oauthApp.openapi(
   createRoute({
     method: 'get',
     path: '/grants',
+    operationId: 'oauth.grants.list',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['oauth'],
     summary: 'List the apps you approved (connected apps)',
     ...auth,
@@ -1372,6 +1396,9 @@ oauthApp.openapi(
   createRoute({
     method: 'delete',
     path: '/grants/{clientId}',
+    operationId: 'oauth.grants.delete',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['oauth'],
     summary: 'Revoke an app you approved: its consent and every live token it holds for you',
     ...auth,
@@ -1433,6 +1460,9 @@ oauthApp.openapi(
   createRoute({
     method: 'get',
     path: '/userinfo',
+    operationId: 'oauth.userinfo.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['oauth'],
     summary: 'OAuth userinfo (requires the `profile` or `email` scope)',
     ...auth,

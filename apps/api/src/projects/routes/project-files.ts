@@ -686,6 +686,9 @@ export function registerProjectFilesRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/commits',
+      operationId: 'commits.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_GITOPS_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['files'],
       summary: 'List repository commits',
       ...auth,
@@ -727,6 +730,9 @@ export function registerProjectFilesRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/commits/{sha}',
+      operationId: 'commits.get',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_GITOPS_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['files'],
       summary: 'Get a repository commit',
       ...auth,
@@ -765,6 +771,9 @@ export function registerProjectFilesRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/commits/{sha}/diff',
+      operationId: 'commits.diff.get',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_GITOPS_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['files'],
       summary: 'Get the diff of a commit',
       ...auth,

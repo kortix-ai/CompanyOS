@@ -152,6 +152,9 @@ export function registerProviderOauthRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/oauth/{provider}/start',
+      operationId: 'oauth.provider_logins.start',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SECRET_WRITE,
+      'x-kortix-exposure': 'human',
       tags: ['secrets'],
       summary: 'Start an LLM provider OAuth login',
       ...auth,
@@ -250,6 +253,9 @@ export function registerProviderOauthRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/oauth/{provider}/poll',
+      operationId: 'oauth.provider_logins.poll',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'human',
       tags: ['secrets'],
       summary: 'Poll an LLM provider OAuth login',
       ...auth,
@@ -368,6 +374,9 @@ export function registerProviderOauthRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/oauth',
+      operationId: 'oauth.provider_logins.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['secrets'],
       summary: 'List connected LLM provider logins',
       ...auth,
@@ -419,6 +428,9 @@ export function registerProviderOauthRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/oauth/{provider}',
+      operationId: 'oauth.provider_logins.delete',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['secrets'],
       summary: 'Disconnect an LLM provider login',
       ...auth,

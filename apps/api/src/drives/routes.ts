@@ -447,6 +447,9 @@ drivesApp.openapi(
   createRoute({
     method: 'get',
     path: '/',
+    operationId: 'drives.list',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_READ,
+    'x-kortix-exposure': 'agent',
     tags: ['drives'],
     summary: 'The project’s Files',
     description: 'Creates the project’s drive and the caller’s own folder (`/Users/<name>`) on first use.',
@@ -546,6 +549,9 @@ drivesApp.openapi(
   createRoute({
     method: 'get',
     path: '/usage',
+    operationId: 'drives.usage.list',
+    'x-kortix-action': 'billing.read',
+    'x-kortix-exposure': 'agent',
     tags: ['drives'],
     summary: 'Files storage of an account, per project',
     description:
@@ -601,6 +607,9 @@ drivesApp.openapi(
   createRoute({
     method: 'get',
     path: '/{driveId}/usage',
+    operationId: 'drives.usage.get',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_READ,
+    'x-kortix-exposure': 'agent',
     tags: ['drives'],
     summary: 'What the project’s Files hold, and their limits',
     description:
@@ -652,6 +661,9 @@ drivesApp.openapi(
   createRoute({
     method: 'get',
     path: '/{driveId}/files',
+    operationId: 'drives.files.list',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_READ,
+    'x-kortix-exposure': 'agent',
     tags: ['drives'],
     summary: 'List a folder',
     description: 'Only what the caller may see. Folders shared with the caller appear even before anything was written to them.',
@@ -730,6 +742,9 @@ drivesApp.openapi(
   createRoute({
     method: 'get',
     path: '/{driveId}/files/content',
+    operationId: 'drives.files.content.get',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_READ,
+    'x-kortix-exposure': 'agent',
     tags: ['drives'],
     summary: 'Download a file',
     description: 'Raw bytes. `download=1` adds `Content-Disposition: attachment`. Honors `Range`.',
@@ -771,6 +786,9 @@ drivesApp.openapi(
   createRoute({
     method: 'put',
     path: '/{driveId}/files/content',
+    operationId: 'drives.files.content.set',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_READ,
+    'x-kortix-exposure': 'agent',
     tags: ['drives'],
     summary: 'Upload a file',
     description: `Raw request body, at most ${MAX_DRIVE_UPLOAD_BYTES} bytes (413 \`payload_too_large\`). Replaces an existing file at the path. With \`If-Match\` (the ETag the file was downloaded with), a file changed since then is refused with 409 \`file_changed\`. A file that does not fit the Files limits (\`GET …/usage\`) is refused before its bytes are read: 403 \`storage_limit_exceeded\` (\`limit\`: \`project_bytes\` or \`account_bytes\`, with \`max\`, \`used\`, \`requested\`), 413 \`file_too_large\` (\`limit: file_bytes\`); a write into a folder sessions mount that would take it past the folder-mount cap answers 422 \`sub_path_too_large\`; busy storage answers 429 with \`Retry-After\`.`,
@@ -852,6 +870,9 @@ drivesApp.openapi(
   createRoute({
     method: 'post',
     path: '/{driveId}/files/upload',
+    operationId: 'drives.files.uploads.create',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_READ,
+    'x-kortix-exposure': 'agent',
     tags: ['drives'],
     summary: 'Start a block upload',
     description:
@@ -916,6 +937,9 @@ drivesApp.openapi(
   createRoute({
     method: 'put',
     path: '/{driveId}/files/upload/{uploadId}/blocks/{sha}',
+    operationId: 'drives.files.uploads.blocks.set',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_READ,
+    'x-kortix-exposure': 'agent',
     tags: ['drives'],
     summary: 'Send one block of a block upload',
     description: 'Raw request body, at most 1 MiB; its sha256 must equal `sha`. Safe to send again.',
@@ -943,6 +967,9 @@ drivesApp.openapi(
   createRoute({
     method: 'post',
     path: '/{driveId}/files/upload/{uploadId}/commit',
+    operationId: 'drives.files.uploads.commit',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_READ,
+    'x-kortix-exposure': 'agent',
     tags: ['drives'],
     summary: 'Commit a block upload',
     description: 'Lands the whole file at once, once every block storage lacked was sent. Safe to send again: a commit that landed answers the same.',
@@ -975,6 +1002,9 @@ drivesApp.openapi(
   createRoute({
     method: 'post',
     path: '/{driveId}/files/mkdir',
+    operationId: 'drives.files.mkdir',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_READ,
+    'x-kortix-exposure': 'agent',
     tags: ['drives'],
     summary: 'Create a folder',
     description: 'A new top-level folder needs a project admin; inside a folder, write access to it.',
@@ -1004,6 +1034,9 @@ drivesApp.openapi(
   createRoute({
     method: 'post',
     path: '/{driveId}/files/move',
+    operationId: 'drives.files.move',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_READ,
+    'x-kortix-exposure': 'agent',
     tags: ['drives'],
     summary: 'Move or rename a file or folder',
     description: 'Refuses to overwrite: an existing destination answers 409. A folder’s sharing moves with it.',
@@ -1045,6 +1078,9 @@ drivesApp.openapi(
   createRoute({
     method: 'delete',
     path: '/{driveId}/files',
+    operationId: 'drives.files.delete',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_READ,
+    'x-kortix-exposure': 'agent',
     tags: ['drives'],
     summary: 'Delete a file or folder',
     description: 'A folder with contents needs `recursive=true`. Its sharing goes with it.',
@@ -1105,6 +1141,9 @@ drivesApp.openapi(
   createRoute({
     method: 'get',
     path: '/{driveId}/access',
+    operationId: 'drives.access.list',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_READ,
+    'x-kortix-exposure': 'agent',
     tags: ['drives'],
     summary: 'Who has access to a folder',
     description: 'The grants on the folder and the ones it inherits from folders above it.',
@@ -1147,6 +1186,9 @@ drivesApp.openapi(
   createRoute({
     method: 'get',
     path: '/{driveId}/admin-reads',
+    operationId: 'drives.admin_reads.list',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_READ,
+    'x-kortix-exposure': 'agent',
     tags: ['drives'],
     summary: 'Admins who opened a person\'s own folder',
     description:
@@ -1197,6 +1239,9 @@ drivesApp.openapi(
   createRoute({
     method: 'put',
     path: '/{driveId}/access',
+    operationId: 'drives.access.set',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_READ,
+    'x-kortix-exposure': 'agent',
     tags: ['drives'],
     summary: 'Share a folder',
     description:
@@ -1243,6 +1288,9 @@ drivesApp.openapi(
   createRoute({
     method: 'delete',
     path: '/{driveId}/access/{grantId}',
+    operationId: 'drives.access.delete',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_READ,
+    'x-kortix-exposure': 'agent',
     tags: ['drives'],
     summary: 'Stop sharing a folder with someone',
     description: 'Running sessions that no longer reach the folder lose it at once; later ones never mount it.',
@@ -1336,6 +1384,9 @@ drivesApp.openapi(
   createRoute({
     method: 'get',
     path: '/{driveId}/mounts',
+    operationId: 'drives.mounts.list',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_READ,
+    'x-kortix-exposure': 'agent',
     tags: ['drives'],
     summary: 'The folders every session mounts',
     description:
@@ -1351,6 +1402,9 @@ drivesApp.openapi(
   createRoute({
     method: 'get',
     path: '/{driveId}/agents/{agentName}/mounts',
+    operationId: 'drives.agents.mounts.list',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_READ,
+    'x-kortix-exposure': 'agent',
     tags: ['drives'],
     summary: 'The folders an agent mounts',
     description:
@@ -1369,6 +1423,9 @@ drivesApp.openapi(
   createRoute({
     method: 'get',
     path: '/{driveId}/principals',
+    operationId: 'drives.principals.list',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_READ,
+    'x-kortix-exposure': 'agent',
     tags: ['drives'],
     summary: 'Who a folder can be shared with',
     description: 'The account’s people and teams the caller may see, and the project’s agents.',
@@ -1412,6 +1469,9 @@ drivesApp.openapi(
   createRoute({
     method: 'get',
     path: '/{driveId}/conflicts',
+    operationId: 'drives.conflicts.list',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_READ,
+    'x-kortix-exposure': 'agent',
     tags: ['drives'],
     summary: 'List open conflict copies',
     description:
@@ -1441,6 +1501,9 @@ drivesApp.openapi(
   createRoute({
     method: 'post',
     path: '/{driveId}/conflicts/{conflictId}/dismiss',
+    operationId: 'drives.conflicts.dismiss',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_READ,
+    'x-kortix-exposure': 'agent',
     tags: ['drives'],
     summary: 'Dismiss a conflict notice',
     description: 'Hides the notice and keeps the copy.',
@@ -1501,6 +1564,9 @@ drivesApp.openapi(
   createRoute({
     method: 'get',
     path: '/{driveId}/versions',
+    operationId: 'drives.versions.list',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_WRITE,
+    'x-kortix-exposure': 'agent',
     tags: ['drives'],
     summary: 'List the project’s Files versions, newest first',
     description: 'Project admins only: a version is the whole drive.',
@@ -1532,6 +1598,9 @@ drivesApp.openapi(
   createRoute({
     method: 'post',
     path: '/{driveId}/restore',
+    operationId: 'drives.restore',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_WRITE,
+    'x-kortix-exposure': 'agent',
     tags: ['drives'],
     summary: 'Restore the project’s Files to a version',
     description:

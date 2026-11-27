@@ -493,21 +493,6 @@ const FLAGS: readonly FeatureFlagDef[] = [
       'chat: billed per use, not gated here.',
   },
   {
-    key: 'humanoid',
-    name: 'Humanoid',
-    description:
-      'The workspace becomes one AI humanoid with its own identity: an email address and, later, a phone, an authenticator and a browser that keeps its logins. Every message, mail and event it receives lands in one event log, and it works on them around the clock.',
-    stability: 'experimental',
-    wip: true,
-    available: () => true,
-    platformDefault: () => false,
-    enforcement: 'routes',
-    enforcementNote:
-      'ROUTES: every /v1/projects/:id/humanoid* route answers 403 `feature_disabled` when off (humanoid/routes.ts), ' +
-      'except POST /humanoid, which turns it on. BEHAVIORAL: off, recordHumanoidEvent (humanoid/events.ts) records ' +
-      'nothing and the channels route as before; the humanoid_identities and humanoid_events rows stay.',
-  },
-  {
     key: 'chat_input',
     // Withdrawn (product owner, 2026-11-25): not part of Channels. Always off, not listed; its code stays dormant.
     withdrawn: 'off',

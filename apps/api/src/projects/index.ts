@@ -94,7 +94,6 @@ import { registerArtifactRoutes } from './routes/artifacts';
 import { registerLinkPreviewRoutes } from './routes/link-preview';
 import { registerSessionRemindersRoutes } from './routes/session-reminders';
 import { registerGoalRoutes } from './routes/goals';
-import { registerHumanoidRoutes } from './routes/humanoid';
 import { registerEvalRoutes } from './routes/evals';
 import { registerCalendarRoutes } from './routes/calendar';
 import { registerRuntimeTriggersRoutes } from './routes/runtime-triggers';
@@ -205,7 +204,6 @@ export function registerAllProjectRoutes(): void {
   registerLinkPreviewRoutes();
   registerSessionRemindersRoutes();
   registerGoalRoutes();
-  registerHumanoidRoutes();
   registerEvalRoutes();
   registerCalendarRoutes();
   registerRuntimeTriggersRoutes();

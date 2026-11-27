@@ -39,8 +39,6 @@ export type SessionInvocationSource =
   | 'system:chat-post'
   /** A space's watcher (`projects/lib/space-watch/`, flag `spaces_proactive`): one hidden session per space. */
   | 'system:space-watcher'
-  /** The humanoid (`humanoid/`, flag `humanoid`): its own conversation (the mind) and the events the dispatcher delivers to it. */
-  | 'system:humanoid'
   /** The goal engine (`projects/goals/`, flag `goals`): owner and verifier sessions and their prompts. */
   | 'system:goal'
   /** The eval runner (`projects/evals/`, flag `evals`): one session per trial. */

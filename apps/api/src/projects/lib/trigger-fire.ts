@@ -1,6 +1,4 @@
 import { checkBillingAdmission } from '../../billing/services/billing-gate';
-import { recordIfHumanoid } from '../../humanoid/events';
-import { logger } from '../../lib/logger';
 import { agentPauseReason } from './agent-directory';
 import { toSessionModelRef } from '../../llm-gateway/resolution/effective';
 import type { PromptOverridesWire } from '../session-lifecycle/store';
@@ -361,13 +359,8 @@ async function enqueueTriggerPrompt(input: {
  * queued a run, attributed to the account owner (a fire has no person).
  */
 export async function fireGitTrigger(
-  input: Parameters<typeof fireGitTriggerOnce>[0] & {
-    /** The humanoid dispatcher replays a fire it took from the event log. */
-    fromHumanoidLog?: boolean;
-  },
+  input: Parameters<typeof fireGitTriggerOnce>[0],
 ): ReturnType<typeof fireGitTriggerOnce> {
-  const logged = await logFireForHumanoid(input);
-  if (logged) return logged;
   const result = await fireGitTriggerOnce(input);
   // No model or no credits: the account cannot run it, so the trigger pauses
   // and resumes when the cause is gone (trigger-setup-pause.ts) instead of
@@ -382,7 +375,6 @@ export async function fireGitTrigger(
     });
   }
   if (result.status === 'fired' || result.status === 'queued') {
-    await recordDirectFireForHumanoid(input, result);
     captureAccountProductEvent({
       accountId: input.project.accountId,
       event: 'trigger_fired',
@@ -395,63 +387,6 @@ export async function fireGitTrigger(
     });
   }
   return result;
-}
-
-/** Fires a humanoid workspace takes up from its event log: the dispatcher replays them (`humanoid-trigger-delivery.ts`). */
-const LEDGER_FIRE_SOURCES = new Set<TriggerFireSource>(['cron', 'webhook', 'event', 'monitor']);
-
-/** The ledger source of a trigger fire. Pure. */
-export function humanoidFireSource(source: TriggerFireSource): 'schedule' | 'webhook' | 'connector' | null {
-  if (source === 'cron' || source === 'reminder') return 'schedule';
-  if (source === 'event') return 'connector';
-  if (source === 'webhook' || source === 'monitor') return 'webhook';
-  return null;
-}
-
-type FireInput = Parameters<typeof fireGitTriggerOnce>[0];
-
-function humanoidFireEvent(input: FireInput, opts: { dispatch: boolean; sessionId?: string | null }) {
-  const source = humanoidFireSource(input.source)!;
-  return {
-    projectId: input.project.projectId,
-    source,
-    type: `${source}.trigger.fired`,
-    subject: `trigger:${input.spec.slug}`,
-    externalId: input.idempotencyKey ?? `${input.spec.slug}:${crypto.randomUUID()}`,
-    actor: { kind: 'system' as const, id: input.spec.slug, name: input.spec.slug },
-    summary: `Trigger ${input.spec.slug} fired (${input.source})${opts.sessionId ? ` into session ${opts.sessionId}` : ''}`,
-    payload: {
-      trigger: input.spec.slug,
-      fire_source: input.source,
-      session_id: opts.sessionId ?? null,
-      // What the dispatcher needs to replay the fire.
-      fire: { spec: input.spec, payload: input.payload, renderedPrompt: input.renderedPrompt, idempotencyKey: input.idempotencyKey ?? null },
-    },
-    dispatch: opts.dispatch,
-  };
-}
-
-/**
- * A humanoid workspace writes a cron, webhook, connector or monitor fire to
- * its event log instead of firing it; the dispatcher takes it up from there.
- * Returns the result to hand back, or null when the workspace is not an
- * humanoid (or the source keeps its direct path).
- */
-async function logFireForHumanoid(input: FireInput & { fromHumanoidLog?: boolean }) {
-  if (input.fromHumanoidLog || !LEDGER_FIRE_SOURCES.has(input.source)) return null;
-  const recorded = await recordIfHumanoid(humanoidFireEvent(input, { dispatch: true }));
-  // The scheduler records this reason as a complete fire (trigger-scheduler.ts).
-  return recorded ? { status: 'queued' as const, reason: 'prompt queued for delivery', deduped: !recorded.inserted } : null;
-}
-
-/** Any other fire in a humanoid workspace (a reminder, a manual run) is kept for awareness. Best effort. */
-async function recordDirectFireForHumanoid(input: FireInput & { fromHumanoidLog?: boolean }, result: { sessionId?: string | null }): Promise<void> {
-  if (input.fromHumanoidLog || LEDGER_FIRE_SOURCES.has(input.source) || !humanoidFireSource(input.source)) return;
-  try {
-    await recordIfHumanoid(humanoidFireEvent(input, { dispatch: false, sessionId: result.sessionId }));
-  } catch (err) {
-    logger.warn('[humanoid] trigger fire not logged', { projectId: input.project.projectId, slug: input.spec.slug, error: String(err) });
-  }
 }
 
 async function fireGitTriggerOnce(input: {

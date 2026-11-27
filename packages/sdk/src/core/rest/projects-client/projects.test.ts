@@ -1039,7 +1039,6 @@ test('FEATURE_FLAG_KEYS lists every flag key exactly once', () => {
     'session_groups',
     'agent_teams',
     'voice_call',
-    'humanoid',
     'chat_input',
     'chat_front',
     'spaces_proactive',

@@ -132,7 +132,6 @@ export type FeatureFlagKey =
   | 'agent_teams'
   /** Voice calls: talk with the session's agent from the session page, with screen share. Off by default. */
   | 'voice_call'
-  | 'humanoid'
   /** Chat input: one composer control for the agent and every session override (model, effort, secrets, provider keys, sandbox). Experimental, off by default. */
   | 'chat_input'
   /** Talk-only threads: with `chat` on, a new space thread's agent only talks and hands the work to one hidden My Kortix session. Experimental, off by default. */
@@ -211,7 +210,6 @@ export const FEATURE_FLAG_KEYS: readonly FeatureFlagKey[] = [
   'session_groups',
   'agent_teams',
   'voice_call',
-  'humanoid',
   'chat_input',
   'chat_front',
   'spaces_proactive',

@@ -1,7 +1,7 @@
 {
   "generatedAt": "static",
-  "count": 1848,
-  "aliases": 723,
+  "count": 1840,
+  "aliases": 719,
   "routes": [
     {
       "method": "GET",
@@ -3942,26 +3942,6 @@
     },
     {
       "method": "GET",
-      "path": "/v1/projects/:workspaceId/humanoid",
-      "aliasOf": "/v1/workspaces/:workspaceId/humanoid"
-    },
-    {
-      "method": "POST",
-      "path": "/v1/projects/:workspaceId/humanoid",
-      "aliasOf": "/v1/workspaces/:workspaceId/humanoid"
-    },
-    {
-      "method": "GET",
-      "path": "/v1/projects/:workspaceId/humanoid/events",
-      "aliasOf": "/v1/workspaces/:workspaceId/humanoid/events"
-    },
-    {
-      "method": "POST",
-      "path": "/v1/projects/:workspaceId/humanoid/events",
-      "aliasOf": "/v1/workspaces/:workspaceId/humanoid/events"
-    },
-    {
-      "method": "GET",
       "path": "/v1/projects/:workspaceId/jwks.json",
       "aliasOf": "/v1/workspaces/:workspaceId/jwks.json"
     },
@@ -6805,22 +6785,6 @@
     {
       "method": "PATCH",
       "path": "/v1/workspaces/:workspaceId/group-grants/:groupId"
-    },
-    {
-      "method": "GET",
-      "path": "/v1/workspaces/:workspaceId/humanoid"
-    },
-    {
-      "method": "POST",
-      "path": "/v1/workspaces/:workspaceId/humanoid"
-    },
-    {
-      "method": "GET",
-      "path": "/v1/workspaces/:workspaceId/humanoid/events"
-    },
-    {
-      "method": "POST",
-      "path": "/v1/workspaces/:workspaceId/humanoid/events"
     },
     {
       "method": "GET",

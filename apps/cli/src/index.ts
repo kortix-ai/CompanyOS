@@ -34,7 +34,6 @@ import { runPermissions } from './commands/permissions.ts';
 import { runProjects } from './commands/projects.ts';
 import { runProviders } from './commands/providers.ts';
 import { runReminders } from './commands/reminders.ts';
-import { runHumanoid } from './commands/humanoid.ts';
 import { runGoals } from './commands/goals.ts';
 import { runEvals } from './commands/evals.ts';
 import { runCalendar } from './commands/calendar.ts';
@@ -268,7 +267,6 @@ const COMMAND_HANDLERS: Record<string, RootCommandHandler> = {
   automations: (rest) => runTriggers(rest[0] === 'add' || rest[0] === 'create' ? [...rest, '--runtime'] : rest),
   triggers: (rest) => runTriggers(rest),
   loops: (rest) => runReminders(rest),
-  humanoid: (rest) => runHumanoid(rest),
   reminders: (rest) => runReminders(rest),
   chrome: (rest) => runChrome(rest),
   goals: (rest) => runGoals(rest),

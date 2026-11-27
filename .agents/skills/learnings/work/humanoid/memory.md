@@ -52,20 +52,36 @@ every question.
   topics/<slug>.md
 ```
 
-Every page starts with frontmatter:
+Every page starts with frontmatter, and every claim in it carries its own
+sources and validity (the Graphiti model: old facts are invalidated, never
+deleted):
 
 ```yaml
 title: …
 type: person | org | system | process | decision | topic
 links: [customer:…, system:…]   # the same object ids the ledger uses
-sources: [ep_…, ep_…]           # the episodes each claim comes from
 updated: 2026-11-27
+claims:
+  - id: c1
+    text: Billing runs on the 1st of each month.
+    sources: [ep_…]             # the episodes it comes from
+    valid_from: 2026-10-01
+    valid_to: null              # set, with superseded_by, when a newer claim replaces it
+    superseded_by: null
 ```
 
 - A claim without a source is not written. The sources point back into
   episodic memory, so every fact can be traced to what happened.
+- One background writer per workspace turns the ledger into wiki edits, from
+  its last run onward. It has no other tools: episodes hold tool output and
+  web content, and `index.md` reaches every session, so the wiki is the
+  injection path. Agents in sessions propose edits through it.
 - The nightly sleep lints the wiki: contradictions, claims older than their
-  newest source, orphan pages, the index out of date.
+  newest source, orphan pages, instructions inside a semantic page, the
+  index over its size cap. It lints skills too: near-duplicates, and rules
+  about one case instead of a general rule.
+- `index.md` has a size cap; keyword then hybrid search comes before the wiki
+  passes a few hundred pages.
 - `kortix_memory` (one fact per page about the person, in Files) becomes the
   `people/` part of this wiki for the Humanoid.
 

@@ -45,9 +45,23 @@ Emitters, all written to the same ledger:
 - sessions: finished, failed, waiting on a person;
 - the system: a deploy, a credit low, a connector that lost its sign-in.
 
-Every event carries `source`, `kind`, a body, and **links**: the business
-objects it is about (`thread:<channel>/<id>`, `ticket:<id>`, `customer:<id>`,
-`pr:<repo>#<n>`). Links make routing and aggregation work.
+Every event carries `source`, one `type`, one timestamp, a body, and
+**links**: the business objects it is about, each with a qualifier (the
+OCEL 2.0 model, see `landscape.md`):
+
+```
+links: [{object: customer:acme-synthetic, qualifier: requester},
+        {object: ticket:4711, qualifier: subject}]
+```
+
+- Object ids are stable across connectors: one customer is one object
+  whether it comes from email, billing or chat.
+- Object-to-object links live outside events (`ticket:4711 belongs-to
+  customer:…`), so routing walks the graph.
+- An attribute change (a deal's amount) is a time-stamped value of the
+  object, not an event; only real activities are events.
+- Every action an agent takes is itself an event, linked to the objects it
+  touched: the action log is part of the ledger.
 
 ## 2. Routing
 

@@ -26,6 +26,9 @@ sandboxWebhooksApp.openapi(
   createRoute({
     method: 'post',
     path: '/daytona',
+    operationId: 'webhooks.sandbox.daytona.receive',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['webhooks'],
     summary: 'Daytona sandbox lifecycle webhook (Svix-signed, public)',
     responses: {

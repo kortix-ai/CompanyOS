@@ -70,6 +70,9 @@ export function registerTriggerWebhooksRoutes(): void {
   projectWebhooksApp.openapi(createRoute({
     method: 'post',
     path: '/projects/{workspaceId}/{slug}',
+    operationId: 'webhooks.triggers.fire',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['triggers'],
     summary: 'Fire a webhook trigger',
     description:

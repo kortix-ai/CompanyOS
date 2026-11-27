@@ -147,7 +147,23 @@ const readinessHandler = (c: any) => {
   }
   return c.json({ status: 'ok' });
 };
-app.get('/health/ready', readinessHandler);
+const ReadinessSchema = z.object({ status: z.string(), reason: z.string().optional() });
+app.openapi(
+  createRoute({
+    method: 'get',
+    path: '/health/ready',
+    operationId: 'system.health.ready_unversioned',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
+    tags: ['system'],
+    summary: 'Readiness (unversioned, the load balancer target health check): 503 until boot finishes and while draining',
+    responses: {
+      200: json(ReadinessSchema, 'Ready'),
+      503: json(ReadinessSchema, 'Starting or draining'),
+    },
+  }),
+  readinessHandler,
+);
 app.openapi(
   createRoute({
     method: 'get',
@@ -156,10 +172,10 @@ app.openapi(
     'x-kortix-action': 'none',
     'x-kortix-exposure': 'internal',
     tags: ['system'],
-    summary: 'Readiness probe: 503 until the schema is ready and while the process drains',
+    summary: 'Readiness: 503 until boot finishes and while draining',
     responses: {
-      200: json(z.object({ status: z.string() }), 'Ready'),
-      503: json(z.object({ status: z.string(), reason: z.string() }), 'Starting or draining'),
+      200: json(ReadinessSchema, 'Ready'),
+      503: json(ReadinessSchema, 'Starting or draining'),
     },
   }),
   readinessHandler,

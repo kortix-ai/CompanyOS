@@ -69,6 +69,9 @@ export function registerGroupGrantsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/group-grants',
+      operationId: 'group_grants.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_MEMBERS_MANAGE,
+      'x-kortix-exposure': 'agent',
       tags: ['access'],
       summary: 'List group access grants of a project',
       ...auth,
@@ -171,6 +174,9 @@ export function registerGroupGrantsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/group-grants',
+      operationId: 'group_grants.create',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_MEMBERS_MANAGE,
+      'x-kortix-exposure': 'agent',
       tags: ['access'],
       summary: 'Grant a group access to a project',
       ...auth,
@@ -247,6 +253,9 @@ export function registerGroupGrantsRoutes(): void {
     createRoute({
       method: 'patch',
       path: '/{workspaceId}/group-grants/{groupId}',
+      operationId: 'group_grants.update',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_MEMBERS_MANAGE,
+      'x-kortix-exposure': 'agent',
       tags: ['access'],
       summary: 'Change a group\'s role on a project',
       ...auth,
@@ -329,6 +338,9 @@ export function registerGroupGrantsRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/group-grants/{groupId}',
+      operationId: 'group_grants.delete',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_MEMBERS_MANAGE,
+      'x-kortix-exposure': 'agent',
       tags: ['access'],
       summary: 'Remove a group\'s access to a project',
       ...auth,

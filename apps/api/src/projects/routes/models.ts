@@ -126,6 +126,9 @@ export function registerModelsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/llm-catalog',
+      operationId: 'llm_catalog.get',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['projects'],
       summary: 'List the models available to a project',
       ...auth,
@@ -371,6 +374,9 @@ export function registerModelsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/llm-catalog/providers',
+      operationId: 'llm_catalog.providers.list',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['projects'],
       summary: 'List LLM providers of a project',
       ...auth,

@@ -294,6 +294,9 @@ export function registerConfigReleaseRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/config-archives/{configTreeId}',
+      operationId: 'config_archives.get',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_FILE_READ,
+      'x-kortix-exposure': 'internal',
       tags: ['sessions'],
       summary: 'Download a config archive',
       ...auth,

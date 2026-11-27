@@ -374,6 +374,9 @@ export function registerProjectSettingsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/restore',
+      operationId: 'workspaces.restore',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'human',
       tags: ['projects'],
       summary: 'Restore a deleted workspace',
       description:

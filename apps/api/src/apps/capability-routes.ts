@@ -27,6 +27,9 @@ export function registerAppCapabilityRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post', path: '/{workspaceId}/apps/{appId}/token', tags: ['apps'], summary: 'Mint a sign-in token for an App', ...auth,
+      operationId: 'apps.tokens.create',
+      'x-kortix-action': 'project.app.read',
+      'x-kortix-exposure': 'agent',
       description:
         `Capability \`member_tokens\`. A ${TOKEN_TTL_SECONDS / 60}-minute ES256 JWT from the project issuer ` +
         '(`iss` = `<API origin>/v1/projects/{projectId}`, `aud` = the App id) naming the caller (`sub` = Kortix user id, ' +
@@ -61,6 +64,9 @@ export function registerAppCapabilityRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get', path: '/{workspaceId}/apps/{appId}/events/credentials', tags: ['apps'], summary: "Read an App's event credentials", ...auth,
+      operationId: 'apps.events.credentials.get',
+      'x-kortix-action': 'project.app.admin',
+      'x-kortix-exposure': 'agent',
       description:
         'The URL and token an App uses to emit events (`KORTIX_APP_EVENTS_URL`, `KORTIX_APP_TOKEN`). Every App machine already ' +
         'has both. Read them to emit from code that runs elsewhere, such as your laptop while you develop the App. Needs project.app.admin.',

@@ -285,6 +285,9 @@ export function registerAgentConfigRoutes(): void {
     createRoute({
       method: 'put',
       path: '/{workspaceId}/default-agent',
+      operationId: 'default_agent.set',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_AGENT_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['projects'],
       summary: 'Set the project default agent',
       ...auth,

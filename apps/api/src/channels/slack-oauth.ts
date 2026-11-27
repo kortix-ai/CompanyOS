@@ -58,6 +58,9 @@ slackOauthApp.openapi(
   createRoute({
     method: 'get',
     path: '/callback',
+    operationId: 'webhooks.slack.oauth.callback',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['channels'],
     summary: 'Slack OAuth install callback (hands off to the web completion page)',
     request: {

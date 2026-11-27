@@ -185,6 +185,9 @@ opsApp.openapi(
   createRoute({
     method: 'get',
     path: '/overview',
+    operationId: 'ops.overview.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['ops'],
     summary: 'Platform operations overview dashboard',
     ...auth,

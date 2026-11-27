@@ -43,6 +43,9 @@ export function registerProjectCredentialsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/cli-token',
+      operationId: 'cli_tokens.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CREDENTIALS_ISSUE,
+      'x-kortix-exposure': 'agent',
       tags: ['projects'],
       summary: 'List CLI tokens of a project',
       ...auth,
@@ -91,6 +94,9 @@ export function registerProjectCredentialsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/cli-token',
+      operationId: 'cli_tokens.create',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CREDENTIALS_ISSUE,
+      'x-kortix-exposure': 'human',
       tags: ['projects'],
       summary: 'Create a project CLI token (API key)',
       description:
@@ -195,6 +201,9 @@ export function registerProjectCredentialsRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/cli-token/{tokenId}',
+      operationId: 'cli_tokens.delete',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CREDENTIALS_ISSUE,
+      'x-kortix-exposure': 'human',
       tags: ['projects'],
       summary: 'Revoke a project CLI token',
       ...auth,

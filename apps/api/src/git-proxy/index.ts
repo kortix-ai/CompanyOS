@@ -652,6 +652,9 @@ gitProxyApp.openapi(
   createRoute({
     method: 'get',
     path: '/{project}/project-snapshot',
+    operationId: 'git.project_snapshot.get',
+    'x-kortix-action': 'project.gitops.read',
+    'x-kortix-exposure': 'internal',
     ...auth, tags: ['git'],
     summary: 'Short-lived download descriptor for a prepared project snapshot archive',
     request: {

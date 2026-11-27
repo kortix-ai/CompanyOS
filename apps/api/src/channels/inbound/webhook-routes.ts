@@ -81,6 +81,9 @@ export function channelWebhookRoutes<V extends { projectId: string }>(channel: C
     createRoute({
       method: 'post',
       path: '/{workspaceId}',
+      operationId: `webhooks.${channel.platform}.receive`,
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       tags: ['channels'],
       summary: channel.summary,
       request: {
@@ -125,6 +128,9 @@ export function channelAppWebhookRoutes<V>(channel: ChannelAppInbound<V>) {
     createRoute({
       method: 'post',
       path: '/',
+      operationId: `webhooks.${channel.platform}.receive`,
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       tags: ['channels'],
       summary: channel.summary,
       request: { body: { content: { 'application/json': { schema: z.any() } } } },

@@ -356,6 +356,9 @@ export function registerBrandingRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/branding',
+      operationId: 'branding.get',
+      'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['accounts'],
       summary: 'Get organization branding',
       ...auth,
@@ -386,6 +389,9 @@ export function registerBrandingRoutes(): void {
     createRoute({
       method: 'put',
       path: '/{workspaceId}/branding',
+      operationId: 'branding.set',
+      'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['accounts'],
       summary: 'Update organization branding (product name)',
       ...auth,
@@ -444,6 +450,9 @@ export function registerBrandingRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/branding/assets/{kind}',
+      operationId: 'branding.assets.upload',
+      'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['accounts'],
       summary: 'Upload a branding asset (logo, icon, or favicon)',
       ...auth,
@@ -537,6 +546,9 @@ export function registerBrandingRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/branding/assets/{kind}',
+      operationId: 'branding.assets.delete',
+      'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['accounts'],
       summary: 'Remove a branding asset',
       ...auth,
@@ -579,6 +591,9 @@ export function registerBrandingRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/branding',
+      operationId: 'branding.reset',
+      'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['accounts'],
       summary: 'Reset organization branding to defaults',
       ...auth,

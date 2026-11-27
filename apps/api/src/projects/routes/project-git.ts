@@ -125,6 +125,9 @@ export function registerProjectGitRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/git/connection',
+      operationId: 'git.connection.get',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['github'],
       summary: 'Get the project Git connection',
       ...auth,
@@ -167,6 +170,9 @@ export function registerProjectGitRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/git/collaborators',
+      operationId: 'git.collaborators.add',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_MEMBERS_MANAGE,
+      'x-kortix-exposure': 'agent',
       tags: ['github'],
       summary: 'Add a Git repository collaborator',
       ...auth,

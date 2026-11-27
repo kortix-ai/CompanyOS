@@ -117,7 +117,7 @@ document.body.append(host);
 const root = createRoot(host);
 const onFinished = mock(() => {});
 
-async function render(saved: OnboardingProfile = {}) {
+async function render(saved: OnboardingProfile = {}, projectId = PROJECT) {
   await act(async () =>
     root.render(
       <QueryClientProvider
@@ -132,8 +132,8 @@ async function render(saved: OnboardingProfile = {}) {
         >
           <TestUiHost viewerId="synthetic-user">
             <WorkspaceOnboardingWizard
-              projectId={PROJECT}
-              project={project({ onboarding: saved })}
+              projectId={projectId}
+              project={{ ...project({ onboarding: saved }), project_id: projectId }}
               onFinished={onFinished}
             />
           </TestUiHost>
@@ -218,6 +218,25 @@ test("a new workspace starts on the profile and moves on only after the answers 
     company_domain: "acme.com",
   });
   expect(heading()).toBe("Connect a model");
+});
+
+test("switching workspace resets the step, profile draft, and selected apps", async () => {
+  await render({ use_case: "engineering" });
+  await click("Skip for now");
+  await click("GitHub");
+  await click("Continue");
+  expect(heading()).toBe("Set up your selected apps");
+
+  await render({}, "synthetic-second-workspace");
+  expect(heading()).toBe("Tell Kortix about your team");
+  expect(host.querySelector('[role="progressbar"]')?.getAttribute("aria-label")).toBe("Step 1 of 5");
+  await click("Skip for now");
+  await click("Skip for now");
+  expect(heading()).toBe("Bring your tools");
+  expect(host.querySelector('[aria-label="Select GitHub"]')?.getAttribute("data-state")).toBe("unchecked");
+  await click("Skip for now");
+  expect(heading()).toBe("Review and open your workspace");
+  expect(connectApp).not.toHaveBeenCalled();
 });
 
 test("a refused profile save keeps the step and shows the reason", async () => {

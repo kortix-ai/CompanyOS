@@ -68,7 +68,15 @@ import {
  * Completion is workspace-wide: the stamp ends the wizard for every member.
  * Answers already saved resume the wizard on any device.
  */
-export function WorkspaceOnboardingWizard({
+export function WorkspaceOnboardingWizard(props: {
+  projectId: string;
+  project: KortixProject;
+  onFinished: () => void;
+}) {
+  return <WorkspaceOnboardingWizardState key={props.projectId} {...props} />;
+}
+
+function WorkspaceOnboardingWizardState({
   projectId,
   project,
   onFinished,

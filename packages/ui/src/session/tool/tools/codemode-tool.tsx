@@ -235,7 +235,7 @@ export function CodemodeTool({ call, defaultOpen, forceOpen, locked }: ToolProps
       <div className={cn(indent && 'mt-1.5', indent)}>
         <div className={cn('relative overflow-hidden', frame)}>
           {calls.length > 0 && (
-            <div className={cn(paneInset, 'border-border/60 border-b')}>
+            <div className={cn(paneInset, 'border-border border-b')}>
               <CallList calls={calls} />
             </div>
           )}
@@ -260,7 +260,7 @@ export function CodemodeTool({ call, defaultOpen, forceOpen, locked }: ToolProps
             </div>
           )}
           {(result || status === 'completed') && (
-            <div className="border-border/60 relative border-t">
+            <div className="border-border relative border-t">
               <div data-scrollable className="max-h-80 overflow-auto">
                 {cards ? (
                   <ul data-slot="script-card-lines" className={cn('text-foreground flex flex-col gap-2 text-sm', paneInset, 'pr-11')}>

@@ -1148,6 +1148,14 @@ const envSchema = z.object({
   // `X-Kortix-Signature: sha256=<HMAC-SHA256 of the raw body>` with the secret.
   // Inert unless both are set (accounts/sales-outbox.ts).
   SALES_RECONCILIATION_TOKEN: optStr,
+  // ── QualiLoop test endpoint (qualiloop/) ────────────────────────────────
+  // POST /v1/qualiloop/chat answers 404 unless the secret and the Kortix
+  // project the test sessions run in are both set. The project key and traces
+  // URL send each test turn's trace to QualiLoop; without them no trace leaves.
+  QUALILOOP_AGENT_SECRET: optStr,
+  QUALILOOP_KORTIX_PROJECT_ID: optStr,
+  QUALILOOP_PROJECT_KEY: optStr,
+  QUALILOOP_OTLP_TRACES_URL: optStr,
   SIGNUP_WEBHOOK_URL: optStr,
   SIGNUP_WEBHOOK_SECRET: optStr,
 
@@ -1881,6 +1889,10 @@ export const config = {
 
   // ─── Signup webhook (signup → sales factory) ──────────────────────────────
   SALES_RECONCILIATION_TOKEN: env.SALES_RECONCILIATION_TOKEN,
+  QUALILOOP_AGENT_SECRET: env.QUALILOOP_AGENT_SECRET,
+  QUALILOOP_KORTIX_PROJECT_ID: env.QUALILOOP_KORTIX_PROJECT_ID,
+  QUALILOOP_PROJECT_KEY: env.QUALILOOP_PROJECT_KEY,
+  QUALILOOP_OTLP_TRACES_URL: env.QUALILOOP_OTLP_TRACES_URL,
   SIGNUP_WEBHOOK_URL: env.SIGNUP_WEBHOOK_URL,
   SIGNUP_WEBHOOK_SECRET: env.SIGNUP_WEBHOOK_SECRET,
 

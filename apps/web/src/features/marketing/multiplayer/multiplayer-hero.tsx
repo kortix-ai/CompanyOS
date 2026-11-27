@@ -86,7 +86,7 @@ function SharePopover() {
   return (
     <div
       className={cn(
-        'bg-popover absolute top-12 right-3 z-10 flex w-64 flex-col gap-3 rounded-lg border p-3 shadow-lg',
+        'bg-popover absolute top-12 right-3 z-10 flex w-64 flex-col gap-3 rounded-lg border p-3 shadow-md',
         FADE,
       )}
     >

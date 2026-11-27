@@ -302,11 +302,23 @@ export function appViewerSessionAal(
   return session && session.userId === userId ? session.aal : undefined;
 }
 
+/** Unknown, legacy and bearer-only sessions never prove a human browser sign-in. */
+export function appViewerSessionProvenance(
+  request: Request,
+  url: URL,
+  app: Pick<AppAccessRow, 'appId' | 'accessMode' | 'accessRevision'>,
+  userId: string,
+): { sessionKind?: 'browser' | 'access_link'; authTime?: number } {
+  const session = resolveAppViewerSession(request, url, app);
+  if (!session || session.userId !== userId) return {};
+  return { sessionKind: session.sessionKind, authTime: session.authTime };
+}
+
 function resolveAppViewerSession(
   request: Request,
   url: URL,
   app: Pick<AppAccessRow, 'appId' | 'accessMode' | 'accessRevision'>,
-): { userId: string; aal?: 'aal2' } | null {
+): { userId: string; aal?: 'aal2'; sessionKind?: 'browser' | 'access_link'; authTime?: number } | null {
   // A PUBLIC App still recognises whoever the gate signed in.
   //
   // This used to bail here for `public`, so the cookie was never even read and
@@ -328,7 +340,7 @@ function resolveAppViewerSession(
   if (!raw) return null;
   const payload = verifyAppAccessToken(raw, app.appId, appAccessSecret());
   if (!payload || payload.kind !== 'kortix' || payload.revision !== app.accessRevision || !payload.userId) return null;
-  return { userId: payload.userId, ...(payload.aal === 'aal2' ? { aal: 'aal2' as const } : {}) };
+  return { sessionKind: payload.sessionKind, authTime: payload.authTime, userId: payload.userId, ...(payload.aal === 'aal2' ? { aal: 'aal2' as const } : {}) };
 }
 
 /**
@@ -523,7 +535,7 @@ export async function appTokenResponse(
   const identity = await resolveAppViewerIdentity(viewer.userId, app.accountId);
   const minted = await mintAppToken(
     { appId: audienceAppId, projectId: app.projectId, accountId: app.accountId },
-    { userId: viewer.userId, ...identity },
+    { userId: viewer.userId, ...identity, ...appViewerSessionProvenance(request, url, app, viewer.userId) },
     linked ? app.appId : undefined,
   );
   const renewed = renewedAppAccessCookie(request, url, app, viewer.userId);
@@ -567,6 +579,8 @@ export function renewedAppAccessCookie(
       // most the 8 h of the cookie the access link was redeemed into, never
       // past the browser session that proved it (Strix, 2026-11-11). Reopening
       // the App from Kortix at aal2 marks a new cookie.
+      sessionKind: payload.sessionKind,
+      authTime: payload.authTime,
       revision: app.accessRevision,
       expiresAt: new Date(now.getTime() + APP_SESSION_SECONDS * 1000),
     },
@@ -603,6 +617,7 @@ export async function appViewerEndpointResponse(
           { aal: appViewerSessionAal(request, url, app, userId) },
         ),
   ]);
+  const provenance = appViewerSessionProvenance(request, url, app, userId);
   return Response.json(
     {
       app_id: app.appId,
@@ -610,6 +625,8 @@ export async function appViewerEndpointResponse(
       account_id: app.accountId,
       project_id: app.projectId,
       user_id: userId,
+      session_kind: provenance.sessionKind ?? null,
+      auth_time: provenance.authTime ?? null,
       email: identity.email,
       name: identity.name ?? null,
       picture: identity.picture ?? null,
@@ -747,6 +764,8 @@ export async function authorizeAppRequest(
         kind: verified!.kind,
         userId: verified!.userId,
         aal: verified!.aal,
+        sessionKind: verified?.sessionKind,
+        authTime: verified?.authTime,
         revision: app.accessRevision,
         expiresAt: new Date(Date.now() + 8 * 60 * 60_000),
       }, secret);

@@ -106,7 +106,7 @@ const RUN_BEAT_MS = 900;
 /** Step 1: the scan as it runs in your terminal: the file, the match, the tool it means. Then a question. */
 export function FindArt() {
   return (
-    <div className="border-border bg-background w-full max-w-sm min-w-0 overflow-hidden rounded-xl border font-mono text-xs shadow-xl shadow-black/15">
+    <div className="border-border bg-background w-full max-w-sm min-w-0 overflow-hidden rounded-xl border font-mono text-xs shadow-md shadow-black/15">
       <div className="border-border text-muted-foreground flex items-center gap-2 border-b px-3 py-2">
         <Claude className="size-3.5 shrink-0" />
         <span className="truncate">Scanning your-org/your-repo</span>
@@ -143,7 +143,7 @@ export function ConnectArt() {
         <Loop axis="x" seconds={34}>{APPS_TOP.map(tile)}</Loop>
         <Loop axis="x" seconds={40} reverse className="mt-3">{APPS_BOTTOM.map(tile)}</Loop>
       </div>
-      <div className="border-border bg-card flex items-center gap-3 rounded-full border px-4 py-2 text-xs shadow-xl shadow-black/15">
+      <div className="border-border bg-card flex items-center gap-3 rounded-full border px-4 py-2 text-xs shadow-md shadow-black/15">
         <span className="text-foreground">3,000+ apps</span>
         <span className="bg-border h-3 w-px" />
         <span className="text-muted-foreground font-mono">SENTRY_DSN ••••••</span>
@@ -205,7 +205,7 @@ export function ProveArt() {
   const done = at > run.steps.length;
   return (
     <div className="flex w-full max-w-sm min-w-0 flex-col gap-3">
-      <div key={run.loop} className="border-border bg-card animate-in fade-in duration-slow rounded-xl border p-3 shadow-xl shadow-black/15">
+      <div key={run.loop} className="border-border bg-card animate-in fade-in duration-slow rounded-xl border p-3 shadow-md shadow-black/15">
         <div className="flex items-center gap-2.5">
           <AgentTile slug={run.agent} />
           <span className="text-foreground min-w-0 flex-1 truncate font-mono text-sm">{run.loop}</span>
@@ -284,12 +284,12 @@ export function ChatComposer({
 
 /** A card-sized composer with a message in it. */
 export function ComposerArt({ text, agent, tone = 'dark' }: { text: string; agent: string; tone?: 'dark' | 'light' }) {
-  return <ChatComposer text={text} agent={agent} tone={tone} className={cn('max-w-sm', tone === 'dark' && 'shadow-xl shadow-black/15')} />;
+  return <ChatComposer text={text} agent={agent} tone={tone} className={cn('max-w-sm', tone === 'dark' && 'shadow-md shadow-black/15')} />;
 }
 
 function Approval({ slug, title, status, time, className }: { slug: string; title: string; status: string; time: string; className?: string }) {
   return (
-    <div className={cn('border-border bg-card flex items-center gap-3 rounded-xl border p-3 shadow-xl shadow-black/15', className)}>
+    <div className={cn('border-border bg-card flex items-center gap-3 rounded-xl border p-3 shadow-md shadow-black/15', className)}>
       <AgentTile slug={slug} size={21} />
       <div className="flex min-w-0 flex-1 flex-col">
         <span className="text-foreground truncate text-sm font-medium">{title}</span>

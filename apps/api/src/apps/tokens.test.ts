@@ -142,3 +142,22 @@ describe('issuer discovery', () => {
     expect(signerJwks(null)).toEqual({ keys: [] });
   });
 });
+
+
+describe('App session provenance', () => {
+  test('signed JWTs distinguish browser and access-link sessions without upgrading unknown callers', () => {
+    const signer = generateSigner();
+    for (const sessionKind of ['browser', 'access_link'] as const) {
+      const { payload } = parts(signToken(signer, target(), {
+        userId: 'viewer', email: null, sessionKind, authTime: 900,
+      }, 1000).token);
+      expect(payload.session_kind).toBe(sessionKind);
+      expect(payload.auth_time).toBe(900);
+    }
+    const unknown = parts(signToken(signer, target(), { userId: 'viewer', email: null }, 1000).token).payload;
+    expect(unknown.session_kind).not.toBe('browser');
+    expect(unknown.auth_time).toBeUndefined();
+    expect(openIdConfiguration(ISSUER).claims_supported).toContain('session_kind');
+    expect(openIdConfiguration(ISSUER).claims_supported).toContain('auth_time');
+  });
+});

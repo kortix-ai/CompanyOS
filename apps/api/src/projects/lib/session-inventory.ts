@@ -198,16 +198,6 @@ export function selectSessionRowsForViewer(input: {
     };
   }
 
-  if (input.scope === 'project') {
-    // A list row is a disclosure. Keep manager-only lifecycle coverage for
-    // sessions the manager can open, including soft-deleted rows, but never
-    // return an inaccessible session as a redacted breadcrumb.
-    return {
-      authorized: true,
-      items: items.filter((item) => item.canAccess),
-    };
-  }
-
   return {
     authorized: true,
     items: items.filter((item) => {

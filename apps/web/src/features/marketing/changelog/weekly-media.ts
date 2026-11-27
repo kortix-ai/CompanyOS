@@ -1,6 +1,7 @@
 export interface WeeklyMedia {
   cover: { url: string; alt: string; width: number; height: number };
   demoUrl?: string;
+  videoUrl?: string;
 }
 
 const COVER_HOST = 'ke4pydspzeg0nm0o.public.blob.vercel-storage.com';
@@ -64,7 +65,11 @@ export function parseWeeklyMedia(value: unknown): WeeklyMedia | undefined {
     'demoUrl' in value
       ? publicUrl(value.demoUrl, ['www.youtube.com', 'youtube.com', 'youtu.be', 'www.loom.com'])
       : undefined;
+  const video = 'videoUrl' in value ? publicUrl(value.videoUrl, [COVER_HOST]) : undefined;
+  const videoUrl =
+    video && !video.search && /\.(mp4|webm)$/i.test(video.pathname) ? video.href : undefined;
   return {
+    ...(videoUrl ? { videoUrl } : {}),
     cover: { url: url.href, alt: cover.alt.trim(), width: cover.width, height: cover.height },
     ...(demo ? { demoUrl: demo.href } : {}),
   };

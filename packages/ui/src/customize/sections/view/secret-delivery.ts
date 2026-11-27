@@ -995,6 +995,7 @@ export function canSaveSecretDelivery(input: {
   selectedConnectorCount?: number;
   /** Who can use the value changed — saving that alone is a real edit. */
   audienceChanged?: boolean;
+  policyChanged?: boolean;
 }): boolean {
   const hasValue = Boolean(input.value.trim());
   if (!input.isEdit && !input.key.trim()) return false;
@@ -1021,6 +1022,7 @@ export function canSaveSecretDelivery(input: {
     !input.isEdit ||
     hasValue ||
     input.nextStrategy !== input.currentStrategy ||
-    input.audienceChanged === true
+    input.audienceChanged === true ||
+    (input.nextStrategy === 'egress' && input.policyChanged === true)
   );
 }

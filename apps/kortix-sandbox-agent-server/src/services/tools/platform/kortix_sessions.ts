@@ -17,6 +17,8 @@ interface SessionRow {
   agent_name?: string | null
   status?: string | null
   runtime_status?: string | null
+  /** The work state the session list computes (`session-board.ts`). */
+  board_state?: 'needs_input' | 'working' | 'failed' | 'stopped' | 'completed' | 'idle' | null
   metadata?: Record<string, unknown> | null
 }
 
@@ -32,8 +34,8 @@ function sessionTitle(row: SessionRow): string {
 
 /** A plain word for a session's state. */
 function stateWord(row: SessionRow): string | undefined {
-  const runtime = row.runtime_status ?? ''
-  if (runtime === 'busy' || runtime === 'running' || runtime === 'retry') return 'working'
+  if (row.board_state === 'needs_input') return 'needs you'
+  if (row.board_state) return row.board_state
   if (row.status === 'stopped' || row.status === 'archived') return 'stopped'
   if (row.status === 'failed' || row.status === 'error') return 'failed'
   return row.status ?? undefined

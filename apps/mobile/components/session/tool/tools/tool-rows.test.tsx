@@ -154,7 +154,6 @@ await mockGraph(
     '../tool-error': { ToolError: host('tool-error') },
     'components/session/tool/shared/code-card': {
       HighlightedCode: none,
-      MD_FLUSH_CLASSES: '',
       MarkdownFrontmatterCard: none,
       ToolCode: none,
       ToolCodeCard: host('code-card'),

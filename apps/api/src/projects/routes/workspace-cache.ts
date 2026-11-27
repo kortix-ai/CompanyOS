@@ -46,11 +46,6 @@ const SaveInputSchema = z.object({
 const SaveSchema = z.object({ entry: EntrySchema, evicted: z.array(z.string()), commit_id: z.string().nullable() });
 const params = z.object({ workspaceId: z.string() });
 
-function refusal(err: unknown) {
-  if (err instanceof WorkspaceCacheError) return { body: { error: err.message, code: err.code }, status: err.status };
-  throw err;
-}
-
 export function registerWorkspaceCacheRoutes(): void {
   projectsApp.openapi(
     createRoute({
@@ -74,8 +69,10 @@ export function registerWorkspaceCacheRoutes(): void {
       try {
         return c.json(await listWorkspaceCache(loaded.row.projectId, placement.location ?? null), 200);
       } catch (err) {
-        const r = refusal(err);
-        return c.json(r.body, r.status);
+        if (err instanceof WorkspaceCacheError) {
+          return c.json({ error: err.message, code: err.code }, err.status);
+        }
+        throw err;
       }
     },
   );
@@ -125,8 +122,10 @@ export function registerWorkspaceCacheRoutes(): void {
         });
         return c.json(saved, 201);
       } catch (err) {
-        const r = refusal(err);
-        return c.json(r.body, r.status);
+        if (err instanceof WorkspaceCacheError) {
+          return c.json({ error: err.message, code: err.code }, err.status);
+        }
+        throw err;
       }
     },
   );

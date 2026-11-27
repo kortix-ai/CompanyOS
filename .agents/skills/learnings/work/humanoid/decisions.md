@@ -117,3 +117,12 @@
   vendor.
 - **D5 (Marko)** Managed email cost: bill the customer per employee inbox, or
   absorb it.
+
+## Decided: the name (2026-11-27)
+
+- **2026-11-27 (Marko)** The product is called **Humanoid** ("digital
+  humanoid" in a first line, since the word also names physical robots). One
+  term everywhere: the flag `humanoid`, `kortix humanoid`, the tables
+  `humanoid_identities` and `humanoid_events`, the routes `/humanoid*`, the
+  Humanoid drive. Entries above this one say "employee" and mean the same
+  thing. The branch keeps its name, `digital-employee`. D1 is closed.

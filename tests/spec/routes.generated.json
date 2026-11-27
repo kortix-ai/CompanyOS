@@ -3567,26 +3567,6 @@
     },
     {
       "method": "GET",
-      "path": "/v1/projects/:workspaceId/employee",
-      "aliasOf": "/v1/workspaces/:workspaceId/employee"
-    },
-    {
-      "method": "POST",
-      "path": "/v1/projects/:workspaceId/employee",
-      "aliasOf": "/v1/workspaces/:workspaceId/employee"
-    },
-    {
-      "method": "GET",
-      "path": "/v1/projects/:workspaceId/employee/events",
-      "aliasOf": "/v1/workspaces/:workspaceId/employee/events"
-    },
-    {
-      "method": "POST",
-      "path": "/v1/projects/:workspaceId/employee/events",
-      "aliasOf": "/v1/workspaces/:workspaceId/employee/events"
-    },
-    {
-      "method": "GET",
       "path": "/v1/projects/:workspaceId/evals",
       "aliasOf": "/v1/workspaces/:workspaceId/evals"
     },
@@ -3959,6 +3939,26 @@
       "method": "PATCH",
       "path": "/v1/projects/:workspaceId/group-grants/:groupId",
       "aliasOf": "/v1/workspaces/:workspaceId/group-grants/:groupId"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/humanoid",
+      "aliasOf": "/v1/workspaces/:workspaceId/humanoid"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/humanoid",
+      "aliasOf": "/v1/workspaces/:workspaceId/humanoid"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/humanoid/events",
+      "aliasOf": "/v1/workspaces/:workspaceId/humanoid/events"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/humanoid/events",
+      "aliasOf": "/v1/workspaces/:workspaceId/humanoid/events"
     },
     {
       "method": "GET",
@@ -6508,22 +6508,6 @@
     },
     {
       "method": "GET",
-      "path": "/v1/workspaces/:workspaceId/employee"
-    },
-    {
-      "method": "POST",
-      "path": "/v1/workspaces/:workspaceId/employee"
-    },
-    {
-      "method": "GET",
-      "path": "/v1/workspaces/:workspaceId/employee/events"
-    },
-    {
-      "method": "POST",
-      "path": "/v1/workspaces/:workspaceId/employee/events"
-    },
-    {
-      "method": "GET",
       "path": "/v1/workspaces/:workspaceId/evals"
     },
     {
@@ -6821,6 +6805,22 @@
     {
       "method": "PATCH",
       "path": "/v1/workspaces/:workspaceId/group-grants/:groupId"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/humanoid"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/humanoid"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/humanoid/events"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/humanoid/events"
     },
     {
       "method": "GET",

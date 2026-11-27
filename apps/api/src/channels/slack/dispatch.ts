@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
-import { recordIfEmployee } from '../../employee/events';
-import { registerEmployeeDelivery } from '../../employee/dispatch';
-import { slackEmployeeEvent } from './employee';
+import { recordIfHumanoid } from '../../humanoid/events';
+import { registerHumanoidDelivery } from '../../humanoid/dispatch';
+import { slackHumanoidEvent } from './humanoid';
 import { db } from '../../shared/db';
 import {
   loadSlackBotIdForProject,
@@ -318,7 +318,7 @@ export function isOwnBotEvent(event: SlackEvent, botUserId: string | null, botId
 export async function dispatchSlackEvent(
   projectId: string,
   envelope: SlackEnvelope,
-  opts: { ownThreadsOnly?: boolean; fromEmployeeLog?: boolean } = {},
+  opts: { ownThreadsOnly?: boolean; fromHumanoidLog?: boolean } = {},
 ): Promise<void> {
   const event = envelope.event;
   if (!event) return;
@@ -345,12 +345,12 @@ export async function dispatchSlackEvent(
   let eventClass = await classifyEvent(teamId, event, botUserId);
   if (eventClass === 'ignore' && (await isStarterReplyInOwnThread(projectId, teamId, event))) eventClass = 'mention';
 
-  // An employee workspace writes the message to its event log first. The
-  // employee dispatcher replays an addressed one through this function
-  // (`fromEmployeeLog`); an unaddressed one stays in the log for awareness.
-  if (!opts.fromEmployeeLog) {
-    const input = slackEmployeeEvent(projectId, teamId, envelope, eventClass !== 'ignore', opts);
-    if (input && (await recordIfEmployee(input))) return;
+  // A humanoid workspace writes the message to its event log first. The
+  // humanoid dispatcher replays an addressed one through this function
+  // (`fromHumanoidLog`); an unaddressed one stays in the log for awareness.
+  if (!opts.fromHumanoidLog) {
+    const input = slackHumanoidEvent(projectId, teamId, envelope, eventClass !== 'ignore', opts);
+    if (input && (await recordIfHumanoid(input))) return;
   }
   if (eventClass === 'ignore') return;
 
@@ -750,9 +750,9 @@ async function deliverToExistingThread(
   return { handled: false as const, handle };
 }
 
-registerEmployeeDelivery('slack', async (row) => {
+registerHumanoidDelivery('slack', async (row) => {
   const payload = row.payload as { envelope?: SlackEnvelope; ownThreadsOnly?: boolean };
-  if (!payload.envelope) throw new Error('employee Slack event has no envelope');
-  await dispatchSlackEvent(row.projectId, payload.envelope, { ownThreadsOnly: payload.ownThreadsOnly, fromEmployeeLog: true });
+  if (!payload.envelope) throw new Error('humanoid Slack event has no envelope');
+  await dispatchSlackEvent(row.projectId, payload.envelope, { ownThreadsOnly: payload.ownThreadsOnly, fromHumanoidLog: true });
   return { sessionId: null };
 });

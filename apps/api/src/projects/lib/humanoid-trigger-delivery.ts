@@ -1,10 +1,10 @@
 /**
- * The employee dispatcher's delivery for trigger fires (flag `employee`): a
+ * The humanoid dispatcher's delivery for trigger fires (flag `humanoid`): a
  * cron, webhook, connector or monitor fire that `fireGitTrigger` wrote to the
  * event log is replayed here, as the original fire, into its target.
  */
 import { eq } from 'drizzle-orm';
-import { registerEmployeeDelivery } from '../../employee/dispatch';
+import { registerHumanoidDelivery } from '../../humanoid/dispatch';
 import { db } from '../../shared/db';
 import { projectsView } from '../../workspaces/rows';
 import { fireGitTrigger } from './trigger-fire';
@@ -21,9 +21,9 @@ type LoggedFire = {
 };
 
 for (const source of ['schedule', 'webhook', 'connector'] as const) {
-  registerEmployeeDelivery(source, async (row) => {
+  registerHumanoidDelivery(source, async (row) => {
     const logged = row.payload as LoggedFire;
-    if (!logged.fire || !logged.fire_source) throw new Error('employee trigger event has no fire to replay');
+    if (!logged.fire || !logged.fire_source) throw new Error('humanoid trigger event has no fire to replay');
     const [project] = await db.select().from(projectsView).where(eq(projectsView.projectId, row.projectId)).limit(1);
     if (!project) throw new Error('the workspace of this trigger is gone');
     const result = await fireGitTrigger({
@@ -33,7 +33,7 @@ for (const source of ['schedule', 'webhook', 'connector'] as const) {
       renderedPrompt: logged.fire.renderedPrompt,
       source: logged.fire_source,
       idempotencyKey: logged.fire.idempotencyKey,
-      fromEmployeeLog: true,
+      fromHumanoidLog: true,
     });
     if (result.status === 'failed') throw new Error(result.error ?? result.reason ?? 'the trigger fire failed');
     return { sessionId: result.sessionId ?? null };

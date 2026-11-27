@@ -1,4 +1,4 @@
-# Phase 1 plan: the event log, the dispatcher, employee create, email
+# Phase 1 plan: the event log, the dispatcher, humanoid create, email
 
 Status: planned 2026-11-27 against `dev` c161aedbae. Line numbers drift;
 search for the named function when a line does not match. The spec is
@@ -6,18 +6,18 @@ search for the named function when a line does not match. The spec is
 
 ## Scope
 
-In: flag `employee`; tables `employee_identities` and `employee_events`;
-`recordEmployeeEvent`; adapters for email, Slack, Teams, connector events,
-trigger fires and session ends; the dispatcher and the mind; the `employee`
-starter template; `POST /{ws}/employee` (enable and provision, email first);
-read routes; `kortix employee` CLI; the Employee drive.
+In: flag `humanoid`; tables `humanoid_identities` and `humanoid_events`;
+`recordHumanoidEvent`; adapters for email, Slack, Teams, connector events,
+trigger fires and session ends; the dispatcher and the mind; the `humanoid`
+starter template; `POST /{ws}/humanoid` (enable and provision, email first);
+read routes; `kortix humanoid` CLI; the Humanoid drive.
 
 Out (later phases): phone, authenticator, browser, captcha, reflection,
-outcomes, the employee home UI, the card.
+outcomes, the humanoid home UI, the card.
 
 ## Core decisions
 
-1. **Log first, then dispatch, for every source.** For an employee project,
+1. **Log first, then dispatch, for every source.** For a humanoid project,
    the ingress writes the event and its dispatch job and returns. The
    dispatcher job then delivers. For a channel event, delivery calls that
    channel's existing thread routing (`routeChannelMessage`,
@@ -33,26 +33,26 @@ outcomes, the employee home UI, the card.
    log holds both sides.
 3. **The log is a table, not the job queue.** `job_queue` rows are deleted
    after 7 days (`pruneFinishedJobs`); the log is the episodic memory and is
-   kept. The dispatch job rides on `job_queue` (queue `employee.dispatch`,
+   kept. The dispatch job rides on `job_queue` (queue `humanoid.dispatch`,
    order key `<project>:<subject>`, seq = the event's `seq`), inserted in the
    same transaction as the event (`enqueueJobs` with `executor`).
-4. **The employee is My Kortix.** Sessions use `agent_name: mykortix`. The
-   flag adds the employee context to its prompt; it does not fork the agent.
-5. **A failed write is a failed ingress.** For an employee project the
+4. **The humanoid is My Kortix.** Sessions use `agent_name: mykortix`. The
+   flag adds the humanoid context to its prompt; it does not fork the agent.
+5. **A failed write is a failed ingress.** For a humanoid project the
    webhook answers 5xx when the event cannot be stored, so the upstream
    retries (Slack, Resend and Composio all retry). This is the write-ahead
    guarantee: an event is never acted on without a row.
 
 ## Data model (migration)
 
-`kortix.employee_identities` (one row per project):
+`kortix.humanoid_identities` (one row per project):
 `project_id` PK/FK, `name`, `role`, `email_connection_id` (FK
 `connector_connections`, nullable), `phone_number` (nullable), `browser_id`
 (nullable), `drive_id` (nullable), `mind_session_id` (nullable),
 `status` (`provisioning | ready | failed`), `last_error`, `created_at`,
 `updated_at`.
 
-`kortix.employee_events`:
+`kortix.humanoid_events`:
 `id` uuid PK, `seq` bigint identity (global, orders arrival), `project_id` FK,
 `source` text, `type` text, `subject` text null, `external_id` text,
 `occurred_at`, `received_at` default now(), `actor` jsonb null,
@@ -66,27 +66,27 @@ Unique `(project_id, source, external_id)`. Index `(project_id, seq desc)`,
 
 | # | Change | Where |
 |---|---|---|
-| 1 | Flag `employee` (experimental, `wip`, default off, `enforcement: 'routes'`), every registration site the registry header lists | `feature-flags/registry.ts` and the 6 sites |
+| 1 | Flag `humanoid` (experimental, `wip`, default off, `enforcement: 'routes'`), every registration site the registry header lists | `feature-flags/registry.ts` and the 6 sites |
 | 2 | Schema + migration (migration skill) | `packages/db/src/schema/kortix.ts`, `packages/db/migrations/` |
-| 3 | `recordEmployeeEvent(input, { executor? })`: flag check (memoized 30 s), insert ON CONFLICT DO NOTHING, enqueue dispatch when the source is not a channel | `apps/api/src/employee/events.ts` |
+| 3 | `recordHumanoidEvent(input, { executor? })`: flag check (memoized 30 s), insert ON CONFLICT DO NOTHING, enqueue dispatch when the source is not a channel | `apps/api/src/humanoid/events.ts` |
 | 4 | Adapters: one call each | `channels/email/session.ts` `handleEmailEvent`; `channels/slack/dispatch.ts` `dispatchSlackEvent`; `channels/teams/dispatch.ts` `handleTeamsActivity`; `projects/trigger-events/deliver.ts` `deliverEvents`; `projects/lib/trigger-fire.ts` `fireGitTrigger`; the turn-end hook |
-| 5 | Dispatcher: job handler for `employee.dispatch`; the mind: `ensureEmployeeMind(projectId)` creates or revives one `mykortix` session (source `system:employee`, metadata `employee: {role: 'mind'}`, idempotency key `employee:mind:<project>`), and digests go in with `enqueueSessionNotice` | `apps/api/src/employee/dispatch.ts`, `employee/mind.ts` |
-| 6 | Starter template `employee`: `general-knowledge-worker` plus `employee/self.md`, the employee skill (identity, the log, how to onboard into a company by invite) | `packages/starter/templates/employee/` |
-| 7 | Routes: `GET /{ws}/employee` (identity + counts), `POST /{ws}/employee` (enable flag, create identity row, create the Resend inbox with `agentName: mykortix`, create the Employee drive), `GET /{ws}/employee/events?before=&subject=&source=`, `POST /{ws}/employee/events` (a person or the employee posts an event) | `apps/api/src/employee/routes.ts` |
-| 8 | SDK + CLI: `kortix employee show | create | events [--follow]` | `packages/sdk`, `apps/cli/src/commands/employee.ts` |
-| 9 | Prompt: the employee section for My Kortix when the flag is on: its identity, its log (`kortix employee events`), the mind/worker roles | `projects/lib/my-kortix-prompt.ts` |
+| 5 | Dispatcher: job handler for `humanoid.dispatch`; the mind: `ensureHumanoidMind(projectId)` creates or revives one `mykortix` session (source `system:humanoid`, metadata `humanoid: {role: 'mind'}`, idempotency key `humanoid:mind:<project>`), and digests go in with `enqueueSessionNotice` | `apps/api/src/humanoid/dispatch.ts`, `humanoid/mind.ts` |
+| 6 | Starter template `humanoid`: `general-knowledge-worker` plus `humanoid/self.md`, the humanoid skill (identity, the log, how to onboard into a company by invite) | `packages/starter/templates/humanoid/` |
+| 7 | Routes: `GET /{ws}/humanoid` (identity + counts), `POST /{ws}/humanoid` (enable flag, create identity row, create the Resend inbox with `agentName: mykortix`, create the Humanoid drive), `GET /{ws}/humanoid/events?before=&subject=&source=`, `POST /{ws}/humanoid/events` (a person or the humanoid posts an event) | `apps/api/src/humanoid/routes.ts` |
+| 8 | SDK + CLI: `kortix humanoid show | create | events [--follow]` | `packages/sdk`, `apps/cli/src/commands/humanoid.ts` |
+| 9 | Prompt: the humanoid section for My Kortix when the flag is on: its identity, its log (`kortix humanoid events`), the mind/worker roles | `projects/lib/my-kortix-prompt.ts` |
 
 ## Tests and proofs
 
 - Unit: the dispatcher's routing decision (pure function).
-- DB suite `integration-employee-events.test.ts`: dedup on redelivery;
+- DB suite `integration-humanoid-events.test.ts`: dedup on redelivery;
   per-subject order; event + job commit together; a disabled flag records
   nothing.
-- REST flow `tests/src/flows/employee.flow.ts` EMP-1: flag off → 403; create →
+- REST flow `tests/src/flows/humanoid.flow.ts` EMP-1: flag off → 403; create →
   identity row and inbox; post an event → listed with `dispatch_status`;
   dedup → one row; cleanup.
-- Local proof with a real stack: mail to the employee address and a Slack
-  mention each start a worker and appear in `kortix employee events`; a
+- Local proof with a real stack: mail to the humanoid address and a Slack
+  mention each start a worker and appear in `kortix humanoid events`; a
   posted connector-style event reaches the mind's digest.
 - Dev proof after merge: the same on dev.
 

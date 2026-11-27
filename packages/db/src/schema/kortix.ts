@@ -9004,13 +9004,13 @@ export const jobQueue = kortixSchema.table(
   ],
 );
 
-// ─── Employee (flag `employee`) ─────────────────────────────────────────────
-// A workspace that is one AI employee: its Base Identity and its event log
-// (.agents/skills/learnings/work/digital-employee/README.md).
+// ─── Humanoid (flag `humanoid`) ─────────────────────────────────────────────
+// A workspace that is one AI humanoid: its Base Identity and its event log
+// (.agents/skills/learnings/work/humanoid/README.md).
 
-/** One per employee workspace: where each part of its Base Identity lives. Secrets stay in the vault. */
-export const employeeIdentities = kortixSchema.table(
-  'employee_identities',
+/** One per humanoid workspace: where each part of its Base Identity lives. Secrets stay in the vault. */
+export const humanoidIdentities = kortixSchema.table(
+  'humanoid_identities',
   {
     projectId: uuid('project_id')
       .primaryKey()
@@ -9022,11 +9022,11 @@ export const employeeIdentities = kortixSchema.table(
     emailAddress: text('email_address'),
     /** E.164. Null until a phone is provisioned. */
     phoneNumber: text('phone_number'),
-    /** The employee's persistent browser on Platinum. */
+    /** The humanoid's persistent browser on Platinum. */
     browserId: text('browser_id'),
-    /** The `Employee` project drive. */
+    /** The `Humanoid` project drive. */
     driveId: uuid('drive_id'),
-    /** The employee's own conversation: it receives every event nobody addressed to it. */
+    /** The humanoid's own conversation: it receives every event nobody addressed to it. */
     mindSessionId: text('mind_session_id'),
     /** `provisioning`, `ready` or `failed`. */
     status: text('status').default('provisioning').notNull(),
@@ -9034,16 +9034,16 @@ export const employeeIdentities = kortixSchema.table(
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
-  (table) => [check('employee_identities_status_check', sql`${table.status} in ('provisioning', 'ready', 'failed')`)],
+  (table) => [check('humanoid_identities_status_check', sql`${table.status} in ('provisioning', 'ready', 'failed')`)],
 );
 
 /**
- * The employee's event log: every inbound and outbound event, written before
- * anything acts on it, and kept while the employee exists (its episodic
- * memory). Dispatch rides on `job_queue` (`employee/events.ts`).
+ * The humanoid's event log: every inbound and outbound event, written before
+ * anything acts on it, and kept while the humanoid exists (its episodic
+ * memory). Dispatch rides on `job_queue` (`humanoid/events.ts`).
  */
-export const employeeEvents = kortixSchema.table(
-  'employee_events',
+export const humanoidEvents = kortixSchema.table(
+  'humanoid_events',
   {
     /** Arrival order. */
     eventId: bigint('event_id', { mode: 'number' }).primaryKey().generatedByDefaultAsIdentity(),
@@ -9058,7 +9058,7 @@ export const employeeEvents = kortixSchema.table(
     subject: text('subject'),
     /** The upstream id: unique per project and source, so a redelivery is a no-op. */
     externalId: text('external_id').notNull(),
-    /** `in` (received) or `out` (the employee acted). */
+    /** `in` (received) or `out` (the humanoid acted). */
     direction: text('direction').default('in').notNull(),
     occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
     receivedAt: timestamp('received_at', { withTimezone: true }).defaultNow().notNull(),
@@ -9076,12 +9076,12 @@ export const employeeEvents = kortixSchema.table(
     lastError: text('last_error'),
   },
   (table) => [
-    uniqueIndex('idx_employee_events_external').on(table.projectId, table.source, table.externalId),
-    index('idx_employee_events_project').on(table.projectId, table.eventId.desc()),
-    index('idx_employee_events_subject').on(table.projectId, table.subject, table.eventId),
-    check('employee_events_direction_check', sql`${table.direction} in ('in', 'out')`),
+    uniqueIndex('idx_humanoid_events_external').on(table.projectId, table.source, table.externalId),
+    index('idx_humanoid_events_project').on(table.projectId, table.eventId.desc()),
+    index('idx_humanoid_events_subject').on(table.projectId, table.subject, table.eventId),
+    check('humanoid_events_direction_check', sql`${table.direction} in ('in', 'out')`),
     check(
-      'employee_events_dispatch_status_check',
+      'humanoid_events_dispatch_status_check',
       sql`${table.dispatchStatus} in ('pending', 'routed', 'digested', 'recorded', 'dead')`,
     ),
   ],

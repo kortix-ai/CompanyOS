@@ -27,8 +27,8 @@ import {
 import { matchesEmailSenderRegex } from './sender-policy-regex';
 import type { InboundEmail, ResendInboxEmailReceivedEvent } from './types';
 import { projectsView } from '../../workspaces/rows';
-import { recordIfEmployee } from '../../employee/events';
-import { registerEmployeeDelivery } from '../../employee/dispatch';
+import { recordIfHumanoid } from '../../humanoid/events';
+import { registerHumanoidDelivery } from '../../humanoid/dispatch';
 
 export function resetEmailChannelForTest() {
   threadEmailLoader = getResendThreadEmail;
@@ -106,11 +106,11 @@ export function emailMessageEvent(projectId: string, event: ResendInboxEmailRece
  * A throw retries the email (8 attempts over about 20 min).
  */
 export async function handleEmailEvent(event: IntegrationEvent, run: { finalAttempt: boolean }): Promise<void> {
-  // An employee workspace writes the email to its event log first; the
-  // employee dispatcher then routes it with `routeEmailEvent` below.
+  // A humanoid workspace writes the email to its event log first; the
+  // humanoid dispatcher then routes it with `routeEmailEvent` below.
   const { inbox_id: inboxId, thread_id: threadId, email_id: emailId, from, to, subject } =
     event.data as unknown as EmailEventData;
-  const recorded = await recordIfEmployee({
+  const recorded = await recordIfHumanoid({
     projectId: event.projectId,
     source: 'email',
     type: 'email.message.received',
@@ -125,9 +125,9 @@ export async function handleEmailEvent(event: IntegrationEvent, run: { finalAtte
   await routeEmailEvent(event, run);
 }
 
-registerEmployeeDelivery('email', async (row, run) => {
+registerHumanoidDelivery('email', async (row, run) => {
   const event = (row.payload as { event?: IntegrationEvent }).event;
-  if (!event) throw new Error('employee email event has no inbox envelope');
+  if (!event) throw new Error('humanoid email event has no inbox envelope');
   await routeEmailEvent(event, run);
   return { sessionId: null };
 });

@@ -15781,8 +15781,8 @@
       },
       "isRLSEnabled": false
     },
-    "kortix.employee_events": {
-      "name": "employee_events",
+    "kortix.humanoid_events": {
+      "name": "humanoid_events",
       "schema": "kortix",
       "columns": {
         "event_id": {
@@ -15792,7 +15792,7 @@
           "notNull": true,
           "identity": {
             "type": "byDefault",
-            "name": "employee_events_event_id_seq",
+            "name": "humanoid_events_event_id_seq",
             "schema": "kortix",
             "increment": "1",
             "startWith": "1",
@@ -15905,8 +15905,8 @@
         }
       },
       "indexes": {
-        "idx_employee_events_external": {
-          "name": "idx_employee_events_external",
+        "idx_humanoid_events_external": {
+          "name": "idx_humanoid_events_external",
           "columns": [
             {
               "expression": "project_id",
@@ -15932,8 +15932,8 @@
           "method": "btree",
           "with": {}
         },
-        "idx_employee_events_project": {
-          "name": "idx_employee_events_project",
+        "idx_humanoid_events_project": {
+          "name": "idx_humanoid_events_project",
           "columns": [
             {
               "expression": "project_id",
@@ -15953,8 +15953,8 @@
           "method": "btree",
           "with": {}
         },
-        "idx_employee_events_subject": {
-          "name": "idx_employee_events_subject",
+        "idx_humanoid_events_subject": {
+          "name": "idx_humanoid_events_subject",
           "columns": [
             {
               "expression": "project_id",
@@ -15982,9 +15982,9 @@
         }
       },
       "foreignKeys": {
-        "employee_events_project_id_projects_project_id_fk": {
-          "name": "employee_events_project_id_projects_project_id_fk",
-          "tableFrom": "employee_events",
+        "humanoid_events_project_id_projects_project_id_fk": {
+          "name": "humanoid_events_project_id_projects_project_id_fk",
+          "tableFrom": "humanoid_events",
           "tableTo": "projects",
           "schemaTo": "kortix",
           "columnsFrom": [
@@ -16001,19 +16001,19 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
-        "employee_events_direction_check": {
-          "name": "employee_events_direction_check",
-          "value": "\"kortix\".\"employee_events\".\"direction\" in ('in', 'out')"
+        "humanoid_events_direction_check": {
+          "name": "humanoid_events_direction_check",
+          "value": "\"kortix\".\"humanoid_events\".\"direction\" in ('in', 'out')"
         },
-        "employee_events_dispatch_status_check": {
-          "name": "employee_events_dispatch_status_check",
-          "value": "\"kortix\".\"employee_events\".\"dispatch_status\" in ('pending', 'routed', 'digested', 'recorded', 'dead')"
+        "humanoid_events_dispatch_status_check": {
+          "name": "humanoid_events_dispatch_status_check",
+          "value": "\"kortix\".\"humanoid_events\".\"dispatch_status\" in ('pending', 'routed', 'digested', 'recorded', 'dead')"
         }
       },
       "isRLSEnabled": false
     },
-    "kortix.employee_identities": {
-      "name": "employee_identities",
+    "kortix.humanoid_identities": {
+      "name": "humanoid_identities",
       "schema": "kortix",
       "columns": {
         "project_id": {
@@ -16100,9 +16100,9 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "employee_identities_project_id_projects_project_id_fk": {
-          "name": "employee_identities_project_id_projects_project_id_fk",
-          "tableFrom": "employee_identities",
+        "humanoid_identities_project_id_projects_project_id_fk": {
+          "name": "humanoid_identities_project_id_projects_project_id_fk",
+          "tableFrom": "humanoid_identities",
           "tableTo": "projects",
           "schemaTo": "kortix",
           "columnsFrom": [
@@ -16119,9 +16119,9 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
-        "employee_identities_status_check": {
-          "name": "employee_identities_status_check",
-          "value": "\"kortix\".\"employee_identities\".\"status\" in ('provisioning', 'ready', 'failed')"
+        "humanoid_identities_status_check": {
+          "name": "humanoid_identities_status_check",
+          "value": "\"kortix\".\"humanoid_identities\".\"status\" in ('provisioning', 'ready', 'failed')"
         }
       },
       "isRLSEnabled": false

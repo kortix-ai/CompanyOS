@@ -1,22 +1,22 @@
 /**
- * Slack events in an employee workspace (flag `employee`): the shape each
- * event takes in the employee's event log. Pure.
+ * Slack events in a humanoid workspace (flag `humanoid`): the shape each
+ * event takes in the humanoid's event log. Pure.
  */
-import type { EmployeeEventInput } from '../../employee/events';
+import type { HumanoidEventInput } from '../../humanoid/events';
 import type { SlackEnvelope } from './types';
 
 /**
- * One Slack event as an employee event. `addressed`: the agent would act on
+ * One Slack event as a humanoid event. `addressed`: the agent would act on
  * it (a mention, a DM, a reply in its thread); false keeps it for awareness
  * only. Null when the event is not a message.
  */
-export function slackEmployeeEvent(
+export function slackHumanoidEvent(
   projectId: string,
   teamId: string,
   envelope: SlackEnvelope,
   addressed: boolean,
   opts: { ownThreadsOnly?: boolean } = {},
-): EmployeeEventInput | null {
+): HumanoidEventInput | null {
   const event = envelope.event;
   if (!event?.channel || !event.ts) return null;
   const isDm = event.channel_type === 'im';

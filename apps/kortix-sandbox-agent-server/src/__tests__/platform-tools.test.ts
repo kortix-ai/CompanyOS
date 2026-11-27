@@ -101,6 +101,14 @@ describe('kortix_agents', () => {
     })
   })
 
+  // Agent Evals on dev: promoted to primary, a helper kept `hidden: true` and never showed in the picker.
+  test('update: making a hidden helper primary clears hidden and keeps its instructions', async () => {
+    fakeKortix(`'agents config support-replies --json') echo '{"block":{"behavior":{"prompt":"Never send anything.","mode":"subagent","hidden":true}}}' ;;
+  'agents config support-replies --file '*' --json') cp "$5" ${JSON.stringify(join('$BIN', 'promote.json'))}; echo '{"ok":true,"agent":"support-replies","block":{}}' ;;`.replaceAll('$BIN', bin))
+    expect((await run('kortix_agents', { action: 'update', name: 'support-replies', mode: 'primary', model: 'kortix/glm-5.3-flash' })).ok).toBe(true)
+    expect(JSON.parse(readFileSync(join(bin, 'promote.json'), 'utf8'))).toEqual({ behavior: { prompt: 'Never send anything.', mode: 'primary', model: 'kortix/glm-5.3-flash' } })
+  })
+
   test('create: the person asked for a primary agent — no subagent default, nothing hidden', async () => {
     fakeKortix(`'agents config primary-writer --json') echo '{"kortix_error":{"kind":"failed","status":404,"message":"No agent primary-writer"}}' >&2; exit 1 ;;
   'agents config primary-writer --file '*' --json') cp "$5" ${JSON.stringify(join('$BIN', 'primary.json'))}; echo '{"ok":true,"agent":"primary-writer","block":{}}' ;;`.replaceAll('$BIN', bin))

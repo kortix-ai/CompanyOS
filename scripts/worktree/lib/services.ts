@@ -1,6 +1,7 @@
 import { spawn } from 'bun';
 import { spawn as spawnChild } from 'node:child_process';
-import { existsSync, mkdirSync, openSync, readFileSync, statSync } from 'node:fs';
+import { constants as fsConstants, existsSync, mkdirSync, openSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { cp, rename, rm } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { run, which } from './exec';
@@ -169,5 +170,73 @@ export function startDocsBuild(worktreePath: string, logPath: string): boolean {
     return true;
   } catch {
     return false; // next.config.ts still builds /docs itself.
+  }
+}
+
+const TURBOPACK_CACHE = join('apps', 'web', '.next', 'dev', 'cache');
+
+/**
+ * Newest write of a checkout's Turbopack dev cache: the mtime of its newest `turbopack/<version>/CURRENT`
+ * whose folder holds data besides it, or 0. A dev server writes a bare CURRENT at once and the data later.
+ */
+function turbopackCacheWrittenAt(checkout: string): number {
+  const root = join(checkout, TURBOPACK_CACHE, 'turbopack');
+  let newest = 0;
+  try {
+    for (const version of readdirSync(root)) {
+      try {
+        if (readdirSync(join(root, version)).length < 2) continue;
+        newest = Math.max(newest, statSync(join(root, version, 'CURRENT')).mtimeMs);
+      } catch { /* not written yet */ }
+    }
+  } catch { /* no cache */ }
+  return newest;
+}
+
+function readCurrents(cache: string): string {
+  try {
+    return readdirSync(join(cache, 'turbopack')).sort().map((v) => {
+      try { return `${v}:${readFileSync(join(cache, 'turbopack', v, 'CURRENT'), 'utf8')}`; } catch { return `${v}:`; }
+    }).join('|');
+  } catch { return ''; }
+}
+
+/**
+ * Give a new worktree's web app the newest Turbopack dev cache among `sources` (other checkouts of the
+ * repository), so its first page compiles warm. Measured on a 6 vCPU Kortix session (2026-11-27): the
+ * first page after the API took 64-66 s cold and 33.2 s from a cache copied in 4.7-7.2 s. It works
+ * because next.config.ts passes Turbopack relative loader paths (apps/web/src/config/turbopack-portable-loaders.ts).
+ * Turbopack writes the cache only after a dev server has run for a while (about 20 s to 5 min measured),
+ * so a source qualifies once it has a `CURRENT`.
+ *
+ * The copy goes to a temporary folder and is renamed into place, so an interrupted create leaves no
+ * half cache for `next dev` to fail restoring. It is dropped when the source's `CURRENT` changed during
+ * the copy (a running dev server wrote it). Returns the source used, or null when the worktree already
+ * has a cache, no source has one, or the copy failed.
+ */
+export async function seedTurbopackCache(worktreePath: string, sources: string[]): Promise<string | null> {
+  const target = join(worktreePath, TURBOPACK_CACHE);
+  if (existsSync(target)) return null;
+  const self = resolve(worktreePath);
+  const best = [...new Set(sources.map((s) => resolve(s)))]
+    .filter((s) => s !== self)
+    .map((s) => ({ s, at: turbopackCacheWrittenAt(s) }))
+    .filter((c) => c.at > 0)
+    .sort((a, b) => b.at - a.at)[0];
+  if (!best) return null;
+  const source = join(best.s, TURBOPACK_CACHE);
+  const staging = `${target}.seeding-${process.pid}`;
+  try {
+    const before = readCurrents(source);
+    await rm(staging, { recursive: true, force: true });
+    mkdirSync(dirname(target), { recursive: true });
+    await cp(source, staging, { recursive: true, mode: fsConstants.COPYFILE_FICLONE, preserveTimestamps: true });
+    if (readCurrents(source) !== before) throw new Error('source cache changed during the copy');
+    if (existsSync(target)) throw new Error('target cache appeared during the copy');
+    await rename(staging, target);
+    return best.s;
+  } catch {
+    await rm(staging, { recursive: true, force: true }).catch(() => {});
+    return null; // next dev compiles cold, as before.
   }
 }

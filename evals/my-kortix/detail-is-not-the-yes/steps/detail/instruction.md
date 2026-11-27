@@ -1,1 +1,1 @@
-Make it an admin.
+Make it a manager.

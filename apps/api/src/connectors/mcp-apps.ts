@@ -31,6 +31,7 @@ import { connectorIdentity } from './catalog-install';
 import { appNameKey } from './connect-direct-twins';
 import { googleMcpUrl } from './google/host';
 import { kortixAgentMcpUrl } from './kortix-agent/host';
+import { phoneProviderConfigured } from './kortix-agent/phone';
 import { kortixOAuthClients } from './kortix-oauth-clients';
 import {
   type ComposioCatalogCard,
@@ -86,6 +87,8 @@ export interface McpApp {
    * My Kortix names it before the person says yes to a sign-in.
    */
   access?: string;
+  /** False while the server lacks what the app needs (a Kortix agent phone needs a phone provider). */
+  available?: () => boolean;
 }
 
 const DCR = { kind: 'dcr' } as const;
@@ -151,6 +154,11 @@ export const MCP_APPS: readonly McpApp[] = [
   {
     slug: 'kortix_browser', name: 'Kortix Browser', description: 'A browser of its own for an agent: a Chromium on Platinum that keeps its logins, shared by every session.', domain: 'browser.kortix', categories: ['developer-tools'], url: kortixAgentMcpUrl('browser'), icon: false, auth: NONE,
     access: 'Start, connect to, pause and reset a browser that belongs to the account, and back up its logins. The connection URL is short-lived.',
+  },
+  {
+    slug: 'kortix_phone', name: 'Kortix Phone', description: 'A phone number of its own for an agent: receives text-message codes, sends texts.', domain: 'phone.kortix', categories: ['communication'], url: kortixAgentMcpUrl('phone'), icon: false, auth: NONE,
+    access: 'Get a phone number for the account (the first one is bought), read the texts it receives and the codes in them, and send texts from it.',
+    available: phoneProviderConfigured,
   },
   { slug: 'cloudflare', name: 'Cloudflare', description: 'Accounts, Workers and DNS.', domain: 'cloudflare.com', categories: ['developer-tools', 'hosting'], url: 'https://mcp.cloudflare.com/mcp', icon: true, auth: DCR },
   // Kortix's own Google MCP servers (./google): Composio-compatible tools over
@@ -218,6 +226,7 @@ export { kortixOAuthClients };
 
 /** An app is usable when it needs no client of Kortix's, or that client is configured. */
 export function mcpAppAvailable(app: McpApp, clients = kortixOAuthClients()): boolean {
+  if (app.available && !app.available()) return false;
   return app.auth.kind !== 'kortix_client' || clients.has(app.auth.client);
 }
 

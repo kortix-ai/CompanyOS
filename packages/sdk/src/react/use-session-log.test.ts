@@ -710,11 +710,11 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
       act(() => stream.onControl(ended('new')));
       act(() => switchSession('kses_other'));
       await flush();
-      const before = reads;
-      await act(async () => pending.resolve(null));
+      const before = [reads, liveReads];
+      await act(async () => pending.resolve(page()));
       await flush();
       await runTimers();
-      expect(reads).toBe(before);
+      expect([reads, liveReads]).toEqual(before);
       expect(useSyncStore.getState().sessionLogs[SESSION]).toBeUndefined();
       expect(useSyncStore.getState().sessionLogs.kses_other).toBeDefined();
       expect(timers.filter((t) => !t.cancelled)).toHaveLength(0);
@@ -1217,6 +1217,49 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
         expect(heldMessages()).toEqual(page().messages);
       });
     }
+
+    test('KRTX-4973: invalidations during stored fallback after a failed live read queue one fresh live read', async () => {
+      const fallback = deferredPage();
+      let storedReads = 0;
+      let liveReads = 0;
+      mount({
+        boxReady: true,
+        loader: async (_project, _session, query) => {
+          if (!query.live) {
+            storedReads++;
+            return storedReads === 1 ? userPage() : fallback.promise;
+          }
+          liveReads++;
+          if (liveReads === 2) throw new Error('daemon 503');
+          return { ...(liveReads === 1 ? userPage() : page()), source: 'box' };
+        },
+      });
+      await flush();
+      expect([storedReads, liveReads]).toEqual([1, 1]);
+      expect(heldMessages()).toEqual(userPage().messages);
+      const stream = latestStream();
+      act(() => stream.onRuntimeResync());
+      await flush();
+      expect([storedReads, liveReads]).toEqual([2, 2]);
+      // The failed live read is now awaiting its stale stored fallback.
+      act(() => {
+        stream.onConnectionChange(false);
+        stream.onConnectionChange(true);
+        stream.onRuntimeResync();
+        stream.onRuntimeResync();
+      });
+      await flush();
+      expect([storedReads, liveReads]).toEqual([2, 2]);
+      expect(heldMessages()).toEqual(userPage().messages);
+      await act(async () => fallback.resolve(userPage()));
+      await flush();
+      expect([storedReads, liveReads]).toEqual([2, 3]);
+      expect(heldMessages()).toEqual(page().messages);
+      await flush();
+      await runTimers();
+      expect([storedReads, liveReads]).toEqual([2, 3]);
+      expect(heldMessages()).toEqual(page().messages);
+    });
 
     test('overlapping reconnects share the pending read and coalesce one post-gap read', async () => {
       let boxReads = 0;

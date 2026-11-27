@@ -523,7 +523,7 @@ describe('kortix_schedules follow-through', () => {
     await run('kortix_schedules', { action: 'resume', id: 'reminder.aaaaaaaaaaaa' })
     await run('kortix_schedules', { action: 'run_now', id: 'reminder.aaaaaaaaaaaa' })
     expect((await run('kortix_schedules', { action: 'pause', id: 'weekly-digest' })).ok).toBe(true)
-    expect((await run('kortix_schedules', { action: 'resume', id: 'weekly-digest' })).ok).toBe(true)
+    expect((await run('kortix_schedules', { action: 'resume', id: 'weekly-digest', force: true })).ok).toBe(true)
     expect(argvs()).toEqual([
       'loops rm reminder.aaaaaaaaaaaa',
       'triggers rm trigger.cccccccccccc',
@@ -913,7 +913,7 @@ describe('kortix_schedules automate tolerance', () => {
 
   test('pause, resume, remove and run_now take the name automate used when id is missing', async () => {
     fakeKortix(`'triggers resume weekday-digest --apply') printf 'Resumed\\n' ;;`)
-    const result = await run('kortix_schedules', { action: 'resume', name: 'weekday-digest' })
+    const result = await run('kortix_schedules', { action: 'resume', name: 'weekday-digest', force: true })
     expect(result.ok).toBe(true)
     expect(argvs()).toEqual(['triggers resume weekday-digest --apply'])
   })
@@ -1135,4 +1135,27 @@ test('kortix_schedules runs: an agent schedule is read by its runtime id, as cre
   const result = await run('kortix_schedules', { action: 'runs', id: 'trigger.d2ef47e4b15e' })
   expect(result.ok).toBe(true)
   expect(result.card.title).toBe('trigger.d2ef47e4b15e: 1 recent runs')
+})
+
+// QualiLoop e2e on dev: automations went live after one matching sample, or after a change with no new test.
+test('kortix_schedules resume: a filtered automation goes live only after a sample that runs and one that is skipped', async () => {
+  fakeKortix(`'triggers show mail-triage --json') echo '{"type":"event","filter":{"event.data.subject":{"prefix":"Invoice"}}}' ;;
+  'triggers fire mail-triage --dry-run --payload={"event":{"data":{"subject":"Invoice 7"}}} --json') echo '{"filter_matches":true,"rendered_prompt":"Go"}' ;;
+  'triggers fire mail-triage --dry-run --payload={"event":{"data":{"subject":"Hello"}}} --json') echo '{"filter_matches":false,"rendered_prompt":"Go"}' ;;
+  'triggers resume mail-triage --apply') echo 'Enabled' ;;`)
+  const refused = await run('kortix_schedules', { action: 'resume', id: 'mail-triage' })
+  expect(refused.card.title).toBe('Test it before it goes live')
+  await run('kortix_schedules', { action: 'test', name: 'mail-triage', payload: { event: { data: { subject: 'Invoice 7' } } } })
+  expect((await run('kortix_schedules', { action: 'resume', id: 'mail-triage' })).error?.message).toContain('should be skipped')
+  await run('kortix_schedules', { action: 'test', name: 'mail-triage', payload: { event: { data: { subject: 'Hello' } } } })
+  expect((await run('kortix_schedules', { action: 'resume', id: 'mail-triage' })).ok).toBe(true)
+  expect(argvs().filter((a) => a.startsWith('triggers resume'))).toEqual(['triggers resume mail-triage --apply'])
+})
+
+test('kortix_schedules resume: an agent schedule from create goes live after run_now', async () => {
+  fakeKortix(`'triggers run trigger.dddddddddddd') echo 'Fired' ;;
+  'triggers resume trigger.dddddddddddd') echo 'Resumed' ;;`)
+  expect((await run('kortix_schedules', { action: 'resume', id: 'trigger.dddddddddddd' })).error?.message).toContain('run_now')
+  await run('kortix_schedules', { action: 'run_now', id: 'trigger.dddddddddddd' })
+  expect((await run('kortix_schedules', { action: 'resume', id: 'trigger.dddddddddddd' })).ok).toBe(true)
 })

@@ -650,6 +650,8 @@ async function automate(args: Record<string, any>, context: PlatformToolContext)
     }
     return fail(TOOL, 'automate', 'Could not set up the automation', made.error, context)
   }
+  // Saved again: an earlier test was of the old automation.
+  TESTED.delete(testedKey(context, name))
   const url = made.text.match(/webhook\s+(https?:\/\/\S+)/)?.[1]
   const reacts = on === 'connector_event' ? `${args.event} on ${args.connector}` : on === 'app_event' ? `${args.app} events` : on === 'webhook' ? 'each webhook call' : flags.find((f) => f.startsWith('--every=') || f.startsWith('--cron='))?.replace(/^--/, '').replace('=', ' ')
   return ok(
@@ -696,6 +698,7 @@ async function testAutomation(args: Record<string, any>, context: PlatformToolCo
   )
   if ('error' in read) return fail(TOOL, 'test', `Could not test ${name}`, read.error, context)
   const r = read.value
+  noteTest(context, name, r.filter_matches ? 'matched' : 'skipped')
   return ok(
     TOOL,
     'test',
@@ -767,6 +770,19 @@ async function testAppAutomation(name: string, app: string, filter: Record<strin
   )
 }
 
+/**
+ * What this session's tests of an automation showed since it was last saved: a run (`matched`) and a skip
+ * (`skipped`). `resume` reads it: an automation goes live only after its test passed (QualiLoop e2e on dev:
+ * it went live after one matching sample, or after a change with no new test). In this process only: after a
+ * daemon restart the automation is tested again.
+ */
+const TESTED = new Map<string, { matched: boolean; skipped: boolean }>()
+const testedKey = (context: PlatformToolContext, name: string) => `${context.env.KORTIX_SESSION_ID ?? ''}:${name}`
+function noteTest(context: PlatformToolContext, name: string, outcome: 'matched' | 'skipped') {
+  const seen = TESTED.get(testedKey(context, name)) ?? { matched: false, skipped: false }
+  TESTED.set(testedKey(context, name), { ...seen, [outcome]: true })
+}
+
 /** `runs`: an automation's recent runs, newest first: what it started, skipped or failed. */
 async function automationRuns(args: Record<string, any>, context: PlatformToolContext) {
   const name = typeof args.name === 'string' ? args.name.trim() : typeof args.id === 'string' ? args.id.trim() : ''
@@ -807,6 +823,19 @@ const FAILED_TITLE: Record<keyof typeof VERB, string> = {
 }
 
 /** `action` is what the caller asked (`delete` stays `delete` in the result); `verb` routes it. */
+/** Why `resume` must wait: what this session's tests have not shown yet, or null when it may go live. */
+async function untested(id: string, context: PlatformToolContext): Promise<string | null> {
+  const seen = TESTED.get(testedKey(context, id)) ?? { matched: false, skipped: false }
+  if (RUNTIME_ID.test(id)) return seen.matched ? null : `Test it first: run_now ${id}, read its runs, then resume. If the person said to skip the test, call resume with force: true.`
+  const shown = await runJson<{ type?: string; filter?: Record<string, unknown> | null }>(['triggers', 'show', id, '--json'], context)
+  // An App event automation starts live (its test is a real App event); one the CLI cannot read is not blocked here.
+  if ('error' in shown || shown.value.type === 'app') return null
+  const filtered = !!shown.value.filter && Object.keys(shown.value.filter).length > 0
+  if (!seen.matched) return `Test it first: \`test\` ${id} with a sample that should run${filtered ? ', and one that should be skipped' : ''}, then resume. If the person said to skip the test, call resume with force: true.`
+  if (filtered && !seen.skipped) return `Its filter is untested: \`test\` ${id} with a sample that should be skipped, then resume. If the person said to skip the test, call resume with force: true.`
+  return null
+}
+
 async function change(action: string, verb: keyof typeof VERB, id: string, context: PlatformToolContext) {
   const cli = VERB[verb]!
   // A loop of this session (`reminder.<hex>`) changes through `kortix loops`; a runtime trigger
@@ -881,6 +910,7 @@ export default {
       at: { type: 'string', description: 'For follow_up and create: one time, ISO 8601.' },
       in: { type: 'string', description: 'For follow_up and create: once, after this long, e.g. "3h".' },
       id: { type: 'string', description: 'For pause, resume, run_now, remove: the id, as list shows it (reminder.<hex>, trigger.<hex> or a schedule slug).' },
+      force: { type: 'boolean', description: 'For resume: put it live without the test this session ran. Only when the person said to skip the test.' },
     },
     required: ['action'],
   },
@@ -911,6 +941,13 @@ export default {
         context,
       )
     }
-    return change(action, verb, id, context)
+    if (verb === 'resume' && !id.startsWith('reminder.') && args.force !== true) {
+      const missing = await untested(id, context)
+      if (missing) return fail(TOOL, action, 'Test it before it goes live', { kind: 'invalid', message: missing }, context)
+    }
+    const changed = await change(action, verb, id, context)
+    // A run started now is a test run of a schedule.
+    if (verb === 'run_now' && changed.ok) noteTest(context, id, 'matched')
+    return changed
   },
 }

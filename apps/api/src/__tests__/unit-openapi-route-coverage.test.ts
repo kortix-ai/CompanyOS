@@ -18,12 +18,9 @@ const EXCLUDED: Array<{ route: RegExp; reason: string }> = [
   { route: /^GET \/(robots\.txt|sitemap\.xml)$/, reason: 'crawler discovery files (RFC 9309, sitemaps.org)' },
   { route: /^GET (\/v1)?\/health\/(live|ready)$|^GET \/metrics$/, reason: 'orchestrator probes and Prometheus scrape' },
   { route: /^GET \/v1\/(openapi\.json|docs)$/, reason: 'the spec and its reader' },
-  { route: /^HEAD \/v1\/runtime-assets\//, reason: 'HEAD twin of a documented GET' },
   { route: /^GET \/v1\/(connectors\/oauth2|webhooks\/teams\/oauth)\/callback$/, reason: 'OAuth browser redirect, not called by a client' },
-  { route: /^POST \/v1\/webhooks\/teams\//, reason: 'Microsoft Bot Framework activity webhook' },
   { route: /^(GET|POST|DELETE) \/v1\/mcp$/, reason: 'MCP streamable-HTTP endpoint, described by the MCP protocol' },
   { route: /^GET \/v1\/artifacts\/(s|p)\//, reason: 'artifact content server: the bytes of an artifact, capability-gated' },
-  { route: /^GET \/v1\/artifacts\/meta\/:artifactId$/, reason: "the public artifact page's chrome (title, type), read only by that page" },
 ];
 
 /** Retired routes are 410 stubs (routes/retired.ts): served, never documented. */

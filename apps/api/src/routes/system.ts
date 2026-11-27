@@ -58,7 +58,7 @@ app.openapi(
   createRoute({
     method: 'get',
     path: '/health',
-    operationId: 'system.health.get',
+    operationId: 'system.health.get_unversioned',
     'x-kortix-action': 'none',
     'x-kortix-exposure': 'internal',
     tags: ['system'],

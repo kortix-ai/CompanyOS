@@ -10,6 +10,7 @@ export const PUBLIC_OPERATIONS: ReadonlySet<string> = new Set([
   'post /v1/qualiloop/chat', // External evaluation protocol; verifies X-Agent-Secret, not a bearer token.
   'get /health',
   'get /health/live',
+  'get /health/ready',
   'get /v1/health',
   'get /v1/health/live',
   'get /v1/health/ready',
@@ -57,6 +58,9 @@ export const PUBLIC_OPERATIONS: ReadonlySet<string> = new Set([
   'get /v1/webhooks/slack/oauth/callback',
   'post /v1/webhooks/slack',
   'post /v1/webhooks/slack/interactivity',
+  'get /v1/webhooks/teams/oauth/callback',
+  'post /v1/webhooks/teams/messages',
+  'post /v1/webhooks/teams/{projectId}/messages',
   'post /v1/webhooks/slack/commands',
   'post /v1/webhooks/slack/{projectId}',
   'post /v1/webhooks/slack/{projectId}/commands',

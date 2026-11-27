@@ -9004,6 +9004,89 @@ export const jobQueue = kortixSchema.table(
   ],
 );
 
+// ─── Employee (flag `employee`) ─────────────────────────────────────────────
+// A workspace that is one AI employee: its Base Identity and its event log
+// (.agents/skills/learnings/work/digital-employee/README.md).
+
+/** One per employee workspace: where each part of its Base Identity lives. Secrets stay in the vault. */
+export const employeeIdentities = kortixSchema.table(
+  'employee_identities',
+  {
+    projectId: uuid('project_id')
+      .primaryKey()
+      .references(() => projects.projectId, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    role: text('role'),
+    /** The managed inbox (`connector_connections` row of `kortix_email`). Null until provisioned. */
+    emailConnectionId: uuid('email_connection_id'),
+    emailAddress: text('email_address'),
+    /** E.164. Null until a phone is provisioned. */
+    phoneNumber: text('phone_number'),
+    /** The employee's persistent browser on Platinum. */
+    browserId: text('browser_id'),
+    /** The `Employee` project drive. */
+    driveId: uuid('drive_id'),
+    /** The employee's own conversation: it receives every event nobody addressed to it. */
+    mindSessionId: uuid('mind_session_id'),
+    /** `provisioning`, `ready` or `failed`. */
+    status: text('status').default('provisioning').notNull(),
+    lastError: text('last_error'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [check('employee_identities_status_check', sql`${table.status} in ('provisioning', 'ready', 'failed')`)],
+);
+
+/**
+ * The employee's event log: every inbound and outbound event, written before
+ * anything acts on it, and kept while the employee exists (its episodic
+ * memory). Dispatch rides on `job_queue` (`employee/events.ts`).
+ */
+export const employeeEvents = kortixSchema.table(
+  'employee_events',
+  {
+    /** Arrival order. */
+    eventId: bigint('event_id', { mode: 'number' }).primaryKey().generatedByDefaultAsIdentity(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.projectId, { onDelete: 'cascade' }),
+    /** `email`, `slack`, `teams`, `sms`, `call`, `connector`, `webhook`, `schedule`, `goal`, `session`, `browser`, `person`. */
+    source: text('source').notNull(),
+    /** `<source>.<object>.<verb>`, e.g. `email.message.received`. */
+    type: text('type').notNull(),
+    /** The thread key: events of one subject are dispatched one at a time, in order. */
+    subject: text('subject'),
+    /** The upstream id: unique per project and source, so a redelivery is a no-op. */
+    externalId: text('external_id').notNull(),
+    /** `in` (received) or `out` (the employee acted). */
+    direction: text('direction').default('in').notNull(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
+    receivedAt: timestamp('received_at', { withTimezone: true }).defaultNow().notNull(),
+    /** Who caused it: `{ kind, id, name }`. */
+    actor: jsonb('actor').$type<Record<string, unknown>>(),
+    /** `public`, `team` or `private:<person key>`: who may see it later. */
+    audience: text('audience').default('team').notNull(),
+    /** One line, made by code. */
+    summary: text('summary').notNull(),
+    payload: jsonb('payload').$type<Record<string, unknown>>().default({}).notNull(),
+    /** `pending`, `routed`, `digested`, `recorded` (needs no delivery) or `dead`. */
+    dispatchStatus: text('dispatch_status').default('pending').notNull(),
+    routedSessionId: uuid('routed_session_id'),
+    routedAt: timestamp('routed_at', { withTimezone: true }),
+    lastError: text('last_error'),
+  },
+  (table) => [
+    uniqueIndex('idx_employee_events_external').on(table.projectId, table.source, table.externalId),
+    index('idx_employee_events_project').on(table.projectId, table.eventId.desc()),
+    index('idx_employee_events_subject').on(table.projectId, table.subject, table.eventId),
+    check('employee_events_direction_check', sql`${table.direction} in ('in', 'out')`),
+    check(
+      'employee_events_dispatch_status_check',
+      sql`${table.dispatchStatus} in ('pending', 'routed', 'digested', 'recorded', 'dead')`,
+    ),
+  ],
+);
+
 // ─── Kortix Capture ──────────────────────────────────────────────────────────
 //
 // Capture is a standalone product whose tenant is a Kortix account (an

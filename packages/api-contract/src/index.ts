@@ -69,6 +69,7 @@ export const FeatureFlagMapSchema = z.object({
   session_groups: z.boolean(),
   agent_teams: z.boolean(),
   voice_call: z.boolean(),
+  employee: z.boolean(),
   chat_input: z.boolean(),
   chat_front: z.boolean(),
   spaces_proactive: z.boolean(),

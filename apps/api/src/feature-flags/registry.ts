@@ -493,6 +493,21 @@ const FLAGS: readonly FeatureFlagDef[] = [
       'chat: billed per use, not gated here.',
   },
   {
+    key: 'employee',
+    name: 'Employee',
+    description:
+      'The workspace becomes one AI employee with its own identity: an email address and, later, a phone, an authenticator and a browser that keeps its logins. Every message, mail and event it receives lands in one event log, and it works on them around the clock.',
+    stability: 'experimental',
+    wip: true,
+    available: () => true,
+    platformDefault: () => false,
+    enforcement: 'routes',
+    enforcementNote:
+      'ROUTES: every /v1/projects/:id/employee* route answers 403 `feature_disabled` when off (employee/routes.ts), ' +
+      'except POST /employee, which turns it on. BEHAVIORAL: off, recordEmployeeEvent (employee/events.ts) records ' +
+      'nothing and the channels route as before; the employee_identities and employee_events rows stay.',
+  },
+  {
     key: 'chat_input',
     // Withdrawn (product owner, 2026-11-25): not part of Channels. Always off, not listed; its code stays dormant.
     withdrawn: 'off',

@@ -10,8 +10,10 @@
 // page runs in an opaque origin and reaches no Kortix cookie, storage or API
 // session. On ARTIFACT_CONTENT_URL (another site) the page keeps that origin, so
 // an embedded player that needs an origin (YouTube, Vimeo) plays.
-import { Hono, type Context } from 'hono';
+import { createRoute, z } from '@hono/zod-openapi';
+import type { Context } from 'hono';
 import { config } from '../config';
+import { errors, json, makeOpenApiApp } from '../openapi';
 import { verifyChannelState } from '../channels/core/signed-state';
 import { createArtifactContentRateLimitMiddleware } from '../middleware/rate-limit';
 import { PUBLIC_SHARE_SANDBOX_CSP } from '../sandbox-proxy/routes/public-share';
@@ -20,7 +22,7 @@ import { DriveStorageError, driveStorageAvailable } from '../drives/volumes';
 import { renderDoc } from './formats';
 import { artifactPrivateFolder, artifactPublicContentUrl, contentTypeFor, getArtifactById, normalizeArtifactPath, readArtifactFile, type ArtifactRow } from './service';
 
-export const artifactContentApp = new Hono();
+export const artifactContentApp = makeOpenApiApp();
 
 function notFound(c: Context): Response {
   return c.html(
@@ -120,7 +122,27 @@ export function registerArtifactContentRoutes(): void {
 
   // The public page's chrome (title, type): a public artifact, else 404.
   artifactContentApp.use('/meta/:artifactId', createArtifactContentRateLimitMiddleware(publicKey));
-  artifactContentApp.get('/meta/:artifactId', async (c) => {
+  artifactContentApp.openapi(createRoute({
+    method: 'get',
+    path: '/meta/{artifactId}',
+    operationId: 'artifacts.public.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'agent',
+    tags: ['artifacts'],
+    summary: "A public artifact's title, type and content URL, without a login",
+    request: { params: z.object({ artifactId: z.string() }) },
+    responses: {
+      200: json(z.object({
+        artifact_id: z.string(),
+        title: z.string(),
+        description: z.string().nullable(),
+        type: z.string(),
+        updated_at: z.string(),
+        content_url: z.string().openapi({ description: 'The page itself, served as a CSP sandbox: embed it in an iframe.' }),
+      }), 'The public artifact'),
+      ...errors(404),
+    },
+  }), async (c) => {
     const id = c.req.param('artifactId');
     const row = isUuid(id) ? await getArtifactById(id) : null;
     if (!row || row.visibility !== 'public' || (await artifactPrivateFolder(row)) || !driveStorageAvailable()) {
@@ -134,7 +156,7 @@ export function registerArtifactContentRoutes(): void {
       type: row.type,
       updated_at: row.updatedAt.toISOString(),
       content_url: artifactPublicContentUrl(row.artifactId),
-    });
+    }, 200);
   });
 
   artifactContentApp.get('/p/:artifactId/*', async (c) => {

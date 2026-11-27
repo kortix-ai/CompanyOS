@@ -19,6 +19,9 @@ export function registerSalesReconciliation(app: OpenAPIHono): void {
   app.openAPIRegistry.registerPath({
     method: 'get',
     path: '/v1/system/confirmed-signups',
+    operationId: 'system.confirmed_signups.list',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['system'],
     summary: 'Confirmed signups for sales reconciliation',
     description:

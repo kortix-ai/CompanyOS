@@ -119,6 +119,9 @@ function registerDeviceIssuerRoutes(app: OpenAPIHono<AppEnv>) {
     createRoute({
       method: 'post',
       path: '/device/authorize',
+      operationId: 'capture.device.authorize',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'local',
       tags: ['capture'],
       summary: 'Start a capture device sign-in (RFC 8628 device authorization request)',
       request: {
@@ -193,6 +196,9 @@ function registerDeviceIssuerRoutes(app: OpenAPIHono<AppEnv>) {
     createRoute({
       method: 'post',
       path: '/device/token',
+      operationId: 'capture.device.token',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'local',
       tags: ['capture'],
       summary: 'Poll a capture device sign-in (RFC 8628 device access token request)',
       request: {
@@ -254,6 +260,9 @@ function registerDeviceIssuerRoutes(app: OpenAPIHono<AppEnv>) {
     createRoute({
       method: 'post',
       path: '/credentials',
+      operationId: 'capture.credentials.issue',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'local',
       tags: ['capture'],
       summary: "Short-lived S3 credentials scoped to the calling device's folder",
       ...auth,
@@ -321,6 +330,9 @@ function registerDeviceGrantRoutes(app: OpenAPIHono<AppEnv>) {
     createRoute({
       method: 'get',
       path: '/device/grants/{user_code}',
+      operationId: 'capture.device.grants.get',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'human',
       tags: ['capture'],
       summary: 'Read a pending capture device sign-in (approval page)',
       ...auth,
@@ -345,6 +357,9 @@ function registerDeviceGrantRoutes(app: OpenAPIHono<AppEnv>) {
     createRoute({
       method: 'post',
       path: '/device/grants/{user_code}/approve',
+      operationId: 'capture.device.grants.approve',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'human',
       tags: ['capture'],
       summary: 'Approve a capture device sign-in into one of your accounts',
       ...auth,
@@ -407,6 +422,9 @@ function registerDeviceGrantRoutes(app: OpenAPIHono<AppEnv>) {
     createRoute({
       method: 'post',
       path: '/device/grants/{user_code}/deny',
+      operationId: 'capture.device.grants.deny',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'human',
       tags: ['capture'],
       summary: 'Deny a capture device sign-in',
       ...auth,

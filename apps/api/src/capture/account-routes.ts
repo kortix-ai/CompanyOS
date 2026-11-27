@@ -339,6 +339,9 @@ accountsRouter.openapi(
   createRoute({
     method: 'get',
     path: '/{workspaceId}/capture',
+    operationId: 'capture.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'agent',
     tags,
     summary: 'The account’s Capture workspace: on or off, and whether you may read everyone (capture.read_all) and manage it (capture.manage)',
     ...auth,
@@ -358,6 +361,9 @@ accountsRouter.openapi(
   createRoute({
     method: 'patch',
     path: '/{workspaceId}/capture',
+    operationId: 'capture.update',
+    'x-kortix-action': ACCOUNT_ACTIONS.CAPTURE_MANAGE,
+    'x-kortix-exposure': 'agent',
     tags,
     summary: 'Turn Capture on or off for the account (capture.manage)',
     ...auth,
@@ -396,6 +402,9 @@ accountsRouter.openapi(
   createRoute({
     method: 'get',
     path: '/{workspaceId}/capture/devices',
+    operationId: 'capture.devices.list',
+    'x-kortix-action': ACCOUNT_ACTIONS.CAPTURE_READ_ALL,
+    'x-kortix-exposure': 'agent',
     tags,
     summary: 'Capture devices with live status: yours, a member’s, or the account’s (`scope=account`); another person’s need capture.read_all',
     ...auth,
@@ -414,6 +423,9 @@ accountsRouter.openapi(
   createRoute({
     method: 'delete',
     path: '/{workspaceId}/capture/devices/{deviceId}',
+    operationId: 'capture.devices.revoke',
+    'x-kortix-action': ACCOUNT_ACTIONS.CAPTURE_MANAGE,
+    'x-kortix-exposure': 'agent',
     tags,
     summary: 'Revoke a capture device: its token stops working and it can no longer get credentials',
     ...auth,
@@ -433,6 +445,9 @@ accountsRouter.openapi(
   createRoute({
     method: 'put',
     path: '/{workspaceId}/capture/devices/{deviceId}/link',
+    operationId: 'capture.devices.link',
+    'x-kortix-action': ACCOUNT_ACTIONS.CAPTURE_MANAGE,
+    'x-kortix-exposure': 'human',
     tags,
     summary: 'Link a device to a member, or unlink it (`user_id: null`) (capture.manage)',
     description:
@@ -473,6 +488,9 @@ accountsRouter.openapi(
   createRoute({
     method: 'post',
     path: '/{workspaceId}/capture/devices/{deviceId}/sync',
+    operationId: 'capture.devices.sync',
+    'x-kortix-action': ACCOUNT_ACTIONS.CAPTURE_READ_ALL,
+    'x-kortix-exposure': 'agent',
     tags,
     summary: 'Read a device’s status, description and index now, queue every new item for indexing, retract every item the device deleted, and raise or clear its not-recording alert',
     ...auth,
@@ -496,6 +514,9 @@ accountsRouter.openapi(
   createRoute({
     method: 'get',
     path: '/{workspaceId}/capture/devices/{deviceId}/assets/{name}',
+    operationId: 'capture.devices.assets.get',
+    'x-kortix-action': ACCOUNT_ACTIONS.CAPTURE_READ_ALL,
+    'x-kortix-exposure': 'agent',
     tags,
     summary: 'A signed, short-lived URL of one content-addressed asset (action screenshot, icon)',
     ...auth,
@@ -523,6 +544,9 @@ accountsRouter.openapi(
   createRoute({
     method: 'get',
     path: '/{workspaceId}/capture/policy',
+    operationId: 'capture.policy.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'agent',
     tags,
     summary: 'The account capture policy (layers, privacy, retention, pause, notice)',
     ...auth,
@@ -540,6 +564,9 @@ accountsRouter.openapi(
   createRoute({
     method: 'put',
     path: '/{workspaceId}/capture/policy',
+    operationId: 'capture.policy.set',
+    'x-kortix-action': ACCOUNT_ACTIONS.CAPTURE_MANAGE,
+    'x-kortix-exposure': 'agent',
     tags,
     summary: 'Set the account capture policy (capture.manage); publishes orgs/<account_id>/policy.json',
     ...auth,
@@ -564,6 +591,9 @@ accountsRouter.openapi(
   createRoute({
     method: 'get',
     path: '/{workspaceId}/capture/storage',
+    operationId: 'capture.storage.get',
+    'x-kortix-action': ACCOUNT_ACTIONS.CAPTURE_MANAGE,
+    'x-kortix-exposure': 'agent',
     tags,
     summary: 'The account’s Capture storage destination (capture.manage). The secret is never returned.',
     ...auth,
@@ -582,6 +612,9 @@ accountsRouter.openapi(
   createRoute({
     method: 'put',
     path: '/{workspaceId}/capture/storage',
+    operationId: 'capture.storage.set',
+    'x-kortix-action': ACCOUNT_ACTIONS.CAPTURE_MANAGE,
+    'x-kortix-exposure': 'agent',
     tags,
     summary: 'Set where the account keeps its recordings: the managed store (mode "kortix") or its own S3 bucket (mode "s3") (capture.manage)',
     ...auth,
@@ -611,6 +644,9 @@ accountsRouter.openapi(
   createRoute({
     method: 'get',
     path: '/{workspaceId}/capture/timeline',
+    operationId: 'capture.timeline.get',
+    'x-kortix-action': ACCOUNT_ACTIONS.CAPTURE_READ_ALL,
+    'x-kortix-exposure': 'agent',
     tags,
     summary: 'One person’s timeline for a day or window: activity runs (app + window) and indexed items',
     ...auth,
@@ -629,6 +665,9 @@ accountsRouter.openapi(
   createRoute({
     method: 'get',
     path: '/{workspaceId}/capture/days',
+    operationId: 'capture.days.list',
+    'x-kortix-action': ACCOUNT_ACTIONS.CAPTURE_READ_ALL,
+    'x-kortix-exposure': 'agent',
     tags,
     summary: 'The days of one person’s timeline with recorded items, newest first, grouped in a time zone',
     ...auth,
@@ -661,6 +700,9 @@ accountsRouter.openapi(
   createRoute({
     method: 'get',
     path: '/{workspaceId}/capture/timeline/items',
+    operationId: 'capture.timeline.items.list',
+    'x-kortix-action': ACCOUNT_ACTIONS.CAPTURE_READ_ALL,
+    'x-kortix-exposure': 'agent',
     tags,
     summary: 'Frames, actions and audio lines of one person in a window (at most 500 of each, oldest first)',
     ...auth,
@@ -685,6 +727,9 @@ accountsRouter.openapi(
   createRoute({
     method: 'get',
     path: '/{workspaceId}/capture/search',
+    operationId: 'capture.search',
+    'x-kortix-action': ACCOUNT_ACTIONS.CAPTURE_READ_ALL,
+    'x-kortix-exposure': 'agent',
     tags,
     summary: 'Full-text search of one person’s timeline, or the account’s (`scope=account`, capture.read_all): screen (app, window, URL, on-screen text; one hit per chunk and window), actions and audio',
     ...auth,
@@ -709,6 +754,9 @@ accountsRouter.openapi(
   createRoute({
     method: 'get',
     path: '/{workspaceId}/capture/frames/{frameId}',
+    operationId: 'capture.frames.get',
+    'x-kortix-action': ACCOUNT_ACTIONS.CAPTURE_READ_ALL,
+    'x-kortix-exposure': 'agent',
     tags,
     summary: 'One frame with its full on-screen text and a signed, short-lived URL of its video chunk',
     ...auth,
@@ -726,6 +774,9 @@ accountsRouter.openapi(
   createRoute({
     method: 'get',
     path: '/{workspaceId}/capture/chunks/{chunkId}/media',
+    operationId: 'capture.chunks.media.get',
+    'x-kortix-action': ACCOUNT_ACTIONS.CAPTURE_READ_ALL,
+    'x-kortix-exposure': 'agent',
     tags,
     summary: 'Signed, short-lived URLs of an indexed item’s media (video or audio)',
     ...auth,
@@ -770,6 +821,9 @@ export function registerCaptureAgentRoutes(app: OpenAPIHono<AppEnv>) {
     createRoute({
       method: 'get',
       path: '/me/timeline',
+      operationId: 'capture.me.timeline.get',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'agent',
       tags: meTags,
       summary: 'Your timeline (or the person your session acts for) in your token’s account',
       ...auth,
@@ -787,6 +841,9 @@ export function registerCaptureAgentRoutes(app: OpenAPIHono<AppEnv>) {
     createRoute({
       method: 'get',
       path: '/me/search',
+      operationId: 'capture.me.search',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'agent',
       tags: meTags,
       summary: 'Search your timeline (or the person your session acts for) in your token’s account',
       ...auth,
@@ -804,6 +861,9 @@ export function registerCaptureAgentRoutes(app: OpenAPIHono<AppEnv>) {
     createRoute({
       method: 'get',
       path: '/me/frames/{frameId}',
+      operationId: 'capture.me.frames.get',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'agent',
       tags: meTags,
       summary: 'One of your frames with its on-screen text and a signed video URL',
       ...auth,

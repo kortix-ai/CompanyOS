@@ -705,6 +705,9 @@ export function registerProjectSettingsRoutes(): void {
     createRoute({
       method: 'put',
       path: '/{workspaceId}/default-reasoning-effort',
+      operationId: 'settings.default_reasoning_effort.set',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SETTINGS_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['projects'],
       summary: 'Set or clear the project default reasoning effort',
       ...auth,

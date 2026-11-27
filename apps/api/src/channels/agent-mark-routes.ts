@@ -15,6 +15,9 @@ export function registerAgentMarkRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{file}',
+      operationId: 'agent_marks.get',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       tags: ['channels'],
       summary: "An agent's face as a PNG",
       request: { params: z.object({ file: z.string().openapi({ example: 'mykortix.png' }) }) },

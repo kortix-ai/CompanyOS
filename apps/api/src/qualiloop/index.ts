@@ -41,6 +41,9 @@ export function registerQualiloopRoutes(): void {
   qualiloopApp.openAPIRegistry.registerPath({
     method: 'post',
     path: '/chat',
+    operationId: 'qualiloop.chat',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['qualiloop'],
     summary: 'Run an external agent evaluation turn',
     description:

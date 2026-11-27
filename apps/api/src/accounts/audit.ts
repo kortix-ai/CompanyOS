@@ -121,6 +121,9 @@ auditRouter.openapi(
   createRoute({
     method: 'get',
     path: '/{workspaceId}/audit',
+    operationId: 'audit.list',
+    'x-kortix-action': ACCOUNT_ACTIONS.AUDIT_READ,
+    'x-kortix-exposure': 'agent',
     tags: ['accounts'],
     summary: 'List audit events (cursor-paginated)',
     description: `Newest first. Covers the last ${HOT_DAYS} days, which PostgreSQL holds. Older events, up to ${RETENTION_DAYS} days: GET /{workspaceId}/audit/export.`,
@@ -294,6 +297,9 @@ auditRouter.openapi(
   createRoute({
     method: 'get',
     path: '/{workspaceId}/audit/activity',
+    operationId: 'audit.activity.list',
+    'x-kortix-action': ACCOUNT_ACTIONS.AUDIT_READ,
+    'x-kortix-exposure': 'agent',
     tags: ['accounts'],
     summary: 'Per-user activity by day (who was active, how often)',
     ...auth,
@@ -423,6 +429,9 @@ auditRouter.openapi(
   createRoute({
     method: 'get',
     path: '/{workspaceId}/audit/export',
+    operationId: 'audit.export',
+    'x-kortix-action': ACCOUNT_ACTIONS.AUDIT_READ,
+    'x-kortix-exposure': 'agent',
     tags: ['accounts'],
     summary: 'Export audit events as CSV or JSONL',
     description:
@@ -579,6 +588,9 @@ auditRouter.openapi(
   createRoute({
     method: 'post',
     path: '/{workspaceId}/audit/reconcile',
+    operationId: 'audit.reconcile',
+    'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_WRITE,
+    'x-kortix-exposure': 'agent',
     tags: ['accounts'],
     summary: 'Reconcile durable source ledgers into the canonical audit log',
     ...auth,
@@ -642,6 +654,9 @@ auditRouter.openapi(
   createRoute({
     method: 'get',
     path: '/{workspaceId}/audit/webhooks',
+    operationId: 'audit.webhooks.list',
+    'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_WRITE,
+    'x-kortix-exposure': 'agent',
     tags: ['accounts'],
     summary: 'List audit webhooks',
     ...auth,
@@ -670,6 +685,9 @@ auditRouter.openapi(
   createRoute({
     method: 'post',
     path: '/{workspaceId}/audit/webhooks',
+    operationId: 'audit.webhooks.create',
+    'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_WRITE,
+    'x-kortix-exposure': 'human',
     tags: ['accounts'],
     summary: 'Create an audit webhook',
     ...auth,
@@ -766,6 +784,9 @@ auditRouter.openapi(
   createRoute({
     method: 'patch',
     path: '/{workspaceId}/audit/webhooks/{webhookId}',
+    operationId: 'audit.webhooks.update',
+    'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_WRITE,
+    'x-kortix-exposure': 'agent',
     tags: ['accounts'],
     summary: 'Update an audit webhook',
     ...auth,
@@ -835,6 +856,9 @@ auditRouter.openapi(
   createRoute({
     method: 'get',
     path: '/{workspaceId}/audit/webhooks/{webhookId}/deliveries',
+    operationId: 'audit.webhooks.deliveries.list',
+    'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_WRITE,
+    'x-kortix-exposure': 'agent',
     tags: ['accounts'],
     summary: 'List durable audit webhook deliveries',
     ...auth,
@@ -898,6 +922,9 @@ auditRouter.openapi(
   createRoute({
     method: 'post',
     path: '/{workspaceId}/audit/webhooks/{webhookId}/deliveries/{deliveryId}/replay',
+    operationId: 'audit.webhooks.deliveries.replay',
+    'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_WRITE,
+    'x-kortix-exposure': 'agent',
     tags: ['accounts'],
     summary: 'Replay a durable audit webhook delivery',
     ...auth,
@@ -945,6 +972,9 @@ auditRouter.openapi(
   createRoute({
     method: 'delete',
     path: '/{workspaceId}/audit/webhooks/{webhookId}',
+    operationId: 'audit.webhooks.delete',
+    'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_WRITE,
+    'x-kortix-exposure': 'agent',
     tags: ['accounts'],
     summary: 'Delete an audit webhook',
     ...auth,

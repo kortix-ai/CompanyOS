@@ -190,6 +190,9 @@ export function registerGoalRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/goals',
+      operationId: 'goals.list',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['goals'],
       summary: 'List the goals of a project',
       description: 'Goals the caller may read. A session sees only goals it owns or verifies (or did). Flag `goals`.',
@@ -219,6 +222,9 @@ export function registerGoalRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/goals',
+      operationId: 'goals.create',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_START,
+      'x-kortix-exposure': 'agent',
       tags: ['goals'],
       summary: 'Create a goal',
       description:
@@ -264,6 +270,9 @@ export function registerGoalRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/goals/{goalId}',
+      operationId: 'goals.get',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['goals'],
       summary: 'Read a goal',
       description: 'The goal and what the caller may do on it (`capabilities`). Flag `goals`.',
@@ -284,6 +293,9 @@ export function registerGoalRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/goals/{goalId}/events',
+      operationId: 'goals.events.list',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['goals'],
       summary: "Read a goal's events",
       description: 'Newest first, 50 per page. Pass `next_cursor` back as `cursor`. Flag `goals`.',
@@ -305,6 +317,9 @@ export function registerGoalRoutes(): void {
     createRoute({
       method: 'patch',
       path: '/{workspaceId}/goals/{goalId}',
+      operationId: 'goals.update',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'agent',
       tags: ['goals'],
       summary: 'Edit a goal',
       description: 'Title, assigned person, space, agent, caps and heartbeat. Its creator, assigned person or a project admin. Flag `goals`.',
@@ -329,6 +344,9 @@ export function registerGoalRoutes(): void {
     createRoute({
       method: 'put',
       path: '/{workspaceId}/goals/{goalId}/criteria',
+      operationId: 'goals.criteria.set',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['goals'],
       summary: "Set a goal's done criteria",
       description:
@@ -346,6 +364,9 @@ export function registerGoalRoutes(): void {
       createRoute({
         method: 'post',
         path: `/{workspaceId}/goals/{goalId}/${action.verb}`,
+        operationId: `goals.${action.verb.replace(/-/g, '_')}`,
+        'x-kortix-action': 'project.read',
+        'x-kortix-exposure': 'agent',
         tags: ['goals'],
         summary: action.summary,
         description: `${action.who} Flag \`goals\`.`,

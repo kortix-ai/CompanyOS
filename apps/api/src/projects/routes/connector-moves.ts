@@ -42,6 +42,9 @@ export function registerConnectorMoveRoutes(): void {
       ...auth,
       method: 'get',
       path: '/{workspaceId}/connector-moves',
+      operationId: 'connectors.moves.list',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       summary: 'List Pipedream and Composio connectors and the Kortix app each moves to',
       request: { params: z.object({ workspaceId: z.string() }) },
       responses: {

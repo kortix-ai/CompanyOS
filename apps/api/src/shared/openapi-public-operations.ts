@@ -9,6 +9,7 @@
 export const PUBLIC_OPERATIONS: ReadonlySet<string> = new Set([
   'post /v1/qualiloop/chat', // External evaluation protocol; verifies X-Agent-Secret, not a bearer token.
   'get /health',
+  'get /health/live',
   'get /v1/health',
   'get /v1/clients/mobile',
   'get /v1/system/status',

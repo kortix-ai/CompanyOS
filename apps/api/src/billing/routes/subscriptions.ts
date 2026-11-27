@@ -39,6 +39,9 @@ subscriptionsRouter.openapi(
   createRoute({
     method: 'post',
     path: '/plan',
+    operationId: 'billing.plan.set',
+    'x-kortix-action': ACCOUNT_ACTIONS.BILLING_WRITE,
+    'x-kortix-exposure': 'human',
     tags: ['billing'],
     summary: 'Set the monthly credits plan amount',
     ...auth,
@@ -77,6 +80,9 @@ subscriptionsRouter.openapi(
   createRoute({
     method: 'post',
     path: '/plan/preview',
+    operationId: 'billing.plan.preview',
+    'x-kortix-action': ACCOUNT_ACTIONS.BILLING_WRITE,
+    'x-kortix-exposure': 'human',
     tags: ['billing'],
     summary: 'Preview a change of the monthly credits plan amount',
     ...auth,
@@ -99,6 +105,9 @@ subscriptionsRouter.openapi(
   createRoute({
     method: 'post',
     path: '/enterprise/contact',
+    operationId: 'billing.enterprise.contact',
+    'x-kortix-action': ACCOUNT_ACTIONS.BILLING_READ,
+    'x-kortix-exposure': 'human',
     tags: ['billing'],
     summary: 'Ask Kortix sales to get in touch about Enterprise',
     ...auth,
@@ -130,6 +139,9 @@ subscriptionsRouter.openapi(
   createRoute({
     method: 'post',
     path: '/enterprise-offer/checkout',
+    operationId: 'billing.enterprise_offer.checkout',
+    'x-kortix-action': ACCOUNT_ACTIONS.BILLING_WRITE,
+    'x-kortix-exposure': 'human',
     tags: ['billing'],
     summary: 'Accept the Enterprise offer: start its Stripe Checkout',
     ...auth,
@@ -157,6 +169,9 @@ subscriptionsRouter.openapi(
   createRoute({
     method: 'post',
     path: '/create-portal-session',
+    operationId: 'billing.portal_sessions.create',
+    'x-kortix-action': ACCOUNT_ACTIONS.BILLING_WRITE,
+    'x-kortix-exposure': 'human',
     tags: ['billing'],
     summary: 'Create a Stripe customer portal session',
     ...auth,
@@ -176,6 +191,9 @@ subscriptionsRouter.openapi(
   createRoute({
     method: 'post',
     path: '/cancel-subscription',
+    operationId: 'billing.subscription.cancel',
+    'x-kortix-action': ACCOUNT_ACTIONS.BILLING_WRITE,
+    'x-kortix-exposure': 'human',
     tags: ['billing'],
     summary: 'Cancel the active subscription',
     ...auth,
@@ -197,6 +215,9 @@ subscriptionsRouter.openapi(
   createRoute({
     method: 'post',
     path: '/reactivate-subscription',
+    operationId: 'billing.subscription.reactivate',
+    'x-kortix-action': ACCOUNT_ACTIONS.BILLING_WRITE,
+    'x-kortix-exposure': 'human',
     tags: ['billing'],
     summary: 'Reactivate a cancelled subscription',
     ...auth,
@@ -214,6 +235,9 @@ subscriptionsRouter.openapi(
   createRoute({
     method: 'post',
     path: '/sync-subscription',
+    operationId: 'billing.subscription.sync',
+    'x-kortix-action': ACCOUNT_ACTIONS.BILLING_WRITE,
+    'x-kortix-exposure': 'human',
     tags: ['billing'],
     summary: 'Sync subscription state from Stripe',
     ...auth,
@@ -231,6 +255,9 @@ subscriptionsRouter.openapi(
   createRoute({
     method: 'get',
     path: '/checkout-session/{sessionId}',
+    operationId: 'billing.checkout_sessions.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['billing'],
     summary: 'Get details for a Stripe checkout session',
     ...auth,

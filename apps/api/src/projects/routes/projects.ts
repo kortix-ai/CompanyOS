@@ -181,6 +181,9 @@ export function registerProjectsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/',
+      operationId: 'projects.list',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['projects'],
       summary: 'List projects',
       description:
@@ -238,6 +241,9 @@ export function registerProjectsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/',
+      operationId: 'projects.create',
+      'x-kortix-action': ACCOUNT_ACTIONS.PROJECT_CREATE,
+      'x-kortix-exposure': 'agent',
       tags: ['projects'],
       summary: 'Create a project from an existing GitHub repository',
       description:
@@ -373,6 +379,9 @@ export function registerProjectsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/quota',
+      operationId: 'projects.quota.get',
+      'x-kortix-action': ACCOUNT_ACTIONS.PROJECT_CREATE,
+      'x-kortix-exposure': 'agent',
       tags: ['projects'],
       summary: 'Get whether an account may create its project',
       description:
@@ -418,6 +427,9 @@ export function registerProjectsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/provision',
+      operationId: 'projects.provision',
+      'x-kortix-action': ACCOUNT_ACTIONS.PROJECT_CREATE,
+      'x-kortix-exposure': 'agent',
       tags: ['projects'],
       summary: 'Create a project with a new managed repository',
       description:
@@ -476,6 +488,9 @@ export function registerProjectsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/provision-stream',
+      operationId: 'projects.provision_stream',
+      'x-kortix-action': ACCOUNT_ACTIONS.PROJECT_CREATE,
+      'x-kortix-exposure': 'agent',
       tags: ['projects'],
       summary: 'Create a project with a new managed repository (streamed progress)',
       ...auth,

@@ -67,6 +67,9 @@ export function registerPromptAttachmentsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/runtime/prompt-attachments/{attachmentId}',
+      operationId: 'runtime.prompt_attachments.get',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       tags: ['sessions'],
       summary: 'Resolve one running command attachment for its session sandbox',
       ...auth,

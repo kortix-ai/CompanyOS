@@ -108,6 +108,9 @@ export function registerProjectFilesRoutes(): void {
     createRoute({
       method: 'put',
       path: '/{workspaceId}/files/content',
+      operationId: 'files.content.set',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_GITOPS_PUSH,
+      'x-kortix-exposure': 'agent',
       tags: ['files'],
       summary: 'Commit an edited repository file',
       ...auth,
@@ -171,6 +174,9 @@ export function registerProjectFilesRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/files',
+      operationId: 'files.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_FILE_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['files'],
       summary: 'List files in the project repository',
       description:
@@ -282,6 +288,9 @@ export function registerProjectFilesRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/files/archive',
+      operationId: 'files.archive.get',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_FILE_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['files'],
       summary: 'Download the project repository as an archive',
       ...auth,
@@ -348,6 +357,9 @@ export function registerProjectFilesRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/files/search',
+      operationId: 'files.search',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_FILE_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['files'],
       summary: 'Search files in the project repository',
       ...auth,
@@ -412,6 +424,9 @@ export function registerProjectFilesRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/files/content',
+      operationId: 'files.content.get',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_FILE_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['files'],
       summary: 'Read a file from the project repository',
       ...auth,
@@ -489,6 +504,9 @@ export function registerProjectFilesRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/files/raw',
+      operationId: 'files.raw.get',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_FILE_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['files'],
       summary: 'Read a file\u2019s raw bytes from the project repository',
       ...auth,
@@ -551,6 +569,9 @@ export function registerProjectFilesRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/files/history',
+      operationId: 'files.history.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_FILE_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['files'],
       summary: 'List the commit history of a file',
       ...auth,

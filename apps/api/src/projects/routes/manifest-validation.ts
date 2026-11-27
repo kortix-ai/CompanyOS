@@ -23,6 +23,9 @@ export function registerManifestValidationRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/manifest/validate',
+      operationId: 'manifest.validate',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['projects'],
       summary: 'Validate a project kortix.yaml manifest',
       ...auth,

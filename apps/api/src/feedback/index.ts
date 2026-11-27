@@ -89,6 +89,9 @@ export function createFeedbackApp(deps: FeedbackAppDeps = {}) {
     createRoute({
       method: 'post',
       path: '/',
+      operationId: 'feedback.create',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'agent',
       tags: ['feedback'],
       summary: 'File product feedback on behalf of the caller',
       description:

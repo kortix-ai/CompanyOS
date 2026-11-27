@@ -45,6 +45,9 @@ export function registerProjectMyMemoryRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/memory/me/agent/{agent}',
+      operationId: 'memory.me.agent.get',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'agent',
       tags: ['memory'],
       summary: 'List what My Kortix remembers about you',
       description:
@@ -71,6 +74,9 @@ export function registerProjectMyMemoryRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/memory/me/agent/{agent}/pages/{name}',
+      operationId: 'memory.me.agent.pages.get',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'agent',
       tags: ['memory'],
       summary: 'Read one thing My Kortix remembers about you',
       description: '`name` is the page’s slug. 404 `memory_not_found` when no page of the caller has it.',
@@ -97,6 +103,9 @@ export function registerProjectMyMemoryRoutes(): void {
     createRoute({
       method: 'put',
       path: '/{workspaceId}/memory/me/agent/{agent}/pages/{name}',
+      operationId: 'memory.me.agent.pages.set',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'agent',
       tags: ['memory'],
       summary: 'Save one thing My Kortix remembers about you',
       description:
@@ -129,6 +138,9 @@ export function registerProjectMyMemoryRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/memory/me/agent/{agent}/pages/{name}',
+      operationId: 'memory.me.agent.pages.delete',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'agent',
       tags: ['memory'],
       summary: 'Forget one thing My Kortix remembers about you',
       description: 'Deletes the caller’s page with that `name` for good (a Drive delete). 404 `memory_not_found` when there is none.',

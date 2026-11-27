@@ -81,8 +81,29 @@ const livenessHandler = (c: any) => {
   return c.json({ status: 'ok', event_loop_lag_ms: lag });
 };
 
+const LivenessSchema = z.object({
+  status: z.enum(['ok', 'degraded']),
+  event_loop_lag_ms: z.number(),
+  threshold_ms: z.number().optional(),
+});
+
 // Unversioned + /v1 forms so either can be wired as the kubelet liveness probe.
-app.get('/health/live', livenessHandler);
+app.openapi(
+  createRoute({
+    method: 'get',
+    path: '/health/live',
+    operationId: 'system.health.live.get_unversioned',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
+    tags: ['system'],
+    summary: 'Liveness: 503 when the event loop lags past the threshold (unversioned, the kubelet probe)',
+    responses: {
+      200: json(LivenessSchema, 'Live'),
+      503: json(LivenessSchema, 'Event loop lag past the threshold'),
+    },
+  }),
+  livenessHandler,
+);
 app.get('/v1/health/live', livenessHandler);
 
 // ─── Readiness gate — returns 503 until the app is fully initialized ──────────

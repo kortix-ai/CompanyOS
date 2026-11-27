@@ -41,6 +41,9 @@ export function registerTurnStreamRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/turn-stream',
+      operationId: 'turn_stream.relay',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE,
+      'x-kortix-exposure': 'internal',
       tags: ['projects'],
       summary: 'Run a turn and stream the reply',
       ...auth,

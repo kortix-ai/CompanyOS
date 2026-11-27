@@ -28,16 +28,25 @@ export function createCliDeviceRouter() {
   });
   router.openapi(createRoute({
     method: 'post', path: '/start', tags: ['cli'], summary: 'Start CLI device login',
+    operationId: 'cli.device.start',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'local',
     responses: { 200: json(z.object({ device_code: z.string(), user_code: z.string(), expires_in: z.number(), interval: z.number(), verification_uri: z.string() }), 'Device grant'), ...errors(429) },
   }), async c => c.json({ ...await startCliGrant(), verification_uri: `${config.FRONTEND_URL.replace(/\/+$/, '')}/cli/authorize` }, 200));
   router.openapi(createRoute({
     method: 'post', path: '/poll', tags: ['cli'], summary: 'Poll CLI device login',
+    operationId: 'cli.device.poll',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'local',
     request: { body: { required: true, content: { 'application/json': { schema: z.object({ device_code: z.string().regex(/^[a-f0-9]{64}$/) }) } } } },
     responses: { 200: json(Result, 'Token or pending grant'), ...errors(400, 429) },
   }), async c => c.json(await pollCliGrant(c.req.valid('json').device_code), 200));
   router.use('/decide', supabaseAuth);
   router.openapi(createRoute({
     method: 'post', path: '/decide', tags: ['cli'], summary: 'Approve or deny CLI login', ...auth,
+    operationId: 'cli.device.decide',
+    'x-kortix-action': 'token.personal.create',
+    'x-kortix-exposure': 'human',
     request: { body: { required: true, content: { 'application/json': { schema: z.object({ user_code: z.string().regex(/^[a-fA-F0-9-]{16,20}$/), approve: z.boolean(), account_id: z.string().uuid().optional().openapi({ description: 'The workspace account the CLI key belongs to. Must be an account you are a member of and may mint a key in (else 403). Defaults to your earliest-joined account.' }) }) } } } },
     responses: { 200: json(z.object({ ok: z.boolean() }), 'Grant decided'), ...errors(400, 401, 403, 404, 409, 429) },
   }), async c => {

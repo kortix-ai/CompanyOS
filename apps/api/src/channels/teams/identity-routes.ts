@@ -20,6 +20,9 @@ teamsIdentityApp.openapi(
   createRoute({
     method: 'get',
     path: '/login/{token}',
+    operationId: 'channels.teams.identity.login',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['channels'],
     summary: 'Redirect a Teams login link to the web login page',
     request: { params: z.object({ token: z.string().min(1) }) },
@@ -61,6 +64,9 @@ teamsIdentityApp.openapi(
   createRoute({
     method: 'post',
     path: '/preview',
+    operationId: 'channels.teams.identity.preview',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['channels'],
     summary: 'Show which Teams account a login token would link',
     ...auth,
@@ -119,6 +125,9 @@ teamsIdentityApp.openapi(
   createRoute({
     method: 'post',
     path: '/bind',
+    operationId: 'channels.teams.identity.bind',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['channels'],
     summary: 'Bind the calling Kortix user to a Teams user from a login token',
     ...auth,

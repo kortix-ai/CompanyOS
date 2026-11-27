@@ -35,6 +35,9 @@ export function registerTurnPermissionsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/turn-permission',
+      operationId: 'turn_permission.relay',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       tags: ['projects'],
       summary: 'Answer an agent permission request for a turn',
       ...auth,

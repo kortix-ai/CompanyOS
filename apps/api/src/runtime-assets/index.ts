@@ -115,6 +115,9 @@ runtimeAssetsApp.openapi(
   createRoute({
     method: 'get',
     path: '/manifest',
+    operationId: 'runtime_assets.manifest.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['runtime-assets'],
     summary: 'Get digests of the sandbox runtime assets',
     description:
@@ -149,10 +152,10 @@ type BinaryContext = {
 };
 
 /**
- * Shared by GET and HEAD, and by both binary components. HEAD is registered
- * explicitly below because nothing in the stack synthesizes it, and it is the
- * only way to read `Content-Length` without transferring ~100 MB — which is what
- * both a size check and the ke2e flow need.
+ * Shared by GET and HEAD, and by both binary components. Hono answers a HEAD
+ * request with the GET route (`c.req.method` stays `HEAD`), so the GET route
+ * returns the headers without the body: the only way to read `Content-Length`
+ * without transferring ~100 MB, which both a size check and the ke2e flow need.
  *
  * One implementation for `/cli` and `/agent` on purpose: they are the same
  * contract (content-addressed ETag, conditional 304, streamed body, 404 when the
@@ -202,7 +205,6 @@ const serveAgent = (c: BinaryContext) =>
     runtimeAgentBinaryPath,
   );
 
-runtimeAssetsApp.on('HEAD', '/cli', (c) => serveCli(c as never));
 const serveEntrypoint = (c: BinaryContext) =>
   serveBinary(
     c,
@@ -212,13 +214,13 @@ const serveEntrypoint = (c: BinaryContext) =>
     runtimeEntrypointPath,
   );
 
-runtimeAssetsApp.on('HEAD', '/agent', (c) => serveAgent(c as never));
-runtimeAssetsApp.on('HEAD', '/entrypoint', (c) => serveEntrypoint(c as never));
-
 runtimeAssetsApp.openapi(
   createRoute({
     method: 'get',
     path: '/cli',
+    operationId: 'runtime_assets.cli.download',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['runtime-assets'],
     summary: 'Download the kortix CLI binary baked into sandboxes',
     description:
@@ -242,6 +244,9 @@ runtimeAssetsApp.openapi(
   createRoute({
     method: 'get',
     path: '/agent',
+    operationId: 'runtime_assets.agent.download',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['runtime-assets'],
     summary: 'Download the kortix-agent daemon baked into sandboxes',
     description:
@@ -267,6 +272,9 @@ runtimeAssetsApp.openapi(
   createRoute({
     method: 'get',
     path: '/entrypoint',
+    operationId: 'runtime_assets.entrypoint.download',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['runtime-assets'],
     summary: 'Download the sandbox entrypoint script',
     description:
@@ -310,6 +318,9 @@ runtimeAssetsApp.openapi(
   createRoute({
     method: 'get',
     path: '/chunks/{component}',
+    operationId: 'runtime_assets.chunks.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['runtime-assets'],
     summary: 'Get the chunk manifest of one runtime binary',
     description:
@@ -346,6 +357,9 @@ runtimeAssetsApp.openapi(
   createRoute({
     method: 'get',
     path: '/chunk/{sha256}',
+    operationId: 'runtime_assets.chunk.download',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['runtime-assets'],
     summary: 'Download one runtime binary chunk',
     description:
@@ -398,6 +412,9 @@ runtimeAssetsApp.openapi(
   createRoute({
     method: 'get',
     path: '/managed-skills',
+    operationId: 'runtime_assets.managed_skills.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['runtime-assets'],
     summary: 'Get the managed kortix-* skill overlay',
     description:

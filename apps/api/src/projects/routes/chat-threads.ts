@@ -100,6 +100,9 @@ export function registerChatThreadRoutes(): void {
   projectsApp.openapi(createRoute({
     method: 'post',
     path: '/{workspaceId}/spaces/{spaceId}/posts',
+    operationId: 'spaces.posts.create',
+    'x-kortix-action': 'project.session.start',
+    'x-kortix-exposure': 'agent',
     tags: ['spaces'],
     summary: 'Post into a space as an agent',
     description:

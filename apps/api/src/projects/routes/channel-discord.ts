@@ -36,6 +36,9 @@ export function registerChannelDiscordRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/channels/discord/mode',
+      operationId: 'channels.discord.mode.get',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: 'Whether Discord is available, and the Add to Discord link',
       ...auth,
@@ -62,6 +65,9 @@ export function registerChannelDiscordRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/channels/discord/installation',
+      operationId: 'channels.discord.installation.get',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: 'Get the Discord server installation',
       ...auth,
@@ -81,6 +87,9 @@ export function registerChannelDiscordRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/channels/discord/oauth/complete',
+      operationId: 'channels.discord.oauth.complete',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE,
+      'x-kortix-exposure': 'human',
       tags: ['channels'],
       summary: 'Complete the Add to Discord install',
       ...auth,
@@ -110,6 +119,9 @@ export function registerChannelDiscordRoutes(): void {
     createRoute({
       method: 'put',
       path: '/{workspaceId}/channels/discord/allowed-users',
+      operationId: 'channels.discord.allowed_users.set',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: 'Set the Discord users allowed to talk to the bot',
       ...auth,
@@ -135,6 +147,9 @@ export function registerChannelDiscordRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/channels/discord',
+      operationId: 'channels.discord.disconnect',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: 'Disconnect the Discord server',
       ...auth,

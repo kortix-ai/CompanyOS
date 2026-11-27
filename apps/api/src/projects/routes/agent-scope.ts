@@ -437,6 +437,9 @@ export function registerAgentScopeRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/agent-identities',
+      operationId: 'agent_identities.list',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['agents'],
       summary: "List this project's agent identities (service accounts)",
       ...auth,

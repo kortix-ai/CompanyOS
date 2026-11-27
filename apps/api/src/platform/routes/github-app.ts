@@ -484,6 +484,9 @@ githubAppSetupRouter.openapi(
   createRoute({
     method: 'post',
     path: '/manifest-start',
+    operationId: 'platform.github_app.manifest.start',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['platform'],
     summary: 'Build a GitHub App manifest + signed state for the self-host setup flow',
     ...auth,
@@ -545,6 +548,9 @@ githubAppSetupRouter.openapi(
   createRoute({
     method: 'get',
     path: '/manifest-callback',
+    operationId: 'platform.github_app.manifest.callback',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['platform'],
     summary:
       'GitHub manifest-flow redirect target — exchanges the code, stores App creds, redirects to install',
@@ -634,6 +640,9 @@ githubAppSetupRouter.openapi(
   createRoute({
     method: 'get',
     path: '/install-callback',
+    operationId: 'platform.github_app.install.callback',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['platform'],
     summary:
       'GitHub App install redirect target — resolves the installation owner, stores it, redirects to the frontend',
@@ -784,6 +793,9 @@ githubAppSetupRouter.openapi(
   createRoute({
     method: 'get',
     path: '/oauth/authorize',
+    operationId: 'platform.github_app.oauth.authorize',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['platform'],
     summary: "Start the GitHub App's own OAuth identity-proof flow",
     responses: {
@@ -830,6 +842,9 @@ githubAppSetupRouter.openapi(
   createRoute({
     method: 'get',
     path: '/oauth/callback',
+    operationId: 'platform.github_app.oauth.callback',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['platform'],
     summary: "GitHub OAuth redirect target — exchanges the code, hands the user token back to the popup",
     request: {
@@ -973,6 +988,9 @@ githubAppSetupRouter.openapi(
   createRoute({
     method: 'get',
     path: '/status',
+    operationId: 'platform.github_app.status.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['platform'],
     summary: 'Instance GitHub identity + git backend status',
     ...auth,
@@ -1098,6 +1116,9 @@ githubAppSetupRouter.openapi(
   createRoute({
     method: 'post',
     path: '/app',
+    operationId: 'platform.github_app.app.set',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['platform'],
     summary: "Configure managed-git by pasting an existing GitHub App's credentials + installation",
     ...auth,
@@ -1290,6 +1311,9 @@ githubAppSetupRouter.openapi(
   createRoute({
     method: 'post',
     path: '/pat',
+    operationId: 'platform.github_app.pat.set',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['platform'],
     summary:
       'Configure managed-git via a personal/fine-grained access token instead of a GitHub App',
@@ -1360,6 +1384,9 @@ githubAppSetupRouter.openapi(
   createRoute({
     method: 'delete',
     path: '/',
+    operationId: 'platform.github_app.disconnect',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['platform'],
     summary: 'Disconnect the stored GitHub identity and git backend',
     ...auth,

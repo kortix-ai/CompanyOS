@@ -40,7 +40,7 @@ import {
 } from './channels';
 import { connectorApp } from './connectors';
 import { nativeOAuth2CallbackApp } from './connectors/oauth2-callback';
-import { edgeApp } from './edge/tls-check';
+import { appsEdgeApp, edgeApp } from './edge/tls-check';
 // STATIC, not `await import(...)`. See the note at the mount site: a top-level
 // await anywhere above the last `app.route(...)` leaves the route table, the
 // error handler and the 404 handler unregistered for any importer that observes
@@ -345,7 +345,7 @@ app.route('/v1/access', accessControlApp); // /v1/access/signup-status, /v1/acce
 // App hosts, and preview hosts simply have no certificate until the API is new.
 // `/v1/edge/tls-check` is the name that describes what it now does.
 // See edge/tls-check.ts.
-app.route('/v1/apps/edge', edgeApp); // GET /v1/apps/edge/tls-check?domain=<host>
+app.route('/v1/apps/edge', appsEdgeApp); // GET /v1/apps/edge/tls-check?domain=<host>
 app.route('/v1/edge', edgeApp); // GET /v1/edge/tls-check?domain=<host>
 
 // Setup links — PUBLIC, token-gated. An agent-minted (encrypted, short-lived,

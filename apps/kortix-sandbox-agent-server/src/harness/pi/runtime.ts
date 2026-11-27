@@ -233,10 +233,18 @@ export function sessionIdsSection(input: {
     ...(parent ? [`- parent_session_id: ${parent} (the session that started you)`] : []),
     ...(input.spaceId?.trim() ? [`- space_id: ${input.spaceId.trim()}`] : []),
     'Read a session\'s conversation with `kortix sessions log <session_id> -n 50` (`--json` for scripts; pipe it to rg or jq to search). It is always current.',
-    ...(input.inProcessChild || parent ? ['Read your parent\'s conversation when your task needs context your brief does not give.'] : []),
+    ...(input.inProcessChild || parent ? ['Read your parent\'s conversation when your task needs context your brief does not give.', REPORT_RULE] : []),
     'Pass a session_id to a subagent or a command instead of copying a conversation into a prompt or a file.',
   ].join('\n')
 }
+
+/**
+ * What a delegated session's final message holds. The session that started it
+ * reads the report and relays it to the person, who never sees it: a report
+ * that only says "done" leaves nothing to relay.
+ */
+export const REPORT_RULE =
+  'Your final message is the report the session that started you reads; the person does not see it. Lead with the outcome in one line. Then what you found, as specific facts (numbers, names, links); what you changed (file paths, ids, settings); what you could not do or did not check, and why; and where the evidence is. A claim you did not check is marked unverified.'
 
 /** The system prompt's `Today's date` line, with the box's time zone. Without it an agent with no shell cannot resolve "yesterday". */
 export const todayLine = (now: number) => `Today's date: ${new Date(now).toDateString()} (${Intl.DateTimeFormat().resolvedOptions().timeZone})`

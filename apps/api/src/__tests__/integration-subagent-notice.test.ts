@@ -106,7 +106,7 @@ describe('a background subagent turn end', () => {
       '</session-report>',
       '</kortix_system>',
       '',
-      `Continue your task with this result. To send this subagent a follow-up, call \`agent\` with task_id ${CHILD}. To read its whole transcript: \`kortix sessions log ${CHILD}\`.`,
+      `The person has not seen this report: relay what matters. Say what finished and what still runs, its findings as specific facts, anything it corrects, and where its evidence is. To send this subagent a follow-up, call \`agent\` with task_id ${CHILD}. To read its whole transcript: \`kortix sessions log ${CHILD}\`.`,
     ].join('\n'));
 
     // A later turn of the same child (a follow-up) is a new event. While the

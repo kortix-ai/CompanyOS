@@ -1863,6 +1863,13 @@
       "when": 1795787123038,
       "tag": "20261127134523_humanoid_identity_and_events",
       "breakpoints": true
+    },
+    {
+      "idx": 266,
+      "version": "7",
+      "when": 1795810806994,
+      "tag": "20261127202006_humanoid_tables_drop",
+      "breakpoints": true
     }
   ]
 }

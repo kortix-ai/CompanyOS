@@ -1183,10 +1183,35 @@ test('kortix_schedules resume: a filtered automation goes live only after a samp
   expect(argvs().filter((a) => a.startsWith('triggers resume'))).toEqual(['triggers resume mail-triage --apply'])
 })
 
-test('kortix_schedules resume: an agent schedule from create goes live after run_now', async () => {
-  fakeKortix(`'triggers run trigger.dddddddddddd') echo 'Fired' ;;
+describe('kortix_schedules resume after run_now', () => {
+  beforeEach(() => setSystemTime(new Date('2026-11-27T13:00:00.000Z')))
+  afterEach(() => setSystemTime())
+  const schedule = (runs: string) =>
+    fakeKortix(`'triggers run trigger.dddddddddddd') echo 'Fired' ;;
+  'triggers runs trigger.dddddddddddd --limit=5 --json') echo '${runs}' ;;
   'triggers resume trigger.dddddddddddd') echo 'Resumed' ;;`)
-  expect((await run('kortix_schedules', { action: 'resume', id: 'trigger.dddddddddddd' })).error?.message).toContain('run_now')
-  await run('kortix_schedules', { action: 'run_now', id: 'trigger.dddddddddddd' })
-  expect((await run('kortix_schedules', { action: 'resume', id: 'trigger.dddddddddddd' })).ok).toBe(true)
+
+  test('an agent schedule from create goes live after its run_now run succeeded', async () => {
+    schedule('{"runs":[{"status":"fired","run_status":"succeeded","started_at":"2026-11-27T13:00:04.000Z"}]}')
+    expect((await run('kortix_schedules', { action: 'resume', id: 'trigger.dddddddddddd' })).error?.message).toContain('run_now')
+    const started = await run('kortix_schedules', { action: 'run_now', id: 'trigger.dddddddddddd' })
+    expect(started.card.subtitle).toContain('Read runs for its outcome')
+    expect((await run('kortix_schedules', { action: 'resume', id: 'trigger.dddddddddddd' })).ok).toBe(true)
+  })
+
+  // QualiLoop journeys on dev: schedules were resumed while the test ran, and after it failed.
+  test('a test run still running, failed, or not there yet keeps it paused', async () => {
+    for (const [runs, says] of [
+      ['{"runs":[{"status":"fired","run_status":"running","started_at":"2026-11-27T13:00:04.000Z"}]}', 'still running'],
+      ['{"runs":[{"status":"fired","run_status":"failed","run_error":"cannot read /Company/Clients","started_at":"2026-11-27T13:00:04.000Z"}]}', 'cannot read /Company/Clients'],
+      ['{"runs":[{"status":"fired","run_status":"succeeded","started_at":"2026-11-26T09:00:00.000Z"}]}', 'has not shown up yet'],
+    ] as const) {
+      schedule(runs)
+      await run('kortix_schedules', { action: 'run_now', id: 'trigger.dddddddddddd' })
+      const refused = await run('kortix_schedules', { action: 'resume', id: 'trigger.dddddddddddd' })
+      expect(refused.ok).toBe(false)
+      expect(refused.error?.message).toContain(says)
+    }
+    expect(argvs().filter((a) => a.startsWith('triggers resume'))).toEqual([])
+  })
 })

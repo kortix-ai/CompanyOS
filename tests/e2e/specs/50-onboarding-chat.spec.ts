@@ -162,7 +162,7 @@ test.describe('50 — a new project opens on the setup wizard, then the first ch
         showMobileAppPromo: true,
       });
       await expect(heading(page, 'Tell Kortix about your team')).toBeVisible({ timeout: 60_000 });
-      await expect(page.getByRole('progressbar', { name: 'Step 1 of 4' })).toBeVisible();
+      await expect(page.getByRole('progressbar', { name: 'Step 1 of 5' })).toBeVisible();
       // The wizard owns the screen: no redirect to the first chat, no kickoff.
       expect(new URL(page.url()).searchParams.get('chat')).toBeNull();
       await page.waitForTimeout(3_000);

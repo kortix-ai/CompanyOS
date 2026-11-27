@@ -202,6 +202,7 @@ test("a new workspace starts on the profile and moves on only after the answers 
   await render();
   expect(heading()).toBe("Tell Kortix about your team");
   expect(button("Skip for now")).toBeDefined();
+  expect(host.querySelector('[role="progressbar"]')?.getAttribute("aria-label")).toBe("Step 1 of 5");
 
   await click("Engineering");
   await click("11-50 people");

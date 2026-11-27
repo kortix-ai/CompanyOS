@@ -39,14 +39,14 @@ export function CtaSection({ content }: { content?: CtaContent } = {}) {
   const override = footerCtaFor(usePathname() ?? '/', tI18nComplete);
 
   // `latestProjectPath` reads document.cookie, which the server pass cannot
-  // see. Seeding with `/auth` keeps both passes identical and lets the row be a
+  // see. Seeding with `/signup` keeps both passes identical and lets the row be a
   // real anchor: hydration adopts the remembered project afterwards. An anchor
   // is what gives the site's primary closing CTA middle-click, cmd-click and
   // "copy link address" — a button has none of them.
   //
   // `HoverPrefetchLink`, so an anonymous visitor scrolling past the footer does
   // not prefetch an authed route it will never open.
-  const [launchHref, setLaunchHref] = useState('/auth');
+  const [launchHref, setLaunchHref] = useState('/signup');
   useEffect(() => {
     if (!user) return;
     const href = latestProjectPath(user.id);

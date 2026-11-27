@@ -173,6 +173,7 @@ const PUBLIC_ROUTES = [
   '/auth/callback',
   '/logout', // Signing OUT must never require signing IN — a protected /logout would be bounced to /auth?redirect=/logout, and the sign-in would land right back here
   '/auth/signup',
+  '/signup', // The explanation before the account; it hands over to /auth
   '/auth/forgot-password',
   '/auth/reset-password',
   '/legal',
@@ -734,6 +735,15 @@ export async function middleware(request: NextRequest) {
   // disabled (the bounce target depends on the session). Every other public
   // page is the same for everyone: static HTML, no Supabase round trip, no
   // token refresh. The browser client refreshes its own session.
+  // `/signup` explains Kortix the product before the account. A self-host with
+  // the marketing site off goes straight to sign-in, with the query the link
+  // carried (a return URL, an invite).
+  if (disableLandingPage && pathname === '/signup') {
+    return finalizeEnvironmentAccess(
+      NextResponse.redirect(new URL(`/auth${request.nextUrl.search}`, request.url)),
+    );
+  }
+
   if (isPublicRoute && pathname !== '/' && !(disableLandingPage && isMarketingContent)) {
     return finalizeEnvironmentAccess(rewriteToLocale(cookieLocale()));
   }

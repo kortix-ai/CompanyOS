@@ -411,7 +411,7 @@ function withoutLocale(pathname: string): string {
 export function replayMasksPage(pathname: string, signedIn: boolean): boolean {
   if (signedIn || isPrivatePath(pathname)) return true;
   const path = withoutLocale(pathname);
-  return path === '/auth' || path.startsWith('/auth/');
+  return path === '/auth' || path.startsWith('/auth/') || path === '/signup';
 }
 
 /**

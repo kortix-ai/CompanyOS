@@ -33,7 +33,7 @@ import { SolidCheckIcon } from '@kortix/ui/internal/icons/solid-check-icon';
 import { PlusIcon } from '@phosphor-icons/react';
 import { Fragment, useState, type ReactNode } from 'react';
 
-const START_URL = '/auth';
+const START_URL = '/signup';
 
 // Keyed by MARKETING plan id (display-only — see pricing-plans.ts). Never an
 // API tier key.

@@ -2355,6 +2355,73 @@ const catalog = {
       "unmuted": "Notifications unmuted"
     }
   },
+  "workspaceOnboarding": {
+    "progress": "Step {current} of {total}",
+    "back": "Back",
+    "continue": "Continue",
+    "skip": "Skip for now",
+    "tryAgain": "Try again",
+    "connected": "Connected",
+    "profile": {
+      "title": "Tell Kortix about your team",
+      "description": "Your answers give the agents context from the first message. Every field is optional.",
+      "useCase": "What will you use Kortix for?",
+      "useCaseNote": "Tell us in a few words",
+      "size": "Team size",
+      "sizeOption": "{size} people",
+      "domain": "Company website",
+      "saveFailed": "Your answers were not saved. {reason}",
+      "domainPlaceholder": "acme.com"
+    },
+    "useCases": {
+      "founder": "Running a company",
+      "engineering": "Engineering",
+      "product_design": "Product and design",
+      "sales": "Sales",
+      "marketing": "Marketing",
+      "support": "Customer support",
+      "finance_ops": "Finance and operations",
+      "hr_recruiting": "People and hiring",
+      "other": "Something else"
+    },
+    "model": {
+      "title": "Connect a model",
+      "description": "Agents need a model to run. Use your ChatGPT or Claude subscription, or any provider with your own key.",
+      "ready": "{count, plural, one {# model ready} other {# models ready}}",
+      "addKey": "Add provider key",
+      "readFailed": "The model list could not be read."
+    },
+    "apps": {
+      "title": "Bring your tools",
+      "description": "Connect the apps your team works in. Connector credentials are brokered server-side and never enter the machine.",
+      "slackMeta": "Mention Kortix in a channel with a task",
+      "addSlack": "Add to Slack",
+      "connect": "Connect",
+      "connectName": "Connect {name}",
+      "meta": {
+        "github": "Repositories, issues and pull requests",
+        "gmail": "Read and draft email",
+        "googlecalendar": "Meetings and availability",
+        "notion": "Docs and wikis",
+        "linear": "Issues and projects"
+      },
+      "more": "3,000+ apps in a click.",
+      "browse": "Browse all apps",
+      "readFailed": "The workspace's apps could not be read."
+    },
+    "finish": {
+      "title": "Review and open your workspace",
+      "description": "This is what the agents start with. Anything not connected can be added later.",
+      "cta": "Open workspace",
+      "failed": "Setup could not be finished. {reason}",
+      "profileSaved": "Team profile saved",
+      "profileSkipped": "Team profile skipped",
+      "modelMissing": "No model connected",
+      "appsConnected": "{count, plural, one {# app connected} other {# apps connected}}",
+      "appsSkipped": "No apps connected",
+      "modelWarning": "Sessions cannot run until a model is connected. The first chat offers to connect one."
+    }
+  },
   "firstChat": {
     "title": "Your first chat with Kortix",
     "greeting": "Welcome, {name}. I'm Kortix.",

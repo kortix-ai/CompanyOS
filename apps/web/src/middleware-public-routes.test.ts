@@ -54,6 +54,7 @@ test('every supported public surface accepts an explicit locale prefix', async (
     '/pricing',
     '/security',
     '/self-hosted',
+    '/signup',
     '/use-cases',
     '/white-label',
   ];
@@ -67,6 +68,36 @@ test('every supported public surface accepts an explicit locale prefix', async (
     );
     expect(response.headers.get('x-locale')).toBe('de');
     expect(response.headers.get('x-middleware-request-x-locale')).toBe('de');
+  }
+});
+
+// "Get started" lands on /signup signed out: it renders, keeps its query for
+// the /auth handoff, and is never bounced to sign-in.
+test('/signup is public and keeps its query', async () => {
+  const response = await middleware(
+    new NextRequest('http://localhost:3000/signup?returnUrl=%2Finvites%2Fabc&utm_source=pricing'),
+  );
+  expect(response.headers.get('location')).toBeNull();
+  const rewrite = new URL(response.headers.get('x-middleware-rewrite')!);
+  expect(rewrite.pathname).toBe('/en/signup');
+  expect(rewrite.searchParams.get('returnUrl')).toBe('/invites/abc');
+  expect(rewrite.searchParams.get('utm_source')).toBe('pricing');
+});
+
+// A self-host with the marketing site off has no product story to tell:
+// /signup goes straight to /auth, query and all.
+test('/signup forwards to /auth with its query when the landing page is disabled', async () => {
+  const previous = process.env.KORTIX_PUBLIC_DISABLE_LANDING_PAGE;
+  process.env.KORTIX_PUBLIC_DISABLE_LANDING_PAGE = 'true';
+  try {
+    for (const path of ['/signup?returnUrl=%2Finvites%2Fabc', '/de/signup?returnUrl=%2Finvites%2Fabc']) {
+      const response = await middleware(new NextRequest(`http://localhost:3000${path}`));
+      expect(response.status).toBe(307);
+      expect(response.headers.get('location')).toBe('http://localhost:3000/auth?returnUrl=%2Finvites%2Fabc');
+    }
+  } finally {
+    if (previous === undefined) delete process.env.KORTIX_PUBLIC_DISABLE_LANDING_PAGE;
+    else process.env.KORTIX_PUBLIC_DISABLE_LANDING_PAGE = previous;
   }
 });
 

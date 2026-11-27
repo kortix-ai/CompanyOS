@@ -3924,6 +3924,125 @@
       }
     }
   },
+  "signup": {
+    "home": "Accueil Kortix",
+    "signIn": "Se connecter",
+    "progress": "Étape {current} sur {total}",
+    "continue": "Continuer",
+    "back": "Retour",
+    "skip": "Passer l'intro",
+    "team": {
+      "title": "Où travaille votre équipe ?",
+      "description": "Kortix est le CompanyOS open source. Choisissez une option pour voir comment il s'intègre.",
+      "email": "E-mail",
+      "solo": "Juste moi pour l'instant",
+      "teams": "Microsoft Teams"
+    },
+    "alone": {
+      "title": "Aujourd'hui, chacun utilise l'IA seul",
+      "description": "Des conversations séparées, le même contexte collé encore et encore, et des résultats bloqués dans l'onglet d'une seule personne."
+    },
+    "together": {
+      "title": "Kortix travaille pour toute l'équipe",
+      "description": "Un workspace où personnes et agents partagent les mêmes agents, skills et la même mémoire d'entreprise."
+    },
+    "memory": {
+      "title": "Votre entreprise vit dans un repo qui vous appartient",
+      "description": "Agents, skills, mémoire et connecteurs sont dans un dépôt git. Chaque changement est versionné et comparable, donc aucun agent ne part d'une page blanche."
+    },
+    "tools": {
+      "title": "Les agents travaillent dans les apps que vous utilisez déjà",
+      "description": "Plus de 3 000 apps en un clic, plus MCP, OpenAPI, Postman, GraphQL et HTTP brut.",
+      "channel": "Ajoutez Kortix à {channel}, invitez le bot, mentionnez-le avec une tâche."
+    },
+    "work": {
+      "title": "Les agents livrent un travail terminé",
+      "description": "Chaque session tourne sur son propre ordinateur cloud isolé. Le travail d'une session atteint main par une change request qu'une personne approuve."
+    },
+    "finish": {
+      "title": "Créez votre workspace",
+      "description": "Commencez avec le plan Free. D'abord votre compte, puis un workspace à vous.",
+      "cta": "Créer votre compte",
+      "signIn": "J'ai déjà un compte",
+      "pointOpen": "Open source. Lisez-le, forkez-le, auditez-le.",
+      "pointModels": "N'importe quel fournisseur de modèles avec vos propres clés. Ou votre abonnement ChatGPT ou Claude Pro/Max, dans les limites du fournisseur.",
+      "pointHost": "Exécutez-le sur Kortix Cloud, dans votre VPC ou sur votre propre réseau on-prem. L'auto-hébergement est gratuit."
+    },
+    "art": {
+      "workspace": "Votre workspace",
+      "shared": "Agents, skills et mémoire partagés",
+      "changeTitle": "Rapport hebdomadaire du pipeline",
+      "changeMeta": "Change request ouverte par un agent",
+      "review": "Prête pour revue"
+    }
+  },
+  "workspaceOnboarding": {
+    "progress": "Étape {current} sur {total}",
+    "back": "Retour",
+    "continue": "Continuer",
+    "skip": "Passer pour l'instant",
+    "tryAgain": "Réessayer",
+    "connected": "Connecté",
+    "profile": {
+      "title": "Parlez de votre équipe à Kortix",
+      "description": "Vos réponses donnent du contexte aux agents dès le premier message. Tous les champs sont facultatifs.",
+      "useCase": "Pour quoi utiliserez-vous Kortix ?",
+      "useCaseNote": "Dites-le en quelques mots",
+      "size": "Taille de l'équipe",
+      "sizeOption": "{size} personnes",
+      "domain": "Site web de l'entreprise",
+      "saveFailed": "Vos réponses n'ont pas été enregistrées. {reason}",
+      "domainPlaceholder": "acme.com"
+    },
+    "useCases": {
+      "founder": "Diriger une entreprise",
+      "engineering": "Ingénierie",
+      "product_design": "Produit et design",
+      "sales": "Ventes",
+      "marketing": "Marketing",
+      "support": "Support client",
+      "finance_ops": "Finance et opérations",
+      "hr_recruiting": "RH et recrutement",
+      "other": "Autre chose"
+    },
+    "model": {
+      "title": "Connecter un modèle",
+      "description": "Les agents ont besoin d'un modèle pour fonctionner. Utilisez votre abonnement ChatGPT ou Claude, ou n'importe quel fournisseur avec votre propre clé.",
+      "ready": "{count, plural, one {# modèle prêt} other {# modèles prêts}}",
+      "addKey": "Ajouter une clé de fournisseur",
+      "readFailed": "La liste des modèles n'a pas pu être lue."
+    },
+    "apps": {
+      "title": "Apportez vos outils",
+      "description": "Connectez les apps où travaille votre équipe. Les identifiants des connecteurs sont gérés côté serveur et n'entrent jamais dans la machine.",
+      "slackMeta": "Mentionnez Kortix dans un canal avec une tâche",
+      "addSlack": "Ajouter à Slack",
+      "connect": "Connecter",
+      "connectName": "Connecter {name}",
+      "meta": {
+        "github": "Dépôts, issues et pull requests",
+        "gmail": "Lire et rédiger des e-mails",
+        "googlecalendar": "Réunions et disponibilités",
+        "notion": "Docs et wikis",
+        "linear": "Issues et projets"
+      },
+      "more": "Plus de 3 000 apps en un clic.",
+      "browse": "Voir toutes les apps",
+      "readFailed": "Les apps du workspace n'ont pas pu être lues."
+    },
+    "finish": {
+      "title": "Vérifiez et ouvrez votre workspace",
+      "description": "Voici ce avec quoi les agents commencent. Tout ce qui n'est pas connecté peut être ajouté plus tard.",
+      "cta": "Ouvrir le workspace",
+      "failed": "La configuration n'a pas pu être terminée. {reason}",
+      "profileSaved": "Profil de l'équipe enregistré",
+      "profileSkipped": "Profil de l'équipe ignoré",
+      "modelMissing": "Aucun modèle connecté",
+      "appsConnected": "{count, plural, one {# app connectée} other {# apps connectées}}",
+      "appsSkipped": "Aucune app connectée",
+      "modelWarning": "Les sessions ne peuvent pas s'exécuter tant qu'aucun modèle n'est connecté. Le premier chat propose d'en connecter un."
+    }
+  },
   "firstChat": {
     "title": "Votre première discussion avec Kortix",
     "greeting": "Bienvenue, {name}. Je suis Kortix.",

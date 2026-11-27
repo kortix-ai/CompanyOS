@@ -3924,6 +3924,125 @@
       }
     }
   },
+  "signup": {
+    "home": "Kortix 首页",
+    "signIn": "登录",
+    "progress": "第 {current} 步，共 {total} 步",
+    "continue": "继续",
+    "back": "返回",
+    "skip": "跳过介绍",
+    "team": {
+      "title": "你的团队在哪里协作？",
+      "description": "Kortix 是开源的 CompanyOS。选一个，看看它如何适配你。",
+      "email": "电子邮件",
+      "solo": "暂时只有我",
+      "teams": "Microsoft Teams"
+    },
+    "alone": {
+      "title": "今天，每个人都在独自使用 AI",
+      "description": "聊天各自分散，同样的上下文一遍遍粘贴，成果困在某一个人的标签页里。"
+    },
+    "together": {
+      "title": "Kortix 为整个团队工作",
+      "description": "一个工作区，人和智能体共享同样的智能体、技能和公司记忆。"
+    },
+    "memory": {
+      "title": "你的公司存在于你拥有的仓库里",
+      "description": "智能体、技能、记忆和连接器都在一个 git 仓库中。每次变更都有版本、可以比对，所以没有智能体从空白开始。"
+    },
+    "tools": {
+      "title": "智能体在你已在用的应用中工作",
+      "description": "一键接入 3,000+ 款应用，另支持 MCP、OpenAPI、Postman、GraphQL 和原始 HTTP。",
+      "channel": "把 Kortix 添加到 {channel}，邀请机器人，然后带着任务提及它。"
+    },
+    "work": {
+      "title": "智能体交付完成的工作",
+      "description": "每个会话都运行在自己独立隔离的云端计算机上。会话产出通过一个由人审批的变更请求进入 main。"
+    },
+    "finish": {
+      "title": "创建你的工作区",
+      "description": "从 Free 计划开始。先创建账户，再拥有自己的工作区。",
+      "cta": "创建账户",
+      "signIn": "我已有账户",
+      "pointOpen": "开源。可阅读、可 fork、可审计。",
+      "pointModels": "使用你自己的密钥接入任意模型提供商。或使用你的 ChatGPT 或 Claude Pro/Max 订阅，受提供商限制约束。",
+      "pointHost": "运行在 Kortix Cloud、你的 VPC 或你自己的本地网络中。自托管免费。"
+    },
+    "art": {
+      "workspace": "你的工作区",
+      "shared": "共享的智能体、技能和记忆",
+      "changeTitle": "每周销售管线报告",
+      "changeMeta": "由智能体发起的变更请求",
+      "review": "待审阅"
+    }
+  },
+  "workspaceOnboarding": {
+    "progress": "第 {current} 步，共 {total} 步",
+    "back": "返回",
+    "continue": "继续",
+    "skip": "暂时跳过",
+    "tryAgain": "重试",
+    "connected": "已连接",
+    "profile": {
+      "title": "向 Kortix 介绍你的团队",
+      "description": "你的回答会从第一条消息起为智能体提供上下文。所有字段都是可选的。",
+      "useCase": "你会用 Kortix 做什么？",
+      "useCaseNote": "用几个词告诉我们",
+      "size": "团队规模",
+      "sizeOption": "{size} 人",
+      "domain": "公司网站",
+      "saveFailed": "你的回答未保存。{reason}",
+      "domainPlaceholder": "acme.com"
+    },
+    "useCases": {
+      "founder": "经营公司",
+      "engineering": "工程",
+      "product_design": "产品与设计",
+      "sales": "销售",
+      "marketing": "市场",
+      "support": "客户支持",
+      "finance_ops": "财务与运营",
+      "hr_recruiting": "人事与招聘",
+      "other": "其他"
+    },
+    "model": {
+      "title": "连接模型",
+      "description": "智能体需要模型才能运行。使用你的 ChatGPT 或 Claude 订阅，或用你自己的密钥接入任意提供商。",
+      "ready": "{count, plural, other {# 个模型可用}}",
+      "addKey": "添加提供商密钥",
+      "readFailed": "无法读取模型列表。"
+    },
+    "apps": {
+      "title": "接入你的工具",
+      "description": "连接团队正在使用的应用。连接器凭据由服务器端代理，绝不会进入机器。",
+      "slackMeta": "在频道中带着任务提及 Kortix",
+      "addSlack": "添加到 Slack",
+      "connect": "连接",
+      "connectName": "连接 {name}",
+      "meta": {
+        "github": "仓库、Issue 和拉取请求",
+        "gmail": "阅读和起草邮件",
+        "googlecalendar": "会议与空闲时间",
+        "notion": "文档与知识库",
+        "linear": "Issue 与项目"
+      },
+      "more": "一键接入 3,000+ 款应用。",
+      "browse": "浏览全部应用",
+      "readFailed": "无法读取工作区的应用。"
+    },
+    "finish": {
+      "title": "检查并打开工作区",
+      "description": "智能体将从这里开始。未连接的内容之后都可以添加。",
+      "cta": "打开工作区",
+      "failed": "无法完成设置。{reason}",
+      "profileSaved": "团队资料已保存",
+      "profileSkipped": "已跳过团队资料",
+      "modelMissing": "未连接模型",
+      "appsConnected": "{count, plural, other {已连接 # 个应用}}",
+      "appsSkipped": "未连接应用",
+      "modelWarning": "连接模型之前，会话无法运行。第一次聊天会引导你连接一个。"
+    }
+  },
   "firstChat": {
     "title": "与 Kortix 的第一次聊天",
     "greeting": "欢迎，{name}。我是 Kortix。",

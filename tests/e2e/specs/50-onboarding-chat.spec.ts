@@ -125,45 +125,100 @@ async function cleanup(user: Provisioned) {
   ).toEqual([]);
 }
 
-test.describe('50 — a new project opens on the first chat, which runs the onboarding', () => {
-  // A Free account has no model, so nothing can be sent: the chat holds the
-  // kickoff in the composer and the tray offers the two ways to get a model.
-  test('without a model: "Onboard me" waits in the composer, nothing is sent', async ({
+/** `PATCH /v1/workspaces/:id/onboarding` (the SDK's path; `/projects/` is its legacy alias). */
+const isOnboardingWrite = (url: string, projectId: string) =>
+  /^\/v1\/(?:workspaces|projects)\/[^/]+\/onboarding$/.test(new URL(url).pathname) &&
+  new URL(url).pathname.includes(`/${projectId}/`);
+
+/** The onboarding PATCHes on the wire: `profile` answers, then the `completed` stamp. */
+function onboardingWrites(page: Parameters<typeof installBrowserSessionDirect>[0], projectId: string) {
+  const writes: string[] = [];
+  page.on('request', (request) => {
+    if (!isOnboardingWrite(request.url(), projectId)) return;
+    const body = request.postDataJSON() as { completed?: boolean; profile?: unknown } | null;
+    writes.push(body?.completed === true ? 'completed' : body?.profile ? 'profile' : request.method());
+  });
+  return writes;
+}
+
+const heading = (page: Parameters<typeof installBrowserSessionDirect>[0], name: string) =>
+  page.getByRole('heading', { level: 1, name, exact: true });
+
+test.describe('50 — a new project opens on the setup wizard, then the first chat', () => {
+  // Model availability comes from the real target: billing-disabled local
+  // stacks can expose runnable models even to an unfunded account.
+  test('the wizard saves the profile, resumes after a reload, and opens the first chat unsent', async ({
     page,
   }) => {
     test.skip(!process.env.E2E_SUPABASE_URL, 'E2E_SUPABASE_URL is required');
     test.setTimeout(300_000);
     const user = await freshUserWithProject();
     try {
-      const stamps: string[] = [];
-      page.on('request', (request) => {
-        if (new URL(request.url()).pathname === `/v1/projects/${user.projectId}/onboarding`) {
-          stamps.push(request.method());
-        }
-      });
+      const writes = onboardingWrites(page, user.projectId);
       // showMobileAppPromo: true lets the promo open if the page allows it.
       // Onboarding owns the screen, so it must not (KRTX-2635).
       await installBrowserSessionDirect(page, user.session, `/workspaces/${user.projectId}`, {
         ...authOptions,
         showMobileAppPromo: true,
       });
-      await expect(composerEditor(page)).toHaveText('Onboard me', { timeout: 60_000 });
-      // The landing is the first chat: its welcome, what Kortix can do, its sidebar row.
-      // (#10878 replaced the starter tiles with the "What you can do" list.)
-      await expect(page.getByRole('heading', { level: 1, name: /I'm Kortix\./ })).toBeVisible();
-      await expect(page.getByText('What you can do with Kortix')).toBeVisible();
-      await expect(page.getByRole('link', { name: 'Your first chat with Kortix' })).toBeVisible();
-      await expect.poll(() => new URL(page.url()).searchParams.get('chat')).toBe('first');
-      await expect(page.getByRole('button', { name: /Connect ChatGPT/ })).toBeVisible({ timeout: 30_000 });
-      await expect(page.getByRole('button', { name: /Connect Claude/ })).toBeVisible();
-      await expect(page.getByRole('button', { name: 'Send message', exact: true })).toBeDisabled();
-      await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveCount(0);
-
-      // The promo opens right after hydration; give it the time it would take.
+      await expect(heading(page, 'Tell Kortix about your team')).toBeVisible({ timeout: 60_000 });
+      await expect(page.getByRole('progressbar', { name: 'Step 1 of 4' })).toBeVisible();
+      // The wizard owns the screen: no redirect to the first chat, no kickoff.
+      expect(new URL(page.url()).searchParams.get('chat')).toBeNull();
       await page.waitForTimeout(3_000);
       await expect(promoTitle(page)).toHaveCount(0);
+
+      await page.getByRole('button', { name: 'Engineering', exact: true }).click();
+      await page.getByRole('button', { name: '1-10 people', exact: true }).click();
+      const saved = page.waitForResponse(
+        (response) =>
+          isOnboardingWrite(response.url(), user.projectId) &&
+          response.request().postDataJSON()?.profile?.use_case === 'engineering',
+      );
+      await page.getByRole('button', { name: 'Continue', exact: true }).click();
+      expect((await saved).status()).toBe(200);
+      await expect(heading(page, 'Connect a model')).toBeVisible();
+      const ready = page.getByText(/^\d+ models? ready$/);
+      const connect = page.getByRole('button', { name: /Connect ChatGPT/ });
+      await expect(ready.or(connect)).toBeVisible({ timeout: 30_000 });
+
+      // The saved answer is the server's: a reload resumes past the profile.
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await expect(heading(page, 'Connect a model')).toBeVisible({ timeout: 60_000 });
+      await expect(ready.or(connect)).toBeVisible({ timeout: 30_000 });
+      const modelReady = await ready.isVisible();
+      const modelSummary = modelReady ? await ready.innerText() : 'No model connected';
+      if (!modelReady) await expect(page.getByRole('button', { name: /Connect Claude/ })).toBeVisible();
+
+      await page.getByRole('button', { name: modelReady ? 'Continue' : 'Skip for now', exact: true }).click();
+      await expect(heading(page, 'Bring your tools')).toBeVisible();
+      await page.getByRole('button', { name: 'Skip for now', exact: true }).click();
+      await expect(heading(page, 'Review and open your workspace')).toBeVisible();
+      await expect(page.getByText('Team profile saved', { exact: true })).toBeVisible();
+      await expect(page.getByText(modelSummary, { exact: true })).toBeVisible();
+      await expect(page.getByText('No apps connected', { exact: true })).toBeVisible();
+      expect(writes).toEqual(['profile']);
+
+      const stamp = page.waitForResponse(
+        (response) =>
+          isOnboardingWrite(response.url(), user.projectId) &&
+          response.request().postDataJSON()?.completed === true,
+      );
+      await page.getByRole('button', { name: 'Open workspace', exact: true }).click();
+      expect((await stamp).status()).toBe(200);
+
+      // The first chat opens with the kickoff in the composer, unsent.
+      await expect(composerEditor(page)).toHaveText('Onboard me', { timeout: 60_000 });
+      await expect(page.getByRole('heading', { level: 1, name: /I'm Kortix\./ })).toBeVisible();
+      await expect(page.getByRole('link', { name: 'Your first chat with Kortix' })).toBeVisible();
+      await expect.poll(() => new URL(page.url()).searchParams.get('chat')).toBe('first');
+      if (!modelReady) await expect(page.getByRole('button', { name: 'Send message', exact: true })).toBeDisabled();
       expect(new URL(page.url()).pathname).toBe(`/workspaces/${user.projectId}`);
-      expect(stamps).toEqual([]);
+      expect(writes).toEqual(['profile', 'completed']);
+
+      // Stamped: the next visit is the usual home, never the wizard again.
+      await page.goto(`/workspaces/${user.projectId}`);
+      await expect(page.getByTestId('workspace-onboarding')).toHaveCount(0);
 
       // Model setup must not lock the owner out of workspace administration.
       await page.goto(`/workspaces/${user.projectId}/admin/danger-zone`);
@@ -180,25 +235,35 @@ test.describe('50 — a new project opens on the first chat, which runs the onbo
     }
   });
 
-  // With a usable model the kickoff sends itself: the agent speaks first.
-  test('with a model: the kickoff opens a session and stamps the project onboarded', async ({
+  // With a usable model the wizard says so, and the first chat's kickoff is
+  // the person's to send: it opens a session.
+  test('with a model: the wizard reads the model as ready and the first send opens a session', async ({
     page,
   }) => {
     test.skip(!process.env.E2E_SUPABASE_URL, 'E2E_SUPABASE_URL is required');
     test.setTimeout(300_000);
     const user = await freshUserWithProject({ realProject: true });
     try {
-      // Credits buy Kortix models; Free cannot run them (#10297).
+      // Fund the real account, but still verify this target exposes a runnable model.
       await fundAccount(user.env.databaseUrl!, user.accountId);
+      await installBrowserSessionDirect(page, user.session, `/workspaces/${user.projectId}`, authOptions);
+      await expect(heading(page, 'Tell Kortix about your team')).toBeVisible({ timeout: 60_000 });
+      await page.getByRole('button', { name: 'Skip for now', exact: true }).click();
+      const ready = page.getByText(/^\d+ models? ready$/);
+      await expect(ready.or(page.getByRole('button', { name: /Connect ChatGPT/ }))).toBeVisible({ timeout: 60_000 });
+      test.skip(!(await ready.isVisible()), 'This target exposes no runnable model after funding; real first-send coverage requires one.');
+      await page.getByRole('button', { name: 'Continue', exact: true }).click();
+      await page.getByRole('button', { name: 'Skip for now', exact: true }).click();
       const stamp = page.waitForResponse(
         (response) =>
-          new URL(response.url()).pathname === `/v1/projects/${user.projectId}/onboarding` &&
-          response.request().method() === 'PATCH' &&
+          isOnboardingWrite(response.url(), user.projectId) &&
           response.request().postDataJSON()?.completed === true,
         { timeout: 120_000 },
       );
-      await installBrowserSessionDirect(page, user.session, `/workspaces/${user.projectId}`, authOptions);
+      await page.getByRole('button', { name: 'Open workspace', exact: true }).click();
       expect((await stamp).status()).toBe(200);
+      await expect(composerEditor(page)).toHaveText('Onboard me', { timeout: 60_000 });
+      await page.getByRole('button', { name: 'Send message', exact: true }).click();
       await expect(page).toHaveURL(new RegExp(`/workspaces/${user.projectId}/sessions/`), {
         timeout: 60_000,
       });

@@ -3924,6 +3924,125 @@
       }
     }
   },
+  "signup": {
+    "home": "Kortix ホーム",
+    "signIn": "サインイン",
+    "progress": "ステップ {current}/{total}",
+    "continue": "続ける",
+    "back": "戻る",
+    "skip": "紹介をスキップ",
+    "team": {
+      "title": "チームはどこで仕事をしていますか？",
+      "description": "Kortix はオープンソースの CompanyOS です。ひとつ選んで、どう使えるかを見てみましょう。",
+      "email": "メール",
+      "solo": "今は自分だけ",
+      "teams": "Microsoft Teams"
+    },
+    "alone": {
+      "title": "今は、誰もが AI をひとりで使っている",
+      "description": "チャットはばらばら、同じ文脈を何度も貼り付け、成果はひとりのタブの中に閉じ込められています。"
+    },
+    "together": {
+      "title": "Kortix はチーム全体のために働く",
+      "description": "人とエージェントが同じエージェント、スキル、会社の記憶を共有するひとつのワークスペース。"
+    },
+    "memory": {
+      "title": "会社は、あなたが所有するリポジトリに宿る",
+      "description": "エージェント、スキル、記憶、コネクタはひとつの Git リポジトリにあります。すべての変更はバージョン管理され差分を確認できるので、エージェントは白紙から始めません。"
+    },
+    "tools": {
+      "title": "エージェントはいつものアプリで働く",
+      "description": "3,000 以上のアプリをワンクリックで。さらに MCP、OpenAPI、Postman、GraphQL、生の HTTP にも対応。",
+      "channel": "Kortix を {channel} に追加し、ボットを招待して、タスクと一緒にメンションしてください。"
+    },
+    "work": {
+      "title": "エージェントは完成した仕事を届ける",
+      "description": "各セッションは専用の隔離されたクラウドコンピューターで動きます。セッションの作業は、人が承認するチェンジリクエストを通じて main に届きます。"
+    },
+    "finish": {
+      "title": "ワークスペースを作成",
+      "description": "Free プランで始めましょう。まずアカウント、次にあなた専用のワークスペースです。",
+      "cta": "アカウントを作成",
+      "signIn": "すでにアカウントをお持ちの方",
+      "pointOpen": "オープンソース。読んで、フォークして、監査できます。",
+      "pointModels": "自分のキーで任意のモデルプロバイダーを利用。または ChatGPT や Claude Pro/Max のサブスクリプション（プロバイダーの上限に従います）。",
+      "pointHost": "Kortix Cloud、自社の VPC、自社のオンプレミスネットワークで動かせます。セルフホストは無料です。"
+    },
+    "art": {
+      "workspace": "あなたのワークスペース",
+      "shared": "共有のエージェント、スキル、記憶",
+      "changeTitle": "週次パイプラインレポート",
+      "changeMeta": "エージェントが作成したチェンジリクエスト",
+      "review": "レビュー待ち"
+    }
+  },
+  "workspaceOnboarding": {
+    "progress": "ステップ {current}/{total}",
+    "back": "戻る",
+    "continue": "続ける",
+    "skip": "今はスキップ",
+    "tryAgain": "再試行",
+    "connected": "接続済み",
+    "profile": {
+      "title": "チームについて Kortix に教えてください",
+      "description": "回答は最初のメッセージからエージェントの文脈になります。すべての項目は任意です。",
+      "useCase": "Kortix を何に使いますか？",
+      "useCaseNote": "ひとことで教えてください",
+      "size": "チームの規模",
+      "sizeOption": "{size} 人",
+      "domain": "会社のウェブサイト",
+      "saveFailed": "回答は保存されませんでした。{reason}",
+      "domainPlaceholder": "acme.com"
+    },
+    "useCases": {
+      "founder": "会社の経営",
+      "engineering": "エンジニアリング",
+      "product_design": "プロダクトとデザイン",
+      "sales": "営業",
+      "marketing": "マーケティング",
+      "support": "カスタマーサポート",
+      "finance_ops": "財務とオペレーション",
+      "hr_recruiting": "人事と採用",
+      "other": "その他"
+    },
+    "model": {
+      "title": "モデルを接続",
+      "description": "エージェントの実行にはモデルが必要です。ChatGPT や Claude のサブスクリプション、または自分のキーで任意のプロバイダーを使えます。",
+      "ready": "{count, plural, other {# 個のモデルが利用可能}}",
+      "addKey": "プロバイダーキーを追加",
+      "readFailed": "モデル一覧を読み込めませんでした。"
+    },
+    "apps": {
+      "title": "ツールを接続",
+      "description": "チームが使っているアプリを接続しましょう。コネクタの認証情報はサーバー側で仲介され、マシンには入りません。",
+      "slackMeta": "チャンネルでタスクと一緒に Kortix をメンション",
+      "addSlack": "Slack に追加",
+      "connect": "接続",
+      "connectName": "{name} を接続",
+      "meta": {
+        "github": "リポジトリ、Issue、プルリクエスト",
+        "gmail": "メールの閲覧と下書き",
+        "googlecalendar": "会議と空き時間",
+        "notion": "ドキュメントと Wiki",
+        "linear": "Issue とプロジェクト"
+      },
+      "more": "3,000 以上のアプリをワンクリックで。",
+      "browse": "すべてのアプリを見る",
+      "readFailed": "ワークスペースのアプリを読み込めませんでした。"
+    },
+    "finish": {
+      "title": "確認してワークスペースを開く",
+      "description": "エージェントはこの状態から始めます。未接続のものは後から追加できます。",
+      "cta": "ワークスペースを開く",
+      "failed": "セットアップを完了できませんでした。{reason}",
+      "profileSaved": "チームプロフィールを保存しました",
+      "profileSkipped": "チームプロフィールをスキップしました",
+      "modelMissing": "モデルが接続されていません",
+      "appsConnected": "{count, plural, other {# 個のアプリを接続済み}}",
+      "appsSkipped": "接続済みのアプリはありません",
+      "modelWarning": "モデルを接続するまでセッションは実行できません。最初のチャットで接続を案内します。"
+    }
+  },
   "firstChat": {
     "title": "Kortix との最初のチャット",
     "greeting": "ようこそ、{name}さん。Kortix です。",

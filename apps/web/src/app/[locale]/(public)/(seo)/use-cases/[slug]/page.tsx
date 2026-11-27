@@ -234,7 +234,7 @@ export default async function UseCasePage(props: PageProps) {
                 {tI18nComplete.raw('text31c48dd4f15a')}
               </p>
               <MarketingButton size="md" asChild className="hit-area-y-1 mt-6">
-                <Link href="/auth">{tI18nComplete.raw('text61e8d44ad423')}</Link>
+                <Link href="/signup">{tI18nComplete.raw('text61e8d44ad423')}</Link>
               </MarketingButton>
             </div>
           </aside>

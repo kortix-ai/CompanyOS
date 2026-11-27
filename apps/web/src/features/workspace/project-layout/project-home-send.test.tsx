@@ -1,20 +1,26 @@
 import { afterEach, expect, mock, test } from 'bun:test';
 import type { SessionPromptPart } from '@kortix/sdk';
-import { createElement, type ComponentProps, type ReactNode } from 'react';
+import { act, createElement, type ComponentProps, type ReactNode } from 'react';
+import { Window } from 'happy-dom';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { ComposerChatInput } from '@kortix/ui/composer';
 import type { FirstChat } from '@kortix/ui/workspace/home/first-chat';
+import { fileURLToPath } from 'node:url';
+import type { WorkspaceOnboardingWizard } from '../../../../../../packages/ui/src/workspace/home/workspace-onboarding-wizard';
 
 let composer!: ComponentProps<typeof ComposerChatInput>;
 let firstChat: ComponentProps<typeof FirstChat> | undefined;
+let wizard: ComponentProps<typeof WorkspaceOnboardingWizard> | undefined;
 let firstChatPending = false;
 /** Whether the address carries `?chat=first` (the sidebar row, onboarding). */
 let firstChatRequested = true;
 /** `metadata.onboarding_completed_at` on the project row; `null` = not onboarded. */
 let onboardedAt: string | null = '2026-10-01T00:00:00Z';
-/** The onboarding leaves: `project.settings.write` (the stamp) and `project.session.start` (the kickoff). */
+/** The onboarding leaves: `project.settings.write` (the wizard's writes) and `project.session.start` (the first chat). */
 let canWrite = true;
 let canStart = true;
+/** The permission probe has not answered yet. */
+let cansLoading = false;
 const stamp = mock(async () => ({}));
 const replaced: string[] = [];
 // `mock.module` is process-wide: every shared module keeps its real exports and
@@ -83,12 +89,14 @@ mock.module('@kortix/ui/internal/lib/use-project-can', () => ({
       actions.map((action) => [
         action,
         {
+          isLoading: cansLoading,
           allowed:
-            action === realSdk.PROJECT_ACTIONS.PROJECT_SETTINGS_WRITE
+            !cansLoading &&
+            (action === realSdk.PROJECT_ACTIONS.PROJECT_SETTINGS_WRITE
               ? canWrite
               : action === realSdk.PROJECT_ACTIONS.PROJECT_SESSION_START
                 ? canStart
-                : false,
+                : false),
         },
       ]),
     ),
@@ -130,6 +138,18 @@ mock.module('@kortix/ui/workspace/home/first-chat', () => ({
     return props.composer;
   },
 }));
+// Not a package export: ProjectHome imports it by path, so it is mocked by path.
+mock.module(
+  fileURLToPath(
+    new URL('../../../../../../packages/ui/src/workspace/home/workspace-onboarding-wizard.tsx', import.meta.url),
+  ),
+  () => ({
+    WorkspaceOnboardingWizard: (props: ComponentProps<typeof WorkspaceOnboardingWizard>) => {
+      wizard = props;
+      return null;
+    },
+  }),
+);
 mock.module('@kortix/ui/workspace/home/welcome-body', () => ({
   ProjectHomeWallpaper: () => null,
   ProjectHomeWelcomeBody: ({ composer: input }: { composer: ReactNode }) => input,
@@ -145,6 +165,7 @@ const handle: SessionPromptPart = {
 
 function mount(onSend: ComponentProps<typeof ProjectHome>['onSend'], onboarding = false) {
   firstChat = undefined;
+  wizard = undefined;
   renderToStaticMarkup(
     createElement(ProjectHome, { projectId: 'project-1', onSend, busy: false, onboarding }),
   );
@@ -156,6 +177,7 @@ afterEach(() => {
   onboardedAt = '2026-10-01T00:00:00Z';
   canWrite = true;
   canStart = true;
+  cansLoading = false;
   stamp.mockClear();
   replaced.length = 0;
 });
@@ -241,16 +263,57 @@ test('a failed first-chat send still reaches the composer as a rejection', async
 });
 
 // Onboarding (Kortix web passes `onboarding`): a project that is not onboarded
-// opens on the first chat — welcome, starters, the sidebar row — and its
-// composer holds "Onboard me" until a model is usable.
-test('a project that is not onboarded opens on the first chat, even without the link', () => {
+// opens on the setup wizard. Nothing is sent and nothing is stamped while it is
+// open; the wizard owns the stamp and waits for it.
+test('a project that is not onboarded opens on the setup wizard, with no kickoff and no redirect', () => {
   onboardedAt = null;
   firstChatRequested = false;
   mount(mock(async () => {}), true);
 
-  expect(firstChat).toBeDefined();
-  expect(composer.placeholder).toBe('firstChat.placeholder');
-  expect(composer.underbarPlacement).toBe('below');
+  expect(wizard).toBeDefined();
+  expect(wizard!.projectId).toBe('project-1');
+  expect(firstChat).toBeUndefined();
+  expect(replaced).toEqual([]);
+  expect(stamp).not.toHaveBeenCalled();
+});
+
+test('the wizard opens even when the address asks for the first chat', () => {
+  onboardedAt = null;
+  firstChatRequested = true;
+  firstChatPending = true;
+  mount(mock(async () => {}), true);
+
+  expect(wizard).toBeDefined();
+  expect(firstChat).toBeUndefined();
+});
+
+test('finishing the wizard opens the first chat, without sending anything', () => {
+  onboardedAt = null;
+  firstChatRequested = false;
+  const onSend = mock(async () => {});
+  mount(onSend, true);
+  realFirstChatStore.useFirstChatStore.getState().finish('project-1');
+
+  wizard!.onFinished();
+
+  expect(replaced).toEqual([realFirstChatStore.firstChatHref('project-1')]);
+  expect(realFirstChatStore.useFirstChatStore.getState().projectIds).toContain('project-1');
+  expect(onSend).not.toHaveBeenCalled();
+  expect(stamp).not.toHaveBeenCalled();
+});
+
+// The permission probe decides between the wizard and the usual home: until
+// it answers, neither paints, so the usual home never flashes first.
+test('an unstamped project paints neither home nor wizard until the permission probe answers', () => {
+  onboardedAt = null;
+  firstChatRequested = false;
+  cansLoading = true;
+  composer = undefined as unknown as typeof composer;
+  mount(mock(async () => {}), true);
+
+  expect(wizard).toBeUndefined();
+  expect(firstChat).toBeUndefined();
+  expect(composer).toBeUndefined();
 });
 
 test('a member who cannot set the project up never gets the onboarding', () => {
@@ -259,11 +322,12 @@ test('a member who cannot set the project up never gets the onboarding', () => {
   canWrite = false;
   mount(mock(async () => {}), true);
 
+  expect(wizard).toBeUndefined();
   expect(firstChat).toBeUndefined();
 });
 
-// A custom role that can start sessions but not write settings would send a
-// kickoff whose stamp is refused, and get the onboarding on every visit.
+// A custom role that can start sessions but not write settings would meet a
+// wizard whose writes are refused, on every visit.
 test('a role without project.settings.write never gets the onboarding', () => {
   onboardedAt = null;
   firstChatRequested = false;
@@ -271,7 +335,7 @@ test('a role without project.settings.write never gets the onboarding', () => {
   canStart = true;
   mount(mock(async () => {}), true);
 
-  expect(firstChat).toBeUndefined();
+  expect(wizard).toBeUndefined();
 });
 
 test('a role that cannot start a session never gets the onboarding', () => {
@@ -280,7 +344,7 @@ test('a role that cannot start a session never gets the onboarding', () => {
   canStart = false;
   mount(mock(async () => {}), true);
 
-  expect(firstChat).toBeUndefined();
+  expect(wizard).toBeUndefined();
 });
 
 // A white-label or SDK host renders the same home without the prop.
@@ -289,40 +353,100 @@ test('a host that does not opt in keeps the usual home on an unstamped project',
   firstChatRequested = false;
   mount(mock(async () => {}), false);
 
+  expect(wizard).toBeUndefined();
   expect(firstChat).toBeUndefined();
 });
 
-test('the first send stamps the project onboarded once the session is created', async () => {
-  onboardedAt = null;
-  const onSend = mock(async () => {});
-  mount(onSend, true);
+test('an onboarded project never shows the wizard', () => {
+  mount(mock(async () => {}), true);
 
-  await composer.onSend('Onboard me', undefined, {});
-  await new Promise((resolve) => setTimeout(resolve, 0));
-
-  expect(onSend).toHaveBeenCalledWith('Onboard me', undefined, {}, undefined);
-  expect(stamp).toHaveBeenCalledWith('project-1', true);
+  expect(wizard).toBeUndefined();
 });
 
-test('a refused first send leaves the project unstamped', async () => {
-  onboardedAt = null;
-  const failure = new Error('Account cannot start a session');
-  mount(
-    mock(async () => {
-      throw failure;
-    }),
-    true,
-  );
-
-  await expect(composer.onSend('Onboard me', undefined, {})).rejects.toBe(failure);
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  expect(stamp).not.toHaveBeenCalled();
-});
-
-test('a send from an onboarded project stamps nothing', async () => {
+test('a send from the home stamps nothing: only the wizard finishes the onboarding', async () => {
   mount(mock(async () => {}), true);
 
   await composer.onSend('hello', undefined, {});
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(stamp).not.toHaveBeenCalled();
+});
+
+
+async function mountedHome(run: (rerender: () => Promise<void>, onSend: ReturnType<typeof mock>) => Promise<void>) {
+  const browser = new Window({ url: 'http://localhost' });
+  const originals = new Map<string, PropertyDescriptor | undefined>();
+  for (const [key, value] of Object.entries({ window: browser, document: browser.document, navigator: browser.navigator, HTMLElement: browser.HTMLElement, Element: browser.Element, Node: browser.Node, IS_REACT_ACT_ENVIRONMENT: true })) {
+    originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
+    Object.defineProperty(globalThis, key, { configurable: true, value });
+  }
+  const { createRoot } = await import('react-dom/client');
+  const root = createRoot(browser.document.createElement('div'));
+  const onSend = mock(async () => {});
+  const rerender = async () => {
+    firstChat = undefined;
+    wizard = undefined;
+    await act(async () => root.render(createElement(ProjectHome, { projectId: 'project-1', onSend, busy: false, onboarding: true })));
+  };
+  try {
+    await rerender();
+    await run(rerender, onSend);
+  } finally {
+    await act(async () => root.unmount());
+    for (const [key, descriptor] of originals) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+    await browser.happyDOM.close();
+  }
+}
+
+test('mounted home releases the temporary first-chat bridge after the URL catches up', async () => {
+  onboardedAt = null;
+  firstChatRequested = false;
+  firstChatPending = false;
+  await mountedHome(async (rerender, onSend) => {
+    await act(async () => wizard!.onFinished());
+    expect(firstChat).toBeDefined();
+    onboardedAt = '2026-11-27T00:00:00Z';
+    firstChatRequested = true;
+    firstChatPending = true;
+    await rerender();
+    expect(firstChat).toBeDefined();
+    firstChatRequested = false;
+    await rerender();
+    expect(firstChat).toBeUndefined();
+    expect(onSend).not.toHaveBeenCalled();
+  });
+});
+
+test('mounted wizard keeps a queued incoming prompt in the first-chat composer without sending', async () => {
+  onboardedAt = null;
+  firstChatRequested = false;
+  const { useComposerPrefillStore } = await import('@kortix/ui/internal/stores/composer-prefill-store');
+  await mountedHome(async (_rerender, onSend) => {
+    expect(wizard).toBeDefined();
+    await act(async () => useComposerPrefillStore.getState().setPrefill('project-1', 'Review the original brief'));
+    await act(async () => wizard!.onFinished());
+    expect(firstChat).toBeDefined();
+    expect(composer.prefill?.text).toBe('Review the original brief');
+    expect(composer.prefill?.submit).toBeUndefined();
+    expect(onSend).not.toHaveBeenCalled();
+  });
+});
+
+test('mounted onboarding initially requested as first chat releases its bridge on finish', async () => {
+  onboardedAt = null;
+  firstChatRequested = true;
+  firstChatPending = true;
+  await mountedHome(async (rerender, onSend) => {
+    expect(wizard).toBeDefined();
+    await act(async () => wizard!.onFinished());
+    onboardedAt = '2026-11-27T00:00:00Z';
+    await rerender();
+    expect(firstChat).toBeDefined();
+    firstChatRequested = false;
+    await rerender();
+    expect(firstChat).toBeUndefined();
+    expect(onSend).not.toHaveBeenCalled();
+  });
 });

@@ -26,6 +26,9 @@ const notFound = { error: 'Not found' };
 tokenIssuerApp.openapi(
   createRoute({
     method: 'get', path: '/{workspaceId}/.well-known/openid-configuration', tags: ['apps'],
+    operationId: 'apps.token_issuer.openid_configuration.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     summary: "A project's token issuer metadata",
     description:
       "OpenID Provider metadata for the issuer of a project's Kortix sign-in tokens: `issuer` and `jwks_uri`. " +

@@ -204,6 +204,9 @@ async function writeUser(c: any) {
 export function registerScimUsersRoutes(): void {
   scimRouter.openapi(createRoute({
     method: 'get', path: '/accounts/{workspaceId}/Users', ...auth, tags: ['scim'],
+    operationId: 'scim.users.list',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     summary: 'List SCIM Users (filter by userName/id/externalId eq)',
     request: { params: z.object({ workspaceId: z.string().uuid() }), query: ScimListQuery },
     responses: { 200: json(ScimResource, 'SCIM ListResponse'), ...errors(400, 401, 403) },
@@ -237,6 +240,9 @@ export function registerScimUsersRoutes(): void {
 
   scimRouter.openapi(createRoute({
     method: 'get', path: '/accounts/{workspaceId}/Users/{userId}', ...auth, tags: ['scim'], summary: 'Get a SCIM User',
+    operationId: 'scim.users.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     request: { params: userParams }, responses: { 200: json(ScimResource, 'SCIM User'), ...errors(400, 401, 403, 404) },
   }), async (c: any) => {
     const user = await resolveDirectoryUser(accountIdParam(c), c.req.param('userId'));
@@ -245,6 +251,9 @@ export function registerScimUsersRoutes(): void {
 
   scimRouter.openapi(createRoute({
     method: 'post', path: '/accounts/{workspaceId}/Users', ...auth, tags: ['scim'], summary: 'Create / provision a SCIM User',
+    operationId: 'scim.users.create',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     request: { params: z.object({ workspaceId: z.string().uuid() }), body: { content: { 'application/json': { schema: ScimResource } } } },
     responses: { 200: json(ScimResource, 'SCIM User (already provisioned)'), 201: json(ScimResource, 'SCIM User created / invited'), ...errors(400, 401, 403, 409) },
   }), async (c: any) => {
@@ -276,6 +285,9 @@ export function registerScimUsersRoutes(): void {
   for (const method of ['patch', 'put'] as const) {
     scimRouter.openapi(createRoute({
       method, path: '/accounts/{workspaceId}/Users/{userId}', ...auth, tags: ['scim'],
+      operationId: method === 'patch' ? 'scim.users.update' : 'scim.users.replace',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       summary: method === 'patch' ? 'Patch a SCIM User' : 'Replace a SCIM User',
       request: { params: userParams, body: { content: { 'application/json': { schema: ScimResource } } } },
       responses: { 200: json(ScimResource, 'SCIM User'), 204: { description: 'Already absent' }, ...errors(400, 401, 403, 404, 409) },
@@ -284,6 +296,9 @@ export function registerScimUsersRoutes(): void {
 
   scimRouter.openapi(createRoute({
     method: 'delete', path: '/accounts/{workspaceId}/Users/{userId}', ...auth, tags: ['scim'], summary: 'Delete / deprovision a SCIM User',
+    operationId: 'scim.users.delete',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     request: { params: userParams }, responses: { 204: { description: 'Deleted / idempotent' }, ...errors(400, 401, 403, 409) },
   }), async (c: any) => {
     const user = await resolveDirectoryUser(accountIdParam(c), c.req.param('userId'));

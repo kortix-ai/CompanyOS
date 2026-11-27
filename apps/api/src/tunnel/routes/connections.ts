@@ -117,6 +117,9 @@ export function createConnectionsRouter() {
     createRoute({
       method: 'get',
       path: '/',
+      operationId: 'tunnel.connections.list',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'human',
       tags: ['tunnel'],
       summary: "List the caller's paired machines",
       description:
@@ -146,6 +149,9 @@ export function createConnectionsRouter() {
     createRoute({
       method: 'get',
       path: '/{tunnelId}',
+      operationId: 'tunnel.connections.get',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'human',
       tags: ['tunnel'],
       summary: 'Get a single tunnel connection',
       security: [{ bearerAuth: [] }],
@@ -176,6 +182,9 @@ export function createConnectionsRouter() {
     createRoute({
       method: 'patch',
       path: '/{tunnelId}',
+      operationId: 'tunnel.connections.update',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'human',
       tags: ['tunnel'],
       summary: 'Rename a paired machine, or change what Kortix may use on it',
       description:
@@ -252,6 +261,9 @@ export function createConnectionsRouter() {
     createRoute({
       method: 'post',
       path: '/{tunnelId}/rotate-token',
+      operationId: 'tunnel.connections.rotate_token',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'human',
       tags: ['tunnel'],
       summary: 'Rotate the setup token for a tunnel connection',
       security: [{ bearerAuth: [] }],
@@ -300,6 +312,9 @@ export function createConnectionsRouter() {
     createRoute({
       method: 'post',
       path: '/{tunnelId}/access',
+      operationId: 'tunnel.connections.access.set',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'human',
       tags: ['tunnel'],
       summary: 'Change when Kortix may use a paired machine',
       description:
@@ -345,6 +360,9 @@ export function createConnectionsRouter() {
     createRoute({
       method: 'delete',
       path: '/{tunnelId}',
+      operationId: 'tunnel.connections.delete',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'human',
       tags: ['tunnel'],
       summary: 'Unpair a machine: delete it and revoke its computer accounts',
       security: [{ bearerAuth: [] }],
@@ -382,6 +400,9 @@ export function createTunnelSelfRouter() {
     createRoute({
       method: 'delete',
       path: '/',
+      operationId: 'tunnel.self.delete',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'local',
       tags: ['tunnel'],
       security: [{ bearerAuth: [] }],
       summary: 'A machine unpairs itself with its own credential',

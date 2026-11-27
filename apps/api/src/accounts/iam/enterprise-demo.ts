@@ -37,6 +37,9 @@ export function registerIamEnterpriseDemoRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/iam/enterprise-demo',
+      operationId: 'iam.enterprise_demo.get',
+      'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'Get the Enterprise demo and Enterprise state',
       ...auth,
@@ -57,6 +60,9 @@ export function registerIamEnterpriseDemoRoutes(): void {
     createRoute({
       method: 'put',
       path: '/{workspaceId}/iam/enterprise-demo',
+      operationId: 'iam.enterprise_demo.set',
+      'x-kortix-action': ACCOUNT_ACTIONS.BILLING_WRITE,
+      'x-kortix-exposure': 'human',
       tags: ['iam'],
       summary: 'Turn the Enterprise demo on or off (owners and admins)',
       ...auth,

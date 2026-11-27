@@ -50,6 +50,9 @@ export function registerIamResourceGrantsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/iam/resource-grants',
+      operationId: 'iam.resource_grants.list',
+      'x-kortix-action': ACCOUNT_ACTIONS.MEMBER_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'List every resource grant across the account (optionally filtered)',
       ...auth,

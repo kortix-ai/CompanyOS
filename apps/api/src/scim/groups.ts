@@ -299,6 +299,9 @@ export function registerScimGroupsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/accounts/{workspaceId}/Groups',
+      operationId: 'scim.groups.list',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       ...auth, tags: ['scim'],
       summary: 'List SCIM Groups (filter by displayName/id/externalId eq)',
       request: {
@@ -343,6 +346,9 @@ export function registerScimGroupsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/accounts/{workspaceId}/Groups/{groupId}',
+      operationId: 'scim.groups.get',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       ...auth, tags: ['scim'],
       summary: 'Get a SCIM Group',
       request: { params: z.object({ workspaceId: z.string(), groupId: z.string() }) },
@@ -366,6 +372,9 @@ export function registerScimGroupsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/accounts/{workspaceId}/Groups',
+      operationId: 'scim.groups.create',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       ...auth, tags: ['scim'],
       summary: 'Create a SCIM Group',
       request: {
@@ -444,6 +453,9 @@ export function registerScimGroupsRoutes(): void {
   for (const method of ['patch', 'put'] as const) {
     scimRouter.openapi(createRoute({
       method, path: '/accounts/{workspaceId}/Groups/{groupId}', ...auth, tags: ['scim'],
+      operationId: method === 'patch' ? 'scim.groups.update' : 'scim.groups.replace',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       summary: method === 'patch' ? 'Patch a SCIM Group' : 'Replace a SCIM Group',
       request: {
         params: z.object({ workspaceId: z.string().uuid(), groupId: z.string().uuid() }),
@@ -457,6 +469,9 @@ export function registerScimGroupsRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/accounts/{workspaceId}/Groups/{groupId}',
+      operationId: 'scim.groups.delete',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       ...auth, tags: ['scim'],
       summary: 'Delete a SCIM Group',
       request: { params: z.object({ workspaceId: z.string(), groupId: z.string() }) },

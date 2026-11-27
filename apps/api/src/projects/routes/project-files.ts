@@ -808,6 +808,9 @@ export function registerProjectFilesRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/version-diff',
+      operationId: 'version_diff.get',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_GITOPS_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['files'],
       summary: 'Compare two repository versions',
       ...auth,

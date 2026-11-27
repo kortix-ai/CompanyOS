@@ -144,6 +144,9 @@ export function registerClaudeSubscriptionRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/claude-subscription',
+      operationId: 'claude_subscription.get',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'human',
       tags: ['secrets'],
       summary: 'Read whether you may use a Claude account here',
       description: 'Whether you may use at least one Claude account in this project: your own or one shared with you. No token is returned.',
@@ -163,6 +166,9 @@ export function registerClaudeSubscriptionRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/claude-subscription/login/start',
+      operationId: 'claude_subscription.login.start',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SECRET_WRITE,
+      'x-kortix-exposure': 'human',
       tags: ['secrets'],
       summary: 'Start a Claude subscription sign-in',
       description:
@@ -193,6 +199,9 @@ export function registerClaudeSubscriptionRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/claude-subscription/login/complete',
+      operationId: 'claude_subscription.login.complete',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'human',
       tags: ['secrets'],
       summary: 'Finish a Claude subscription sign-in',
       description:
@@ -230,6 +239,9 @@ export function registerClaudeSubscriptionRoutes(): void {
     createRoute({
       method: 'put',
       path: '/{workspaceId}/claude-subscription/token',
+      operationId: 'claude_subscription.token.set',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SECRET_WRITE,
+      'x-kortix-exposure': 'human',
       tags: ['secrets'],
       summary: 'Store a Claude subscription token you made',
       description:
@@ -269,6 +281,9 @@ export function registerClaudeSubscriptionRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/claude-subscription',
+      operationId: 'claude_subscription.delete',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'human',
       tags: ['secrets'],
       summary: 'Delete your own Claude accounts in this project',
       description: 'Deletes every Claude account you added to this project and stops your running Claude sign-ins. Accounts others shared with you stay.',

@@ -140,6 +140,9 @@ export function registerScimServiceProviderRoutes(): void {
     createRoute({
       method: 'get',
       path: '/accounts/{workspaceId}/ServiceProviderConfig',
+      operationId: 'scim.service_provider_config.get',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       ...auth, tags: ['scim'],
       summary: 'SCIM ServiceProviderConfig (capabilities discovery)',
       request: { params: z.object({ workspaceId: z.string() }) },
@@ -174,6 +177,9 @@ export function registerScimServiceProviderRoutes(): void {
     createRoute({
       method: 'get',
       path: '/accounts/{workspaceId}/ResourceTypes',
+      operationId: 'scim.resource_types.list',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       ...auth, tags: ['scim'],
       summary: 'SCIM ResourceTypes (User + Group discovery)',
       request: { params: z.object({ workspaceId: z.string() }) },
@@ -189,6 +195,9 @@ export function registerScimServiceProviderRoutes(): void {
     createRoute({
       method: 'get',
       path: '/accounts/{workspaceId}/ResourceTypes/{id}',
+      operationId: 'scim.resource_types.get',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       ...auth, tags: ['scim'],
       summary: 'SCIM ResourceType by id',
       request: { params: z.object({ workspaceId: z.string(), id: z.string() }) },
@@ -207,6 +216,9 @@ export function registerScimServiceProviderRoutes(): void {
     createRoute({
       method: 'get',
       path: '/accounts/{workspaceId}/Schemas',
+      operationId: 'scim.schemas.list',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       ...auth, tags: ['scim'],
       summary: 'SCIM Schemas (User + Group attribute definitions)',
       request: { params: z.object({ workspaceId: z.string() }) },
@@ -222,6 +234,9 @@ export function registerScimServiceProviderRoutes(): void {
     createRoute({
       method: 'get',
       path: '/accounts/{workspaceId}/Schemas/{id}',
+      operationId: 'scim.schemas.get',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       ...auth, tags: ['scim'],
       summary: 'SCIM Schema by urn',
       request: { params: z.object({ workspaceId: z.string(), id: z.string() }) },

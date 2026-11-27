@@ -51,6 +51,9 @@ export function registerWorkspaceCacheRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/workspace-cache',
+      operationId: 'workspace_cache.list',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'List the project’s saved workspaces',
       description:
@@ -81,6 +84,9 @@ export function registerWorkspaceCacheRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/workspace-cache',
+      operationId: 'workspace_cache.save',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SETTINGS_WRITE,
+      'x-kortix-exposure': 'human',
       tags: ['sessions'],
       summary: 'Save a session’s /workspace as the project’s workspace cache',
       description:
@@ -134,6 +140,9 @@ export function registerWorkspaceCacheRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/workspace-cache/build',
+      operationId: 'workspace_cache.build',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SETTINGS_WRITE,
+      'x-kortix-exposure': 'human',
       tags: ['sessions'],
       summary: 'Rebuild the project’s workspace cache now',
       description:

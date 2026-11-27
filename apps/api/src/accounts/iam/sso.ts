@@ -129,6 +129,9 @@ export function registerIamSsoRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/iam/sso/provider',
+      operationId: 'iam.sso.provider.get',
+      'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'Get the account SSO provider',
       ...auth,
@@ -151,6 +154,9 @@ export function registerIamSsoRoutes(): void {
     createRoute({
       method: 'put',
       path: '/{workspaceId}/iam/sso/provider',
+      operationId: 'iam.sso.provider.set',
+      'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'Create or update the SSO provider',
       ...auth,
@@ -272,6 +278,9 @@ export function registerIamSsoRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/iam/sso/provider/from-metadata',
+      operationId: 'iam.sso.provider.set_from_metadata',
+      'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'Register a SAML provider from IdP metadata (self-serve)',
       ...auth,
@@ -402,6 +411,9 @@ export function registerIamSsoRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/iam/sso/provider/verify-domain',
+      operationId: 'iam.sso.provider.verify_domain',
+      'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: "Verify the SSO provider's primary domain via DNS",
       ...auth,
@@ -500,6 +512,9 @@ export function registerIamSsoRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/iam/sso/provider',
+      operationId: 'iam.sso.provider.delete',
+      'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'Delete the SSO provider',
       ...auth,
@@ -556,6 +571,9 @@ export function registerIamSsoRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/iam/sso/mappings',
+      operationId: 'iam.sso.mappings.list',
+      'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'List SSO group mappings',
       ...auth,
@@ -588,6 +606,9 @@ export function registerIamSsoRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/iam/sso/mappings',
+      operationId: 'iam.sso.mappings.create',
+      'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'Create an SSO group mapping',
       ...auth,
@@ -663,6 +684,9 @@ export function registerIamSsoRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/iam/sso/mappings/{mappingId}',
+      operationId: 'iam.sso.mappings.delete',
+      'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'Delete an SSO group mapping',
       ...auth,

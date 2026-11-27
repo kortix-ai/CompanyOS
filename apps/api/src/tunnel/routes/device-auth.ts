@@ -95,6 +95,9 @@ export function createDeviceAuthPublicRouter() {
     createRoute({
       method: 'post',
       path: '/',
+      operationId: 'tunnel.device_auth.create',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'local',
       tags: ['tunnel'],
       summary: 'Create a device-auth request (public; CLI device-code flow)',
       request: {
@@ -197,6 +200,9 @@ export function createDeviceAuthPublicRouter() {
     createRoute({
       method: 'get',
       path: '/{code}/status',
+      operationId: 'tunnel.device_auth.poll',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'local',
       tags: ['tunnel'],
       summary: 'Poll a device-auth request for approval (public)',
       request: { params: z.object({ code: z.string() }) },
@@ -289,6 +295,9 @@ function registerDeviceAuthInfoRoute(router: OpenAPIHono<AppEnv>): void {
     createRoute({
       method: 'get',
       path: '/{code}/info',
+      operationId: 'tunnel.device_auth.get',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'human',
       tags: ['tunnel'],
       summary: 'Fetch device-auth request details (approval page)',
       security: [{ bearerAuth: [] }],
@@ -368,6 +377,9 @@ function registerDeviceAuthApproveRoute(router: OpenAPIHono<AppEnv>): void {
     createRoute({
       method: 'post',
       path: '/{code}/approve',
+      operationId: 'tunnel.device_auth.approve',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_CONNECTIONS_MANAGE,
+      'x-kortix-exposure': 'human',
       tags: ['tunnel'],
       summary: 'Approve a device-auth request (pairs the machine to the caller)',
       description:
@@ -619,6 +631,9 @@ function registerDeviceAuthDenyRoute(router: OpenAPIHono<AppEnv>): void {
     createRoute({
       method: 'post',
       path: '/{code}/deny',
+      operationId: 'tunnel.device_auth.deny',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'human',
       tags: ['tunnel'],
       summary: 'Deny a pending device-auth request',
       security: [{ bearerAuth: [] }],

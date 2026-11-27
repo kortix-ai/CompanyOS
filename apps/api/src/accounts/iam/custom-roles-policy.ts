@@ -114,6 +114,9 @@ export function registerPolicyListRoute() {
   createRoute({
     method: 'get',
     path: '/{workspaceId}/iam/policies',
+    operationId: 'iam.policies.list',
+    'x-kortix-action': ACCOUNT_ACTIONS.POLICY_READ,
+    'x-kortix-exposure': 'agent',
     tags: ['iam'],
     summary: 'List policies (optionally filtered)',
     ...auth,
@@ -153,6 +156,9 @@ export function registerPolicyWriteRoutes() {
   createRoute({
     method: 'post',
     path: '/{workspaceId}/iam/policies',
+    operationId: 'iam.policies.create',
+    'x-kortix-action': ACCOUNT_ACTIONS.POLICY_CREATE,
+    'x-kortix-exposure': 'agent',
     tags: ['iam'],
     summary: 'Bind a principal to a custom role at a scope',
     ...auth,
@@ -205,6 +211,9 @@ export function registerPolicyWriteRoutes() {
   createRoute({
     method: 'delete',
     path: '/{workspaceId}/iam/policies/{policyId}',
+    operationId: 'iam.policies.delete',
+    'x-kortix-action': ACCOUNT_ACTIONS.POLICY_DELETE,
+    'x-kortix-exposure': 'agent',
     tags: ['iam'],
     summary: 'Delete a policy',
     ...auth,
@@ -245,6 +254,9 @@ export function registerPolicyWriteRoutes() {
   createRoute({
     method: 'post',
     path: '/{workspaceId}/iam/policies:bulk-delete',
+    operationId: 'iam.policies.bulk_delete',
+    'x-kortix-action': ACCOUNT_ACTIONS.POLICY_DELETE,
+    'x-kortix-exposure': 'agent',
     tags: ['iam'],
     summary: 'Delete multiple policies',
     ...auth,
@@ -275,6 +287,9 @@ export function registerPolicyWriteRoutes() {
   createRoute({
     method: 'patch',
     path: '/{workspaceId}/iam/policies/{policyId}',
+    operationId: 'iam.policies.update',
+    'x-kortix-action': ACCOUNT_ACTIONS.POLICY_CREATE,
+    'x-kortix-exposure': 'agent',
     tags: ['iam'],
     summary: 'Change a policy’s role / scope / expiry (principal is immutable)',
     ...auth,
@@ -333,6 +348,9 @@ export function registerPolicyWriteRoutes() {
   createRoute({
     method: 'post',
     path: '/{workspaceId}/iam/policies:bulk-import',
+    operationId: 'iam.policies.bulk_import',
+    'x-kortix-action': ACCOUNT_ACTIONS.POLICY_CREATE,
+    'x-kortix-exposure': 'agent',
     tags: ['iam'],
     summary: 'Create many policies, referencing roles by key (portable import)',
     ...auth,

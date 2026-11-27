@@ -50,7 +50,8 @@ const BASELINE = resolve(import.meta.dir, 'operation-catalog.baseline.json');
 const EXCLUSIONS = resolve(import.meta.dir, 'operation-catalog.exclusions.json');
 const excluded: Record<string, string> = JSON.parse(readFileSync(EXCLUSIONS, 'utf8')) as Record<string, string>;
 
-const toOpenApiPath = (path: string) => path.replace(/:([A-Za-z0-9_]+)(\{[^}]*\})?/g, '{$1}');
+// A parameter starts a segment; a colon inside one is a literal custom verb (`/policies:bulk-delete`).
+const toOpenApiPath = (path: string) => path.replace(/(?<=\/):([A-Za-z0-9_]+)(\{[^}]*\})?/g, '{$1}');
 const key = (method: string, path: string) => `${method} ${path}`;
 
 function concreteRoutes(): Array<{ method: string; path: string }> {

@@ -95,6 +95,9 @@ export function registerProjectDetailRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}',
+      operationId: 'projects.get',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['projects'],
       summary: 'Get a project',
       ...auth,
@@ -170,6 +173,9 @@ export function registerProjectDetailRoutes(): void {
     createRoute({
       method: 'patch',
       path: '/{workspaceId}',
+      operationId: 'projects.update',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SETTINGS_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['projects'],
       summary: 'Update project name or settings',
       ...auth,

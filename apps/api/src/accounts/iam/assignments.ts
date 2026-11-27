@@ -132,6 +132,9 @@ export function registerIamAssignmentsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/iam/assignments',
+      operationId: 'iam.assignments.list',
+      'x-kortix-action': ACCOUNT_ACTIONS.POLICY_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'List role assignments',
       ...auth,
@@ -204,6 +207,9 @@ export function registerIamAssignmentsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/iam/assignments',
+      operationId: 'iam.assignments.create',
+      'x-kortix-action': ACCOUNT_ACTIONS.MEMBER_SUPER_ADMIN_GRANT,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'Grant a role to a principal, at a scope, optionally on one object',
       ...auth,
@@ -314,6 +320,9 @@ export function registerIamAssignmentsRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/iam/assignments/{assignmentId}',
+      operationId: 'iam.assignments.delete',
+      'x-kortix-action': ACCOUNT_ACTIONS.MEMBER_SUPER_ADMIN_GRANT,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'Revoke one assignment',
       ...auth,
@@ -347,6 +356,9 @@ export function registerIamAssignmentsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/iam/permissions',
+      operationId: 'iam.permissions.list',
+      'x-kortix-action': ACCOUNT_ACTIONS.ROLE_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'The permission catalog (action, scope, delegability, implications)',
       ...auth,

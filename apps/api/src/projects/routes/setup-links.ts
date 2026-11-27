@@ -175,6 +175,9 @@ export function registerSetupLinksRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/connect-requests',
+      operationId: 'connect_requests.create',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_CONNECTIONS_MANAGE,
+      'x-kortix-exposure': 'agent',
       tags: ['connectors'],
       summary: 'Create a link where a person connects an app',
       ...auth,

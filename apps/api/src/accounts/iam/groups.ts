@@ -85,6 +85,9 @@ export function registerIamGroupsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/iam/groups',
+      operationId: 'iam.groups.list',
+      'x-kortix-action': ACCOUNT_ACTIONS.GROUP_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'List account groups',
       ...auth,
@@ -130,6 +133,9 @@ export function registerIamGroupsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/iam/groups',
+      operationId: 'iam.groups.create',
+      'x-kortix-action': ACCOUNT_ACTIONS.GROUP_CREATE,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'Create an account group',
       ...auth,
@@ -196,6 +202,9 @@ export function registerIamGroupsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/iam/groups/{groupId}',
+      operationId: 'iam.groups.get',
+      'x-kortix-action': ACCOUNT_ACTIONS.GROUP_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'Get a group',
       ...auth,
@@ -231,6 +240,9 @@ export function registerIamGroupsRoutes(): void {
     createRoute({
       method: 'patch',
       path: '/{workspaceId}/iam/groups/{groupId}',
+      operationId: 'iam.groups.update',
+      'x-kortix-action': ACCOUNT_ACTIONS.GROUP_UPDATE,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'Update a group',
       ...auth,
@@ -303,6 +315,9 @@ export function registerIamGroupsRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/iam/groups/{groupId}',
+      operationId: 'iam.groups.delete',
+      'x-kortix-action': ACCOUNT_ACTIONS.GROUP_DELETE,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'Delete a group',
       ...auth,
@@ -353,6 +368,9 @@ export function registerIamGroupsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/iam/groups/{groupId}/members',
+      operationId: 'iam.groups.members.list',
+      'x-kortix-action': ACCOUNT_ACTIONS.GROUP_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'List group members',
       ...auth,
@@ -383,6 +401,9 @@ export function registerIamGroupsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/iam/groups/{groupId}/members',
+      operationId: 'iam.groups.members.add',
+      'x-kortix-action': ACCOUNT_ACTIONS.GROUP_MEMBERS_MANAGE,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'Add members to a group',
       ...auth,
@@ -449,6 +470,9 @@ export function registerIamGroupsRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/iam/groups/{groupId}/members/{userId}',
+      operationId: 'iam.groups.members.remove',
+      'x-kortix-action': ACCOUNT_ACTIONS.GROUP_MEMBERS_MANAGE,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'Remove a member from a group',
       ...auth,
@@ -505,6 +529,9 @@ export function registerIamGroupsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/iam/groups/{groupId}/project-grants',
+      operationId: 'iam.groups.project_grants.list',
+      'x-kortix-action': ACCOUNT_ACTIONS.GROUP_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'List project grants for a group',
       ...auth,

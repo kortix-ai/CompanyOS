@@ -21,6 +21,9 @@ export function registerLinkPreviewRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/link-preview',
+      operationId: 'link_preview.get',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['projects'],
       summary: 'Read a web page’s title, description and image for a link card',
       ...auth,

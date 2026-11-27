@@ -102,6 +102,9 @@ export function registerIamMembersRoutes(): void {
     createRoute({
       method: 'patch',
       path: '/{workspaceId}/iam/members/{userId}/super-admin',
+      operationId: 'iam.members.super_admin.set',
+      'x-kortix-action': ACCOUNT_ACTIONS.MEMBER_SUPER_ADMIN_GRANT,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'Grant or revoke super-admin',
       ...auth,
@@ -191,6 +194,9 @@ export function registerIamMembersRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/iam/members/{userId}/groups',
+      operationId: 'iam.members.groups.list',
+      'x-kortix-action': ACCOUNT_ACTIONS.MEMBER_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'List group memberships for a member',
       ...auth,
@@ -236,6 +242,9 @@ export function registerIamMembersRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/iam/members/{userId}/project-access',
+      operationId: 'iam.members.project_access.list',
+      'x-kortix-action': ACCOUNT_ACTIONS.MEMBER_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'List effective project access for a member',
       ...auth,
@@ -408,6 +417,9 @@ export function registerIamMembersRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/iam/members/{userId}/effective',
+      operationId: 'iam.members.effective.get',
+      'x-kortix-action': ACCOUNT_ACTIONS.MEMBER_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'Probe effective permission for a member',
       ...auth,
@@ -457,6 +469,9 @@ export function registerIamMembersRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/iam/members/{userId}/effective:batch',
+      operationId: 'iam.members.effective.batch_get',
+      'x-kortix-action': ACCOUNT_ACTIONS.MEMBER_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'Batch-probe effective permissions for a member',
       ...auth,

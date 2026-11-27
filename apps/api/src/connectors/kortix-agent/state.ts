@@ -46,28 +46,21 @@ export function decodeAccountState(token: string, service: KortixAgentService): 
   return { projectId, ...parsed, data: parsed.data ?? {} };
 }
 
-let persist = async (state: AccountState): Promise<void> => {
+// No `startedAt` and no `connectNow`: the write lands only on a live account,
+// so a revoke always wins and the account stays revoked.
+const writeCredential = async (state: AccountState): Promise<void> => {
   await upsertConnectionCredential({
     projectId: state.projectId,
     connectorId: state.connectorId,
     connectionId: state.connectionId,
     value: encodeAccountState(state),
-    // Not a sign-in completing: a revoked account stays revoked.
-    startedAt: new Date(),
   });
 };
+let persist = writeCredential;
 
 /** Tests replace the credential write; never called in production. */
 export function setAccountStatePersistForTests(fn: ((state: AccountState) => Promise<void>) | null): void {
-  persist = fn ?? (async (state) => {
-    await upsertConnectionCredential({
-      projectId: state.projectId,
-      connectorId: state.connectorId,
-      connectionId: state.connectionId,
-      value: encodeAccountState(state),
-      startedAt: new Date(),
-    });
-  });
+  persist = fn ?? writeCredential;
 }
 
 /** Write an account's new state to its credential. */

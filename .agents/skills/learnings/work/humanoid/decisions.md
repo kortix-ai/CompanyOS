@@ -159,3 +159,24 @@
   accounts narrowed to its agent by grants.
 - **Open** Removing an account does not yet delete its Platinum browser,
   saved profile or phone number.
+
+## Decided: Kortix Browser through the gateway (2026-11-27)
+
+- **2026-11-27 (Marko)** Every capability a Humanoid uses is a connector, so
+  one gateway enforces rules, approvals and the call log for all of them.
+  Kortix Browser is the priority.
+- **2026-11-27** Every page action runs in the API over CDP
+  (`kortix-agent/browser-page.ts`): `open`, `snapshot` (refs), `click`,
+  `type`, `press`, `read`, `screenshot`, tabs, `evaluate`. The CDP URL stays
+  on the server. `connect` (raw CDP for agent-browser) remains the one bypass,
+  and the history records each URL handed out.
+- **2026-11-27** The account state keeps `sites` (per origin: username, a
+  password never returned, notes, signed-in and saved times) and `history`
+  (the last 200 pages and actions). `fill_login` types a stored password
+  from the server into the page. State changes are atomic under the
+  connection row lock (`updateAccountState`).
+- **2026-11-27** A result with `data_base64` + `mime_type` is a file:
+  `kortix connectors call` writes it to disk and prints the path.
+- **Open** Web search, scrape and image search already bill through the router
+  proxy; moving them to a connector changes billing attribution and the web
+  UI's tool cards. Needs Marko's call.

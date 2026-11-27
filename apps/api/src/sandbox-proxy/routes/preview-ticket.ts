@@ -9,6 +9,9 @@ export const previewTicket = makeOpenApiApp();
 
 previewTicket.openapi(createRoute({
   method: 'post', path: '/', tags: ['preview'],
+  operationId: 'preview.tickets.create',
+  'x-kortix-action': 'project.read',
+  'x-kortix-exposure': 'human',
   summary: 'Exchange a bearer credential for a 60-second scoped preview navigation ticket',
   ...auth,
   responses: {

@@ -25,6 +25,9 @@ getAuthToken.openapi(
   createRoute({
     method: 'post',
     path: '/',
+    operationId: 'preview.cookie.set',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['preview'],
     summary: 'Exchange a bearer token for a preview session cookie',
     description:

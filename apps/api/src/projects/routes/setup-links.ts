@@ -44,6 +44,9 @@ export function registerSetupLinksRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/secret-requests',
+      operationId: 'secrets.requests.create',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SECRET_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['secrets'],
       summary: 'Create a link where a person enters a secret',
       description:

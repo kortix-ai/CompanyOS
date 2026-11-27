@@ -269,6 +269,9 @@ export function registerSandboxesRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/sandboxes',
+      operationId: 'sandboxes.list',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['sandboxes'],
       summary: 'List project sandboxes',
       ...auth,

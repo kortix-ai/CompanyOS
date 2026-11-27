@@ -149,6 +149,9 @@ shareApp.openapi(
   createRoute({
     method: 'post',
     path: '/',
+    operationId: 'preview.shares.create',
+    'x-kortix-action': 'project.read',
+    'x-kortix-exposure': 'agent',
     tags: ['preview'],
     summary: 'Create a public share link for a sandbox port',
     ...auth,
@@ -207,6 +210,9 @@ shareApp.openapi(
   createRoute({
     method: 'get',
     path: '/',
+    operationId: 'preview.shares.list',
+    'x-kortix-action': 'project.read',
+    'x-kortix-exposure': 'agent',
     tags: ['preview'],
     summary: 'List public share links for a sandbox',
     ...auth,
@@ -239,6 +245,9 @@ shareApp.openapi(
   createRoute({
     method: 'delete',
     path: '/{token}',
+    operationId: 'preview.shares.delete',
+    'x-kortix-action': 'project.read',
+    'x-kortix-exposure': 'agent',
     tags: ['preview'],
     summary: 'Revoke a public share link',
     ...auth,

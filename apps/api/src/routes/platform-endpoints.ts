@@ -34,6 +34,9 @@ app.openapi(
   createRoute({
     method: 'get',
     path: '/v1/system/status',
+    operationId: 'system.status.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['system'],
     summary: 'Maintenance / technical-issue banner status',
     responses: {
@@ -61,6 +64,9 @@ app.openapi(
   createRoute({
     method: 'get',
     path: '/v1/system/maintenance',
+    operationId: 'system.maintenance.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'agent',
     tags: ['system'],
     summary: 'Read the maintenance config (public — banner + maintenance page)',
     responses: { 200: json(MaintenanceSchema, 'Maintenance config') },
@@ -86,6 +92,9 @@ app.openapi(
   createRoute({
     method: 'put',
     path: '/v1/system/maintenance',
+    operationId: 'system.maintenance.set',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['system'],
     summary: 'Update the maintenance config (admin only)',
     ...auth,
@@ -146,6 +155,9 @@ app.openapi(
   createRoute({
     method: 'post',
     path: '/v1/system/demo-request',
+    operationId: 'system.demo_requests.create',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['system'],
     summary: 'Submit a public demo request or job application (stored, then emails an internal notification)',
     middleware: [createDemoRequestRateLimitMiddleware()] as const,

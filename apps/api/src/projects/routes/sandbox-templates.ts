@@ -44,6 +44,9 @@ export function registerSandboxTemplatesRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/sandbox-templates',
+      operationId: 'sandbox_templates.list',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['sandboxes'],
       summary: 'List sandbox templates',
       ...auth,
@@ -85,6 +88,9 @@ export function registerSandboxTemplatesRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/sandbox-templates',
+      operationId: 'sandbox_templates.create',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SANDBOX_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['sandboxes'],
       summary: 'Create a sandbox template',
       ...auth,
@@ -188,6 +194,9 @@ export function registerSandboxTemplatesRoutes(): void {
     createRoute({
       method: 'patch',
       path: '/{workspaceId}/sandbox-templates/{templateId}',
+      operationId: 'sandbox_templates.update',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SANDBOX_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['sandboxes'],
       summary: 'Update a sandbox template',
       ...auth,
@@ -286,6 +295,9 @@ export function registerSandboxTemplatesRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/sandbox-templates/{templateId}',
+      operationId: 'sandbox_templates.delete',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SANDBOX_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['sandboxes'],
       summary: 'Delete a sandbox template',
       ...auth,
@@ -342,6 +354,9 @@ export function registerSandboxTemplatesRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/sandbox-templates/reconcile',
+      operationId: 'sandbox_templates.reconcile',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SANDBOX_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['sandboxes'],
       summary: 'Build every project sandbox template whose image is missing',
       ...auth,
@@ -382,6 +397,9 @@ export function registerSandboxTemplatesRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/sandbox-templates/{templateId}/build',
+      operationId: 'sandbox_templates.build',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SANDBOX_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['sandboxes'],
       summary: 'Build a sandbox template',
       ...auth,

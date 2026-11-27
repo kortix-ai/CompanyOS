@@ -86,7 +86,22 @@ const livenessHandler = (c: any) => {
 
 // Unversioned + /v1 forms so either can be wired as the kubelet liveness probe.
 app.get('/health/live', livenessHandler);
-app.get('/v1/health/live', livenessHandler);
+app.openapi(
+  createRoute({
+    method: 'get',
+    path: '/v1/health/live',
+    operationId: 'system.health.live',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
+    tags: ['system'],
+    summary: 'Liveness probe: 503 while the event loop lags past the threshold',
+    responses: {
+      200: json(z.object({ status: z.string(), event_loop_lag_ms: z.number() }), 'Live'),
+      503: json(z.object({ status: z.string(), event_loop_lag_ms: z.number(), threshold_ms: z.number() }), 'Degraded'),
+    },
+  }),
+  livenessHandler,
+);
 
 // ─── Readiness gate — returns 503 until the app is fully initialized ──────────
 //
@@ -112,7 +127,22 @@ const readinessHandler = (c: any) => {
   return c.json({ status: 'ok' });
 };
 app.get('/health/ready', readinessHandler);
-app.get('/v1/health/ready', readinessHandler);
+app.openapi(
+  createRoute({
+    method: 'get',
+    path: '/v1/health/ready',
+    operationId: 'system.health.ready',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
+    tags: ['system'],
+    summary: 'Readiness probe: 503 until the schema is ready and while the process drains',
+    responses: {
+      200: json(z.object({ status: z.string() }), 'Ready'),
+      503: json(z.object({ status: z.string(), reason: z.string() }), 'Starting or draining'),
+    },
+  }),
+  readinessHandler,
+);
 
 // Sign in with Kortix — RFC 8414 discovery at the API root. The issuer is the
 // configured public API origin (KORTIX_URL); the request origin is only the
@@ -162,6 +192,9 @@ app.openapi(
   createRoute({
     method: 'get',
     path: '/v1/health',
+    operationId: 'system.health.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['system'],
     summary: 'Service health',
     responses: { 200: json(HealthSchema, 'Service health') },

@@ -1,4 +1,6 @@
-import { Context, Hono } from 'hono';
+import { createRoute, z } from '@hono/zod-openapi';
+import { Context } from 'hono';
+import { errors, json, makeOpenApiApp } from '../../openapi';
 import { normalizeForwardedHeader } from '../../lib/request-url';
 import {
   PUBLIC_SHARE_BLOCKED_PORTS,
@@ -14,7 +16,7 @@ import {
 import { previewOriginFor } from '../preview-hosts';
 import { forwardToSandbox, stripFrameAncestors } from './preview';
 
-const publicShareApp = new Hono();
+const publicShareApp = makeOpenApiApp();
 
 /**
  * The path form serves share-author content on the API origin. That origin
@@ -91,8 +93,21 @@ function publicOrigin(c: Context): string {
   return `${proto}://${host}`;
 }
 
-publicShareApp.get('/:token', async (c) => {
-  const token = c.req.param('token');
+publicShareApp.openapi(createRoute({
+  method: 'get',
+  path: '/{token}',
+  operationId: 'preview.public_shares.get',
+  'x-kortix-action': 'none',
+  'x-kortix-exposure': 'agent',
+  tags: ['preview'],
+  summary: 'Resolve a public share link: what it shares and the URL that opens it',
+  request: { params: z.object({ token: z.string() }) },
+  responses: {
+    200: json(z.object({ share: z.record(z.string(), z.any()) }), 'The share'),
+    ...errors(404, 410),
+  },
+}), async (c) => {
+  const { token } = c.req.valid('param');
   const resolved = await resolvePublicShare(token);
   if (!resolved.ok) return c.json({ error: resolved.error }, resolved.status as any);
   const row = resolved.row;

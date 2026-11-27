@@ -68,6 +68,9 @@ export function registerArtifactFolderRoutes() {
     createRoute({
       method: "get",
       path: "/{workspaceId}/artifacts/folders",
+      operationId: "artifacts.folders.list",
+      "x-kortix-action": "project.artifact.read",
+      "x-kortix-exposure": "agent",
       tags: ["artifacts"],
       summary: "List gallery folders",
       ...auth,
@@ -96,6 +99,9 @@ export function registerArtifactFolderRoutes() {
     createRoute({
       method: "post",
       path: "/{workspaceId}/artifacts/folders",
+      operationId: "artifacts.folders.create",
+      "x-kortix-action": "project.artifact.write",
+      "x-kortix-exposure": "agent",
       tags: ["artifacts"],
       summary: "Create a gallery folder",
       ...auth,
@@ -131,6 +137,9 @@ export function registerArtifactFolderRoutes() {
       createRoute({
         method,
         path: "/{workspaceId}/artifacts/folders/{folderId}",
+        operationId: method === "patch" ? "artifacts.folders.update" : "artifacts.folders.delete",
+        "x-kortix-action": "project.artifact.write",
+        "x-kortix-exposure": "agent",
         tags: ["artifacts"],
         summary:
           method === "patch"

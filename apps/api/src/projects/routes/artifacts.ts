@@ -254,6 +254,9 @@ export function registerArtifactRoutes(): void {
   registerArtifactFolderRoutes();
   projectsApp.openapi(createRoute({
     method: 'get', path: '/{workspaceId}/artifacts/types', tags: ['artifacts'],
+    operationId: 'artifacts.types.list',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_ARTIFACT_READ,
+    'x-kortix-exposure': 'agent',
     summary: 'The artifact types, their format and a starter',
     ...auth,
     request: { params: ProjectParams },
@@ -269,6 +272,9 @@ export function registerArtifactRoutes(): void {
 
   projectsApp.openapi(createRoute({
     method: 'get', path: '/{workspaceId}/artifacts', tags: ['artifacts'],
+    operationId: 'artifacts.list',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_ARTIFACT_READ,
+    'x-kortix-exposure': 'agent',
     summary: "List the project's artifacts you may view",
     description:
       '`scope`: all (default), mine (you shared), shared (others shared), pinned (you pinned). Newest change first. ' +
@@ -306,6 +312,9 @@ export function registerArtifactRoutes(): void {
   projectsApp.use('/:workspaceId/artifacts', PUBLISH_LIMIT);
   projectsApp.openapi(createRoute({
     method: 'post', path: '/{workspaceId}/artifacts', tags: ['artifacts'],
+    operationId: 'artifacts.create',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_ARTIFACT_PUBLIC,
+    'x-kortix-exposure': 'agent',
     summary: 'Publish new files as an artifact (into your folder in Files)',
     ...auth,
     request: { params: ProjectParams, body: { required: true, content: { 'application/json': { schema: PublishBody } } } },
@@ -331,6 +340,9 @@ export function registerArtifactRoutes(): void {
 
   projectsApp.openapi(createRoute({
     method: 'post', path: '/{workspaceId}/artifacts/share', tags: ['artifacts'],
+    operationId: 'artifacts.share',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_ARTIFACT_PUBLIC,
+    'x-kortix-exposure': 'agent',
     summary: 'Share a path that is already in Files as an artifact',
     description: 'A .md file (doc), a .html file (page), or a folder with index.md or index.html. You must be able to read it in Files. 409 already_shared when the path already is an artifact.',
     ...auth,
@@ -352,6 +364,9 @@ export function registerArtifactRoutes(): void {
 
   projectsApp.openapi(createRoute({
     method: 'get', path: '/{workspaceId}/artifacts/{artifactId}', tags: ['artifacts'],
+    operationId: 'artifacts.get',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_ARTIFACT_READ,
+    'x-kortix-exposure': 'agent',
     summary: 'Read an artifact: its metadata, its files now or at a version, and a signed URL',
     ...auth,
     request: { params: ArtifactParams, query: z.object({ version: CommitId.optional() }) },
@@ -371,6 +386,9 @@ export function registerArtifactRoutes(): void {
   projectsApp.use('/:workspaceId/artifacts/:artifactId', PUBLISH_LIMIT);
   projectsApp.openapi(createRoute({
     method: 'put', path: '/{workspaceId}/artifacts/{artifactId}', tags: ['artifacts'],
+    operationId: 'artifacts.save',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_ARTIFACT_WRITE,
+    'x-kortix-exposure': 'agent',
     summary: 'Save files into the artifact in Files',
     description: 'Each file is written to its path in Files (a save, a commit of the volume). Pass base_version to refuse a stale save (409 version_conflict).',
     ...auth,
@@ -390,6 +408,9 @@ export function registerArtifactRoutes(): void {
 
   projectsApp.openapi(createRoute({
     method: 'patch', path: '/{workspaceId}/artifacts/{artifactId}', tags: ['artifacts'],
+    operationId: 'artifacts.update',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_ARTIFACT_PUBLIC,
+    'x-kortix-exposure': 'agent',
     summary: 'Rename or share an artifact',
     description: 'visibility: private (you and shared_with_user_ids), project (every project member), public (anyone with the link).',
     ...auth,
@@ -415,6 +436,9 @@ export function registerArtifactRoutes(): void {
 
   projectsApp.openapi(createRoute({
     method: 'delete', path: '/{workspaceId}/artifacts/{artifactId}', tags: ['artifacts'],
+    operationId: 'artifacts.delete',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_ARTIFACT_MANAGE,
+    'x-kortix-exposure': 'agent',
     summary: 'Stop sharing: remove it from Artifacts (its files stay in Files)',
     ...auth,
     request: { params: ArtifactParams },
@@ -430,6 +454,9 @@ export function registerArtifactRoutes(): void {
   for (const method of ['put', 'delete'] as const) {
     projectsApp.openapi(createRoute({
       method, path: '/{workspaceId}/artifacts/{artifactId}/pin', tags: ['artifacts'],
+      operationId: method === 'put' ? 'artifacts.pin' : 'artifacts.unpin',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_ARTIFACT_READ,
+      'x-kortix-exposure': 'agent',
       summary: method === 'put' ? 'Pin an artifact for yourself' : 'Unpin an artifact',
       ...auth,
       request: { params: ArtifactParams },
@@ -447,6 +474,9 @@ export function registerArtifactRoutes(): void {
 
   projectsApp.openapi(createRoute({
     method: 'get', path: '/{workspaceId}/artifacts/{artifactId}/versions', tags: ['artifacts'],
+    operationId: 'artifacts.versions.list',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_ARTIFACT_READ,
+    'x-kortix-exposure': 'agent',
     summary: "An artifact's history from the Files volume, newest first",
     description: 'Every save of its entry file, read from the Files commit log (the last 200 commits of Files).',
     ...auth,
@@ -465,6 +495,9 @@ export function registerArtifactRoutes(): void {
 
   projectsApp.openapi(createRoute({
     method: 'post', path: '/{workspaceId}/artifacts/{artifactId}/restore', tags: ['artifacts'],
+    operationId: 'artifacts.restore',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_ARTIFACT_WRITE,
+    'x-kortix-exposure': 'agent',
     summary: 'Restore an old version: its files are written back to Files, as a new save',
     ...auth,
     request: { params: ArtifactParams, body: { required: true, content: { 'application/json': { schema: z.object({ version: CommitId }) } } } },
@@ -483,6 +516,9 @@ export function registerArtifactRoutes(): void {
 
   projectsApp.openapi(createRoute({
     method: 'get', path: '/{workspaceId}/artifacts/{artifactId}/content', tags: ['artifacts'],
+    operationId: 'artifacts.content.get',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_ARTIFACT_READ,
+    'x-kortix-exposure': 'agent',
     summary: "One file's source, as stored in Files",
     description: 'Text files answer text/plain; binary files answer application/octet-stream. Default the entry file, default version now.',
     ...auth,

@@ -464,6 +464,9 @@ export function registerProjectAuditRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/audit',
+      operationId: 'audit.events.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_MEMBERS_MANAGE,
+      'x-kortix-exposure': 'agent',
       tags: ['projects'],
       summary: 'List canonical project audit events',
       ...auth,

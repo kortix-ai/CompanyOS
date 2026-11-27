@@ -79,6 +79,9 @@ export function registerDeviceEnrollRoute(app: OpenAPIHono<AppEnv>) {
     createRoute({
       method: 'post',
       path: '/device/enroll',
+      operationId: 'capture.device.enroll',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'local',
       tags: ['capture'],
       summary: 'Enroll a computer with an IT enrollment token, as the person signed in to it (no browser sign-in)',
       description:
@@ -260,6 +263,9 @@ export function registerCaptureEnrollmentRoutes() {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/capture/enrollment-tokens',
+      operationId: 'capture.enrollment_tokens.list',
+      'x-kortix-action': 'capture.manage',
+      'x-kortix-exposure': 'agent',
       tags,
       summary: 'The account’s Capture enrollment tokens, newest first (capture.manage)',
       ...auth,
@@ -277,6 +283,9 @@ export function registerCaptureEnrollmentRoutes() {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/capture/enrollment-tokens',
+      operationId: 'capture.enrollment_tokens.create',
+      'x-kortix-action': 'capture.manage',
+      'x-kortix-exposure': 'human',
       tags,
       summary: 'Create a Capture enrollment token for an IT rollout (capture.manage); the token is in this answer only',
       ...auth,
@@ -336,6 +345,9 @@ export function registerCaptureEnrollmentRoutes() {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/capture/enrollment-tokens/{tokenId}',
+      operationId: 'capture.enrollment_tokens.delete',
+      'x-kortix-action': 'capture.manage',
+      'x-kortix-exposure': 'agent',
       tags,
       summary: 'Revoke a Capture enrollment token (capture.manage); computers it enrolled keep recording',
       ...auth,
@@ -357,6 +369,9 @@ export function registerCaptureEnrollmentRoutes() {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/capture/enrollments',
+      operationId: 'capture.enrollments.list',
+      'x-kortix-action': 'capture.manage',
+      'x-kortix-exposure': 'agent',
       tags,
       summary: 'Computers that presented an enrollment token, last seen first (capture.manage)',
       ...auth,
@@ -374,6 +389,9 @@ export function registerCaptureEnrollmentRoutes() {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/capture/enrollments/{enrollmentId}/approve',
+      operationId: 'capture.enrollments.approve',
+      'x-kortix-action': 'capture.manage',
+      'x-kortix-exposure': 'agent',
       tags,
       summary: 'Approve a waiting computer, optionally linked to a member (capture.manage); it enrolls at its next call, within a minute',
       ...auth,
@@ -408,6 +426,9 @@ export function registerCaptureEnrollmentRoutes() {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/capture/enrollments/{enrollmentId}/deny',
+      operationId: 'capture.enrollments.deny',
+      'x-kortix-action': 'capture.manage',
+      'x-kortix-exposure': 'agent',
       tags,
       summary: 'Deny a computer (capture.manage); a device it enrolled is revoked at once',
       ...auth,

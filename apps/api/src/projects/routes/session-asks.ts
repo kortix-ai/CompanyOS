@@ -60,6 +60,9 @@ export function registerSessionAsksRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/asks',
+      operationId: 'asks.list',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'List the open asks that wait on a person',
       description:
@@ -101,6 +104,9 @@ export function registerSessionAsksRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/asks/{askId}/answer',
+      operationId: 'asks.answer',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'human',
       tags: ['sessions'],
       summary: 'Answer a question or decide a permission or access ask',
       description:

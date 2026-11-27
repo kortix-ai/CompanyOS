@@ -35,6 +35,9 @@ previewConfig.openapi(
   createRoute({
     method: 'get',
     path: '/',
+    operationId: 'preview.config.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'agent',
     tags: ['preview'],
     summary: 'Preview addressing for this deployment',
     responses: {

@@ -184,6 +184,9 @@ function describeSystemMessage(
     };
   }
 
+  // A change request the session opened was merged: the API wrote the sentence.
+  if (type === 'cr-merged') return { label: body };
+
   // Project status injection
   if (type === 'project-status') {
     return { label: tI18nComplete.raw('text985959785319'), detail: 'status' };

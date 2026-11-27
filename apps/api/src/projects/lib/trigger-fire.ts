@@ -240,6 +240,27 @@ export async function findKeyedTriggerSession(
 }
 
 /**
+ * The existing sessions a fire of `spec` prompts before it creates one: a
+ * session target's one session, none for an App target, else in the order
+ * {@link queueExistingTriggerSession} tries them: the `pinned` session the user
+ * chose, the `keyed` session for the key rendered from the payload, and the
+ * `reuse` canonical session this trigger created last (also a dead pin's
+ * fallback), so one long-lived session accumulates context across fires.
+ * Reads only: a caller can tell where a fire lands without firing it.
+ */
+export async function existingTriggerSessions(projectId: string, spec: GitTriggerSpec, payload: Record<string, unknown>): Promise<string[]> {
+  if (spec.target?.app) return [];
+  if (spec.reminder) return spec.pinnedSessionId ? [spec.pinnedSessionId] : [];
+  const sessionKey = renderSessionKey(spec, payload);
+  const found = [
+    spec.sessionMode === 'pinned' ? spec.pinnedSessionId : null,
+    sessionKey ? (await findKeyedTriggerSession(projectId, spec.slug, sessionKey))?.sessionId : null,
+    spec.sessionMode === 'reuse' || spec.sessionMode === 'pinned' ? (await findReusableTriggerSession(projectId, spec.slug))?.sessionId : null,
+  ];
+  return found.filter((sessionId): sessionId is string => Boolean(sessionId));
+}
+
+/**
  * Durable prompt hand-off into an EXISTING session (`session_mode` pinned /
  * reuse). The direct in-process continueSession() call this replaces was the
  * silent-loss hole: 'pending' (runtime never ready inside the deadline) was
@@ -482,7 +503,7 @@ async function fireGitTriggerOnce(input: {
   const actor = automation;
 
   const sessionKey = renderSessionKey(spec, payload);
-  const queued = await queueExistingTriggerSession(input, actor, sessionKey);
+  const queued = await queueExistingTriggerSession(input, actor);
   if (queued && 'status' in queued) return queued;
   if (queued) {
     return { status: 'queued', sessionId: queued.sessionId, deduped: queued.deduped, reason: 'prompt queued for delivery' };
@@ -500,7 +521,7 @@ async function fireGitTriggerOnce(input: {
   if (!(await claimTriggerCreate(createKey))) {
     for (let attempt = 0; attempt < CREATE_WAIT_ATTEMPTS; attempt += 1) {
       await new Promise((resolve) => setTimeout(resolve, CREATE_WAIT_POLL_MS));
-      const joined = await queueExistingTriggerSession(input, actor, sessionKey);
+      const joined = await queueExistingTriggerSession(input, actor);
       if (joined && 'status' in joined) return joined;
       if (joined) {
         return { status: 'queued', sessionId: joined.sessionId, deduped: joined.deduped, reason: 'prompt queued for delivery' };
@@ -696,7 +717,6 @@ async function fireReminderSuccessor(
 async function queueExistingTriggerSession(
   input: Parameters<typeof fireGitTrigger>[0],
   actor: string,
-  sessionKey: string | null,
 ): Promise<{ sessionId: string; deduped: boolean } | BillingRefusal | null> {
   const { spec, project, renderedPrompt, source } = input;
   // The session the prompt went to, the billing refusal (it ends the fire: a
@@ -712,52 +732,11 @@ async function queueExistingTriggerSession(
     return outcome === 'queued' || outcome === 'deduped' ? { sessionId, deduped: outcome === 'deduped' } : null;
   };
 
-  // Session pinning — when a trigger opts into `session_mode = "pinned"`, always
-  // re-prompt the EXACT session the user chose (`spec.pinnedSessionId`), not
-  // "whatever this trigger last created" (that's `reuse`). If the pinned session
-  // is gone/unresumable we degrade gracefully: fall through to the `reuse` block
-  // (the trigger's own last session), then to a brand-new session.
-  if (spec.sessionMode === 'pinned' && spec.pinnedSessionId) {
-    const pinned = await queue(spec.pinnedSessionId);
-    if (pinned) return pinned;
-    // outcome === 'no-session' | 'failed' → pinned session is gone/unusable;
-    // fall through to the reuse/create fallback below.
-  }
-
-  // Session reuse — when a trigger opts into `session_mode = "reuse"`, re-prompt
-  // the canonical session this trigger already created (resuming its sandbox +
-  // runtime root) so ONE long-lived session accumulates context across fires,
-  // instead of minting a brand-new session every time. If no reusable session
-  // exists yet, or the last one is gone/failed, we fall through to createSession
-  // below and that fresh session becomes the canonical one for next time. Also
-  // the graceful-degradation path for a `pinned` trigger whose pin is dead.
-  // Session keying — `session_mode = "keyed"` is `reuse` bucketed by a value
-  // rendered from the payload, so one trigger drives one session PER chat /
-  // customer / repo. A key that renders empty falls through to a fresh session
-  // rather than blending every keyless delivery into a shared one.
-  if (sessionKey) {
-    const keyed = await findKeyedTriggerSession(project.projectId, spec.slug, sessionKey);
-    if (keyed) {
-      const queuedKeyed = await queue(keyed.sessionId);
-      if (queuedKeyed) return queuedKeyed;
-      // Unusable session for this key → fall through and create a fresh one,
-      // which becomes the canonical session for the key going forward.
-    }
-  }
-
-  if (spec.sessionMode === 'reuse' || spec.sessionMode === 'pinned') {
-    const reusable = await findReusableTriggerSession(project.projectId, spec.slug);
-    if (reusable) {
-      const queuedReuse = await queue(reusable.sessionId);
-      if (queuedReuse) {
-        // The prompt is durably queued (drain retries until delivered or
-        // dead-letters loudly) — treat as a successful fire so the scheduler
-        // records last_fired_at and doesn't immediately create a dupe.
-        return queuedReuse;
-      }
-      // outcome === 'no-session' | 'failed' → canonical session is unusable;
-      // fall through to create a fresh one below.
-    }
+  // The pin, the key's session, the trigger's reused session, in that order;
+  // an unusable one falls through to the next, and none to a fresh session.
+  for (const sessionId of await existingTriggerSessions(project.projectId, spec, input.payload)) {
+    const queued = await queue(sessionId);
+    if (queued) return queued;
   }
   return null;
 }

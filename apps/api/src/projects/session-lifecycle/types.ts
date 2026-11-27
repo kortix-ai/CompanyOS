@@ -26,6 +26,8 @@ export type SessionInvocationSource =
   | 'system:approval-resume'
   | 'system:secret-submitted'
   | 'system:connector-connected'
+  /** A change request the session opened was merged (`projects/lib/change-request-triggers.ts`). */
+  | 'system:cr-merged'
   /** A background subagent finished a turn: its report, delivered into the parent (`projects/subagent-notice.ts`). */
   | 'system:subagent-finished'
   /** A cross-session message (`send_message`) or its idle notice (`projects/peer-messages`). */

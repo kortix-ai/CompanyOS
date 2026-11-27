@@ -77,7 +77,7 @@ afterEach(async () => {
 })
 
 /** A fresh workspace and pi home, pointed only at the fake model. */
-function freshBox(sessionId: string) {
+function freshBox(sessionId: string, overrides: NodeJS.ProcessEnv = {}) {
   const workspace = mkdtempSync(join(tmpdir(), 'pi-restore-box-'))
   dirs.push(workspace)
   // Compaction keeps one token so a summary cuts (pi's global settings: no project file is read).
@@ -98,6 +98,7 @@ function freshBox(sessionId: string) {
     KORTIX_SESSION_ID: sessionId,
     KORTIX_PROJECT_ID: 'proj-pi-restore',
     KORTIX_PI_TURN_RETRY_BASE_MS: '5',
+    ...overrides,
   }
   /** Built, not started: the boot builds the service before its reconcile restores. */
   const service = () => {
@@ -690,6 +691,36 @@ describe('the boot reconcile on pi (P6.4)', () => {
       expect(uploaded.some(message => message.role === 'assistant' && message.status !== 'streaming')).toBe(true);
     } finally { api.stop(); }
   }, 30_000);
+
+  test('lifecycle stop journals after bounded abandonment of an uncooperative tool', async () => {
+    const log = storedImage();
+    const box = freshBox(log.session_id, {
+      KORTIX_PI_STOP_SETTLE_MS: '50',
+      KORTIX_COMPILED_AGENT_CONFIG: JSON.stringify({ agent: { build: {} }, project_tools: { slow: 'tools/slow.ts' } }),
+    });
+    mkdirSync(join(box.workspace, 'tools'), { recursive: true });
+    writeFileSync(join(box.workspace, 'tools/slow.ts'), "export default { description: 'Synthetic slow tool.', parameters: { type: 'object', properties: {} }, execute: () => new Promise(resolve => setTimeout(() => resolve('late synthetic output'), 500)) }");
+    const api = fakeSessionLogApi(log, { projectId: PROJECT, stateDir: join(box.workspace, '.runtime') });
+    try {
+      const service = box.service();
+      await service.lifecycle.start();
+      const rt = service.runtime()!;
+      expect(startSessionLogJournal(createPiSessionLogPort(() => rt.sessionLogSnapshot()), { generation: 0 })).not.toBeNull();
+      model.script([{ tool: 'slow', args: {} }]);
+      const admitted = rt.admit({ text: 'Run synthetic slow work.', files: [] });
+      await waitFor(() => piSessionLog(rt.sessionLogSnapshot()!).log.threads.some(thread => thread.messages.some(message => message.blocks.some(block => block.type === 'tool_call' && block.name === 'slow' && block.status === 'running'))));
+      const started = Date.now();
+      await service.lifecycle.stop();
+      expect(Date.now() - started).toBeLessThan(2_000);
+      expect(await admitted.done).toBe('aborted');
+      const native = readPiSnapshot(box.stateDir, log.session_id);
+      expect(native).not.toBeNull();
+      const records = piSessionLog(native!).log.threads.flatMap(thread => thread.messages);
+      expect(records.some(message => message.role === 'assistant')).toBe(true);
+      const persisted = api.stored().threads.flatMap(thread => thread.messages);
+      for (const message of records) expect(persisted.find(record => record.message_id === message.message_id)).toEqual(message);
+    } finally { api.stop(); }
+  });
 
   test('lifecycle stop closes the journal and disposes pi even when abort throws', async () => {
     const log = storedImage();

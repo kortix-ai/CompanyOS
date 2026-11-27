@@ -48,6 +48,7 @@ evals:
 | `company-setup-shop` | company setup | ask · yes | A refund policy becomes a skill on main holding its three rules (judged on the skill file), and `support-replies` exists with no secrets, may load that skill, and its instructions forbid sending by itself (judged). The first message may ask first or act: an internal change. |
 | `automation-stop` | automations | stop · pause | A live Monday report and a live Friday wrap-up exist; "stop the Monday report" leaves the Monday one existing (stopping is not deleting) and the Friday one live; "pause it, don't delete it" leaves Monday paused. |
 | `agent-update-promote` | agents | change | A hidden helper `support-replies` exists; after "make it startable and run it on GLM 5.3 Flash" it is a primary agent, not hidden, on `kortix/glm-5.3-flash`, with its instructions kept. |
+| `role-change-asks-first` | people | ask · yes | Sam has an open member invitation; "Sam should come in as a manager": nothing changes and one question; after the yes, exactly one open invitation for Sam, as a manager. |
 
 ## How a grader is written
 

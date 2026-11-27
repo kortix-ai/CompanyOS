@@ -546,7 +546,12 @@ async function cmdCreate(a: Args) {
   // design. A per-worktree --store-dir defeats hardlink dedup and materialised
   // a full ~2.8GB copy per worktree (91 of them once leaked 244GB into ~/.kortix).
   step('Installing dependencies (shared pnpm store)');
-  if (await run(['pnpm', 'install'], { cwd: wtPath }) !== 0) die(`pnpm install failed — fix and re-run \`pnpm worktree create --name ${name}\``);
+  // From the lockfile as committed: 7.4-7.8 s against 14.1-15.3 s for a resolving install in a new worktree (pnpm
+  // 8.11, 6 vCPU Kortix session, 2026-11-27). A branch whose lockfile does not match its package.json falls back.
+  if (await run(['pnpm', 'install', '--frozen-lockfile'], { cwd: wtPath }) !== 0) {
+    sub('the lockfile does not match package.json — installing with resolution');
+    if (await run(['pnpm', 'install'], { cwd: wtPath }) !== 0) die(`pnpm install failed — fix and re-run \`pnpm worktree create --name ${name}\``);
+  }
   // The web app's first `next dev` builds /docs when public/docs/ is missing, which it is here, and that build slows
   // the first page's compile. It needs the install above; started now it is done before `start` serves a page.
   if (!a.flags['no-web'] && startDocsBuild(wtPath, joinPath(slotDir(name), 'docs-build.log'))) sub('building /docs in the background');

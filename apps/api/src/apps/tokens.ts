@@ -38,7 +38,7 @@ import { projectsView } from '../workspaces/rows';
 export const TOKEN_TTL_SECONDS = 15 * 60;
 
 export const TOKEN_CLAIMS = [
-  'iss', 'aud', 'sub', 'iat', 'exp', 'email', 'name', 'picture', 'groups', 'group_ids', 'role', 'account_id', 'project_id', 'kind', 'via_app_id',
+  'iss', 'aud', 'sub', 'iat', 'exp', 'email', 'name', 'picture', 'groups', 'group_ids', 'role', 'account_id', 'project_id', 'kind', 'via_app_id', 'session_kind', 'auth_time',
 ] as const;
 
 const b64url = (input: Buffer | string) => Buffer.from(input).toString('base64url');
@@ -141,6 +141,8 @@ export interface TokenSubject {
   role?: string | null;
   /** `agent` when the subject is an agent's service account, not a person. */
   kind?: 'agent';
+  sessionKind?: 'browser' | 'access_link';
+  authTime?: number;
 }
 
 export interface TokenTarget {
@@ -177,6 +179,8 @@ export function signToken(
       ...(subject.role ? { role: subject.role } : {}),
       account_id: target.accountId,
       project_id: target.projectId,
+      session_kind: subject.sessionKind,
+      auth_time: subject.authTime,
       ...(subject.kind ? { kind: subject.kind } : {}),
       ...(target.viaAppId ? { via_app_id: target.viaAppId } : {}),
     }),

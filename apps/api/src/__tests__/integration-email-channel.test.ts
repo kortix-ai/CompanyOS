@@ -235,6 +235,7 @@ describe('a received email: stored before the ack, then run', () => {
   const delivered: Array<Record<string, any>> = [];
   /** Runs inside the next create, before it binds; a throw fails the create. */
   let duringCreate: ((input: Record<string, any>) => Promise<void>) | null = null;
+  let refuseCreate = false;
 
   beforeAll(async () => {
     project = await seedProject('email-event-inbox', { metadata: { experimental: { email_channel: true } } });
@@ -246,6 +247,7 @@ describe('a received email: stored before the ack, then run', () => {
       resolveProjectAutomationActor: async () => OWNER,
       createSession: (async (input: Record<string, any>) => {
         created.push(input);
+        if (refuseCreate) return { status: 'failed', error: { status: 403, body: { code: 'CONNECTOR_NOT_ASSIGNED', error: 'private manifest detail' } } };
         if (duringCreate) await duringCreate(input);
         const sessionId = crypto.randomUUID();
         const projectId = input.project.projectId as string;
@@ -273,6 +275,7 @@ describe('a received email: stored before the ack, then run', () => {
     created.length = 0;
     delivered.length = 0;
     duringCreate = null;
+    refuseCreate = false;
   });
 
   afterAll(async () => {
@@ -327,6 +330,31 @@ describe('a received email: stored before the ack, then run', () => {
     expect(await jobsOf(STRICT)).toHaveLength(1);
     await runJobBatch();
     expect(created).toHaveLength(1);
+  });
+
+  test('a create refusal is retried then dead-lettered with a safe code, never consumed or sent back', async () => {
+    const event = email(INBOX, 20, 'refused');
+    expect(await (await deliver(event)).json()).toEqual({ ok: true });
+    await db.update(jobQueue).set({ maxAttempts: 2 }).where(eq(jobQueue.jobKey, `email:${INBOX}:${event.data.email_id}`));
+    refuseCreate = true;
+    await runJobBatch();
+    const find = async () => (await jobsOf(INBOX)).find((job) => job.jobKey.endsWith('-20'))!;
+    let job = await find();
+    expect([job.status, job.attempts]).toEqual(['queued', 1]);
+    expect(job.lastError).toBe('Email session creation failed: CONNECTOR_NOT_ASSIGNED');
+    expect(await db.select().from(chatEventDedup).where(eq(chatEventDedup.eventId, `email:threadcreate:${INBOX}:${event.data.thread_id}`))).toHaveLength(0);
+    expect(await db.select().from(chatThreads).where(eq(chatThreads.threadId, event.data.thread_id))).toHaveLength(0);
+    await rewind(INBOX);
+    await runJobBatch();
+    job = await find();
+    expect([job.status, job.attempts]).toEqual(['dead', 2]);
+    expect(job.lastError).not.toContain('private manifest detail');
+    expect(replies()).toHaveLength(0);
+    expect(delivered).toHaveLength(0);
+    expect(created).toHaveLength(2);
+    await deliver(event);
+    expect((await jobsOf(INBOX)).filter((row) => row.jobKey.endsWith('-20'))).toHaveLength(1);
+    expect(await runJobBatch()).toBe(0);
   });
 
   test('a body read that fails is retried with backoff, then runs', async () => {

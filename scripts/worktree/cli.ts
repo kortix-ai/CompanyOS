@@ -641,6 +641,14 @@ async function cmdStart(a: Args) {
     sub(`refreshed slot ${e.slot} ports from BASE (${added.join(', ')}) → gateway :${freshPorts.gateway}`);
   }
 
+  // Neither the tunnel nor the runtime artifacts need the database, so they run while it comes up. In a fresh session
+  // the Supabase that `worktree create` started is still booting here (it needs ~25-30 s); the tunnel took ~4 s and
+  // the artifact check 1.6 s after it before.
+  const tunnelStart = a.flags['no-tunnel'] ? null : startTunnel(e.ports.api);
+  void tunnelStart?.then((t) => { if (t) process.once('exit', () => { try { t.proc.kill(); } catch {} }); }); // a die() below must not leave cloudflared running
+  step('Building runtime artifacts');
+  if (await ensureRuntimeArtifacts(e.path) !== 0) die('runtime artifact build failed');
+
   let creds;
   if (dbMode === 'isolated') {
     renderSupabaseProject(name, e.path, e.projectId, e.ports);
@@ -683,16 +691,13 @@ async function cmdStart(a: Args) {
     sub(`${creds.supabaseUrl} · ${creds.dbUrl}`);
     warnOnSharedDbCrosstalk(name, reg);
   }
-  step('Building runtime artifacts');
-  if (await ensureRuntimeArtifacts(e.path) !== 0) die('runtime artifact build failed');
-
   for (const port of [e.ports.web, e.ports.api]) { const u = portInUse(port); if (u.inUse && u.pid) sh(['bash', '-lc', `kill ${u.pid} 2>/dev/null || true`]); }
   await withLock(() => { const r = loadRegistry(); if (r.slots[name]) { r.slots[name].status = 'running'; r.slots[name].lastUsedAt = new Date().toISOString(); saveRegistry(r); } });
 
   let tunnel: Tunnel | null = null;
   if (!a.flags['no-tunnel']) {
     step('Cloudflare tunnel (cloud sandbox callback)');
-    tunnel = await startTunnel(e.ports.api);
+    tunnel = await tunnelStart;
     if (tunnel) sub(`KORTIX_URL → ${tunnel.url}`);
     else warn('no tunnel (cloudflared missing or timed out) — cloud sandboxes won’t be reachable; `brew install cloudflared` and restart, or pass --no-tunnel to silence');
   }

@@ -31,6 +31,21 @@ test('create installs from the committed lockfile first and resolves only when t
   expect(cli.slice(frozen, resolving)).toMatch(/!== 0\) \{/);
 });
 
+test('start brings the tunnel up and checks the runtime artifacts while the database comes up; the API waits for the URL', () => {
+  const cli = readFileSync(join(REPO, 'scripts/worktree/cli.ts'), 'utf8');
+  const at = (needle: string) => { const i = cli.indexOf(needle); expect(i).toBeGreaterThan(-1); return i; };
+  const tunnel = at("const tunnelStart = a.flags['no-tunnel'] ? null : startTunnel(e.ports.api);");
+  const artifacts = at("if (await ensureRuntimeArtifacts(e.path) !== 0) die('runtime artifact build failed');");
+  const db = at("if (dbMode === 'isolated') {\n    renderSupabaseProject");
+  const awaited = at('tunnel = await tunnelStart;');
+  const api = at('let api = spawnApi(tunnel?.url);');
+  expect(tunnel).toBeLessThan(artifacts);
+  expect(artifacts).toBeLessThan(db);
+  expect(awaited).toBeGreaterThan(db);
+  expect(awaited).toBeLessThan(api);
+  expect(cli.match(/ensureRuntimeArtifacts\(e\.path\)/g)?.length).toBe(1);
+});
+
 test('a shared-db start initializes an empty primary database from the primary checkout, and only an empty one', () => {
   const cli = readFileSync(join(REPO, 'scripts/worktree/cli.ts'), 'utf8');
   const shared = cli.slice(cli.indexOf("step('Using shared primary Supabase')"), cli.indexOf('warnOnSharedDbCrosstalk(name, reg)'));

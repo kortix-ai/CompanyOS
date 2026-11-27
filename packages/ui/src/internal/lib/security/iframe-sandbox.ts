@@ -4,12 +4,13 @@
  * `packages/ui/src/files/viewer/preview-policy.ts`, which owns the origin rule.
  */
 
-/** A running app on an origin of its own: same-origin, scripts, forms, popups, downloads, modals. */
+/** A running app on its own origin; popups open without inheriting its sandbox. */
 export const INTERACTIVE_PREVIEW_IFRAME_SANDBOX = [
   'allow-same-origin',
   'allow-scripts',
   'allow-forms',
   'allow-popups',
+  'allow-popups-to-escape-sandbox',
   'allow-downloads',
   'allow-modals',
 ].join(' ');

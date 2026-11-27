@@ -571,6 +571,45 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
     expect(timers.filter((timer) => !timer.cancelled)).toHaveLength(0);
   });
 
+  test('durable coverage retries exhaust after three attempts and disposal cancels pending work', async () => {
+    const template = page().messages.find((message) => message.role === 'assistant')!;
+    const records = Array.from({ length: 100 }, (_, index) => ({ ...structuredClone(template), message_id: `msg_bounded${String(index).padStart(13, '0')}`, seq: index + 1 }));
+    let advanced = false;
+    let reads = 0;
+    const loader: LoadSessionLogPage = async (_project, _session, query) => {
+      reads += 1;
+      const box = !!query.live && advanced;
+      const available = box ? records : records.slice(0, 40);
+      const eligible = available.filter((message) => query.before_seq === undefined || message.seq < query.before_seq);
+      const messages = eligible.slice(-(query.limit ?? 40));
+      return { ...page(), source: box ? 'box' : 'store', messages, has_more: eligible.length > messages.length };
+    };
+    mount({ loader });
+    await flush();
+    advanced = true;
+    const reconnect = () => { latestStream().onConnectionChange?.(false); latestStream().onConnectionChange?.(true); };
+    act(reconnect);
+    await flush();
+    for (const delay of [2_000, 10_000, 30_000]) {
+      expect(timers.filter((timer) => !timer.cancelled).map((timer) => timer.ms)).toEqual([delay]);
+      await runTimers();
+    }
+    expect(timers.filter((timer) => !timer.cancelled)).toHaveLength(0);
+    const exhausted = reads;
+    await runTimers();
+    expect(reads).toBe(exhausted);
+    act(reconnect);
+    await flush();
+    expect(timers.filter((timer) => !timer.cancelled)).toHaveLength(1);
+    act(() => renderer?.unmount());
+    renderer = null;
+    const disposed = reads;
+    expect(timers.every((timer) => timer.cancelled)).toBe(true);
+    await runTimers();
+    expect(reads).toBe(disposed);
+    expect(useSyncStore.getState().sessionLogs[SESSION]).toBeUndefined();
+  });
+
   test('a staggered second reader bridges shared history before the first reader leaves', async () => {
     const template = page().messages.find((message) => message.role === 'assistant')!;
     const records = Array.from({ length: 200 }, (_, index) => ({ ...structuredClone(template), message_id: `msg_shared${String(index).padStart(14, '0')}`, seq: index + 1 }));

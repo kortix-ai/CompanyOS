@@ -1,5 +1,8 @@
 #!/bin/bash
-mkdir -p /tmp/repo && cd /tmp/repo && kortix workspaces clone "$KORTIX_PROJECT_ID" ws >/dev/null 2>&1 && cd ws
+set -e
+cd /workspace && kortix workspaces clone > /tmp/clone.txt 2>&1
+dir=$(dirname "$(find /workspace -maxdepth 3 -name kortix.yaml | head -1)")
+cd "$dir"
 mkdir -p skills/refund-policy && cat > skills/refund-policy/SKILL.md <<"EOF"
 ---
 name: refund-policy
@@ -11,10 +14,14 @@ description: The shop's refund policy. Load it before answering any refund quest
 EOF
 python3 - <<"PY2"
 p = 'kortix.yaml'; s = open(p).read()
-s = s.replace('skills:\n', 'skills:\n  refund-policy: skills/refund-policy\n', 1)
+s = s.replace('\nskills:\n', '\nskills:\n  refund-policy: skills/refund-policy\n', 1) if '\nskills:\n' in s else s.rstrip('\n') + '\n\nskills:\n  refund-policy: skills/refund-policy\n'
 open(p, 'w').write(s)
 PY2
-git add -A && git commit -qm "Add the refund-policy skill" && git push -q origin HEAD:main
+git add -A && git -c user.email=oracle@example.test -c user.name=oracle commit -qm "Add the refund-policy skill"
+git push -q origin HEAD
+kortix cr open --title "Add the refund-policy skill" --description "The shop's refund policy as a skill." > /tmp/cr.txt
+n=$(kortix cr ls --json | python3 -c 'import json,sys; d=json.load(sys.stdin); r=d if isinstance(d,list) else d["change_requests"]; print(r[0]["number"])')
+kortix cr merge "$n"
 cat > /tmp/support.json <<"EOF"
 {"behavior":{"prompt":"You draft replies to customers. Follow the refund-policy skill. You never send anything yourself: a person reviews and sends every reply.","description":"Drafts customer replies","mode":"subagent","hidden":true},"skills":["refund-policy"],"tools":["read","write"]}
 EOF

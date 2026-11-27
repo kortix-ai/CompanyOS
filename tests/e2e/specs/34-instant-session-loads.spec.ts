@@ -58,7 +58,11 @@
  * `GET …/transcript`, because the history read raced the snapshot and the
  * sync layer kept its own read. The snapshot now carries it alone.
  */
-import { type Page, expect, test } from '@playwright/test';
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { createInterface } from 'node:readline';
+import { lockProjectFirst } from '../../src/fixtures/token-binding-lock';
+import { type Page, type Request, expect, test } from '@playwright/test';
 import { loadEnv } from '../../src/core/env';
 import { createDatabaseSession } from '../../src/fixtures/database-project';
 import { journalSessionLog, seedSessionTranscript } from '../../src/fixtures/session-transcript';
@@ -249,7 +253,7 @@ async function firstShown(page: Page): Promise<Record<string, number>> {
 type SavedMessages = Parameters<typeof seedSessionTranscript>[1]['messages'];
 
 /** A user, a project and a stopped session with saved history in its session log. */
-async function setup(page: Page, label: string, messages?: SavedMessages) {
+async function setup(page: Page, label: string, messages?: SavedMessages, realRuntime = false) {
   const env = loadEnv();
   const email = `instant-${label}-${Date.now()}@example.test`;
   const user = await createAuthUser(email, authOptions);
@@ -269,7 +273,7 @@ async function setup(page: Page, label: string, messages?: SavedMessages) {
     accountId,
     userId: user.id,
   });
-  const seeded = await seedSessionTranscript(env, {
+  const seeded = realRuntime ? { root: '', messages: [] } : await seedSessionTranscript(env, {
     projectId: project.id,
     accountId,
     sessionId,
@@ -284,7 +288,7 @@ async function setup(page: Page, label: string, messages?: SavedMessages) {
   // The recordings are PR demos: keep the personal welcome card a new account
   // gets off the session pages they show.
   await page.addInitScript(() => localStorage.setItem('kortix:marko-welcome-dismissed', '1'));
-  await installBrowserSessionDirect(page, auth, `/workspaces/${project.id}`, authOptions);
+  await installBrowserSessionDirect(page, auth, realRuntime ? '/favicon.png' : `/workspaces/${project.id}`, authOptions);
   await selectAccountForUi(page, accountId);
   await dismissOnboarding(page);
   return { user, auth, accountId, project, sessionId, root: seeded.root, seeded: seeded.messages };
@@ -1127,27 +1131,104 @@ test('34 — loading older messages leaves the turn the reader is reading where 
   }
 });
 
-test('34 — transcript invalidation during a held page read fetches the finished reply without reload', async ({
+test('34 — real pi persisted reply survives invalidation during a held page read without reload', async ({
   page,
 }, testInfo) => {
   test.setTimeout(300_000);
   const env = loadEnv();
-  let fullTurn: ReturnType<NonNullable<SavedMessages>> = [];
-  const { auth, accountId, project, sessionId, root } = await setup(page, 'held-invalidation', (_root, defaults) => {
-    fullTurn = defaults;
-    return defaults.filter((message) => message.info.role === 'user');
+  const { auth, accountId, project, sessionId } = await setup(page, 'held-invalidation', undefined, true);
+  let credential: { token_id: string; secret_key: string } | undefined;
+  let child: ReturnType<typeof spawn> | undefined;
+  const network = await page.context().newCDPSession(page);
+  await network.send('Network.enable');
+  const streamRequests = new Set<string>();
+  let streamFrames = 0;
+  let streamDrops = 0;
+  network.on('Network.loadingFailed', ({ requestId }) => {
+    if (streamRequests.has(requestId)) streamDrops += 1;
   });
+  network.on('Network.responseReceived', ({ requestId, response }) => {
+    if (!new URL(response.url).pathname.endsWith(`/sessions/${sessionId}/events`)) return;
+    streamRequests.add(requestId);
+  });
+  network.on('Network.dataReceived', ({ requestId, dataLength }) => {
+    if (streamRequests.has(requestId) && dataLength > 0) streamFrames += 1;
+  });
+  const reconnect = async () => {
+    const before = streamFrames;
+    const drops = streamDrops;
+    child!.stdin!.write('disconnect\n');
+    await expect.poll(() => streamDrops, { timeout: 20_000 }).toBeGreaterThan(drops);
+    streamRequests.clear();
+    await expect.poll(() => streamFrames, { timeout: 20_000 }).toBeGreaterThan(before);
+  };
   let release = () => {};
   const held = new Promise<void>((resolve) => { release = resolve; });
   let holdNext = false;
   let holding = false;
   let released = false;
   let freshReads = 0;
-  const visible = () => page.evaluate(() => {
-    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
-    document.dispatchEvent(new Event('visibilitychange'));
+  let navigations = 0;
+  let staleDelivered = false;
+  let staleRequest: Request | null = null;
+  page.on('requestfinished', (request) => {
+    if (request === staleRequest) staleDelivered = true;
   });
+  page.on('framenavigated', (frame) => { if (frame === page.mainFrame()) navigations += 1; });
   try {
+    // External inference is scripted; pi, its journal, the API and browser are real.
+    // This proves persisted-history recovery, not cloud provisioning or composer send.
+    await runDatabaseSql(
+      "UPDATE kortix.project_sessions SET status='stopped', sandbox_id=$1, sandbox_url='http://127.0.0.1:1' WHERE session_id=$1",
+      [sessionId], env.databaseUrl!,
+    );
+    await runDatabaseSql(
+      "INSERT INTO kortix.session_sandboxes (sandbox_id, session_id, account_id, project_id, status, external_id, base_url) VALUES ($1::uuid,$1,$2,$3,'active',$1,'http://127.0.0.1:1')",
+      [sessionId, accountId, project.id], env.databaseUrl!,
+    );
+    const minted = await fetch(`${env.apiUrl}/accounts/tokens`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${auth.access_token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Real pi browser fixture', account_id: accountId }),
+    });
+    expect(minted.status).toBe(201);
+    credential = await minted.json() as NonNullable<typeof credential>;
+    await runDatabaseSql(lockProjectFirst('UPDATE kortix.account_tokens SET project_id=$2, session_id=$3 WHERE token_id=$1'),
+      [credential.token_id, project.id, sessionId], env.databaseUrl!);
+    child = spawn('bun', ['run', '--tsconfig-override', 'tsconfig.json', fileURLToPath(new URL('../../../apps/kortix-sandbox-agent-server/src/__tests__/helpers/browser-transcript-process.ts', import.meta.url))], {
+      cwd: fileURLToPath(new URL('../../../apps/kortix-sandbox-agent-server', import.meta.url)), stdio: ['pipe', 'pipe', 'inherit'],
+    });
+    const events = createInterface({ input: child.stdout! });
+    const messages: Record<string, unknown>[] = [];
+    let processError: Error | undefined;
+    child.on('error', (error) => { processError = error; });
+    child.stdin!.on('error', (error) => { processError = error; });
+    child.on('exit', (code, signal) => { processError = new Error(`pi fixture exited (${code}, ${signal})`); });
+    events.on('line', (line) => {
+      try { messages.push(JSON.parse(line)); } catch { /* Runtime diagnostics are not protocol messages. */ }
+    });
+    const waitFor = async (key: string) => {
+      await expect.poll(() => {
+        if (processError) throw processError;
+        return messages.some((message) => message[key] === true);
+      }, { timeout: 60_000, message: `pi fixture ${key}` }).toBe(true);
+      return messages.find((message) => message[key] === true)!;
+    };
+    child.stdin!.write(`${JSON.stringify({ apiUrl: env.apiUrl, projectId: project.id, sessionId, token: credential.secret_key })}\n`);
+    const ready = await waitFor('ready');
+    expect(typeof ready.rootId).toBe('string');
+    expect(typeof ready.relayPort).toBe('number');
+    await network.send('Fetch.enable', { patterns: [{ urlPattern: `*/sessions/${sessionId}/events*`, requestStage: 'Request' }] });
+    network.on('Fetch.requestPaused', async ({ requestId, request }) => {
+      const url = new URL(request.url);
+      url.host = `127.0.0.1:${ready.relayPort}`;
+      await network.send('Fetch.continueRequest', { requestId, url: url.href });
+    });
+    await runDatabaseSql('UPDATE kortix.project_sessions SET runtime_session_id=$2 WHERE session_id=$1',
+      [sessionId, ready.rootId], env.databaseUrl!);
+    const sandboxStatus = (status: string) => runDatabaseSql(
+      'UPDATE kortix.session_sandboxes SET status=$2 WHERE session_id=$1', [sessionId, status], env.databaseUrl!);
+    await sandboxStatus('stopped');
     // Neither boot nor the snapshot can supply the reply or provision a cloud computer.
     for (const path of ['start', 'snapshot']) {
       await page.route(`**/sessions/${sessionId}/${path}*`, async (route) => {
@@ -1168,35 +1249,100 @@ test('34 — transcript invalidation during a held page read fetches the finishe
       if (holdNext) {
         holdNext = false;
         holding = true;
-        expect(body.messages).toHaveLength(1);
+        staleRequest = route.request();
+        expect(body.messages.filter((message: { role: string }) => message.role === 'user')).toHaveLength(1);
+        expect(body.messages.some((message: { role: string }) => message.role === 'assistant')).toBe(false);
         await held;
       } else if (released) {
         freshReads += 1;
       }
-      await route.fulfill({ response, json: { ...body, source: 'store' } });
+      expect(body.source).toBe('store');
+      await route.fulfill({ response });
     });
     await page.goto(`/workspaces/${project.id}/sessions/${sessionId}`, { waitUntil: 'commit' });
     await expect(page.getByText(SAVED_PROMPT, { exact: true })).toBeVisible({ timeout: 120_000 });
     await expect(page.getByText(SAVED_REPLY, { exact: true })).toHaveCount(0);
 
     holdNext = true;
-    await visible();
-    await expect.poll(() => holding, { message: 'visibility refresh has a user-only page held on the wire' }).toBe(true);
-    await journalSessionLog(env, {
-      projectId: project.id, accountId, sessionId, bearer: auth.access_token, root, messages: fullTurn,
-    });
+    await reconnect();
+    await expect.poll(() => holding, { message: 'reconnect has a user-only page held on the wire' }).toBe(true);
+    await sandboxStatus('active');
+    child.stdin!.write('release\n');
+    const completed = await waitFor('complete');
+    expect(completed.modelCalls).toBe(1);
+    await sandboxStatus('stopped');
+    const navigationCount = navigations;
     // This invalidation must survive the read already in flight. No navigation,
     // reload, or additional visibility signal is allowed to rescue the assertion.
-    await visible();
+    await reconnect();
     released = true;
     release();
+    await expect.poll(() => staleDelivered, { message: 'the held stale response completed successfully' }).toBe(true);
+    expect(staleRequest?.failure()).toBeNull();
     await expect.poll(() => freshReads, { timeout: 15_000, message: 'a fresh GET follows the stale response' }).toBeGreaterThan(0);
     await expect(page.getByText(SAVED_REPLY, { exact: true })).toBeVisible({ timeout: 15_000 });
+    expect(navigations, 'recovery does not navigate or reload').toBe(navigationCount);
+    const persistedResponse = await fetch(`${env.apiUrl}/projects/${project.id}/sessions/${sessionId}/log?limit=40`, {
+      headers: { authorization: `Bearer ${auth.access_token}` },
+    });
+    expect(persistedResponse.status).toBe(200);
+    const persisted = await persistedResponse.json();
+    expect(persisted.source).toBe('store');
+    const texts = persisted.messages.filter((message: { role: string }) => message.role === 'user' || message.role === 'assistant').map((message: { message_id: string; role: string; blocks: { type: string; text?: string }[] }) => ({
+      id: message.message_id, role: message.role,
+      text: message.blocks.filter((block) => block.type === 'text').map((block) => block.text ?? '').join(''),
+    }));
+    expect(texts.map((message: { role: string; text: string }) => [message.role, message.text])).toEqual([
+      ['user', SAVED_PROMPT], ['assistant', SAVED_REPLY],
+    ]);
+    expect(new Set(texts.map((message: { id: string }) => message.id)).size).toBe(2);
+    const assertTranscript = async () => {
+      const turn = page.locator('[data-turn-id]').filter({ has: page.getByText(SAVED_PROMPT, { exact: true }) });
+      await expect(turn).toHaveCount(1);
+      await expect(turn).toHaveAttribute('data-turn-id', texts[0].id);
+      for (const message of texts) {
+        await expect(turn.getByText(message.text, { exact: true })).toHaveCount(1);
+        await expect(turn.getByText(message.text, { exact: true })).toBeVisible();
+      }
+      await expect(page.locator('[data-turn-id="optimistic"]')).toHaveCount(0);
+    };
+    await assertTranscript();
+    for (let repetition = 0; repetition < 3; repetition += 1) {
+      const reads = freshReads;
+      await reconnect();
+      await expect.poll(() => freshReads).toBeGreaterThan(reads);
+      await assertTranscript();
+      const foregroundReads = freshReads;
+      await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+      await expect.poll(() => freshReads).toBeGreaterThan(foregroundReads);
+      await assertTranscript();
+      await page.goto(`/workspaces/${project.id}/sessions`, { waitUntil: 'commit' });
+      await expect(page).toHaveURL(new RegExp(`/workspaces/${project.id}/sessions$`));
+      await page.goBack({ waitUntil: 'commit' });
+      await assertTranscript();
+    }
+    console.log('transcript oracle: 2 persisted records, exact turn identity/content, 3 reconnect + 3 foreground-signal + 3 navigation/back cycles');
     await page.screenshot({ path: testInfo.outputPath('held-read-finished-reply.png') });
 
   } finally {
     release();
     await page.unrouteAll({ behavior: 'ignoreErrors' });
-    await project?.dispose?.();
+    if (child && child.exitCode === null && child.signalCode === null) {
+      child.stdin?.write('stop\n');
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(() => { child!.kill('SIGKILL'); resolve(); }, 5_000);
+        child!.once('exit', () => { clearTimeout(timer); resolve(); });
+      });
+    }
+    try {
+      if (credential) {
+        const revoked = await fetch(`${env.apiUrl}/accounts/tokens/${credential.token_id}?account_id=${accountId}`, {
+          method: 'DELETE', headers: { authorization: `Bearer ${auth.access_token}` },
+        });
+        expect(revoked.ok).toBe(true);
+      }
+    } finally {
+      await project.dispose();
+    }
   }
 });

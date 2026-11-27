@@ -8,7 +8,8 @@
  * Only tools treg serves on its own keys are offered (`platform_eligible`,
  * not `own_account`): a tool that acts on a customer's own account (ads,
  * analytics, social posting) belongs to a regular Kortix connector with the
- * customer's sign-in.
+ * customer's sign-in. A background tool (image and video generation) answers
+ * with a task: treg holds its cost at submission and refunds it on failure.
  */
 import { config } from '../../config';
 import { ToolInputError } from './tool';
@@ -40,11 +41,28 @@ export interface TregEndpoint {
   [key: string]: unknown;
 }
 
+/** How treg polls a background task (`X-Treg-Async`): which statuses end it, and where its result is. */
+export interface TregAsync {
+  status?: { path?: string; success?: string[]; failure?: string[] };
+  result?: { path?: string };
+  interval?: number;
+}
+
 export interface TregCallResult {
   status: number;
   body: unknown;
   costMicro: number;
   callId: string | null;
+  /** Set when the call started a background task: poll it with `task(callId)`. */
+  async: TregAsync | null;
+}
+
+export interface TregTask {
+  /** `processing`, `succeeded`, `failed` … */
+  state: string;
+  /** The provider's answer as treg last saw it. */
+  body: unknown;
+  httpStatus: number | null;
 }
 
 /** The treg API Toolbox uses. Tests replace it. */
@@ -52,16 +70,16 @@ export interface TregApi {
   search(query: string, limit: number): Promise<TregEndpoint[]>;
   get(id: string): Promise<TregEndpoint | null>;
   call(input: { id: string; method: string; query?: Record<string, string>; body?: unknown; meta: string; maxCostUsd: number }): Promise<TregCallResult>;
+  task(callId: string): Promise<TregTask | null>;
 }
 
-/** A tool Toolbox may offer: treg's own key serves it, a price is known, it answers at once. Pure. */
+/** A tool Toolbox may offer: treg's own key serves it and a price is known. Pure. */
 export function offerable(e: TregEndpoint): boolean {
   return (
     e.platform_eligible === true &&
     e.scope !== 'own_account' &&
     !e.platform_blocked &&
     !e.superseded_by &&
-    e.async == null &&
     typeof e.cost?.usd === 'number'
   );
 }
@@ -136,7 +154,28 @@ const tregApi: TregApi = {
     const costMicro = Number(res.headers.get('x-treg-cost-micro') ?? 0) || 0;
     // A treg refusal (its own JSON error) costs nothing; a provider's own 4xx/5xx is relayed as the answer.
     if (!res.ok && parsed && typeof parsed === 'object' && 'error' in parsed && !res.headers.get('x-treg-call-id')) throw refusal(res.status, parsed);
-    return { status: res.status, body: parsed, costMicro, callId: res.headers.get('x-treg-call-id') };
+    let asyncInfo: TregAsync | null = null;
+    try {
+      asyncInfo = res.headers.get('x-treg-async') ? (JSON.parse(res.headers.get('x-treg-async')!) as TregAsync) : null;
+    } catch {
+      asyncInfo = {};
+    }
+    return { status: res.status, body: parsed, costMicro, callId: res.headers.get('x-treg-call-id'), async: asyncInfo };
+  },
+  async task(callId) {
+    const res = await tregFetch(`/tasks/${encodeURIComponent(callId)}`);
+    if (res.status === 404) return null;
+    const body = (await readJson(res)) as { state?: string; status?: string; response?: { http_status?: number; body?: unknown } } | null;
+    if (!res.ok) throw refusal(res.status, body);
+    let answer = body?.response?.body ?? null;
+    if (typeof answer === 'string') {
+      try {
+        answer = JSON.parse(answer);
+      } catch {
+        // not JSON: the text itself
+      }
+    }
+    return { state: body?.state ?? body?.status ?? 'unknown', body: answer, httpStatus: body?.response?.http_status ?? null };
   },
 };
 

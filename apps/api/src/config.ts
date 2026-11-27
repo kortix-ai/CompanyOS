@@ -1990,11 +1990,12 @@ const TOOL_PRICING: Record<string, ToolPricing> = {
     perResultCost: 0,
     markupMultiplier: 1.5,
   },
-  // A Kortix Toolbox catalog call (treg): the provider's real cost times this markup.
+  // A Kortix Toolbox catalog call (treg): the provider's real cost times this
+  // markup, kept low on purpose (card fees and failed-call risk).
   toolbox_catalog: {
     baseCost: 0,
     perResultCost: 0,
-    markupMultiplier: 1.5,
+    markupMultiplier: 1.1,
   },
   // Crawl status polls cost nothing upstream, so they cost nothing here.
   proxy_firecrawl_status: {

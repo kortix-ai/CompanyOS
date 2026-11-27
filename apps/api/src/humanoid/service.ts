@@ -5,6 +5,8 @@
 import { humanoidEvents } from '@kortix/db';
 import { eq, sql } from 'drizzle-orm';
 import { listEmailInboxAccounts } from '../channels/email/installs';
+import { createManagedProjectInbox } from '../channels/email/managed-inbox';
+import { MY_KORTIX_AGENT_NAME } from '@kortix/shared';
 import { db } from '../shared/db';
 import type { HumanoidEventRow } from './events';
 import { ensureHumanoidIdentity, getHumanoidIdentity, updateHumanoidIdentity, type HumanoidIdentityRow } from './identity';
@@ -29,20 +31,45 @@ export function humanoidName(raw: unknown): string {
  */
 export async function syncHumanoidEmail(identity: HumanoidIdentityRow): Promise<HumanoidIdentityRow> {
   const accounts = await listEmailInboxAccounts(identity.projectId);
-  const inbox = accounts.find((a) => a.agentName === 'mykortix')
+  const inbox = accounts.find((a) => a.agentName === MY_KORTIX_AGENT_NAME)
     ?? accounts.find((a) => a.ownerType === 'project');
   if (!inbox || inbox.connectionId === identity.emailConnectionId) return identity;
   await updateHumanoidIdentity(identity.projectId, { emailConnectionId: inbox.connectionId, emailAddress: inbox.email });
   return { ...identity, emailConnectionId: inbox.connectionId, emailAddress: inbox.email };
 }
 
-/** Create the humanoid (idempotent) and start its own conversation. */
-export async function createHumanoid(projectId: string, input: { name: string; role?: string | null }): Promise<HumanoidIdentityRow> {
-  const identity = await ensureHumanoidIdentity(projectId, { name: input.name, role: input.role ?? null });
+/**
+ * Create the humanoid (idempotent): its identity, its own address on the
+ * managed domain when the workspace has no inbox for it yet, and its own
+ * conversation. A part that fails is named in `last_error`; a second create
+ * retries it.
+ */
+export async function createHumanoid(
+  projectId: string,
+  input: { name: string; role?: string | null; accountId: string; createdBy: string | null; webhookBaseUrl: string },
+): Promise<HumanoidIdentityRow> {
+  const identity = await syncHumanoidEmail(await ensureHumanoidIdentity(projectId, { name: input.name, role: input.role ?? null }));
+  const problems: string[] = [];
+  if (!identity.emailConnectionId) {
+    try {
+      await createManagedProjectInbox({
+        projectId,
+        accountId: input.accountId,
+        name: identity.name,
+        agentName: MY_KORTIX_AGENT_NAME,
+        createdBy: input.createdBy,
+        webhookBaseUrl: input.webhookBaseUrl,
+      });
+    } catch (err) {
+      problems.push(`email: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
   const mind = await ensureHumanoidMind(projectId);
-  await updateHumanoidIdentity(projectId, mind
-    ? { status: 'ready', lastError: null }
-    : { status: 'failed', lastError: 'its own conversation could not be started' });
+  if (!mind) problems.push('its own conversation could not be started');
+  await updateHumanoidIdentity(projectId, {
+    status: mind ? 'ready' : 'failed',
+    lastError: problems.length ? problems.join('; ').slice(0, 1000) : null,
+  });
   return syncHumanoidEmail((await getHumanoidIdentity(projectId)) ?? identity);
 }
 

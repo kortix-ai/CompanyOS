@@ -12,6 +12,7 @@
  * Design: .agents/skills/learnings/work/humanoid/README.md.
  */
 import { createRoute, z } from '@hono/zod-openapi';
+import { config } from '../../config';
 import type { Context } from 'hono';
 import { recordHumanoidEvent, listHumanoidEvents } from '../../humanoid/events';
 import '../../humanoid/dispatch';
@@ -109,7 +110,13 @@ export function registerHumanoidRoutes(): void {
       const projectId = loaded.row.projectId;
       await writeProjectFeatureFlag(projectId, 'humanoid', true);
       await writeProjectFeatureFlag(projectId, 'email_channel', true);
-      const identity = await createHumanoid(projectId, { name, role });
+      const identity = await createHumanoid(projectId, {
+        name,
+        role,
+        accountId: loaded.row.accountId,
+        createdBy: loaded.userId,
+        webhookBaseUrl: config.KORTIX_URL || new URL(c.req.url).origin,
+      });
       return c.json({ humanoid: serializeIdentity(identity, await eventCounts(projectId)) }, 201);
     }),
   );
@@ -138,13 +145,15 @@ export function registerHumanoidRoutes(): void {
       if (scope instanceof Response) return scope;
       const before = Number(c.req.query('before'));
       const limit = Number(c.req.query('limit'));
+      const pageSize = Number.isSafeInteger(limit) && limit > 0 ? Math.min(limit, 200) : 50;
       const rows = await listHumanoidEvents(scope.loaded.row.projectId, {
         before: Number.isSafeInteger(before) && before > 0 ? before : undefined,
-        limit: Number.isSafeInteger(limit) ? limit : undefined,
+        limit: pageSize,
         subject: c.req.query('subject') || undefined,
         source: c.req.query('source') || undefined,
       });
-      return c.json({ events: rows.map(serializeEvent), next_before: rows.at(-1)?.eventId ?? null }, 200);
+      // A full page may have older events behind it; a short page is the end.
+      return c.json({ events: rows.map(serializeEvent), next_before: rows.length === pageSize ? rows.at(-1)!.eventId : null }, 200);
     }),
   );
 

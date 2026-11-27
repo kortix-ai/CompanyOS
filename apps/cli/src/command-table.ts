@@ -258,6 +258,12 @@ export const TIERS: readonly CommandTier[] = [
             featureFlag: 'chrome',
           },
           {
+            name: 'humanoid',
+            args: '<subcommand>',
+            blurb: 'The workspace as one Humanoid: its identity and its event ledger: show, create, events, post',
+            featureFlag: 'humanoid',
+          },
+          {
             name: 'goals',
             args: '<subcommand>',
             blurb: 'Work a goal through the Goals API until a verifier passes every criterion: transition, progress, verify, verdict, handover, check, ls, status',

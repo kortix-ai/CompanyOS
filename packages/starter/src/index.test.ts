@@ -285,6 +285,7 @@ describe('KORTIX_MANAGED_SKILL_NAMES', () => {
       'kortix-genui',
       'kortix-goals',
       'kortix-harness-refinement',
+      'kortix-humanoid',
       'kortix-memory',
       'kortix-onboarding',
       'kortix-program-agents',

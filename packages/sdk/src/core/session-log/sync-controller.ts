@@ -68,13 +68,20 @@ export function startSessionLogSync({ projectId, sessionId, loader, store, copie
     // The live read. One on the wire at a time: a reconnect, a resync, a tab-visible signal and
     // a turn end can fire together, and they would all read the same page.
     let liveRead: Promise<SessionLogRead> | null = null;
-    const reload = (): Promise<SessionLogRead> => {
+    let invalidated = false;
+    const reload = (fresh = false): Promise<SessionLogRead> => {
+      if (liveRead && fresh) invalidated = true;
       if (!liveRead) {
         liveRead = (async () => {
-          const read = await load(true);
-          // No page this client can read (a record it does not know, the network, a 5xx): the
-          // stored log, as a failed box read always fell back to it.
-          return read.answer === null && !stopped ? load(false) : read;
+          let read: SessionLogRead;
+          do {
+            invalidated = false;
+            read = await load(true);
+            // A failed box read falls back to the stored log. An invalidation during
+            // either read still needs a snapshot taken after that signal.
+            if (read.answer === null && !stopped) read = await load(false);
+          } while (invalidated && !stopped);
+          return read;
         })().finally(() => {
           liveRead = null;
         });
@@ -103,8 +110,7 @@ export function startSessionLogSync({ projectId, sessionId, loader, store, copie
     };
     const reloadAfterTurnEnd = () => {
       followSettlement();
-      const stale = liveRead;
-      void (stale ? stale.then(() => reload()) : reload());
+      void reload(true);
     };
     // A `kortix.control.turn` frame that reports a turn end this effect has not seen. The first
     // frame of a connection names the last end at join, which is not news.
@@ -148,8 +154,8 @@ export function startSessionLogSync({ projectId, sessionId, loader, store, copie
         onControl: (frame) => {
           if (endedTurn(frame)) reloadAfterTurnEnd();
         },
-        onConnectionChange: onReconnect(() => void reload()),
-        onRuntimeResync: () => void reload(),
+        onConnectionChange: onReconnect(() => void reload(true)),
+        onRuntimeResync: () => void reload(true),
       });
     };
     // The box got ready after the first read: read the page live now. A live read already on the
@@ -157,8 +163,7 @@ export function startSessionLogSync({ projectId, sessionId, loader, store, copie
     const readLive = () => {
       if (stopped) return;
       if (!onV2) return void attempt();
-      const pending = liveRead;
-      void (pending ? pending.then(() => reload()) : reload());
+      void reload(true);
     };
     const attempt = async (): Promise<void> => {
       if (busy || stopped) return;
@@ -235,9 +240,9 @@ export function startSessionLogSync({ projectId, sessionId, loader, store, copie
     // its stream silently): read the newest page again, as the v1 transcript reads its tail.
     // A refused session waits for its next turn end or reconnect instead.
     const stopVisible = onTabVisible(() => {
-      if (onV2) void reload();
+      if (onV2) void reload(true);
     });
-    if (reloadRef) reloadRef.current = () => void (onV2 ? reload() : attempt());
+    if (reloadRef) reloadRef.current = () => void (onV2 ? reload(true) : attempt());
     const dispose = () => {
       if (reloadRef) reloadRef.current = null;
       stopVisible();

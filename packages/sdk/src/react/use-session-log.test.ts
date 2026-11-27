@@ -1167,7 +1167,58 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
       expect(joined.at(-1)!.options.schema).toBe('v2');
     });
 
-    test('overlapping reload triggers share one in-flight box read', async () => {
+    for (const signal of ['reconnect', 'resync', 'visible'] as const) {
+      test(`KRTX-4973: ${signal} during a pre-gap box read queues one fresh read and restores the assistant`, async () => {
+        const pending = deferredPage();
+        let apiReads = 0;
+        let boxReads = 0;
+        let committed = false;
+        mount({
+          loader: async () => { apiReads++; return userPage(); },
+          livePage: async () => {
+            boxReads++;
+            if (boxReads === 2) return pending.promise;
+            return committed ? page() : userPage();
+          },
+        });
+        await flush();
+        expect([apiReads, boxReads]).toEqual([1, 1]);
+        expect(heldMessages()).toEqual(userPage().messages);
+        const stream = latestStream();
+        act(() => stream.onConnectionChange(true));
+        // This snapshot was taken before the gap; hold its response on the wire.
+        act(() => stream.onRuntimeResync());
+        await flush();
+        expect(boxReads).toBe(2);
+        committed = true;
+        const notify = () => {
+          if (signal === 'reconnect') {
+            stream.onConnectionChange(false);
+            stream.onConnectionChange(true);
+          } else if (signal === 'resync') {
+            stream.onRuntimeResync();
+          } else {
+            notifyHostSignal('visible');
+          }
+        };
+        // Repeated invalidations must not start parallel reads or queue one per signal.
+        act(() => { notify(); notify(); notify(); });
+        await flush();
+        expect([apiReads, boxReads]).toEqual([1, 2]);
+        expect(heldMessages()).toEqual(userPage().messages);
+        await act(async () => pending.resolve(userPage()));
+        await flush();
+        expect([apiReads, boxReads]).toEqual([1, 3]);
+        expect(heldMessages()).toEqual(page().messages);
+        // No turn-end, reload, or further signal is needed to recover the reply.
+        await flush();
+        await runTimers();
+        expect([apiReads, boxReads]).toEqual([1, 3]);
+        expect(heldMessages()).toEqual(page().messages);
+      });
+    }
+
+    test('overlapping reconnects share the pending read and coalesce one post-gap read', async () => {
       let boxReads = 0;
       let hang = false;
       let release: ((v: unknown) => void) | null = null;
@@ -1190,14 +1241,15 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
       act(() => v2.options.onConnectionChange(true));
       await flush();
       expect(boxReads).toBe(2); // the second reload joined the in-flight read
+      hang = false;
       await act(async () => release?.(undefined));
       await flush();
-      expect(boxReads).toBe(2); // the failed read counted once; one failure arms nothing
-      // A later reconnect reads again (one failure so far).
+      expect(boxReads).toBe(3); // one fresh snapshot follows the pre-gap read
+      // A later reconnect starts a new read.
       act(() => v2.options.onConnectionChange(false));
       act(() => v2.options.onConnectionChange(true));
       await flush();
-      expect(boxReads).toBe(3);
+      expect(boxReads).toBe(4);
     });
 
   });

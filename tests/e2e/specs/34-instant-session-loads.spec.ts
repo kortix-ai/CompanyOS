@@ -64,6 +64,7 @@ import { createDatabaseSession } from '../../src/fixtures/database-project';
 import { journalSessionLog, seedSessionTranscript } from '../../src/fixtures/session-transcript';
 import { runDatabaseSql } from '../helpers/database';
 import { createApiJsonClient } from '../helpers/http';
+import { ensureOwnedAccount } from '../helpers/accounts';
 import { createManifestProject, fundAccount } from '../helpers/manifest-project';
 import { createAuthUser, installBrowserSessionDirect, signIn } from '../helpers/session-auth';
 import { dismissOnboarding, selectAccountForUi } from '../helpers/ui';
@@ -253,12 +254,7 @@ async function setup(page: Page, label: string, messages?: SavedMessages) {
   const email = `instant-${label}-${Date.now()}@example.test`;
   const user = await createAuthUser(email, authOptions);
   const auth = await signIn(email, authOptions);
-  const accounts = await api<Array<{ account_id: string; personal_account?: boolean }>>(
-    auth.access_token,
-    'GET',
-    '/accounts',
-  );
-  const accountId = (accounts.find((a) => a.personal_account) ?? accounts[0]).account_id;
+  const accountId = await ensureOwnedAccount(api, auth.access_token);
   await fundAccount(env.databaseUrl!, accountId);
   const project = await createManifestProject({
     api,
@@ -1126,6 +1122,80 @@ test('34 — loading older messages leaves the turn the reader is reading where 
     expect(result.maxShiftPx, `the reader's turn never moved on screen (${JSON.stringify(result)})`).toBeLessThanOrEqual(1);
     expect(Math.abs(result.finalShiftPx), 'and ends where it started').toBeLessThanOrEqual(1);
   } finally {
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    await project?.dispose?.();
+  }
+});
+
+test('34 — transcript invalidation during a held page read fetches the finished reply without reload', async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(300_000);
+  const env = loadEnv();
+  let fullTurn: ReturnType<NonNullable<SavedMessages>> = [];
+  const { auth, accountId, project, sessionId, root } = await setup(page, 'held-invalidation', (_root, defaults) => {
+    fullTurn = defaults;
+    return defaults.filter((message) => message.info.role === 'user');
+  });
+  let release = () => {};
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  let holdNext = false;
+  let holding = false;
+  let released = false;
+  let freshReads = 0;
+  const visible = () => page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  try {
+    // Neither boot nor the snapshot can supply the reply or provision a cloud computer.
+    for (const path of ['start', 'snapshot']) {
+      await page.route(`**/sessions/${sessionId}/${path}*`, async (route) => {
+        await held;
+        await route.abort().catch(() => {});
+      });
+    }
+    await page.route(`**/sessions/${sessionId}/log*`, async (route) => {
+      const url = new URL(route.request().url());
+      if (route.request().method() !== 'GET' || url.searchParams.has('before_seq') || url.searchParams.has('thread')) {
+        return route.continue();
+      }
+      // Capture a real stored page BEFORE the journal commits the assistant. Its
+      // metadata and message revisions stay canonical, including source: 'store'.
+      const response = await route.fetch();
+      expect(response.status()).toBe(200);
+      const body = await response.json();
+      if (holdNext) {
+        holdNext = false;
+        holding = true;
+        expect(body.messages).toHaveLength(1);
+        await held;
+      } else if (released) {
+        freshReads += 1;
+      }
+      await route.fulfill({ response, json: { ...body, source: 'store' } });
+    });
+    await page.goto(`/workspaces/${project.id}/sessions/${sessionId}`, { waitUntil: 'commit' });
+    await expect(page.getByText(SAVED_PROMPT, { exact: true })).toBeVisible({ timeout: 120_000 });
+    await expect(page.getByText(SAVED_REPLY, { exact: true })).toHaveCount(0);
+
+    holdNext = true;
+    await visible();
+    await expect.poll(() => holding, { message: 'visibility refresh has a user-only page held on the wire' }).toBe(true);
+    await journalSessionLog(env, {
+      projectId: project.id, accountId, sessionId, bearer: auth.access_token, root, messages: fullTurn,
+    });
+    // This invalidation must survive the read already in flight. No navigation,
+    // reload, or additional visibility signal is allowed to rescue the assertion.
+    await visible();
+    released = true;
+    release();
+    await expect.poll(() => freshReads, { timeout: 15_000, message: 'a fresh GET follows the stale response' }).toBeGreaterThan(0);
+    await expect(page.getByText(SAVED_REPLY, { exact: true })).toBeVisible({ timeout: 15_000 });
+    await page.screenshot({ path: testInfo.outputPath('held-read-finished-reply.png') });
+
+  } finally {
+    release();
     await page.unrouteAll({ behavior: 'ignoreErrors' });
     await project?.dispose?.();
   }

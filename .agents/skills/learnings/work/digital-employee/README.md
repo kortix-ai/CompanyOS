@@ -112,6 +112,26 @@ employee's laptop.
   The skill teaches the sign-up, sign-in and 2FA flows, the accounts ledger,
   and when to stop and ask a person.
 
+### Vendor choices (research 2026-11-27)
+
+Evidence and sources: the session research file `identity-vendors.md`; the
+numbers below are from vendor pages unless marked.
+
+| Part | Choice | Why | Unverified |
+|---|---|---|---|
+| Browser | Headful Chromium under Xvfb on Platinum, real fonts, WebGL not SwiftShader, no `Runtime.enable` leak (Patchright-style), timezone/locale/WebRTC pinned to the residential exit, generated mouse and keyboard input | A 2026-11-24 benchmark (arXiv 2611.31962, 80 tasks, 11 bot-defense families) reached 2% of pages with local headless (our setup today), 50% headful, 68–77% with Kernel, Anchor and Browser Use Cloud, 89% with a forked Chromium plus generated input | Our own pass rate: measure against our top-20 SaaS sign-up list before and after |
+| Fallback browser | Kernel or Browser Use Cloud (hosted stealth, built-in captcha) | Highest hosted pass rates in the same benchmark | Their stealth tier in that benchmark |
+| Email | Resend inbox on the managed domain (today); a Google Workspace seat on the customer's domain when the employee needs "Sign in with Google" | Resend: $1/inbox/month after 3. Workspace users are created by API (`users.insert`); no API creates a consumer Google account | Google's "verify it's you" challenge on a new device can be lifted for 10 minutes only |
+| Phone | Test Telnyx Mobile Voice (eSIM, $5/month, US, beta): a real carrier number by API | VoIP numbers (Twilio, Telnyx local) are labelled `fixedVoip`/`nonFixedVoip` by line-type lookups and refused for SMS 2FA by many services | Whether SMS to the eSIM reaches the API with no handset, and its lookup line type |
+| Authenticator | TOTP seeds in the vault, codes by RFC 6238 server-side; passkeys via the CDP WebAuthn virtual authenticator, credential exported to the vault and re-added on each browser start | Both work by API | Sites that check the authenticator type |
+| Captcha | CapSolver by API ($0.8–1.2 per 1,000), 2Captcha as fallback; hCaptcha is the weak spot | Cheapest; AI-solved | CapSolver's own pricing page (404 when read) |
+| Card | Stripe Issuing: one virtual card per employee ($0.10), MCC locks, per-purchase and monthly limits, real-time approval webhook | Fits per-employee limits and approvals | Platform program terms for customers' employees |
+
+**Terms that limit the employee, whatever the technology:** LinkedIn's User
+Agreement 8.2 forbids a profile for anyone but a real person and automated
+access. Paid captcha solving breaks most protected sites' terms. The employee
+skill names these and asks a person instead.
+
 ## 2. The event log
 
 A permanent, append-only log per employee: `kortix.employee_events`.

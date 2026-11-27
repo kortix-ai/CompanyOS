@@ -789,7 +789,7 @@ describe('session-log journal', () => {
     expect(putIds(api.received)).toEqual(['m1', 'm1'])
   }, 20_000)
 
-  test('the daemon stop flushes the journal before the harness stops and the process exits', async () => {
+  test('the daemon stop flushes records finalized by the harness before the process exits', async () => {
     const order: string[] = []
     fakeApi((body) => {
       order.push(`journal ${body.puts.map((p) => p.message.message_id).join(',')}`)
@@ -800,13 +800,13 @@ describe('session-log journal', () => {
     const journal = startSessionLogJournal(fake.port, { generation: 1 })
     if (!journal) throw new Error('journal did not start')
     const proxy = { port: 0, reload: () => {}, stop: async () => {} }
-    const harness = { stop: async () => void order.push('harness.stop') }
+    const harness = { stop: async () => { order.push('harness.stop'); fake.put('m2', 2, 'finalized during stop') } }
     const shutdown = installShutdownHandlers(harness, proxy, undefined, { exit: (code) => void order.push(`exit ${code}`) })
 
     shutdown({ reason: 'agent-swap', exitCode: 75 })
     await until(() => order.includes('exit 75'))
 
-    expect(order).toEqual(['journal m1', 'harness.stop', 'exit 75'])
+    expect(order).toEqual(['harness.stop', 'journal m1,m2', 'exit 75'])
     expect(journal.clean).toBe(true)
   })
 

@@ -1214,7 +1214,7 @@ test('34 — real pi persisted reply survives invalidation during a held page re
       }, { timeout: 60_000, message: `pi fixture ${key}` }).toBe(true);
       return messages.find((message) => message[key] === true)!;
     };
-    child.stdin!.write(`${JSON.stringify({ apiUrl: env.apiUrl, projectId: project.id, sessionId, token: credential.secret_key })}\n`);
+    child.stdin!.write(`${JSON.stringify({ apiUrl: env.apiUrl, projectId: project.id, sessionId, token: credential.secret_key, historyTurns: Number(process.env.E2E_TRANSCRIPT_HISTORY_TURNS ?? 0), finalOutcome: process.env.E2E_TRANSCRIPT_FINAL_OUTCOME ?? 'completed' })}\n`);
     const ready = await waitFor('ready');
     expect(typeof ready.rootId).toBe('string');
     expect(typeof ready.relayPort).toBe('number');
@@ -1250,8 +1250,8 @@ test('34 — real pi persisted reply survives invalidation during a held page re
         holdNext = false;
         holding = true;
         staleRequest = route.request();
-        expect(body.messages.filter((message: { role: string }) => message.role === 'user')).toHaveLength(1);
-        expect(body.messages.some((message: { role: string }) => message.role === 'assistant')).toBe(false);
+        expect(body.messages.some((message: { blocks: { text?: string }[] }) => message.blocks.some(block => block.text === SAVED_PROMPT))).toBe(true);
+        expect(body.messages.some((message: { blocks: { text?: string }[] }) => message.blocks.some(block => block.text === SAVED_REPLY))).toBe(false);
         await held;
       } else if (released) {
         freshReads += 1;
@@ -1269,18 +1269,18 @@ test('34 — real pi persisted reply survives invalidation during a held page re
     await sandboxStatus('active');
     child.stdin!.write('release\n');
     const completed = await waitFor('complete');
-    expect(completed.modelCalls).toBe(1);
+    expect(completed.modelCalls).toBe(Number(process.env.E2E_TRANSCRIPT_HISTORY_TURNS ?? 0) * 2 + 1);
     await sandboxStatus('stopped');
     const navigationCount = navigations;
     // This invalidation must survive the read already in flight. No navigation,
     // reload, or additional visibility signal is allowed to rescue the assertion.
-    await reconnect();
+    if (Number(process.env.E2E_TRANSCRIPT_HISTORY_TURNS ?? 0) === 0) await reconnect();
     released = true;
     release();
     await expect.poll(() => staleDelivered, { message: 'the held stale response completed successfully' }).toBe(true);
     expect(staleRequest?.failure()).toBeNull();
     await expect.poll(() => freshReads, { timeout: 15_000, message: 'a fresh GET follows the stale response' }).toBeGreaterThan(0);
-    await expect(page.getByText(SAVED_REPLY, { exact: true })).toBeVisible({ timeout: 15_000 });
+    if (process.env.E2E_TRANSCRIPT_FINAL_OUTCOME !== 'cancelled') await expect(page.getByText(SAVED_REPLY, { exact: true })).toBeVisible({ timeout: 15_000 });
     expect(navigations, 'recovery does not navigate or reload').toBe(navigationCount);
     const persistedResponse = await fetch(`${env.apiUrl}/projects/${project.id}/sessions/${sessionId}/log?limit=40`, {
       headers: { authorization: `Bearer ${auth.access_token}` },
@@ -1288,25 +1288,59 @@ test('34 — real pi persisted reply survives invalidation during a held page re
     expect(persistedResponse.status).toBe(200);
     const persisted = await persistedResponse.json();
     expect(persisted.source).toBe('store');
-    const texts = persisted.messages.filter((message: { role: string }) => message.role === 'user' || message.role === 'assistant').map((message: { message_id: string; role: string; blocks: { type: string; text?: string }[] }) => ({
+    const allMessages = [...persisted.messages];
+    let olderPage = persisted;
+    while (olderPage.has_more) {
+      const before = olderPage.messages[0]?.seq;
+      expect(typeof before).toBe('number');
+      const response = await fetch(`${env.apiUrl}/projects/${project.id}/sessions/${sessionId}/log?limit=100&before_seq=${before}`, {
+        headers: { authorization: `Bearer ${auth.access_token}` },
+      });
+      expect(response.status).toBe(200);
+      olderPage = await response.json();
+      allMessages.unshift(...olderPage.messages);
+    }
+    const texts = allMessages.filter((message: { role: string }) => message.role === 'user' || message.role === 'assistant').map((message: { message_id: string; role: string; blocks: { type: string; text?: string }[] }) => ({
       id: message.message_id, role: message.role,
       text: message.blocks.filter((block) => block.type === 'text').map((block) => block.text ?? '').join(''),
     }));
-    expect(texts.map((message: { role: string; text: string }) => [message.role, message.text])).toEqual([
-      ['user', SAVED_PROMPT], ['assistant', SAVED_REPLY],
-    ]);
-    expect(new Set(texts.map((message: { id: string }) => message.id)).size).toBe(2);
+    const historyTurns = Number(process.env.E2E_TRANSCRIPT_HISTORY_TURNS ?? 0);
+    expect(texts.filter((message: { role: string }) => message.role === 'user')).toHaveLength(historyTurns + 1);
+    expect(new Set(texts.map((message: { id: string }) => message.id)).size).toBe(texts.length);
     const assertTranscript = async () => {
       const turn = page.locator('[data-turn-id]').filter({ has: page.getByText(SAVED_PROMPT, { exact: true }) });
       await expect(turn).toHaveCount(1);
-      await expect(turn).toHaveAttribute('data-turn-id', texts[0].id);
-      for (const message of texts) {
+      await expect(turn).toHaveAttribute('data-turn-id', texts.find((message: { text: string }) => message.text === SAVED_PROMPT).id);
+      for (const message of texts.filter((message: { text: string }) => message.text === SAVED_PROMPT || message.text === SAVED_REPLY)) {
         await expect(turn.getByText(message.text, { exact: true })).toHaveCount(1);
         await expect(turn.getByText(message.text, { exact: true })).toBeVisible();
       }
       await expect(page.locator('[data-turn-id="optimistic"]')).toHaveCount(0);
     };
     await assertTranscript();
+    if (historyTurns > 0) {
+      // Load older records through the real scroll sentinel, never inject SDK state.
+      for (let pull = 0; pull < 12 && await page.getByText('History prompt 1.', { exact: true }).count() === 0; pull += 1) {
+        await page.locator('[data-follow]').evaluate((node) => {
+          node.dispatchEvent(new WheelEvent('wheel', { deltaY: -800, bubbles: true }));
+          node.scrollTop = 0;
+        });
+        await page.waitForTimeout(700);
+      }
+      for (let index = 1; index <= historyTurns; index += 1) {
+        const expectedPrompt = texts.find((message: { text: string }) => message.text === `History prompt ${index}.`);
+        expect(expectedPrompt).toBeDefined();
+        const historyTurn = page.locator(`[data-turn-id="${expectedPrompt.id}"]`);
+        const prompt = historyTurn.getByText(`History prompt ${index}.`, { exact: true });
+        await expect(prompt).toHaveCount(1);
+        await prompt.scrollIntoViewIfNeeded();
+        await expect(prompt).toBeVisible();
+        await expect(historyTurn.getByText(`History reply ${index}.`, { exact: true })).toHaveCount(1);
+      }
+      const toolBlocks = allMessages.flatMap((message: { blocks: { type: string }[] }) => message.blocks).filter((block: { type: string }) => block.type === 'tool_call');
+      expect(toolBlocks).toHaveLength(historyTurns + (process.env.E2E_TRANSCRIPT_FINAL_OUTCOME === 'cancelled' ? 1 : 0));
+      console.log(`long transcript oracle: ${historyTurns} native tool turns, ${allMessages.length} persisted records, complete prompt/reply multiplicity; ${toolBlocks.length} persisted tool blocks (expanded tool UI not asserted)`);
+    }
     for (let repetition = 0; repetition < 3; repetition += 1) {
       const reads = freshReads;
       await reconnect();
@@ -1321,7 +1355,7 @@ test('34 — real pi persisted reply survives invalidation during a held page re
       await page.goBack({ waitUntil: 'commit' });
       await assertTranscript();
     }
-    console.log('transcript oracle: 2 persisted records, exact turn identity/content, 3 reconnect + 3 foreground-signal + 3 navigation/back cycles');
+    console.log(`transcript oracle: ${allMessages.length} persisted records, exact turn identity/content, 3 reconnect + 3 foreground-signal + 3 navigation/back cycles`);
     await page.screenshot({ path: testInfo.outputPath('held-read-finished-reply.png') });
 
   } finally {

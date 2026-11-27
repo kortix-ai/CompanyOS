@@ -36,10 +36,9 @@ export function installShutdownHandlers(
     stopEgressShim()
 
     void (async () => {
-      // Drive changes not yet on the drive, and session-log changes not yet
-      // acknowledged (at most 3 s), go up before anything stops: the journal
-      // reads the harness's native store, so it runs before harness.stop().
-      await Promise.all([flushDriveSyncOnShutdown().catch(() => {}), stopSessionLogJournal().catch(() => {})])
+      // Keep the journal alive through harness abort/finalization. The harness
+      // flushes before disposing pi; a final bounded stop below covers failure paths.
+      await flushDriveSyncOnShutdown().catch(() => {})
       try {
         await proxy.stop()
       } catch (err) {
@@ -65,6 +64,7 @@ export function installShutdownHandlers(
         logger.warn('[shutdown] harness stop failed', err)
       } finally {
         clearTimeout(deadline)
+        await stopSessionLogJournal().catch(() => {})
       }
       logger.info('[shutdown] done', { reason, exitCode })
       exit(exitCode)

@@ -987,18 +987,24 @@ export class PiRuntime {
     }
   }
 
-  async stop(): Promise<void> {
-    if (this.state === 'down') return
-    await this.abort()
-    // A run an extension started is no turn `abort` stops; a turn queued behind it waits for it.
-    if (this.pi && !this.pi.session.isIdle) this.stopPi()
-    if (!(await settlesWithin(this.queue.catch(() => {}), this.cfg.piStopSettleMs))) this.abandonWork()
-    const runner = this.runner.current
-    if (runner?.hasHandlers('session_shutdown')) await runner.emit({ type: 'session_shutdown', reason: 'quit' }).catch(() => {})
-    this.persist()
-    this.pi?.session.dispose()
-    this.pi = null
-    this.state = 'down'
+  async stop(beforeDispose?: () => Promise<void>): Promise<void> {
+    if (this.state === 'down') { await beforeDispose?.(); return }
+    try {
+      await this.abort()
+      // A run an extension started is no turn `abort` stops; a turn queued behind it waits for it.
+      if (this.pi && !this.pi.session.isIdle) this.stopPi()
+      if (!(await settlesWithin(this.queue.catch(() => {}), this.cfg.piStopSettleMs))) this.abandonWork()
+      const runner = this.runner.current
+      if (runner?.hasHandlers('session_shutdown')) await runner.emit({ type: 'session_shutdown', reason: 'quit' }).catch(() => {})
+      this.persist()
+    } finally {
+      try { await beforeDispose?.() }
+      finally {
+        this.pi?.session.dispose()
+        this.pi = null
+        this.state = 'down'
+      }
+    }
   }
 
   async restart(): Promise<void> {

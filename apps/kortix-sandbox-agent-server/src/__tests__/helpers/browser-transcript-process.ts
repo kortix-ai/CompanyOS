@@ -18,6 +18,8 @@ async function line() {
 const input = z.object({
   apiUrl: z.string().url(), projectId: z.string().min(1),
   sessionId: z.string().min(1), token: z.string().min(1),
+  historyTurns: z.number().int().min(0).max(100).default(0),
+  finalOutcome: z.enum(['completed', 'cancelled']).default('completed'),
 }).parse(JSON.parse(await line()))
 assert(['localhost', '127.0.0.1', '[::1]'].includes(new URL(input.apiUrl).hostname), 'local API required')
 const workspace = await mkdtemp(join(tmpdir(), 'pi-transcript-'))
@@ -42,12 +44,13 @@ const model = startFakeModel(modelId, {
   [modelId]: { name: 'Scripted external inference fixture', limit: { context: 64_000, output: 4_096 } },
 })
 model.script([{ text: 'This reply is stored in the database.' }])
+let holdInference = false
 const gate = Promise.withResolvers<void>()
 const proxy = Bun.serve({
   hostname: '127.0.0.1', port: 0, idleTimeout: 0,
   async fetch(request) {
     const url = new URL(request.url)
-    if (url.pathname.endsWith('/chat/completions')) await gate.promise
+    if (holdInference && url.pathname.endsWith('/chat/completions')) await gate.promise
     return fetch(new Request(`${model.origin}${url.pathname}${url.search}`, request))
   },
 })
@@ -60,7 +63,14 @@ const { createPiHarnessService } = await import('@/harness/pi/service')
 const { createPiSessionLogPort } = await import('@/harness/pi/session-log')
 const { startSessionLogJournal, flushSessionLogJournal, stopSessionLogJournal } =
   await import('@/harness/shared/session-log-journal')
-const service = createPiHarnessService(requirePiConfig(loadConfig(env)), undefined, { env, releases: { api: null } })
+const { relayTurnBegin, relayTurnEnd } = await import('@/harness/shared/turn-relay')
+let relayFinal = false
+let begun: Promise<void> = Promise.resolve()
+let ended: Promise<boolean> = Promise.resolve(false)
+const service = createPiHarnessService(requirePiConfig(loadConfig(env)), undefined, { env, releases: { api: null }, hooks: {
+  onTurnBegin: ({ rootId, messageId }) => { if (relayFinal) begun = relayTurnBegin(rootId, messageId) },
+  onTurnEnd: (frame) => { if (relayFinal) ended = begun.then(() => relayTurnEnd({ runtimeSessionId: frame.rootId, ...frame })) },
+} })
 const streams = new Set<() => void>()
 const relay = Bun.serve({
   hostname: '127.0.0.1', port: 0, idleTimeout: 0,
@@ -97,14 +107,25 @@ try {
   const runtime = service.runtime()
   assert(runtime, 'pi runtime did not start')
   assert(startSessionLogJournal(createPiSessionLogPort(() => runtime.sessionLogSnapshot()), { generation: 0 }))
+  for (let index = 1; index <= input.historyTurns; index += 1) {
+    model.script([{ tool: 'bash', args: { command: `printf 'synthetic-tool-${index}'` } }, { text: `History reply ${index}.` }])
+    assert.equal(await runtime.admit({ text: `History prompt ${index}.`, files: [], model: { providerID: 'kortix', modelID: modelId } }).done, 'completed')
+  }
+  assert.equal(await flushSessionLogJournal(), true, 'history journal not acknowledged')
+  const historyCalls = model.bodies.length
+  model.script(input.finalOutcome === 'cancelled'
+    ? [{ tool: 'bash', args: { command: 'sleep 30' } }, { text: 'cancelled turn must not reach this reply' }]
+    : [{ text: 'This reply is stored in the database.' }])
+  holdInference = true
+  relayFinal = input.historyTurns > 0
   const turn = runtime.admit({ text: 'Show my saved conversation.', files: [],
     model: { providerID: 'kortix', modelID: modelId } })
   const deadline = Date.now() + 15_000
-  while (!runtime.sessionLogSnapshot()?.entries.some(entry => entry.type === 'message' && entry.message.role === 'user')) {
+  while (!runtime.sessionLogSnapshot()?.entries.some(entry => entry.type === 'message' && entry.message.role === 'user' && JSON.stringify(entry.message).includes('Show my saved conversation.'))) {
     assert(Date.now() < deadline, 'native user message not persisted')
     await Bun.sleep(10)
   }
-  assert.equal(model.bodies.length, 0, 'inference escaped hold')
+  assert.equal(model.bodies.length, historyCalls, 'inference escaped hold')
   assert.equal(await flushSessionLogJournal(), true, 'user journal not acknowledged')
   console.log(JSON.stringify({ ready: true, rootId: runtime.rootId, relayPort: relay.port }))
   for (;;) {
@@ -117,10 +138,24 @@ try {
     } else {
       assert.equal(command, 'release')
       gate.resolve()
-      assert.equal(await turn.done, 'completed')
-      assert.equal(await flushSessionLogJournal(), true, 'completed journal not acknowledged')
-      assert.equal(model.bodies.length, 1)
-      console.log(JSON.stringify({ complete: true, modelCalls: model.bodies.length }))
+      if (input.finalOutcome === 'cancelled') {
+        const until = Date.now() + 15_000
+        while (!JSON.stringify(runtime.sessionLogSnapshot()).includes('sleep 30')) {
+          assert(Date.now() < until, 'cancel turn did not begin inference')
+          await Bun.sleep(10)
+        }
+        await runtime.abort()
+      }
+      assert.equal(await turn.done, input.finalOutcome === 'cancelled' ? 'aborted' : 'completed')
+      // Long-history mode relies on the real terminal relay's journal flush, not
+      // an extra test-only durability barrier before the completion notification.
+      if (!relayFinal) assert.equal(await flushSessionLogJournal(), true, 'completed journal not acknowledged')
+      assert.equal(model.bodies.length, historyCalls + 1)
+      if (relayFinal) assert.equal(await ended, true, 'terminal relay was not acknowledged')
+      const snapshot = runtime.sessionLogSnapshot()
+      console.log(JSON.stringify({ complete: true, modelCalls: model.bodies.length, historyCalls,
+        messageCount: snapshot?.entries.filter(entry => entry.type === 'message').length,
+        outcome: input.finalOutcome }))
     }
   }
 } finally {

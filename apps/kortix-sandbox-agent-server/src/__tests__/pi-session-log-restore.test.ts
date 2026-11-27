@@ -663,6 +663,51 @@ describe('the boot reconcile on pi (P6.4)', () => {
     }
   }, 60_000)
 
+  test('lifecycle stop journals terminal tool records produced by abort before disposing pi', async () => {
+    const log = storedImage();
+    const box = freshBox(log.session_id);
+    const api = fakeSessionLogApi(log, { projectId: PROJECT, stateDir: join(box.workspace, '.runtime') });
+    try {
+      const service = box.service();
+      await service.lifecycle.start();
+      const rt = service.runtime()!;
+      expect(startSessionLogJournal(createPiSessionLogPort(() => rt.sessionLogSnapshot()), { generation: 0 })).not.toBeNull();
+      model.script([{ tool: 'bash', args: { command: 'sleep 30' } }, { text: 'unreachable after stop' }]);
+      const admitted = rt.admit({ text: 'Run a synthetic long tool.', files: [] });
+      await waitFor(() => JSON.stringify(rt.sessionLogSnapshot()).includes('sleep 30'));
+      expect(await flushSessionLogJournal()).toBe(true);
+      const before = api.journal.length;
+      await service.lifecycle.stop();
+      expect(await admitted.done).toBe('aborted');
+      const native = readPiSnapshot(box.stateDir, log.session_id);
+      expect(native).not.toBeNull();
+      const nativeFinal = piSessionLog(native!).log;
+      const persisted = api.stored().threads.flatMap(thread => thread.messages);
+      for (const message of nativeFinal.threads.flatMap(thread => thread.messages)) {
+        expect(persisted.find(record => record.message_id === message.message_id)).toEqual(message);
+      }
+      const uploaded = api.journal.slice(before).flatMap(batch => batch.puts.map(put => put.message));
+      expect(uploaded.some(message => message.role === 'assistant' && message.status !== 'streaming')).toBe(true);
+    } finally { api.stop(); }
+  }, 30_000);
+
+  test('lifecycle stop closes the journal and disposes pi even when abort throws', async () => {
+    const log = storedImage();
+    const box = freshBox(log.session_id);
+    const api = fakeSessionLogApi(log, { projectId: PROJECT, stateDir: join(box.workspace, '.runtime') });
+    try {
+      const service = box.service();
+      await service.lifecycle.start();
+      const rt = service.runtime()!;
+      const journal = startSessionLogJournal(createPiSessionLogPort(() => rt.sessionLogSnapshot()), { generation: 0 });
+      expect(journal).not.toBeNull();
+      rt.abort = async () => { throw new Error('synthetic abort failure'); };
+      await expect(service.lifecycle.stop()).rejects.toThrow('synthetic abort failure');
+      expect(service.runtime()).toBeNull();
+      expect(await flushSessionLogJournal()).toBe(false);
+    } finally { api.stop(); }
+  });
+
   test('stale native state (a store from before the last turns) is restored; native ahead (a turn not yet journaled) is kept', async () => {
     const log = storedImage()
     const rootId = log.threads[0]!.thread_id

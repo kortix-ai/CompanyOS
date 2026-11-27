@@ -72,10 +72,14 @@ export function createPiHarnessService(
         options.onStartupMark?.('pi-ready')
       },
       async stop() {
-        // The journal reads the runtime: its last flush runs before the runtime stops.
-        await stopSessionLogJournal()
-        started = false
-        await runtime.stop()
+        // Abort/abandonment can produce final records. Flush after finalization,
+        // while pi still exposes its transcript, and close the journal on errors too.
+        try {
+          await runtime.stop(stopSessionLogJournal)
+        } finally {
+          await stopSessionLogJournal()
+          started = false
+        }
       },
       async restart() {
         await runtime.restart()

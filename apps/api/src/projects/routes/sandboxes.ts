@@ -310,6 +310,9 @@ export function registerSandboxesRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/snapshots',
+      operationId: 'snapshots.list',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['sandboxes'],
       summary: 'List project sandbox snapshots',
       ...auth,
@@ -421,6 +424,9 @@ export function registerSandboxesRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/snapshots/rebuild',
+      operationId: 'snapshots.rebuild',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SANDBOX_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['sandboxes'],
       summary: 'Rebuild the project sandbox snapshot',
       ...auth,
@@ -542,6 +548,9 @@ export function registerSandboxesRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/snapshots/fix-with-agent',
+      operationId: 'snapshots.fix_with_agent',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SANDBOX_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['sandboxes'],
       summary: 'Ask an agent to fix a failing snapshot build',
       ...auth,

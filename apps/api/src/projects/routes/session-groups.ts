@@ -420,6 +420,9 @@ export function registerSessionGroupsRoutes(): void {
     createRoute({
       method: 'put',
       path: '/{workspaceId}/sessions/{sessionId}/group',
+      operationId: 'sessions.group.set',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_START,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'File a session into a session group',
       description: '`group_id` files the session into that group of its project (one the caller sees: 404 `group_not_found` otherwise); `null` takes it out of its group. A group shares the sessions in it, so only the session’s owner may file a session that is not visible to the whole project (403 `group_share_forbidden`). The session keeps its `updated_at`, so it keeps its place in the list. A session another session started stays with its parent: 400 `group_child_session`.',

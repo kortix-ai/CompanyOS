@@ -102,10 +102,13 @@ function failed(error: unknown): { known: false; reason: string } {
   return { known: false, reason: 'leg_failed' };
 }
 
-const sessionSnapshotRoute = (path: string, summary: string) =>
+const sessionSnapshotRoute = (path: string, operationId: string, summary: string) =>
   createRoute({
     method: 'get',
     path,
+    operationId,
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_READ,
+    'x-kortix-exposure': 'agent',
     tags: ['sessions'],
     summary,
     ...auth,
@@ -364,6 +367,7 @@ export function registerSessionOpenBundleRoutes(): void {
   projectsApp.openapi(
     sessionSnapshotRoute(
       '/{workspaceId}/sessions/{sessionId}/snapshot',
+      'sessions.snapshot.get',
       'Get the session snapshot (state, prompts, audit) in one read',
     ),
     handleSessionSnapshot,
@@ -376,6 +380,7 @@ export function registerSessionOpenBundleRoutes(): void {
   projectsApp.openapi(
     sessionSnapshotRoute(
       '/{workspaceId}/sessions/{sessionId}/open-bundle',
+      'sessions.open_bundle.get',
       'Get the session snapshot (legacy open-bundle path)',
     ),
     handleSessionSnapshot,

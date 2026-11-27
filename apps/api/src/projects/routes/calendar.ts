@@ -102,6 +102,9 @@ export function registerCalendarRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/calendar',
+      operationId: 'calendar.list',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['calendar'],
       summary: 'List calendar items',
       description:
@@ -144,6 +147,9 @@ export function registerCalendarRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/calendar',
+      operationId: 'calendar.create',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['calendar'],
       summary: 'Create a calendar item',
       description:
@@ -171,6 +177,9 @@ export function registerCalendarRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/calendar/people',
+      operationId: 'calendar.people.list',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['calendar'],
       summary: 'List who can be assigned or mentioned',
       description: 'The people of the workspace with the `@handle` that names each one, and the agents by kortix.yaml name. Flag `calendar`.',
@@ -189,6 +198,9 @@ export function registerCalendarRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/calendar/{itemId}',
+      operationId: 'calendar.get',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['calendar'],
       summary: 'Read a calendar item and its comments',
       description: 'The item and its comments, oldest first (at most 500). Flag `calendar`.',
@@ -213,6 +225,9 @@ export function registerCalendarRoutes(): void {
     createRoute({
       method: 'patch',
       path: '/{workspaceId}/calendar/{itemId}',
+      operationId: 'calendar.update',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['calendar'],
       summary: 'Change a calendar item',
       description:
@@ -242,6 +257,9 @@ export function registerCalendarRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/calendar/{itemId}',
+      operationId: 'calendar.delete',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['calendar'],
       summary: 'Delete a calendar item',
       description: 'Deletes the item and its comments. Flag `calendar`.',
@@ -267,6 +285,9 @@ export function registerCalendarRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/calendar/{itemId}/comments',
+      operationId: 'calendar.comments.create',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['calendar'],
       summary: 'Comment on a calendar item',
       description:

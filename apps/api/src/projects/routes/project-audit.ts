@@ -578,6 +578,9 @@ export function registerProjectAuditRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/sessions/{sessionId}/audit/events',
+      operationId: 'sessions.audit.events.ingest',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       tags: ['sessions'],
       summary: 'Ingest an idempotent runtime audit batch',
       ...auth,
@@ -722,6 +725,9 @@ export function registerProjectAuditRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/sessions/{sessionId}/audit',
+      operationId: 'sessions.audit.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'List audit events of a session',
       ...auth,

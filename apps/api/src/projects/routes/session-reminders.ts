@@ -262,6 +262,9 @@ export function registerSessionRemindersRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/sessions/{sessionId}/reminders',
+      operationId: 'sessions.reminders.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_START,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'List the loops of a session',
       ...auth,
@@ -285,6 +288,9 @@ export function registerSessionRemindersRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/sessions/{sessionId}/reminders',
+      operationId: 'sessions.reminders.create',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_START,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'Create a loop on a session',
       ...auth,
@@ -340,6 +346,9 @@ export function registerSessionRemindersRoutes(): void {
     createRoute({
       method: 'patch',
       path: '/{workspaceId}/sessions/{sessionId}/reminders/{reminderId}',
+      operationId: 'sessions.reminders.update',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_START,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'Pause or resume a loop',
       ...auth,
@@ -374,6 +383,9 @@ export function registerSessionRemindersRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/sessions/{sessionId}/reminders/{reminderId}/run',
+      operationId: 'sessions.reminders.run',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_START,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'Run a loop now',
       ...auth,
@@ -396,6 +408,9 @@ export function registerSessionRemindersRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/sessions/{sessionId}/reminders/{reminderId}',
+      operationId: 'sessions.reminders.delete',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_START,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'Delete a loop',
       ...auth,

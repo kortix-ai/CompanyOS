@@ -41,6 +41,9 @@ async function resolvePerson(c: Context, projectId: string, sessionId: string) {
 export function registerSessionListStateRoutes(): void {
   projectsApp.openapi(createRoute({
     method: 'put', path: '/{workspaceId}/sessions/{sessionId}/pin', tags: ['sessions'],
+    operationId: 'sessions.pin.set',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_READ,
+    'x-kortix-exposure': 'human',
     summary: 'Pin or unpin a session in your list',
     description: 'pinned=true keeps the session at the top of your list and takes it out of your archive. Only your list changes.',
     ...auth,
@@ -58,6 +61,9 @@ export function registerSessionListStateRoutes(): void {
 
   projectsApp.openapi(createRoute({
     method: 'put', path: '/{workspaceId}/sessions/{sessionId}/archive', tags: ['sessions'],
+    operationId: 'sessions.archive.set',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_READ,
+    'x-kortix-exposure': 'human',
     summary: 'Archive or unarchive a session in your list',
     description: 'archived=true hides the session from your list and unpins it; list it with `archived=only`. Only your list changes.',
     ...auth,

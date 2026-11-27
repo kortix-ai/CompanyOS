@@ -376,6 +376,9 @@ export function registerChangeRequestsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/sessions/{sessionId}/commit-push',
+      operationId: 'sessions.commit_push',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_GITOPS_PUSH,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'Commit and push a session\'s changes',
       ...auth,

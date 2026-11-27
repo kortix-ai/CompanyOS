@@ -305,6 +305,9 @@ export function registerModelsRoutes(): void {
     createRoute({
       method: 'put',
       path: '/{workspaceId}/model-enablement',
+      operationId: 'model_enablement.set',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_MODEL_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['projects'],
       summary: 'Enable or disable project models',
       ...auth,

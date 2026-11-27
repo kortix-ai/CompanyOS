@@ -422,6 +422,9 @@ usageApp.openapi(
   createRoute({
     method: 'get',
     path: '/',
+    operationId: 'usage.get',
+    'x-kortix-action': ACCOUNT_ACTIONS.BILLING_READ,
+    'x-kortix-exposure': 'human',
     tags: ['router'],
     summary: 'Get account usage rollup',
     description:
@@ -532,6 +535,9 @@ usageApp.openapi(
   createRoute({
     method: 'get',
     path: '/session-costs',
+    operationId: 'usage.session_costs.list',
+    'x-kortix-action': ACCOUNT_ACTIONS.BILLING_READ,
+    'x-kortix-exposure': 'human',
     tags: ['usage'],
     summary: 'List session costs for one account',
     description:
@@ -644,6 +650,9 @@ usageApp.openapi(
   createRoute({
     method: 'get',
     path: '/session-costs/{sessionId}',
+    operationId: 'usage.session_costs.get',
+    'x-kortix-action': ACCOUNT_ACTIONS.BILLING_READ,
+    'x-kortix-exposure': 'human',
     tags: ['usage'],
     summary: 'Get one session cost ledger',
     description:
@@ -677,6 +686,9 @@ usageApp.openapi(
   createRoute({
     method: 'get',
     path: '/cost-by-project',
+    operationId: 'usage.cost_by_project.list',
+    'x-kortix-action': ACCOUNT_ACTIONS.BILLING_READ,
+    'x-kortix-exposure': 'human',
     tags: ['usage'],
     summary: 'Roll up spend by project over a date window',
     description:
@@ -802,6 +814,9 @@ usageApp.openapi(
   createRoute({
     method: 'get',
     path: '/cost-summary',
+    operationId: 'usage.cost_summary.get',
+    'x-kortix-action': ACCOUNT_ACTIONS.BILLING_READ,
+    'x-kortix-exposure': 'human',
     tags: ['usage'],
     summary: 'Spend totals, daily series and model breakdown over a date window',
     description:

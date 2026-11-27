@@ -116,6 +116,9 @@ export function registerSessionStreamRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/sessions/{sessionId}/events',
+      operationId: 'sessions.events.stream',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'Stream live events of a session',
       ...auth,

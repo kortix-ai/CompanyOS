@@ -234,6 +234,9 @@ export function createNotificationsApp(deps: NotificationsAppDeps = {}) {
     createRoute({
       method: 'post',
       path: '/device-token/release',
+      operationId: 'notifications.device_tokens.release',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'human',
       tags: ['notifications'],
       summary: 'Release a push device token after sign-out',
       description:
@@ -257,6 +260,9 @@ export function createNotificationsApp(deps: NotificationsAppDeps = {}) {
     createRoute({
       method: 'post',
       path: '/device-token',
+      operationId: 'notifications.device_tokens.create',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'human',
       tags: ['notifications'],
       summary: 'Register this device for push notifications',
       description:
@@ -303,6 +309,9 @@ export function createNotificationsApp(deps: NotificationsAppDeps = {}) {
     createRoute({
       method: 'delete',
       path: '/device-token/{token}',
+      operationId: 'notifications.device_tokens.delete',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'human',
       tags: ['notifications'],
       summary: 'Unregister a push device token',
       description:
@@ -327,6 +336,9 @@ export function createNotificationsApp(deps: NotificationsAppDeps = {}) {
     createRoute({
       method: 'get',
       path: '/',
+      operationId: 'notifications.list',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'human',
       tags: ['notifications'],
       summary: 'List your notifications, newest first',
       description:
@@ -350,6 +362,9 @@ export function createNotificationsApp(deps: NotificationsAppDeps = {}) {
     createRoute({
       method: 'post',
       path: '/read',
+      operationId: 'notifications.mark_read',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'human',
       tags: ['notifications'],
       summary: 'Mark notifications as read',
       description: 'Send exactly one of `ids`, `all` or `session_id`. Only the caller\'s own rows change.',
@@ -383,6 +398,9 @@ export function createNotificationsApp(deps: NotificationsAppDeps = {}) {
     createRoute({
       method: 'get',
       path: '/preferences',
+      operationId: 'notifications.preferences.get',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'human',
       tags: ['notifications'],
       summary: 'Read your notification preferences',
       description: 'Push and email on or off for each notification kind, with the defaults filled in.',
@@ -403,6 +421,9 @@ export function createNotificationsApp(deps: NotificationsAppDeps = {}) {
     createRoute({
       method: 'put',
       path: '/preferences',
+      operationId: 'notifications.preferences.update',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'human',
       tags: ['notifications'],
       summary: 'Change your notification preferences',
       description: 'Sets push or email for the kinds named; every other kind and channel keeps its value.',
@@ -426,6 +447,9 @@ export function createNotificationsApp(deps: NotificationsAppDeps = {}) {
     createRoute({
       method: 'get',
       path: '/web-push/key',
+      operationId: 'notifications.web_push.key.get',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'human',
       tags: ['notifications'],
       summary: 'Get the Web Push public key',
       description: 'The VAPID application server key a browser subscribes with.',
@@ -446,6 +470,9 @@ export function createNotificationsApp(deps: NotificationsAppDeps = {}) {
     createRoute({
       method: 'post',
       path: '/web-push/subscriptions',
+      operationId: 'notifications.web_push.subscriptions.create',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'human',
       tags: ['notifications'],
       summary: 'Register this browser for push notifications',
       description:
@@ -482,6 +509,9 @@ export function createNotificationsApp(deps: NotificationsAppDeps = {}) {
     createRoute({
       method: 'delete',
       path: '/web-push/subscriptions',
+      operationId: 'notifications.web_push.subscriptions.delete',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'human',
       tags: ['notifications'],
       summary: 'Unregister a browser push subscription',
       description: "Deletes the caller's subscription for this endpoint. Another user's endpoint or an unknown one returns deleted=false.",

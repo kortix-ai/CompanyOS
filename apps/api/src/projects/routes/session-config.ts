@@ -114,6 +114,9 @@ export function registerSessionConfigRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/sessions/{sessionId}/config',
+      operationId: 'sessions.config.get',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: "Whether a session's agent config is the latest",
       ...auth,
@@ -283,6 +286,9 @@ export function registerSessionConfigRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/sessions/{sessionId}/reload',
+      operationId: 'sessions.reload',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_STOP,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: "Reload a running session's agent config from git",
       ...auth,
@@ -362,6 +368,9 @@ export function registerSessionConfigRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/sessions/{sessionId}/reload-stream',
+      operationId: 'sessions.reload_stream',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_STOP,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: "Reload a running session's agent config with live progress",
       ...auth,

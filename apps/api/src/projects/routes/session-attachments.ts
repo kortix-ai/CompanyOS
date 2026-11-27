@@ -42,6 +42,9 @@ export function registerSessionAttachmentsRoutes(): void {
     createRoute({
       method: "post",
       path,
+      operationId: 'sessions.attachments.create',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_START,
+      'x-kortix-exposure': 'agent',
       tags: ["sessions"],
       summary: "Save a private session attachment before sandbox startup",
       ...auth,
@@ -143,6 +146,9 @@ export function registerSessionAttachmentsRoutes(): void {
     createRoute({
       method: "get",
       path: `${path}/{attachmentId}`,
+      operationId: 'sessions.attachments.get',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_READ,
+      'x-kortix-exposure': 'agent',
       tags: ["sessions"],
       summary: "Read private attachment bytes without starting the sandbox",
       ...auth,

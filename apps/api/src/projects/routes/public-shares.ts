@@ -66,6 +66,9 @@ export function registerPublicSharesRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/sessions/{sessionId}/previews',
+      operationId: 'sessions.previews.list',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'List preview URLs of a session',
       ...auth,
@@ -102,6 +105,9 @@ export function registerPublicSharesRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/sessions/{sessionId}/public-shares',
+      operationId: 'sessions.public_shares.list',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'List public shares of a session',
       ...auth,
@@ -133,6 +139,9 @@ export function registerPublicSharesRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/sessions/{sessionId}/public-shares',
+      operationId: 'sessions.public_shares.create',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'Create a public share of a session',
       ...auth,
@@ -190,6 +199,9 @@ export function registerPublicSharesRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/sessions/{sessionId}/public-shares/{shareId}',
+      operationId: 'sessions.public_shares.delete',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'Revoke a public session share',
       ...auth,
@@ -228,6 +240,9 @@ export function registerPublicSharesRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/sessions/{sessionId}/turns/{turnId}/share',
+      operationId: 'sessions.turns.share.get',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'human',
       tags: ['sessions'],
       summary: 'Read the public share of one assistant response',
       ...auth,
@@ -257,6 +272,9 @@ export function registerPublicSharesRoutes(): void {
     createRoute({
       method: 'put',
       path: '/{workspaceId}/sessions/{sessionId}/turns/{turnId}/share',
+      operationId: 'sessions.turns.share.set',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'human',
       tags: ['sessions'],
       summary: 'Share one assistant response publicly, or refresh its snapshot',
       description:
@@ -306,6 +324,9 @@ export function registerPublicSharesRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/sessions/{sessionId}/turns/{turnId}/share',
+      operationId: 'sessions.turns.share.delete',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'Revoke the public share of one assistant response',
       ...auth,

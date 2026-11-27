@@ -13,8 +13,14 @@ description: The shop's refund policy. Load it before answering any refund quest
 - No refunds on sale items.
 EOF
 python3 - <<"PY2"
-p = 'kortix.yaml'; s = open(p).read()
-s = s.replace('\nskills:\n', '\nskills:\n  refund-policy: skills/refund-policy\n', 1) if '\nskills:\n' in s else s.rstrip('\n') + '\n\nskills:\n  refund-policy: skills/refund-policy\n'
+import re
+p = 'kortix.yaml'; s = open(p).read(); entry = '  refund-policy: skills/refund-policy'
+if re.search(r'^skills:[ \t]*\{[ \t]*\}[ \t]*$', s, re.M):
+    s = re.sub(r'^skills:[ \t]*\{[ \t]*\}[ \t]*$', 'skills:\n' + entry, s, count=1, flags=re.M)
+elif re.search(r'^skills:[ \t]*$', s, re.M):
+    s = re.sub(r'^skills:[ \t]*$', 'skills:\n' + entry, s, count=1, flags=re.M)
+else:
+    s = s.rstrip('\n') + '\n\nskills:\n' + entry + '\n'
 open(p, 'w').write(s)
 PY2
 git add -A && git -c user.email=oracle@example.test -c user.name=oracle commit -qm "Add the refund-policy skill"

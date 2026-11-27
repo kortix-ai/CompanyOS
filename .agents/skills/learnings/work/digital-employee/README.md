@@ -85,6 +85,48 @@ employee.
    transcripts into memory (volume) and into better skills, agents and
    triggers (git, through change requests that pass the eval gate).
 
+### Lessons from other proactive agents (2026-11-27)
+
+Read: LangChain "What we've learned building proactive agents", xAI Grok Bot
+1.0 and its design post, Devin automations, Meta Muse, Instinct (reviews),
+Letta sleep-time compute (arXiv 2504.13171). None publishes how it stores
+or retrieves memory, or how it queues many instances. What we take:
+
+1. **A gate between the ledger and a wake.** Before an event wakes a
+   session: a cheap rule or script, then a small model that sees only the
+   event. A skip is a ledger state with its reason (`skipped`), so useful
+   silence can be audited. LangChain's Slack agent and Devin's preflight both
+   do this.
+2. **Backpressure in the ledger.** A per-source hourly cap and a bounded
+   queue per employee; an event over the bound is `dropped` with its reason,
+   never lost silently. Dedup by upstream id plus a version; content hash as
+   the fallback (Devin).
+3. **Its own reminders and finished threads are events.** A follow-up it
+   schedules for itself, and a working thread that finishes or needs input,
+   wake the conversation through the ledger. Nothing polls (Devin's
+   coordinator).
+4. **An attention budget.** A message to a person is a one-line headline
+   with detail on request. Each person sets how proactive it may be with
+   them. The metric is the share of its messages that people act on
+   (LangChain, Muse).
+5. **Only sleep writes core memory.** Live sessions append notes and read
+   memory; the sleep session, on a stronger model, merges, deduplicates,
+   expires stale facts and resolves conflicts (Letta). Its inputs are traces,
+   review feedback (rewrites, rejections) and outcomes (did the draft get a
+   reply) (LangChain). Changes to git are change requests, never silent.
+6. **An autonomy ladder.** Every approval decision is stored per action
+   class; a class approved again and again stops asking (LangChain, Grok
+   Bot "smarter approvals").
+7. **Connector content is untrusted.** Mail, messages and pages can carry
+   instructions. The employee uses credentials it cannot read, network
+   access to new hosts needs approval, and an action that sends, pays or
+   changes access goes through the approval check. Instinct's reported
+   failures (obeying an email, an unchecked send, a password reset on its
+   own) are what this prevents; Muse runs a separate approving process.
+8. **Visible states.** The employee home shows each thread as idle,
+   working, waiting, blocked or done, and a person can take over its
+   browser and hand it back (Grok Bot).
+
 ## 1. The Base Identity
 
 One record per employee, `kortix.employee_identities`, one row per project.

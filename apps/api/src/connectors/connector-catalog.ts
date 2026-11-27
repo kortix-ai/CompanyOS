@@ -433,18 +433,20 @@ function onePerApp(items: ConnectorCatalogItem[]): ConnectorCatalogItem[] {
 }
 
 /**
- * Search results by how well the NAME matches: exact, then prefix, then the
- * domain, then any other field. Stable inside each tier, so the index order
- * (popularity) breaks ties.
+ * Search results by how well the NAME matches: exact, then the name or an exact
+ * category ("email" finds Gmail), then the domain, then any other field. Stable
+ * inside each tier, so the index order (popularity) breaks ties: without the
+ * category tier, "email" listed SendGrid and Emailable and never Gmail, and My
+ * Kortix told a person there was no inbox app (QualiLoop Core run 9).
  */
 function rankByName(items: ConnectorCatalogItem[], query: string): ConnectorCatalogItem[] {
   const tier = (item: ConnectorCatalogItem) => {
     const name = item.name.toLowerCase();
     if (name === query) return 0;
-    if (name.startsWith(query)) return 1;
+    if (name.startsWith(query) || name.includes(query)) return 1;
+    if (item.categories.some((category) => category.toLowerCase() === query)) return 1;
     if (item.domain.toLowerCase().startsWith(query)) return 2;
-    if (name.includes(query)) return 3;
-    return 4;
+    return 3;
   };
   return items
     .map((item, index) => ({ item, index, rank: tier(item) }))

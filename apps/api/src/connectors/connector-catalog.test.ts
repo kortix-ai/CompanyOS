@@ -51,6 +51,18 @@ describe('connector catalogue search', () => {
     ]);
   });
 
+  test('an exact category ranks with name prefixes, so a popular app in it comes before a niche app named after it', async () => {
+    const index = [
+      { ...item('gmail', 'mcp', 'Gmail', 'gmail.com', 'Read and send email in your inbox.'), categories: ['email'] },
+      item('emailable', 'openapi', 'Emailable', 'emailable.com', 'Verify addresses'),
+      item('sendgrid', 'openapi', 'SendGrid', 'sendgrid.com', 'Send transactional email'),
+    ];
+    const page = await createConnectorCatalog({
+      fetch: (async () => new Response(JSON.stringify({ data: index }), { headers: { 'content-type': 'application/json' } })) as unknown as typeof fetch,
+    }).list({ q: 'email' });
+    expect(page.items.map((entry) => entry.name)).toEqual(['Gmail', 'Emailable', 'SendGrid']);
+  });
+
   test('browsing without a query also shows each app once, in index order', async () => {
     const page = await catalog().list({});
     expect(page.items.map((entry) => entry.domain)).toEqual([

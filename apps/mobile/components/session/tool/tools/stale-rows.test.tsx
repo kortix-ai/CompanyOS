@@ -75,7 +75,6 @@ mock.module('../shared/navigation', () => ({
 }));
 mock.module('../shared/code-card', () => ({
   HighlightedCode: none,
-  MD_FLUSH_CLASSES: '',
   MarkdownFrontmatterCard: none,
   ToolCode: none,
   ToolCodeCard: none,

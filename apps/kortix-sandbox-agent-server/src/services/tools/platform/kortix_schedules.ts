@@ -776,11 +776,31 @@ async function testAppAutomation(name: string, app: string, filter: Record<strin
  * it went live after one matching sample, or after a change with no new test). In this process only: after a
  * daemon restart the automation is tested again.
  */
-const TESTED = new Map<string, { matched: boolean; skipped: boolean }>()
+const TESTED = new Map<string, { matched: boolean; skipped: boolean; ranAt?: number }>()
 const testedKey = (context: PlatformToolContext, name: string) => `${context.env.KORTIX_SESSION_ID ?? ''}:${name}`
-function noteTest(context: PlatformToolContext, name: string, outcome: 'matched' | 'skipped') {
+function noteTest(context: PlatformToolContext, name: string, outcome: 'matched' | 'skipped', ranAt?: number) {
   const seen = TESTED.get(testedKey(context, name)) ?? { matched: false, skipped: false }
-  TESTED.set(testedKey(context, name), { ...seen, [outcome]: true })
+  TESTED.set(testedKey(context, name), { ...seen, [outcome]: true, ...(ranAt ? { ranAt } : {}) })
+}
+
+/**
+ * Why a run_now test does not count yet: its run has not finished, or it failed. A run_now only
+ * starts the run, and QualiLoop journeys on dev resumed schedules while the test was still running
+ * or after it failed. The run is the newest one since run_now (2 min of clock slack); null = it succeeded.
+ */
+async function runNowOutcome(id: string, ranAt: number, context: PlatformToolContext): Promise<string | null> {
+  const read = await runJson<{ runs?: Array<{ status?: string; run_status?: string | null; error?: string | null; run_error?: string | null; started_at?: string }> }>(
+    ['triggers', 'runs', id, '--limit=5', '--json'],
+    context,
+  )
+  if ('error' in read) return `Could not read the test run of ${id}: read its runs, then resume.`
+  const run = (read.value.runs ?? []).find((r) => Date.parse(r.started_at ?? '') >= ranAt - 120_000)
+  const retry = 'If the person said to skip the test, call resume with force: true.'
+  if (!run) return `The test run has not shown up yet: read the runs of ${id}, then resume. ${retry}`
+  if (run.status === 'queued' || run.status === 'running' || run.run_status === 'running') return `The test run is still running: wait for it, read its result with runs, then resume. ${retry}`
+  if (run.status === 'failed' || run.status === 'rejected' || run.run_status === 'failed') return `The test run failed (${run.error || run.run_error || 'no reason given'}): fix it and run_now again before it goes live. ${retry}`
+  if (run.status === 'skipped') return `The test run was skipped (${run.error || 'no reason given'}): it has not shown the work yet. ${retry}`
+  return null
 }
 
 /** `runs`: an automation's recent runs, newest first: what it started, skipped or failed. */
@@ -826,6 +846,11 @@ const FAILED_TITLE: Record<keyof typeof VERB, string> = {
 /** Why `resume` must wait: what this session's tests have not shown yet, or null when it may go live. */
 async function untested(id: string, context: PlatformToolContext): Promise<string | null> {
   const seen = TESTED.get(testedKey(context, id)) ?? { matched: false, skipped: false }
+  // A run_now this session started counts once its run succeeded.
+  if (seen.ranAt) {
+    const pending = await runNowOutcome(id, seen.ranAt, context)
+    if (pending) return pending
+  }
   if (RUNTIME_ID.test(id)) return seen.matched ? null : `Test it first: run_now ${id}, read its runs, then resume. If the person said to skip the test, call resume with force: true.`
   const shown = await runJson<{ type?: string; filter?: Record<string, unknown> | null }>(['triggers', 'show', id, '--json'], context)
   // An App event automation starts live (its test is a real App event); one the CLI cannot read is not blocked here.
@@ -854,7 +879,17 @@ async function change(action: string, verb: keyof typeof VERB, id: string, conte
       ]
   const done = await cliRun(argv, context)
   if ('error' in done) return fail(TOOL, action, FAILED_TITLE[verb] ?? 'Could not change it', done.error, context)
-  return ok(TOOL, action, { title: cli.title, subtitle: id, links: [{ label: 'Triggers', href: adminHref(context.env, 'triggers') }] }, { id })
+  return ok(
+    TOOL,
+    action,
+    {
+      title: cli.title,
+      // run_now only starts the run: say where its outcome is, so a reply does not call it passed.
+      subtitle: verb === 'run_now' && !id.startsWith('reminder.') ? `${id}: started. Read runs for its outcome; it goes live only after the run succeeded.` : id,
+      links: [{ label: 'Triggers', href: adminHref(context.env, 'triggers') }],
+    },
+    { id },
+  )
 }
 
 export default {
@@ -946,8 +981,8 @@ export default {
       if (missing) return fail(TOOL, action, 'Test it before it goes live', { kind: 'invalid', message: missing }, context)
     }
     const changed = await change(action, verb, id, context)
-    // A run started now is a test run of a schedule.
-    if (verb === 'run_now' && changed.ok) noteTest(context, id, 'matched')
+    // A run started now is a test run of a schedule; resume waits for its outcome.
+    if (verb === 'run_now' && changed.ok) noteTest(context, id, 'matched', Date.now())
     return changed
   },
 }

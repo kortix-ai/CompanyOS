@@ -105,7 +105,7 @@ root = Stack([d, s, o, c])
 d = Card("All your data in one place", "<one line in their terms>", "Memory · Drive · Connectors")
 s = Card("All your software in one place", "<one line in their terms>", "Connectors · Apps")
 o = Card("Work that runs itself", "<one line in their terms>", "Agents · Triggers · Slack and Teams")
-c = Card("You stay in control", "Nothing becomes permanent until you approve it.", "Change requests · Permissions")
+c = Card("You stay in control", "Anything that touches other people, access or money waits for your yes.", "Change requests · Permissions")
 ```
 
 ```openui

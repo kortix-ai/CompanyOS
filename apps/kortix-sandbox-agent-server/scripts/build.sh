@@ -32,7 +32,7 @@ compile_with_retry() {
   # agentArtifactCurrent) skips this build when the binary is newer than every module in it. Only on a Bun
   # that has the flag; without the file the worktree always rebuilds.
   local meta_args=()
-  if bun build --help 2>/dev/null | grep -q -- '--metafile'; then meta_args=(--metafile=dist/kortix-agent.meta.json); fi
+  if bun build --help 2>/dev/null | grep -q -- '--metafile'; then meta_args=(--metafile="$next.meta.json"); fi
 
   while true; do
     # pi's two workers are extra entrypoints: in a compiled binary pi starts them as
@@ -42,7 +42,7 @@ compile_with_retry() {
     # start: exec to the first line of `main()` measured 485 ms cold before, 134-334 ms after, on a
     # Platinum box (2026-11-03). It needs `--format=esm`: the default CJS bytecode fails at runtime
     # on `import.meta` ("import.meta is only valid inside modules").
-    if bun build --compile --bytecode --format=esm --root=. --target="$target" --tsconfig-override ./tsconfig.json ${meta_args[@]+"${meta_args[@]}"} --outfile=dist/kortix-agent src/main.ts src/extensions/codemode/worker.ts src/utils/image-resize-worker.ts; then
+    if bun build --compile --bytecode --format=esm --root=. --target="$target" --tsconfig-override ./tsconfig.json ${meta_args[@]+"${meta_args[@]}"} --outfile="$next" src/main.ts src/extensions/codemode/worker.ts src/utils/image-resize-worker.ts; then
       return 0
     fi
 
@@ -66,10 +66,25 @@ compile_with_retry() {
 # 8000 never rebound → every proxied request 502'd → sandboxes stuck at
 # "Starting the agent" forever. Gate the compile on a clean tsc so it can never
 # recur.
-echo "Typechecking (tsc --noEmit) before compile…"
-bun run typecheck
-
-compile_with_retry
+# The typecheck runs beside the compile (6 vCPU Kortix session, 2026-11-27: 9.7-9.8 s one after the other, 6.3-6.8 s
+# side by side) and still gates it: the compile writes to $next, which replaces dist/kortix-agent only once both
+# have passed, so a failed typecheck leaves the previous binary exactly as a typecheck before the compile did.
+next=dist/.kortix-agent.next
+rm -f "$next" "$next.meta.json"
+echo "Typechecking (tsc --noEmit) beside the compile…"
+bun run typecheck &
+typecheck_pid=$!
+compile_status=0
+compile_with_retry || compile_status=$?
+typecheck_status=0
+wait "$typecheck_pid" || typecheck_status=$?
+if [ "$typecheck_status" -ne 0 ] || [ "$compile_status" -ne 0 ]; then
+  rm -f "$next" "$next.meta.json"
+  [ "$typecheck_status" -eq 0 ] || echo "typecheck failed: no binary built" >&2
+  exit 1
+fi
+if [ -f "$next.meta.json" ]; then mv -f "$next.meta.json" dist/kortix-agent.meta.json; fi
+mv -f "$next" dist/kortix-agent
 chmod +x dist/kortix-agent
 
 # Invalidate the snapshot builder's source-staleness memo (dist/kortix-agent.srchash,

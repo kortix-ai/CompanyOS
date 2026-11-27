@@ -30,7 +30,7 @@ import {
   pickSlot, sh, run, which, portInUse, repoRoot, defaultWorktreePath, branchExists, freshBase, worktreeAddArgs, removeWorktree,
   renderSupabaseProject, runMigrate, supa, supaStatusEnv, slotCredsFromStatus, apiLaunchEnv, webLaunchEnv, gatewayLaunchEnv,
   writeMarker, ensureDeps, checkDeps, supaWorkdir, slotDir, startTunnel, tunnelAnswers, startStripeListen, WT_HOME, REGISTRY_PATH,
-  startSupabaseDb, startSupabaseFullStack, hasKortixSchema, ensureRuntimeArtifacts, startDocsBuild, dbModeOf,
+  startSupabaseDb, startSupabaseFullStack, hasKortixSchema, ensureRuntimeArtifacts, startDocsBuild, seedTurbopackCache, dbModeOf,
   ensurePrimarySupabase, prewarmPrimarySupabase, PREWARM_LOG, primaryCredsFromStatus, primarySupabaseStatusEnv, SHARED_SUPABASE_PORTS, supabaseBin,
   branchDbName, primaryDb, branchDbExists, createBranchDb, syncBranchUsers, dropBranchDb, withDatabase,
   killTree, stackRoots, stackPids, listenersOn, psTable, cwdTable,
@@ -546,10 +546,17 @@ async function cmdCreate(a: Args) {
   // design. A per-worktree --store-dir defeats hardlink dedup and materialised
   // a full ~2.8GB copy per worktree (91 of them once leaked 244GB into ~/.kortix).
   step('Installing dependencies (shared pnpm store)');
-  if (await run(['pnpm', 'install'], { cwd: wtPath }) !== 0) die(`pnpm install failed — fix and re-run \`pnpm worktree create --name ${name}\``);
+  // From the lockfile as committed: 7.4-7.8 s against 14.1-15.3 s for a resolving install in a new worktree (pnpm
+  // 8.11, 6 vCPU Kortix session, 2026-11-27). A branch whose lockfile does not match its package.json falls back.
+  if (await run(['pnpm', 'install', '--frozen-lockfile'], { cwd: wtPath }) !== 0) {
+    sub('the lockfile does not match package.json — installing with resolution');
+    if (await run(['pnpm', 'install'], { cwd: wtPath }) !== 0) die(`pnpm install failed — fix and re-run \`pnpm worktree create --name ${name}\``);
+  }
   // The web app's first `next dev` builds /docs when public/docs/ is missing, which it is here, and that build slows
   // the first page's compile. It needs the install above; started now it is done before `start` serves a page.
   if (!a.flags['no-web'] && startDocsBuild(wtPath, joinPath(slotDir(name), 'docs-build.log'))) sub('building /docs in the background');
+  // A warm Turbopack cache from another checkout halves the first page's compile; it copies while the rest of create runs.
+  const turbopackSeed = a.flags['no-web'] ? Promise.resolve(null) : seedTurbopackCache(wtPath, [root, ...Object.values(loadRegistry().slots).map((s) => s.path)]);
 
   if (dbMode === 'isolated') {
     step(`Rendering isolated Supabase project ${pc.dim('('+entry.projectId+')')}`);
@@ -578,6 +585,8 @@ async function cmdCreate(a: Args) {
 
   step('Building runtime artifacts');
   if (await ensureRuntimeArtifacts(wtPath) !== 0) die('runtime artifact build failed');
+  const seededFrom = await turbopackSeed;
+  if (seededFrom) sub(`web app compile cache copied from ${seededFrom}`);
 
   writeMarker(wtPath, entry);
   await withLock(() => { const reg = loadRegistry(); if (reg.slots[name]) { reg.slots[name].status = 'created'; reg.slots[name].lastUsedAt = new Date().toISOString(); saveRegistry(reg); } });
@@ -632,6 +641,14 @@ async function cmdStart(a: Args) {
     sub(`refreshed slot ${e.slot} ports from BASE (${added.join(', ')}) → gateway :${freshPorts.gateway}`);
   }
 
+  // Neither the tunnel nor the runtime artifacts need the database, so they run while it comes up. In a fresh session
+  // the Supabase that `worktree create` started is still booting here (it needs ~25-30 s); the tunnel took ~4 s and
+  // the artifact check 1.6 s after it before.
+  const tunnelStart = a.flags['no-tunnel'] ? null : startTunnel(e.ports.api);
+  void tunnelStart?.then((t) => { if (t) process.once('exit', () => { try { t.proc.kill(); } catch {} }); }); // a die() below must not leave cloudflared running
+  step('Building runtime artifacts');
+  if (await ensureRuntimeArtifacts(e.path) !== 0) die('runtime artifact build failed');
+
   let creds;
   if (dbMode === 'isolated') {
     renderSupabaseProject(name, e.path, e.projectId, e.ports);
@@ -674,16 +691,13 @@ async function cmdStart(a: Args) {
     sub(`${creds.supabaseUrl} · ${creds.dbUrl}`);
     warnOnSharedDbCrosstalk(name, reg);
   }
-  step('Building runtime artifacts');
-  if (await ensureRuntimeArtifacts(e.path) !== 0) die('runtime artifact build failed');
-
   for (const port of [e.ports.web, e.ports.api]) { const u = portInUse(port); if (u.inUse && u.pid) sh(['bash', '-lc', `kill ${u.pid} 2>/dev/null || true`]); }
   await withLock(() => { const r = loadRegistry(); if (r.slots[name]) { r.slots[name].status = 'running'; r.slots[name].lastUsedAt = new Date().toISOString(); saveRegistry(r); } });
 
   let tunnel: Tunnel | null = null;
   if (!a.flags['no-tunnel']) {
     step('Cloudflare tunnel (cloud sandbox callback)');
-    tunnel = await startTunnel(e.ports.api);
+    tunnel = await tunnelStart;
     if (tunnel) sub(`KORTIX_URL → ${tunnel.url}`);
     else warn('no tunnel (cloudflared missing or timed out) — cloud sandboxes won’t be reachable; `brew install cloudflared` and restart, or pass --no-tunnel to silence');
   }

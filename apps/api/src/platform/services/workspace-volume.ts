@@ -76,6 +76,13 @@ export const WORKSPACE_CACHE_KEY_PREFIX = 'ws-';
 export const WORKSPACE_CACHE_MAX_ENTRIES = 2;
 /** Idle lifetime of an entry: a project that stops starting sessions stops paying for its cache after a week. */
 export const WORKSPACE_CACHE_TTL_SECONDS = 7 * 24 * 3600;
+/**
+ * Bytes a project's saved workspaces may hold together (Platinum `max_bytes`, per namespace). Measured
+ * CompanyOS entries are 12.4-17.3 GB, so 32 GiB keeps two. Without it one project's large save evicts other
+ * projects' only entry from the org's shared budget. A single save over the cap is refused with 413 and
+ * evicts nothing.
+ */
+export const WORKSPACE_CACHE_MAX_BYTES = 32 * 1024 ** 3;
 /** Platinum's cache key rule, narrowed to the `ws-` keys a project saves. */
 const WORKSPACE_CACHE_KEY = /^ws-[A-Za-z0-9._:+=-]{1,120}$/;
 /** Platinum's namespace rule. */
@@ -471,6 +478,7 @@ export async function saveWorkspaceCache(input: {
           volume: volume.name,
           max_entries: WORKSPACE_CACHE_MAX_ENTRIES,
           ttl_seconds: WORKSPACE_CACHE_TTL_SECONDS,
+          max_bytes: WORKSPACE_CACHE_MAX_BYTES,
           ...(commitId ? { ref: commitId } : {}),
         }),
         signal: AbortSignal.timeout(60_000),

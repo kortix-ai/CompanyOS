@@ -145,7 +145,7 @@ export const MCP_APPS: readonly McpApp[] = [
   // Kortix's own Google MCP servers (./google): Composio-compatible tools over
   // Google's REST APIs, served in-process. The URLs never reach the network.
   {
-    slug: 'gmail', name: 'Gmail', description: 'Read, search, send and organize email.', domain: 'gmail.com', categories: ['email'], url: googleMcpUrl('gmail'), icon: true,
+    slug: 'gmail', name: 'Gmail', description: 'Read, search, send and organize email in your inbox.', domain: 'gmail.com', categories: ['email'], url: googleMcpUrl('gmail'), icon: true,
     auth: { ...GOOGLE, scopes: [...GOOGLE_IDENTITY, googleScope('gmail.modify'), googleScope('gmail.settings.basic'), googleScope('contacts.readonly'), googleScope('contacts.other.readonly')] },
     access: 'Read, search, send, label and archive mail, and move it to the trash; change basic mail settings such as filters and the vacation reply; read your contacts; see your name and email address.',
   },

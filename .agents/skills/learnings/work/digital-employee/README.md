@@ -1,163 +1,265 @@
 ---
-title: Digital employee (My Kortix as a product): one workspace, one self, one memory, the full action space of a person
-status: designing (branch `digital-employee`); flag `digital_employee` planned; product name open (decisions.md D1)
+title: The Kortix employee: a digital human with its own identity, one event log, one memory, and outcomes
+status: spec (branch `digital-employee`); flag `employee`; phase 1 in progress
 owner: Marko (decisions)
-updated: 2026-11-26
+updated: 2026-11-27
 ---
 
-# Digital employee
+# The Kortix employee
 
-**The problem.** My Kortix is a strong agent, but it is not an employee. You
-open an app to talk to it, every person gets a separate memory, and it acts
-only when someone writes to it. A company wants to hire a colleague: one name,
-one memory, its own accounts, on every channel the team uses, working on goals
-around the clock, many things at once.
+**The problem.** Kortix agents act only when a person opens a chat. They have
+no identity of their own: no email, no phone, no logins that last, no second
+factor. They borrow a person's connections. They forget between sessions. A
+company wants to hire a colleague, not open a chat.
 
-**The product.** A black box AI employee at the front. Underneath it is one
-Kortix workspace. 1 employee = 1 workspace. You hire it, it interviews you, it
-gets its accounts like a new hire, and from then on you talk to it only where
-you already work: Slack, Teams, email, SMS, phone, Google Meet, a Slack huddle.
-The app only hires and oversees.
+**The product.** You click **Create employee**. Kortix makes a workspace and
+gives it a Base Identity: an email address, a phone number, an authenticator,
+a browser that keeps its logins, and a Drive. You onboard it like a new hire:
+invite its email to Slack, Teams or Google, and tell it what to do. It signs
+up, signs in, sets up its own connectors and automations, and drives outcomes
+around the clock. 1 employee = 1 Kortix workspace. My Kortix becomes the
+employee.
 
 ## Principles
 
-1. **Black box at the front, a workspace underneath.** Sessions, agents,
-   files and `kortix.yaml` stay hidden. "Open workspace" stays for power users.
-2. **Conversation only through human channels.** The app has no message box.
-3. **General primitives, not app integrations.** Parity with a person comes
-   from a computer with a signed-in browser, a voice bridge into any web call,
-   and a phone. A Meet link, a Slack huddle, a Teams call and a Zoom web call
-   all join the same way: the browser opens the call and the voice is its
-   microphone (`packages/voice/src/meet/call.ts`). Meet has its own path today
-   (`packages/voice/src/meet/join.ts`).
-4. **One self, one memory.** Every session of the employee reads and writes
-   the same self and the same memory, whoever talks to it and on any channel.
-5. **Every rule is code.** Goals stage 1 showed written rules fail 4 of 7
-   times (`../goals-and-workflows/README.md`). Discretion, approvals and
-   spending limits are checks outside the model.
+1. **One identity, used like a person uses one.** Every copy of the employee
+   uses the same email, phone, browser, vault and memory. From outside it is
+   one person.
+2. **The browser is the default hand.** The employee uses any software
+   through its browser, as a person does. It then sets up API keys,
+   connectors and automations where they make it faster or more reliable.
+   The browser stays the fallback for everything without an API.
+3. **Every input is an event in one log.** Messages, mail, SMS, calls,
+   connector events, schedules, goal wakes and finished sessions all land in
+   one append-only log before anything acts on them.
+4. **Code decides routing, the model decides work.** The dispatcher is
+   deterministic. The model never chooses whether an event is stored or lost.
+5. **Every rule that matters is code.** Discretion, approvals, spend caps,
+   2FA seeds and passwords are enforced outside the model. Written rules
+   failed 4 of 7 times in the Goals live runs.
+6. **The employee owns its state.** Its Drive holds everything about it. It
+   writes outward only when someone needs to know.
 
-## The state model: where everything lives and how it aggregates
+## 1. The Base Identity
 
-| State | Where | Written by | How parallel writes merge |
+One record per employee, `kortix.employee_identities`, one row per project.
+It points at each part; the secrets themselves stay in the vault.
+
+| Part | What the employee gets | How Kortix provisions it | Today |
 |---|---|---|---|
-| Self: name, role, manager, values, rules, accounts | git: the workspace repo | the interview, then the employee through change requests | config release (one commit at a time) |
-| Procedural memory: skills | git: `skills/` | the employee, through the learning gate (`../continual-learning/README.md`) | config release |
-| Goals | git: the goals folder (`../goals-and-workflows/README.md`) | the interview, the employee, people | config release |
-| Semantic memory: people, facts, projects, preferences | the workspace volume: one employee memory folder | every session | each session appends its own notes; one consolidation job merges them into the canonical files |
-| Episodic memory: every event and every action | the event ledger plus session transcripts | the API and every session | append-only |
-| Computer state: browser profile, cookies, logins, dotfiles | the workspace volume: one computer folder | the session that holds it | each worker gets a copy of the profile; on exit its cookies merge back by domain, newest wins |
-| Secrets: passwords, TOTP seeds, later a card | the vault (secrets) | the employee, people | one value per key |
+| Name | A first name and a role | The create form; default from a name list | None |
+| Email | `<name>@<managed domain>`, inbound and outbound, threads, attachments | Resend inbox, created by `addEmailInbox` with `agentName: mykortix` | Exists, behind `RESEND_MANAGED_EMAIL_ENABLED` and flag `email_channel` |
+| Phone | One number: SMS in and out, calls in and out on the voice cascade | Number bought by API from the phone provider; webhooks to a new `sms` channel and to the voice relay | None |
+| Authenticator | TOTP for every account it secures; codes from SMS and email | Seeds in the vault (`project_secrets`, broker strategy); codes made server-side | None |
+| Passwords | One strong password per account | Generated server-side, stored in the vault, typed by the browser tool, never shown to the model | Vault exists |
+| Browser | One persistent Chromium: logins, cookies and IndexedDB survive; one residential IP; one fingerprint | One Platinum Browser per employee, residential proxy, stealth image, live view | Platinum Browsers exist; residential proxy exists for sandboxes only |
+| Captcha | Solved without a person | A solver behind the browser tool, billed per solve | None |
+| Drive | Everything about the employee | A project drive `Employee`, mounted in every employee session | Drives exist |
+| Card | A prepaid card with limits | Card issuing by API, per employee | Later phase |
 
-Today My Kortix memory is per viewer: `/Users/<viewer>/Memory/mykortix`
-(`apps/api/src/memory/layers.ts:9`). The employee replaces it with one folder
-for the workspace.
+**Onboarding a company is an invite.** A person invites the employee's email
+to Slack, Teams, Google Workspace, Notion, HubSpot or any tool. The invite is
+an email event. The employee opens it in its browser, signs up as a real
+member, saves the password and 2FA seed, and records the account in its
+Drive. Slack and Teams seats are then real user seats, not bots.
 
-**Discretion is code, not prompt.** One memory does not mean that the employee
-repeats a DM to the whole company. Each fact carries its source and its
-audience (`public`, `team`, `private:<person>`). Recall in a conversation
-returns only the facts whose audience includes everyone in that conversation.
+**Email is the universal event bus.** A person learns about a DM, a mention,
+a comment or an assigned task from a notification email. So does the
+employee: notification mail from any tool is an event in its log, even for a
+tool with no API and no connector. Connectors and webhooks add faster and
+richer events where they exist.
 
-## One being, many hands: the mind and the workers
+### The accounts ledger
 
-The employee is one autonomous being with its own identity. It scales itself
-without limit, but from outside it is always one person: one Slack member, one
-email address, one voice, one memory. A worker is not a subagent with its own
-persona. A worker is the employee itself, working on one more thing at once.
+Every account the employee creates is one row in `kortix.employee_accounts`:
+site, login, the vault reference of the password, the 2FA method and its
+vault reference, the creation time, the last successful sign-in, and its
+state (`active`, `locked`, `needs_person`). The Drive keeps a readable copy
+(`/Employee/Accounts.md`). The employee checks this ledger before it signs up
+anywhere, so it never makes a second account.
 
-- **Same self in every copy.** Every worker loads the same self, the same
-  memory, the same accounts and the same voice. No worker has a name, a prompt
-  or a memory of its own.
-- **Each copy knows what the others do.** One live self-state ("now") lists
-  every running copy: its thread, its task, what it waits on. Each copy reads
-  it on every turn, so two copies never contradict each other or do the same
-  work twice.
-- **Scale is a budget, not a design limit.** The mind starts as many workers
-  as the work and the workspace budget allow. Each worker has a full computer.
-- **The mind** is one root session per employee, always on. Every inbound
-  event lands in one feed: channel messages, email, calls, SMS, triggers,
-  connector events, goal wake-ups (`apps/api/src/integrations/event-inbox.ts`
-  is one of today's pieces). The mind never waits. It answers short things
-  itself and starts a worker for anything else.
-- **A worker** is one session per thread of work: one Slack thread, one email
-  thread, one call, one goal. The worker that owns a thread hears its
-  follow-ups first (`../long-horizon-runtime/README.md`). Workers run in
-  parallel, each in its own sandbox, on the same git release and the same
-  memory.
-- **A call is a worker too.** The voice cascade answers in real time and the
-  same session does the deep work (`packages/voice/README.md`).
+### The authenticator
 
-## The action space: parity with a person
+- `kortix otp add` takes an `otpauth://` URI or a QR screenshot and stores the
+  seed in the vault. The seed never enters the model's context.
+- `kortix otp code <account>` returns the current 6-digit code.
+- `kortix otp wait --via sms|email [--from <sender>]` waits for the next code
+  that arrives by SMS or email and returns only the code. It reads the event
+  log.
+- Passkeys: a CDP virtual authenticator in the employee's browser. This is a
+  later step.
 
-| A person has | The employee gets | Today |
-|---|---|---|
-| A work email | A real mailbox in the customer's Google Workspace or Microsoft 365, signed in as the user. A managed inbox when the customer has none | Managed inboxes exist (`apps/api/src/channels/email/installs.ts`) |
-| A Slack and Teams seat | A real member account with a user token, not a bot | Bot only: `apps/api/src/config.ts:540-544` |
-| Meetings, huddles, calls | Browser plus voice bridge into any web call; Meet by link | `voice_join_meet`, `voice_join_call`, flag `voice_call` (wip) |
-| A phone | A number with calls and SMS, on the same voice cascade | None |
-| 2FA | One `otp` tool: TOTP seeds from the vault, codes from SMS and email | None |
-| A laptop with saved logins | A browser profile on the workspace volume that survives every session | None: state lives in the box only (`apps/sandbox/entrypoint.sh:42-47`) |
-| A card | Later | None |
+### The browser
 
-My Kortix's computer has no browser today (`apps/sandbox/MACHINE.md:44`). The
-employee runs on the full computer.
+The browser is one long-lived Chromium per employee, on Platinum. It is the
+employee's laptop.
 
-## The parity checklist: the definition of done
+- **One identity in parallel.** Every copy connects to the same browser over
+  CDP, through a short-lived URL that the API mints per session. Each copy
+  works in its own tab. All tabs share the same cookies, so one login serves
+  every copy.
+- **Logins last.** The browser's disk keeps the full profile, IndexedDB and
+  service workers included. A nightly job also saves the cookies and
+  localStorage to a Platinum saved profile, as a backup.
+- **Looks like a person.** One sticky residential IP per employee, from one
+  country. The timezone and locale match that IP. The browser runs with a
+  display (not headless), real fonts and a stable fingerprint. Required
+  Platinum work: `network.residential_proxy` on browsers, a stealth image
+  option, and a live view.
+- **Watch its screen.** The employee home shows the browser live. A person
+  can take over to clear a step the employee cannot.
+- **The agent tool.** `agent-browser --cdp` against the employee browser.
+  The skill teaches the sign-up, sign-in and 2FA flows, the accounts ledger,
+  and when to stop and ask a person.
 
-The employee has the same action space as a person, end to end. Each row is a
-task it must finish alone on dev, from a real input to a real result. The rows
-become tasks in the agent evals (`evals/`), so parity is measured, not claimed.
+## 2. The event log
 
-| # | A person can | The proof |
-|---|---|---|
-| 1 | Get hired and onboarded by talking | A voice interview writes its self, goals and first facts |
-| 2 | Read and answer email from anyone | Mail to its address gets a correct reply in the same thread |
-| 3 | Work in Slack and Teams as a member | It answers a DM, joins a channel, starts a thread, as a user and not a bot |
-| 4 | Join a call from a link | It joins a Meet link and a Slack huddle, talks, and acts on what it hears |
-| 5 | Call and text a phone | It calls a number, holds a conversation, and sends and reads SMS |
-| 6 | Sign up and sign in anywhere | It creates an account on a new site, stores the password, sets up 2FA, and signs in again a week later |
-| 7 | Use any web app | It finishes a task in a web app that has no API, with its saved login |
-| 8 | Remember everything, with discretion | A fact from person A is used for A, never told to B |
-| 9 | Do many things at once | Three people ask at once, three copies work, no answer contradicts another |
-| 10 | Act without being asked | It moves a goal forward and reports back with no prompt from a person |
-| 11 | Learn the job | A task it failed once, it does right next time, through a skill it wrote |
-| 12 | Pay for something | Later: a purchase under a limit, an approval above it |
+A permanent, append-only log per employee: `kortix.employee_events`.
 
-## UX
+| Column | Content |
+|---|---|
+| `id` | ULID, ordered by arrival |
+| `project_id` | The employee's workspace |
+| `source` | `email`, `slack`, `teams`, `sms`, `call`, `connector:<app>`, `webhook`, `schedule`, `goal`, `session`, `browser`, `person` |
+| `type` | `<source>.<object>.<verb>`, for example `email.message.received` |
+| `subject` | The thread key: one email thread, one Slack thread, one phone number, one goal |
+| `external_id` | The upstream id; unique with `project_id` and `source`, so a redelivery is a no-op |
+| `occurred_at`, `received_at` | Upstream time and arrival time |
+| `actor` | Who caused it: a member, an outside address or number, the employee itself |
+| `audience` | `public`, `team` or `private:<person>`: who may see it later |
+| `summary` | One line for the dispatcher and the digest, made by code |
+| `payload` | The event body, or a pointer to it when large |
+| `routed_to` | The session that took it, and when |
 
-- **Hire.** Offer (name, role, manager) → voice interview (context dump,
-  files, screen share; a live list of what it learned) → accounts (identity,
-  phone, Slack, Teams, tools; the employee sets up its own password and 2FA
-  while you watch) → first day (it writes its first week and messages you).
-- **Oversee.** Now (calls, browser, waiting), goals, approvals, the week in
-  numbers, "watch its screen". No message box.
-- The design canvas is the reference for these screens. It lives outside the
-  repository; the PR links it.
+- **Write first, then act.** An adapter writes the row in the same transaction
+  as the dispatch job (`kortix.job_queue`, queue `employee.dispatch`, ordered
+  per `subject`). If the dispatch fails, the event stays and is retried; after
+  the last attempt it is dead-lettered and shown on the employee home.
+- **Adapters.** Each existing ingress gets one call, `recordEmployeeEvent`,
+  when the project has the `employee` flag:
+  - email: `handleEmailEvent` (already on the durable inbox);
+  - Slack and Teams: after the webhook dedup claim;
+  - connector events: `deliverEvents` (Composio push, MCP polls);
+  - schedules and reminders: `fireGitTrigger`;
+  - goal wakes: `wakeGoal` and the heartbeat;
+  - session ends: the turn-end hooks;
+  - SMS and calls: the new phone channel.
+- **Kept for good.** Unlike `job_queue` rows, events are never pruned while the
+  employee exists. They are the episodic memory.
 
-## Phases
+## 3. The dispatcher and the mind
 
-Each phase ends with a proof that runs on dev.
+The dispatcher is code. For each event, in order per subject:
 
-1. **One self, one memory, the mind.** Proof: a voice interview writes the
-   self and the memory. Then two people write to it on Slack and on email.
-   Both reach the same memory, the discretion check holds, and the mind runs
-   two workers at once.
-2. **Hire and oversee.** The employee workspace type behind flag
-   `digital_employee` and the onboarding and oversight screens.
-3. **The computer.** Persistent browser profile, a Slack and Teams member
-   account, huddles and web calls through the browser.
-4. **Phone, SMS, OTP.**
-5. **Learning.** The continual-learning loop writes and tests skills.
-6. **The brand front door** and the card.
+1. **A session owns the subject** (a chat thread binding, an email thread, a
+   goal's owner): deliver the event to it as a follow-up.
+2. **The event is addressed to the employee** (a DM, a mention, mail to its
+   address, an SMS, a call): start a worker session for the subject, bind it,
+   deliver the event.
+3. **Everything else** (connector events, schedules, notifications it was not
+   addressed in): add it to the mind's digest.
 
-## How this relates to other topics
+**The mind** is one always-addressable session per employee. It receives the
+digest every few minutes, never waits, and decides: ignore, note in memory,
+or start a worker with the `agent` tool. **Workers** are the employee itself
+on one thread or one task each, in parallel, each in its own sandbox, all on
+the same identity, Drive and memory. Every turn, a worker sees the live list
+of the other workers ("now"), so two copies never do the same work or
+contradict each other.
 
-This topic sequences work that is already planned:
-`long-horizon-runtime` (the mind and the workers), `continual-learning`
-(procedural memory), `goals-and-workflows` (goals),
-`my-kortix-multi-agent-parity` (workers and messages between them),
-`stateless-sessions` and `project-repository-access` (one volume per
-workspace, the sandbox is disposable).
+## 4. Memory
+
+| Memory | Holds | Where | Written by |
+|---|---|---|---|
+| Working | The current task | The session | The session |
+| Episodic | Every event and every action, in order | `employee_events` plus session logs | Adapters and sessions (append only) |
+| Semantic | Facts about people, the company, its accounts and itself, each with audience and source | `/Employee/Memory/facts/` | Sessions append notes; the consolidation job merges |
+| Procedural | Skills: how it does things here | `skills/` in git | The reflection job, through a change request |
+| Self | Name, role, manager, rules, goals | `employee/self.md` in git | The interview, then change requests |
+
+**Recall.** Every turn gets the self, the "now" list and an index of facts
+whose audience covers everyone in the conversation. `kortix memory search`
+searches facts and the event log on demand. A copy never compacts its context
+away: it rebuilds what it needs from the log.
+
+**Discretion is code.** A fact or event with audience `private:<person>` is
+returned only in a conversation where that person is the only other
+participant.
+
+**Reflection: the nightly review.** A worker job starts one reflection session
+per employee per night. It reads the day's events and every session log, then:
+
+1. merges the day's notes into facts (the single writer of semantic memory);
+2. writes a diary entry to `/Employee/Journal/<date>.md`: what happened, what
+   failed, what it learned;
+3. proposes new or changed skills as a change request; a skill is kept only
+   if it passes replay of the past cases it covers;
+4. checks open outcomes and plans the next day.
+
+## 5. Outcomes
+
+The employee is hired for outcomes. An outcome extends Kortix Goals
+(`project_goals`): a statement, a metric read from the source system by the
+platform, a baseline, a target and a deadline, guardrails, an owner, a
+budget, and approval limits. People assign outcomes in chat, in a task tool,
+or on the employee home. The employee can work inside a team's task tool,
+but it keeps its own state in its log, memory and goals, and writes outward
+only when someone needs to know. A separate verifier, blind to the actor's
+transcript, decides when an outcome is met.
+
+## 6. The Drive
+
+One project drive named `Employee`, mounted read-write in every employee
+session at `/drives/employee`:
+
+```
+/Employee
+  Identity.md          name, role, email, phone, browser, country
+  Accounts.md          readable copy of the accounts ledger (no secrets)
+  Memory/facts/        semantic memory, one fact per file
+  Memory/notes/        notes from sessions, merged nightly
+  Journal/<date>.md    the nightly review
+  Outcomes/            one file per outcome: plan, progress, evidence
+  Files/               everything it downloads or makes
+  Browser/             profile backups and screenshots of key steps
+```
+
+## 7. UX
+
+- **Create employee.** One click on the workspaces page: name and role,
+  optional. A live checklist shows each part of the Base Identity as it is
+  provisioned. The last step shows its email and phone and says: "Invite
+  <name>@… to your tools and tell it what to do."
+- **The employee home** replaces the workspace home for employee workspaces:
+  identity card, now (live workers and the browser screen), outcomes,
+  approvals, the event feed, accounts. No chat box: people talk to it in
+  their tools, by email, SMS or a call. A call button stays.
+
+## 8. Phases
+
+Each phase ends with a proof on dev, from a real input to a real result.
+
+1. **Event log, dispatcher, employee create, email.** Flag `employee`. Proof:
+   an email to the employee's address and a Slack mention land in the log,
+   each starts its own worker, a follow-up in either thread reaches the same
+   worker, and a connector event reaches the mind's digest.
+2. **The authenticator, the vault ledger, the Drive.** Proof: the employee
+   signs up to a web app by email, sets up TOTP, and signs in again the next
+   day with no person.
+3. **The browser.** One Platinum Browser per employee with residential IP,
+   stealth and live view; parallel copies share it. Proof: it accepts a Slack
+   invite by email, becomes a real member, and answers a DM as a user.
+4. **Memory and reflection.** Facts with audience, the nightly review, skills
+   by change request. Proof: a fact told in a DM is used for that person and
+   never told to another; a task it failed once, it does right the next week.
+5. **Phone and captcha.** Proof: it texts and calls a number, and passes an
+   SMS 2FA and a captcha on sign-up.
+6. **Outcomes and the employee home.** Proof: one outcome on a real metric
+   moves through measure, plan, dispatch, verify and report with no prompt.
+7. **The card.** Proof: a purchase under the limit goes through; one above it
+   waits for approval.
 
 ## Pick it up
 
-Read `decisions.md` first, then `phase-1-plan.md`. The canonical branch is `digital-employee`.
+Read `decisions.md`, then `phase-1-plan.md`. The canonical branch is
+`digital-employee`, worktree `../suna-digital-employee`.

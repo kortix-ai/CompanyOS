@@ -75,3 +75,45 @@
 - A second employee is a second workspace, added only for a real boundary:
   different permissions or audit (finance), a different face to outsiders
   (support), a separate budget, or memory that must not mix between teams.
+- **2026-11-26 (Marko)** 1 employee = 1 Kortix workspace, and the employee is
+  whatever its onboarding makes it. There are no fixed role types. The
+  interview writes the self, the goals and the rules, and picks the starting
+  skills and connectors from the starter templates
+  (`packages/starter/templates/`) as a kit, never as a product the customer
+  chooses.
+
+## Decided: Kortix core and the Base Identity (2026-11-27)
+
+- **2026-11-26 (Marko)** No separate product or brand. Every Kortix workspace
+  is one long-horizon employee; this is the new core UX of Kortix, and My
+  Kortix becomes the employee. This replaces the "new employee workspace
+  type" entry above. The flag is `employee`.
+- **2026-11-27 (Marko)** One click creates an employee with a Base Identity:
+  email, phone, an authenticator, a captcha solver, a browser that looks like
+  a person, a Drive that stores everything about it, and later a card.
+- **2026-11-27 (Marko)** The browser is the employee's primary way to use
+  software. It sets up API keys, connectors and automations itself where they
+  help; the browser is the fallback for everything else.
+- **2026-11-27 (Marko)** Onboarding to a company is an invite to the
+  employee's email plus an instruction. It self-onboards: creates its own
+  channel, asks stakeholders, pings proactively.
+- **2026-11-27 (Marko)** It drives outcomes assigned by people, can work in a
+  task tool, keeps its own state, and writes outward only when needed.
+- **2026-11-27 (Marko)** Memory is episodic, semantic and procedural, with a
+  self-reflection job that reviews every session, on a write-ahead event log.
+- **2026-11-27** The event log is a permanent table; dispatch rides on the job
+  queue. Channels keep their thread routing in phase 1 (`phase-1-plan.md`).
+- **2026-11-27** The browser is one Platinum Browser per employee, shared by
+  all copies over CDP, with a residential IP. Platinum needs residential proxy
+  and a stealth option on browsers.
+- **2026-11-27** Notification email from any tool is an event, so the
+  employee hears about tools that have no API, as a person does.
+
+## Open (2026-11-27)
+
+- **D3 (Marko)** The phone provider and which Kortix account pays for numbers
+  (see the vendor research).
+- **D4 (Marko)** Captcha solving: accept the terms-of-service risk, and which
+  vendor.
+- **D5 (Marko)** Managed email cost: bill the customer per employee inbox, or
+  absorb it.

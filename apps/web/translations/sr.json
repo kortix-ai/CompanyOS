@@ -1373,7 +1373,7 @@
         },
         "platinum_cache": {
           "name": "Keš radnog prostora",
-          "description": "Nove sesije počinju sa /workspace vraćenim iz sačuvanog keša ovog projekta na Platinumu: pripremljen checkout sa node_modules i pnpm skladištem, za oko sekundu umesto minuta pripreme. Administrator projekta čuva pripremljenu sesiju kao keš. Isključeno, svaka sesija počinje sa praznim /workspace."
+          "description": "Nove sesije počinju sa /workspace vraćenim iz sačuvanog keša ovog radnog prostora na Platinumu: pripremljen checkout sa node_modules i pnpm skladištem, za oko sekundu umesto minuta pripreme. Administrator radnog prostora čuva pripremljenu sesiju kao keš. Isključeno, svaka sesija počinje sa praznim /workspace."
         },
         "sidebar_rail": {
           "name": "Трака са иконама",

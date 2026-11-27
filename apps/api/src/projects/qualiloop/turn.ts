@@ -13,6 +13,7 @@ import { and, desc, eq, gt, ne, sql } from 'drizzle-orm';
 import { config } from '../../config';
 import { logger } from '../../lib/logger';
 import { db } from '../../shared/db';
+import { qualifiedColumn } from '../../shared/sql-qualified-column';
 import { projectsView } from '../../workspaces/rows';
 import { readSessionLogPage } from '../session-log-read';
 import {
@@ -39,7 +40,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 /** The text of the user messages after `afterSeq`: the prompts delivered since. */
 async function userTextsAfter(sessionId: string, afterSeq: number): Promise<string[]> {
   const rows = await db
-    .select({ text: sql<string | null>`(select string_agg(b->>'text', '') from jsonb_array_elements(${sessionLogMessages.record}->'blocks') b where b->>'type' = 'text')` })
+    .select({ text: sql<string | null>`(select string_agg(b->>'text', '') from jsonb_array_elements(${qualifiedColumn(sessionLogMessages.record)}->'blocks') b where b->>'type' = 'text')` })
     .from(sessionLogMessages)
     .where(and(eq(sessionLogMessages.sessionId, sessionId), eq(sessionLogMessages.role, 'user'), gt(sessionLogMessages.seq, afterSeq)));
   return rows.map((row) => row.text ?? '');

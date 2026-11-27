@@ -1373,7 +1373,7 @@
         },
         "platinum_cache": {
           "name": "Workspace-Cache",
-          "description": "Neue Sessions starten mit /workspace aus dem gespeicherten Workspace-Cache dieses Projekts auf Platinum: ein vorbereiteter Checkout mit node_modules und pnpm-Store, in etwa einer Sekunde statt minutenlangem Setup. Ein Projekt-Admin speichert eine vorbereitete Session als Cache. Aus: Jede Session startet mit leerem /workspace."
+          "description": "Neue Sessions starten mit /workspace aus dem gespeicherten Workspace-Cache dieses Workspaces auf Platinum: ein vorbereiteter Checkout mit node_modules und pnpm-Store, in etwa einer Sekunde statt minutenlangem Setup. Ein Workspace-Admin speichert eine vorbereitete Session als Cache. Aus: Jede Session startet mit leerem /workspace."
         },
         "sidebar_rail": {
           "name": "Icon-Leiste der Seitenleiste",

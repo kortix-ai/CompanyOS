@@ -1,8 +1,12 @@
+'use client';
+
+import { useTranslations } from '@/i18n/use-translations';
 import { Badge } from '@kortix/ui/badge';
 import type { Announcement } from './announcements';
 import { WeeklyCover } from './weekly-cover';
 
 export function AnnouncementsView({ announcements }: { announcements?: Announcement[] }) {
+  const t = useTranslations('hardcodedUi.i18nComplete');
   if (!announcements?.length) return null;
   return (
     <div className="mb-8 space-y-8">
@@ -26,7 +30,7 @@ export function AnnouncementsView({ announcements }: { announcements?: Announcem
             href={announcement.guideUrl}
             className="text-foreground text-sm underline underline-offset-4"
           >
-            Read the guide
+            {t('text83b3b277abbf')}
           </a>
         </article>
       ))}

@@ -1373,7 +1373,7 @@
         },
         "platinum_cache": {
           "name": "Cache dello spazio di lavoro",
-          "description": "Le nuove sessioni partono con /workspace ripristinato dalla cache salvata di questo progetto su Platinum: un checkout pronto con node_modules e lo store di pnpm, in circa un secondo invece di minuti di preparazione. Un amministratore del progetto salva una sessione pronta come cache. Disattivata, ogni sessione parte con /workspace vuoto."
+          "description": "Le nuove sessioni partono con /workspace ripristinato dalla cache salvata di questo spazio di lavoro su Platinum: un checkout pronto con node_modules e lo store di pnpm, in circa un secondo invece di minuti di preparazione. Un amministratore dello spazio di lavoro salva una sessione pronta come cache. Disattivata, ogni sessione parte con /workspace vuoto."
         },
         "sidebar_rail": {
           "name": "Barra di icone laterale",

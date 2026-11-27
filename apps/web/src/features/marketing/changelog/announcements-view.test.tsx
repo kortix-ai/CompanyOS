@@ -33,3 +33,18 @@ test('renders cover, guide, escaped text, video controls and release deep links'
   expect(html).toContain('<video controls=""');
   expect(html).not.toContain('autoplay');
 });
+
+test('the guide action uses the host locale', async () => {
+  const { NextIntlClientProvider } = await import('next-intl');
+  const announcements = parseAnnouncements([{
+    title: 'Synthetic launch', text: 'Synthetic release.', guide_url: 'https://kortix.com/docs', tags: ['v0.16.0'],
+    cover: { url: 'https://ke4pydspzeg0nm0o.public.blob.vercel-storage.com/changelog/test.png', alt: 'Synthetic cover', width: 1200, height: 630 },
+  }]);
+  const html = renderToStaticMarkup(
+    <NextIntlClientProvider locale="de" timeZone="UTC" messages={{ hardcodedUi: { i18nComplete: { text83b3b277abbf: 'Anleitung lesen' } } }}>
+      <AnnouncementsView announcements={announcements} />
+    </NextIntlClientProvider>,
+  );
+  expect(html).toContain('Anleitung lesen');
+  expect(html).not.toContain('Read the guide');
+});

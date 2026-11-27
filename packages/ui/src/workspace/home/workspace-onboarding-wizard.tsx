@@ -657,7 +657,13 @@ function AppsStep({ projectId, apps, selected, onSelected, setup = false, onNext
           const app = entry.connector.composio ?? entry;
           const managed = entry.connector.kind === "composio";
           const slack = entry.connector.kind === "kortix" && entry.slug === "slack";
-          const done = slack ? apps.slackInstalled : connectorState(appConnector(apps.connectors, app)) === "connected";
+          const done = slack ? apps.slackInstalled : managed
+            ? connectorState(appConnector(apps.connectors, app)) === "connected"
+            : apps.connectors.some((connector) =>
+              connector.provider === entry.connector.kind &&
+              entry.connector.installed?.includes(connector.slug) &&
+              connectorState(connector) === "connected",
+            );
           return <AppRow key={entry.key} name={entry.name} meta={entry.description ?? entry.name}
             logo={<ConnectorLogo source={{ icon: entry.icon }} size="md" />}
             done={done} error={failures[app.slug]}

@@ -40,6 +40,7 @@ const { createRoot } = await import("react-dom/client");
 const PROJECT = "synthetic-workspace";
 let models: Array<{ enabled: boolean; available: boolean }> = [];
 let connectors: AdminConnector[] = [];
+let extraCatalog: DiscoverConnector[] = [];
 const saveProfile = mock(async (_id: string, profile: OnboardingProfile) =>
   project({ onboarding: profile }),
 );
@@ -65,7 +66,7 @@ mock.module("@kortix/sdk", () => ({
   setWorkspaceOnboardingComplete: stamp,
   getWorkspaceModelPicker: async () => ({ models }),
   listConnectors: async () => ({ connectors }),
-  listDiscoverConnectors: async () => ({ items: ["GitHub", "Gmail", "Notion", "Figma"].map((name): DiscoverConnector => ({ id: name.toLowerCase(), slug: name.toLowerCase(), name, kind: "composio", description: null, url: null, icon: null, domain: "example.test", categories: [], feeds: [], popularity: null })), hasMore: false }),
+  listDiscoverConnectors: async () => ({ items: [...extraCatalog, ...["GitHub", "Gmail", "Notion", "Figma"].map((name): DiscoverConnector => ({ id: name.toLowerCase(), slug: name.toLowerCase(), name, kind: "composio", description: null, url: null, icon: null, domain: "example.test", categories: [], feeds: [], popularity: null }))], hasMore: false }),
   listDiscoverSections: async () => ({ popular: [], categories: [], sections: [] }),
   listConnectToolkits: async (_id: string, query: { q?: string }) => ({ provider: 'composio', toolkits: query.q === 'Slack' ? [{ slug: 'Slack', name: 'Slack', connected: false, isNoAuth: false, logo: null }] : query.q === 'Figma' ? [{ slug: 'figma', name: 'Figma', connected: false, isNoAuth: false, logo: null }] : [], hasMore: false }),
   getSlackInstallation: async () => null,
@@ -185,6 +186,7 @@ afterEach(async () => {
   await act(async () => root.render(null));
   models = [];
   connectors = [];
+  extraCatalog = [];
   saveProfile.mockClear();
   stamp.mockClear();
   connectApp.mockClear();
@@ -364,3 +366,31 @@ test("selecting an app does not authorize it; setup contains only selected apps 
   await click("Skip for now");
   expect(heading()).toBe("Review and open your workspace");
 });
+
+for (const match of ["other-kind", "other-profile", "needs-auth", "connected"] as const) {
+  test(`MCP setup uses its installed profile and kind: ${match}`, async () => {
+    extraCatalog = [{
+      id: "synthetic-mcp", slug: "github-mcp", name: "GitHub MCP", kind: "mcp",
+      description: null, url: null, icon: null, domain: "example.test",
+      categories: [], feeds: [], popularity: null, installed: ["github-mcp-a1"],
+    }];
+    connectors = [{
+      slug: match === "other-profile" ? "other-github" : "github-mcp-a1",
+      name: "GitHub MCP", provider: match === "other-kind" ? "composio" : "mcp",
+      status: match === "needs-auth" ? "needs_auth" : "active",
+      state: match === "needs-auth" ? "needs_account" : "connected",
+      credentialMode: "shared", authorizationStrategy: "project",
+      sensitive: false, actions: [], authSecret: null, secretSet: match !== "needs-auth",
+    }];
+    await render({ use_case: "engineering" });
+    await click("Skip for now");
+    await click("GitHub MCP");
+    await click("Continue");
+    expect(heading()).toBe("Set up your selected apps");
+    const row = Array.from(host.querySelectorAll("li")).find((item) => item.textContent?.includes("GitHub MCP"));
+    expect(row).toBeDefined();
+    expect(row?.querySelector('[role="status"]')?.textContent ?? null).toBe(match === "connected" ? "Connected" : null);
+    expect(row?.querySelector('a[target="_blank"]') !== null).toBe(match !== "connected");
+    expect(connectApp).not.toHaveBeenCalled();
+  });
+}

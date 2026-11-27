@@ -16,6 +16,9 @@ export function createRpcRouter() {
     createRoute({
       method: 'post',
       path: '/{tunnelId}',
+      operationId: 'tunnel.rpc.call',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'human',
       tags: ['tunnel'],
       summary: 'Relay an RPC call to the connected local agent',
       security: [{ bearerAuth: [] }],

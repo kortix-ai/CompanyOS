@@ -60,6 +60,9 @@ export function registerAccessRequestsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/access-requests',
+      operationId: 'access_requests.create',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'human',
       tags: ['access'],
       summary: 'Request access to a project',
       ...auth,
@@ -164,6 +167,9 @@ export function registerAccessRequestsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/access-requests',
+      operationId: 'access_requests.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_MEMBERS_MANAGE,
+      'x-kortix-exposure': 'agent',
       tags: ['access'],
       summary: 'List project access requests',
       ...auth,
@@ -204,6 +210,9 @@ export function registerAccessRequestsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/access-requests/{requestId}/approve',
+      operationId: 'access_requests.approve',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_MEMBERS_MANAGE,
+      'x-kortix-exposure': 'agent',
       tags: ['access'],
       summary: 'Approve a project access request',
       ...auth,
@@ -300,6 +309,9 @@ export function registerAccessRequestsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/access-requests/{requestId}/reject',
+      operationId: 'access_requests.reject',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_MEMBERS_MANAGE,
+      'x-kortix-exposure': 'agent',
       tags: ['access'],
       summary: 'Reject a project access request',
       ...auth,

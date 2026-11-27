@@ -141,6 +141,9 @@ export function registerSecretResourceRoutes() {
   });
   accountsRouter.openapi(createRoute({
     method: 'get', path: '/{workspaceId}/subscription-connections', tags: ['secrets'],
+    operationId: 'subscription_connections.list',
+    'x-kortix-action': 'project.read',
+    'x-kortix-exposure': 'agent',
     summary: 'List subscription logins, including existing legacy connections', ...auth,
     request: { params: AccountIdParam, query: SubscriptionQuery },
     responses: { 200: json(z.object({ subscriptions: z.array(View.extend({ storage: z.enum(['account_resource', 'project']) })) }), 'Connected subscriptions'), ...errors(400, 403) },
@@ -163,6 +166,9 @@ export function registerSecretResourceRoutes() {
 
   accountsRouter.openapi(createRoute({
     method: 'post', path: '/{workspaceId}/subscription-connections/{secretId}/usage', tags: ['secrets'],
+    operationId: 'subscription_connections.usage.refresh',
+    'x-kortix-action': 'project.read',
+    'x-kortix-exposure': 'agent',
     summary: 'Read usage from an existing subscription without reconnecting', ...auth,
     request: { params: SecretIdParam, query: SubscriptionQuery.extend({ storage: z.enum(['account_resource', 'project']) }) },
     responses: { 200: json(z.object({ usage: SubscriptionUsageSchema.nullable(), provider_account: SubscriptionAccountSchema.nullable() }), 'Subscription usage'), ...errors(400, 403, 404) },

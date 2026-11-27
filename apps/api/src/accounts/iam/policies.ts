@@ -49,6 +49,9 @@ export function registerIamPoliciesRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/iam/session-policy',
+      operationId: 'iam.session_policy.get',
+      'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'Get the account session policy',
       ...auth,
@@ -83,6 +86,9 @@ export function registerIamPoliciesRoutes(): void {
     createRoute({
       method: 'patch',
       path: '/{workspaceId}/iam/session-policy',
+      operationId: 'iam.session_policy.update',
+      'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'Update the account session policy',
       ...auth,
@@ -177,6 +183,9 @@ export function registerIamPoliciesRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/iam/sessions',
+      operationId: 'iam.sessions.list',
+      'x-kortix-action': ACCOUNT_ACTIONS.MEMBER_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'List recent account sessions',
       ...auth,
@@ -225,6 +234,9 @@ export function registerIamPoliciesRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/iam/sessions/{sessionId}/revoke',
+      operationId: 'iam.sessions.revoke',
+      'x-kortix-action': ACCOUNT_ACTIONS.MEMBER_REMOVE,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'Revoke (force-logout) a session',
       ...auth,
@@ -279,6 +291,9 @@ export function registerIamPoliciesRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/iam/pat-policy',
+      operationId: 'iam.pat_policy.get',
+      'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'Get the account PAT policy',
       ...auth,
@@ -319,6 +334,9 @@ export function registerIamPoliciesRoutes(): void {
     createRoute({
       method: 'patch',
       path: '/{workspaceId}/iam/pat-policy',
+      operationId: 'iam.pat_policy.update',
+      'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'Update the account PAT policy',
       ...auth,

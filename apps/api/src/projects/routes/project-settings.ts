@@ -280,6 +280,9 @@ export function registerProjectSettingsRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}',
+      operationId: 'workspaces.delete',
+      'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_DELETE,
+      'x-kortix-exposure': 'human',
       tags: ['projects'],
       summary: 'Delete a workspace',
       description:
@@ -471,6 +474,9 @@ export function registerProjectSettingsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/transfer',
+      operationId: 'workspaces.transfer',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_DELETE,
+      'x-kortix-exposure': 'human',
       tags: ['projects'],
       summary: 'Transfer the project to another account',
       ...auth,

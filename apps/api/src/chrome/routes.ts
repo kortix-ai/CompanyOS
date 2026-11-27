@@ -85,6 +85,9 @@ export function registerChromeRoutes(): void {
     createRoute({
       method: 'get',
       path: '/',
+      operationId: 'chrome.connections.list',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'human',
       tags: ['chrome'],
       summary: "List the caller's connected browsers",
       ...auth,
@@ -97,6 +100,9 @@ export function registerChromeRoutes(): void {
     createRoute({
       method: 'patch',
       path: '/{id}',
+      operationId: 'chrome.connections.update',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'human',
       tags: ['chrome'],
       summary: 'Rename a browser or change its access mode or tab scope',
       ...auth,
@@ -118,6 +124,9 @@ export function registerChromeRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{id}',
+      operationId: 'chrome.connections.delete',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'human',
       tags: ['chrome'],
       summary: 'Disconnect a browser from Kortix',
       ...auth,
@@ -135,6 +144,9 @@ export function registerChromeRoutes(): void {
     createRoute({
       method: 'post',
       path: '/attach',
+      operationId: 'chrome.attach',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       tags: ['chrome'],
       summary: "Attach the calling session to one of the owner's browsers (sandbox credential only)",
       ...auth,
@@ -162,6 +174,9 @@ export function registerChromeRoutes(): void {
     createRoute({
       method: 'post',
       path: '/panel-session',
+      operationId: 'chrome.panel_session.create',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'human',
       tags: ['chrome'],
       summary: 'Mint a one-time sign-in token for the extension side panel (extension OAuth token only)',
       ...auth,
@@ -194,6 +209,9 @@ export function registerChromeRoutes(): void {
     createRoute({
       method: 'post',
       path: '/release',
+      operationId: 'chrome.release',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       tags: ['chrome'],
       summary: 'Release the browser the calling session attached (sandbox credential only)',
       ...auth,

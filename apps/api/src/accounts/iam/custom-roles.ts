@@ -263,6 +263,9 @@ export function registerIamCustomRolesRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/iam/actions',
+      operationId: 'iam.actions.list',
+      'x-kortix-action': ACCOUNT_ACTIONS.ROLE_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'List the action catalog (for the role permission matrix)',
       ...auth,
@@ -282,6 +285,9 @@ export function registerIamCustomRolesRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/iam/roles',
+      operationId: 'iam.roles.list',
+      'x-kortix-action': ACCOUNT_ACTIONS.ROLE_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'List built-in presets + custom roles',
       ...auth,
@@ -329,6 +335,9 @@ export function registerIamCustomRolesRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/iam/roles',
+      operationId: 'iam.roles.create',
+      'x-kortix-action': ACCOUNT_ACTIONS.ROLE_CREATE,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'Create a custom role',
       ...auth,
@@ -387,6 +396,9 @@ export function registerIamCustomRolesRoutes(): void {
     createRoute({
       method: 'patch',
       path: '/{workspaceId}/iam/roles/{roleId}',
+      operationId: 'iam.roles.update',
+      'x-kortix-action': ACCOUNT_ACTIONS.ROLE_UPDATE,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'Rename / describe a custom role',
       ...auth,
@@ -425,6 +437,9 @@ export function registerIamCustomRolesRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/iam/roles/{roleId}',
+      operationId: 'iam.roles.delete',
+      'x-kortix-action': ACCOUNT_ACTIONS.ROLE_DELETE,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'Delete a custom role (cascades its policies)',
       ...auth,
@@ -460,6 +475,9 @@ export function registerIamCustomRolesRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/iam/roles/{roleId}/permissions',
+      operationId: 'iam.roles.permissions.list',
+      'x-kortix-action': ACCOUNT_ACTIONS.ROLE_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'Get a role’s action set',
       ...auth,
@@ -499,6 +517,9 @@ export function registerIamCustomRolesRoutes(): void {
     createRoute({
       method: 'put',
       path: '/{workspaceId}/iam/roles/{roleId}/permissions',
+      operationId: 'iam.roles.permissions.set',
+      'x-kortix-action': ACCOUNT_ACTIONS.ROLE_UPDATE,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'Replace a custom role’s action set (the capability matrix)',
       ...auth,
@@ -544,6 +565,9 @@ export function registerIamCustomRolesRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/iam/roles/{roleId}/usage',
+      operationId: 'iam.roles.usage.get',
+      'x-kortix-action': ACCOUNT_ACTIONS.ROLE_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'How many policies reference this role',
       ...auth,
@@ -567,6 +591,9 @@ export function registerIamCustomRolesRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/iam/agent-identities',
+      operationId: 'iam.agent_identities.list',
+      'x-kortix-action': ACCOUNT_ACTIONS.POLICY_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'List agent service-account identities (policy principal picker)',
       ...auth,

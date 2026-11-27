@@ -75,6 +75,9 @@ export function registerIamOauthClientsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/iam/oauth-clients',
+      operationId: 'iam.oauth_clients.list',
+      'x-kortix-action': ACCOUNT_ACTIONS.TOKEN_CREATE,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'List OAuth clients (Sign in with Kortix apps)',
       ...auth,
@@ -99,6 +102,9 @@ export function registerIamOauthClientsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/iam/oauth-clients',
+      operationId: 'iam.oauth_clients.create',
+      'x-kortix-action': ACCOUNT_ACTIONS.TOKEN_CREATE,
+      'x-kortix-exposure': 'human',
       tags: ['iam'],
       summary: 'Register an OAuth client',
       ...auth,
@@ -167,6 +173,9 @@ export function registerIamOauthClientsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/iam/oauth-clients/{clientId}',
+      operationId: 'iam.oauth_clients.get',
+      'x-kortix-action': ACCOUNT_ACTIONS.TOKEN_CREATE,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'Get one OAuth client',
       ...auth,
@@ -187,6 +196,9 @@ export function registerIamOauthClientsRoutes(): void {
     createRoute({
       method: 'patch',
       path: '/{workspaceId}/iam/oauth-clients/{clientId}',
+      operationId: 'iam.oauth_clients.update',
+      'x-kortix-action': ACCOUNT_ACTIONS.TOKEN_CREATE,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'Update an OAuth client (name, description, redirect URIs, scopes, active)',
       ...auth,
@@ -255,6 +267,9 @@ export function registerIamOauthClientsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/iam/oauth-clients/{clientId}/rotate-secret',
+      operationId: 'iam.oauth_clients.rotate_secret',
+      'x-kortix-action': ACCOUNT_ACTIONS.TOKEN_CREATE,
+      'x-kortix-exposure': 'human',
       tags: ['iam'],
       summary: 'Rotate a confidential client secret (returned once)',
       ...auth,
@@ -287,6 +302,9 @@ export function registerIamOauthClientsRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/iam/oauth-clients/{clientId}',
+      operationId: 'iam.oauth_clients.delete',
+      'x-kortix-action': ACCOUNT_ACTIONS.TOKEN_REVOKE,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'Delete an OAuth client (revokes every token it minted)',
       ...auth,

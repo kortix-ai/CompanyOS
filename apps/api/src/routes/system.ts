@@ -58,6 +58,9 @@ app.openapi(
   createRoute({
     method: 'get',
     path: '/health',
+    operationId: 'system.health.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['system'],
     summary: 'Service health (unversioned, used by the load balancer)',
     responses: { 200: json(HealthSchema, 'Service health') },

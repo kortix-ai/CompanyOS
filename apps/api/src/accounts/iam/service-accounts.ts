@@ -26,6 +26,9 @@ export function registerIamServiceAccountsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/iam/service-accounts',
+      operationId: 'iam.service_accounts.list',
+      'x-kortix-action': ACCOUNT_ACTIONS.TOKEN_CREATE,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'List service accounts',
       ...auth,
@@ -59,6 +62,9 @@ export function registerIamServiceAccountsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/iam/service-accounts',
+      operationId: 'iam.service_accounts.create',
+      'x-kortix-action': ACCOUNT_ACTIONS.TOKEN_CREATE,
+      'x-kortix-exposure': 'human',
       tags: ['iam'],
       summary: 'Create a service account',
       ...auth,
@@ -128,6 +134,9 @@ export function registerIamServiceAccountsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/iam/service-accounts/{saId}/disable',
+      operationId: 'iam.service_accounts.disable',
+      'x-kortix-action': ACCOUNT_ACTIONS.TOKEN_REVOKE,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'Disable a service account',
       ...auth,
@@ -178,6 +187,9 @@ export function registerIamServiceAccountsRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/iam/service-accounts/{saId}',
+      operationId: 'iam.service_accounts.delete',
+      'x-kortix-action': ACCOUNT_ACTIONS.TOKEN_REVOKE,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'Delete a service account',
       ...auth,

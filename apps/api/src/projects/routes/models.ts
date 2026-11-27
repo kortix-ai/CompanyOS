@@ -406,6 +406,9 @@ export function registerModelsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/model-defaults',
+      operationId: 'model_defaults.get',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['projects'],
       summary: 'Get the project default model',
       ...auth,
@@ -454,6 +457,9 @@ export function registerModelsRoutes(): void {
     createRoute({
       method: 'put',
       path: '/{workspaceId}/model-defaults',
+      operationId: 'model_defaults.set',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_MODEL_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['projects'],
       summary: 'Set the project default model',
       ...auth,
@@ -557,6 +563,9 @@ export function registerModelsRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/model-defaults',
+      operationId: 'model_defaults.delete',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_MODEL_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['projects'],
       summary: 'Clear the project default model',
       ...auth,

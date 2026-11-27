@@ -24,6 +24,9 @@ export function registerIamScimTokensRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/iam/scim/tokens',
+      operationId: 'iam.scim_tokens.list',
+      'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'List SCIM provisioning tokens',
       ...auth,
@@ -61,6 +64,9 @@ export function registerIamScimTokensRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/iam/scim/tokens',
+      operationId: 'iam.scim_tokens.create',
+      'x-kortix-action': ACCOUNT_ACTIONS.TOKEN_CREATE,
+      'x-kortix-exposure': 'human',
       tags: ['iam'],
       summary: 'Mint a SCIM provisioning token',
       ...auth,
@@ -147,6 +153,9 @@ export function registerIamScimTokensRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/iam/scim/tokens/{tokenId}',
+      operationId: 'iam.scim_tokens.delete',
+      'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'Revoke a SCIM provisioning token',
       ...auth,

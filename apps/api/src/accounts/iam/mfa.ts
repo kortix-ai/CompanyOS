@@ -24,6 +24,9 @@ export function registerIamMfaRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/iam/mfa-required',
+      operationId: 'iam.mfa_required.get',
+      'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'Get account MFA-required status',
       ...auth,
@@ -56,6 +59,9 @@ export function registerIamMfaRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/iam/mfa-required/preview',
+      operationId: 'iam.mfa_required.preview',
+      'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'Preview who would be locked out by MFA enforcement',
       ...auth,
@@ -125,6 +131,9 @@ export function registerIamMfaRoutes(): void {
     createRoute({
       method: 'patch',
       path: '/{workspaceId}/iam/mfa-required',
+      operationId: 'iam.mfa_required.update',
+      'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'Enable or disable account MFA requirement',
       ...auth,

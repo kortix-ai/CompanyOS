@@ -36,6 +36,9 @@ export function registerIamSessionOversightRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/iam/session-oversight',
+      operationId: 'iam.session_oversight.get',
+      'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'Get whether account owners and admins can open every session',
       ...auth,
@@ -64,6 +67,9 @@ export function registerIamSessionOversightRoutes(): void {
     createRoute({
       method: 'patch',
       path: '/{workspaceId}/iam/session-oversight',
+      operationId: 'iam.session_oversight.update',
+      'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'Enable or disable owner/admin access to every session (owner only)',
       ...auth,

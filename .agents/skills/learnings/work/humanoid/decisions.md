@@ -180,3 +180,15 @@
 - **Open** Web search, scrape and image search already bill through the router
   proxy; moving them to a connector changes billing attribution and the web
   UI's tool cards. Needs Marko's call.
+
+## Decided: every base capability is a connector (2026-11-27)
+
+- **2026-11-27 (Marko)** The base connectors (phone number, authenticator,
+  Toolbox, browser) are finished first, so an action space can be assembled
+  like a person's. Built-in tools are glued to connectors underneath.
+- **2026-11-27 (Marko)** A captcha solver is a default of the managed browser,
+  not an optional extra.
+- **2026-11-27 (Marko)** Compute stays as it is (one sandbox per session).
+  Sandboxes as a connector is a future intent: `../compute-as-connector/`.
+- **2026-11-27 (Marko)** Kortix-managed connectors are our own build, modeled
+  on treg; no treg code is copied. Hosted treg.to is the bridge for now.

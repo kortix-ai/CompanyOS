@@ -606,6 +606,20 @@ describe('canSaveSecretDelivery', () => {
     expect(canSaveSecretDelivery({ ...enforced, enforcedPolicyValid: true })).toBe(true);
   });
 
+  test('saves a host-only edit on an existing enforced secret without rotating its value', () => {
+    const enforced = {
+      ...base,
+      currentStrategy: 'egress' as const,
+      nextStrategy: 'egress' as const,
+      nextConsumer: 'network' as const,
+      enforcedPolicyValid: true,
+    };
+    expect(canSaveSecretDelivery(enforced)).toBe(false);
+    expect(canSaveSecretDelivery({ ...enforced, policyChanged: true })).toBe(true);
+    expect(canSaveSecretDelivery({ ...enforced, policyChanged: true, enforcedPolicyValid: false })).toBe(false);
+    expect(canSaveSecretDelivery({ ...enforced, policyChanged: true, requiresValue: true })).toBe(false);
+  });
+
   test('a legacy HTTPS-broker row needs the same host list', () => {
     const legacy = {
       ...base,

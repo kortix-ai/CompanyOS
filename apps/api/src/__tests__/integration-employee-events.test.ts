@@ -166,3 +166,45 @@ test('routing is a pure decision', () => {
   expect(routeOf({ direction: 'out', dispatchStatus: 'recorded', source: 'email' }, true)).toBe('skip');
   expect(routeOf({ direction: 'in', dispatchStatus: 'routed', source: 'email' }, true)).toBe('skip');
 });
+
+test('an email to an employee is logged, not routed; the dispatcher replays the inbox envelope', async () => {
+  const { handleEmailEvent } = await import('../channels/email/session');
+  const emailId = `email-${crypto.randomUUID()}`;
+  const envelope = {
+    id: emailId,
+    source: 'email:inbox-1',
+    type: 'email.message.received',
+    time: '2026-11-27T10:00:00.000Z',
+    subject: 'thread-1',
+    projectId: EMPLOYEE,
+    data: { inbox_id: 'inbox-1', thread_id: 'thread-1', email_id: emailId, from: 'sam@example.test', to: ['otto@example.test'], subject: 'Invoice' },
+  };
+  await handleEmailEvent(envelope, { finalAttempt: false });
+  const [row] = await db.select().from(employeeEvents).where(and(eq(employeeEvents.projectId, EMPLOYEE), eq(employeeEvents.externalId, emailId)));
+  expect(row!.source).toBe('email');
+  expect(row!.subject).toBe('email:inbox-1:thread-1');
+  expect(row!.summary).toBe('Email from sam@example.test: Invoice');
+  expect(row!.dispatchStatus).toBe('pending');
+  expect((row!.payload as { event: { id: string } }).event.id).toBe(emailId);
+  expect((await jobsOf(row!.eventId)).length).toBe(1);
+});
+
+test('a Slack message maps to one row per message; a DM is private; an unaddressed one is not dispatched', async () => {
+  const { slackEmployeeEvent } = await import('../channels/slack/employee');
+  const mention = slackEmployeeEvent(EMPLOYEE, 'T1', { type: 'event_callback', event: { type: 'app_mention', channel: 'C1', user: 'U1', ts: '1795000000.000100', text: '<@B1> draft the update' } }, true)!;
+  const asMessage = slackEmployeeEvent(EMPLOYEE, 'T1', { type: 'event_callback', event: { type: 'message', channel: 'C1', user: 'U1', ts: '1795000000.000100', text: '<@B1> draft the update' } }, true)!;
+  expect(mention.externalId).toBe(asMessage.externalId);
+  expect(mention.subject).toBe('slack:T1:C1:1795000000.000100');
+  expect(mention.audience).toBe('team');
+  expect(mention.dispatch).toBe(true);
+
+  const dm = slackEmployeeEvent(EMPLOYEE, 'T1', { type: 'event_callback', event: { type: 'message', channel: 'D1', channel_type: 'im', user: 'U2', ts: '1795000001.000200', thread_ts: '1795000000.000050', text: 'about my raise' } }, true)!;
+  expect(dm.audience).toBe('private:slack:T1:U2');
+  expect(dm.subject).toBe('slack:T1:D1:1795000000.000050');
+
+  const ambient = slackEmployeeEvent(EMPLOYEE, 'T1', { type: 'event_callback', event: { type: 'message', channel: 'C2', user: 'U3', ts: '1795000002.000300', text: 'lunch?' } }, false)!;
+  expect(ambient.type).toBe('slack.message.posted');
+  const recorded = await events.recordEmployeeEvent(ambient);
+  expect((await rowOf(recorded.eventId)).dispatchStatus).toBe('recorded');
+  expect(slackEmployeeEvent(EMPLOYEE, 'T1', { type: 'event_callback', event: { type: 'reaction_added' } }, false)).toBeNull();
+});

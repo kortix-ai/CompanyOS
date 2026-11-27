@@ -15,7 +15,7 @@ import { AUTHENTICATOR_TOOLS } from './authenticator';
 import { BROWSER_TOOLS } from './browser';
 import { PHONE_TOOLS } from './phone';
 import { kortixAgentServiceForUrl, type KortixAgentService } from './host';
-import { type AccountState, decodeAccountState, InvalidAccountToken, saveAccountState } from './state';
+import { type AccountState, decodeAccountState, InvalidAccountToken, updateAccountState } from './state';
 import { type AgentTool, ToolInputError } from './tool';
 
 const SUPPORTED_PROTOCOL_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26'];
@@ -76,9 +76,9 @@ async function callTool(service: KortixAgentService, rpc: Rpc, state: AccountSta
   let current = state;
   const ctx = {
     get state() { return current; },
-    save: async (data: Record<string, unknown>) => {
-      current = { ...current, data };
-      await saveAccountState(current);
+    update: async (mutate: (data: Record<string, unknown>) => Record<string, unknown>) => {
+      current = await updateAccountState(current, mutate);
+      return current.data;
     },
     now: () => clock(),
   };

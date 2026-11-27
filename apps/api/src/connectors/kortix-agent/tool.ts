@@ -10,8 +10,12 @@ export { DESTRUCTIVE, READ, WRITE, ToolInputError, optInt, optStr, reqStr, s, i,
 export interface AgentToolContext<D> {
   /** The account's state, decrypted from its credential. */
   state: AccountState<D>;
-  /** Replace the account's data and write it to the credential. */
-  save(data: D): Promise<void>;
+  /**
+   * Change the account's data atomically: `mutate` gets the CURRENT stored
+   * data (another session may have changed it) and returns the new data.
+   * Returns what was written; `state` then holds it too.
+   */
+  update(mutate: (data: D) => D): Promise<D>;
   /** The clock, in ms. */
   now(): number;
 }

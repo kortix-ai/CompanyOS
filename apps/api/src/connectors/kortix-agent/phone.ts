@@ -181,7 +181,7 @@ export const PHONE_TOOLS: readonly AgentTool<PhoneData>[] = [
       const country = (optStr(args, 'country') ?? 'US').toUpperCase();
       if (!/^[A-Z]{2}$/.test(country)) throw new ToolInputError('country must be a two-letter ISO code, e.g. US');
       const bought = owned ?? (await api.buyNumber({ country, areaCode: optStr(args, 'area_code'), tag }));
-      await ctx.save({ ...data, number: bought.number, numberId: bought.id, country, boughtAt: new Date(ctx.now()).toISOString() });
+      await ctx.update((d) => ({ ...d, number: bought.number, numberId: bought.id, country, boughtAt: new Date(ctx.now()).toISOString() }));
       return { number: bought.number, country, new: !owned };
     },
   },
@@ -248,8 +248,7 @@ export const PHONE_TOOLS: readonly AgentTool<PhoneData>[] = [
       if (!number || !numberId) throw new ToolInputError('this account has no number');
       if (reqStr(args, 'confirm').replace(/[\s()-]/g, '') !== number) throw new ToolInputError(`pass confirm: "${number}"`);
       await api.releaseNumber(numberId);
-      const { boughtAt: _boughtAt, country: _country, ...kept } = rest;
-      await ctx.save(kept);
+      await ctx.update(({ number: _n, numberId: _id, boughtAt: _b, country: _c, ...kept }) => kept);
       return { released: number };
     },
   },

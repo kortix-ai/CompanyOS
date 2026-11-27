@@ -2,7 +2,7 @@ import { afterAll, beforeEach, expect, test } from 'bun:test';
 import { kortixAgentMcpUrl } from './host';
 import { codesIn, type PhoneApi, type PhoneMessage, setPhoneApiForTests, setPhoneSleepForTests } from './phone';
 import { dispatchKortixAgentMcp, setKortixAgentClockForTests } from './server';
-import { type AccountState, encodeAccountState, setAccountStatePersistForTests } from './state';
+import { type AccountState, encodeAccountState, setAccountStateStoreForTests } from './state';
 
 const ACCOUNT = { projectId: '4f2a9c1e-1111-4222-8333-944445555666', connectorId: '0f0e0d0c-0000-4000-8000-000000000001', connectionId: '0f0e0d0c-0000-4000-8000-000000000004', service: 'phone' as const };
 const NUMBER = '+15005550006';
@@ -51,15 +51,18 @@ beforeEach(() => {
   setPhoneSleepForTests(async (ms) => {
     now += ms;
   });
-  setAccountStatePersistForTests(async (state) => {
-    stored = state;
-  });
+  setAccountStateStoreForTests(async <D,>(state: AccountState<D>, mutate: (d: D) => D) => {
+  const base = (stored?.connectionId === state.connectionId ? stored : state) as AccountState<D>;
+  const next = { ...base, data: mutate(base.data) };
+  stored = next as AccountState;
+  return next;
+});
 });
 afterAll(() => {
   setPhoneApiForTests(null);
   setPhoneSleepForTests(null);
   setKortixAgentClockForTests(null);
-  setAccountStatePersistForTests(null);
+  setAccountStateStoreForTests(null);
 });
 
 async function call(name: string, args: Record<string, unknown> = {}) {

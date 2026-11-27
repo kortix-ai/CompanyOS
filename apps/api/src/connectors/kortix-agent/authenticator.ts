@@ -80,7 +80,11 @@ export const AUTHENTICATOR_TOOLS: readonly AgentTool<AuthenticatorData>[] = [
       }
       const label = optStr(args, 'label') ?? ([key.issuer, key.account && `(${key.account})`].filter(Boolean).join(' ') || 'Unnamed key');
       const entry: AuthenticatorEntry = { id: `totp_${randomBytes(5).toString('hex')}`, label, key, addedAt: new Date(ctx.now()).toISOString() };
-      await ctx.save({ ...ctx.state.data, entries: [...entries, entry] });
+      await ctx.update((data) => {
+        const now = data.entries ?? [];
+        if (now.length >= AUTHENTICATOR_MAX_KEYS) throw new ToolInputError(`this authenticator holds ${AUTHENTICATOR_MAX_KEYS} keys; remove one first`);
+        return { ...data, entries: [...now, entry] };
+      });
       const now = totp(key, ctx.now());
       return { ...view(entry), code: now.code, expires_in_seconds: now.expiresInSeconds };
     },
@@ -121,7 +125,7 @@ export const AUTHENTICATOR_TOOLS: readonly AgentTool<AuthenticatorData>[] = [
     async run(args, ctx) {
       const entries = ctx.state.data.entries ?? [];
       const entry = findEntry(entries, { id: optStr(args, 'id') });
-      await ctx.save({ ...ctx.state.data, entries: entries.filter((e) => e.id !== entry.id) });
+      await ctx.update((data) => ({ ...data, entries: (data.entries ?? []).filter((e) => e.id !== entry.id) }));
       return { removed: view(entry) };
     },
   },

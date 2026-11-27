@@ -1,5 +1,5 @@
 import { HTTPException } from 'hono/http-exception';
-import type { ProxyServiceConfig } from '../../config/proxy-services';
+import type { ProxyServiceConfig } from '../config/proxy-services';
 
 /**
  * The upstream budget of one managed Firecrawl request (Kortix's key).

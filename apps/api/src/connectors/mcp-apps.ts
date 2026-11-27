@@ -160,6 +160,10 @@ export const MCP_APPS: readonly McpApp[] = [
     access: 'Get a phone number for the account (the first one is bought), read the texts it receives and the codes in them, and send texts from it.',
     available: phoneProviderConfigured,
   },
+  {
+    slug: 'kortix_web', name: 'Kortix Web', description: 'Web search, page reading, site maps and image search, billed to the workspace like the built-in tools.', domain: 'web.kortix', categories: ['search'], url: kortixAgentMcpUrl('web'), icon: false, auth: NONE,
+    access: 'Search the web, read public pages, list a site\'s pages and search images with Kortix\'s keys, billed to this workspace\'s credits.',
+  },
   { slug: 'cloudflare', name: 'Cloudflare', description: 'Accounts, Workers and DNS.', domain: 'cloudflare.com', categories: ['developer-tools', 'hosting'], url: 'https://mcp.cloudflare.com/mcp', icon: true, auth: DCR },
   // Kortix's own Google MCP servers (./google): Composio-compatible tools over
   // Google's REST APIs, served in-process. The URLs never reach the network.

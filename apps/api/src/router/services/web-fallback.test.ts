@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 
-import type { ProxyServiceConfig } from '../../config/proxy-services';
-import { runWithContext } from '../../../lib/request-context';
+import type { ProxyServiceConfig } from '../config/proxy-services';
+import { runWithContext } from '../../lib/request-context';
 
 // KRTX-5162: when Kortix's Tavily or Firecrawl account was over its limit, the
 // router answered 503 `tool_unavailable` and every session lost web search and
@@ -15,9 +15,9 @@ const refunds: string[] = [];
 const fetched: string[] = [];
 
 const config: Record<string, unknown> = { KORTIX_BILLING_INTERNAL_ENABLED: true, SERPER_API_URL: 'https://google.serper.dev' };
-mock.module('../../../config', () => ({ config }));
+mock.module('../../config', () => ({ config }));
 
-mock.module('./helpers', () => ({
+const helpersMock = () => ({
   tryAuthenticate: async () =>
     authMode === 'kortix-key'
       ? { isKortixUser: true, accountId: 'acct-synthetic' }
@@ -30,21 +30,24 @@ mock.module('./helpers', () => ({
     refunds.push(description);
   },
   injectApiKey: (_service: unknown, _headers: Headers, body: unknown) => body,
-}));
+});
+mock.module('../routes/proxy/helpers', helpersMock);
+// The billed call reads these from the proxy-billing service; the same fakes stand in there.
+mock.module('./proxy-billing', helpersMock);
 
-mock.module('../../../lib/logger', () => ({
+mock.module('../../lib/logger', () => ({
   logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
 }));
 
 // The synthetic page host does not resolve; the address checks are covered by
 // the ssrf-guard tests. Here the guarded fetch is a plain fetch.
-mock.module('../../../shared/ssrf-guard', () => ({
+mock.module('../../shared/ssrf-guard', () => ({
   assertSafeEgressUrl: async (url: string) => new URL(url),
   safeEgressFetch: (url: string, init: RequestInit) => fetch(url, init),
   UnsafeEgressError: class extends Error {},
 }));
 
-const { handleProxy } = await import('./handlers');
+const { handleProxy } = await import('../routes/proxy/handlers');
 
 type SearchBody = {
   query: string;

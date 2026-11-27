@@ -106,7 +106,7 @@ describe.skipIf(!chrome)('browser page over real CDP', () => {
     const snap = await pages.snapshot(page);
     await pages.type(page, { ref: snap.elements[0]!.ref }, 'first');
     await pages.type(page, { ref: snap.elements[0]!.ref }, 'otto@example.test', { clear: true });
-    expect(await pages.evaluate(page, 'document.querySelector("#u").value')).toBe('otto@example.test');
+    expect(await pages.evaluate<string>(page, 'document.querySelector("#u").value')).toBe('otto@example.test');
 
     const links = await pages.read(page, 'links', 0);
     expect(links.links).toEqual([{ text: 'Other page', href: `${base}/other` }]);

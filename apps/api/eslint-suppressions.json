@@ -325,6 +325,11 @@
       "count": 1
     }
   },
+  "src/channels/core/install-secrets.ts": {
+    "kortix-api/projects-surface": {
+      "count": 1
+    }
+  },
   "src/channels/core/signed-state.ts": {
     "kortix-api/replica-local": {
       "count": 1
@@ -349,11 +354,6 @@
     }
   },
   "src/channels/email/session.ts": {
-    "kortix-api/projects-surface": {
-      "count": 1
-    }
-  },
-  "src/channels/core/install-secrets.ts": {
     "kortix-api/projects-surface": {
       "count": 1
     }
@@ -2427,16 +2427,13 @@
   },
   "src/router/routes/proxy/handlers.ts": {
     "no-console": {
-      "count": 5
+      "count": 2
     },
     "no-restricted-syntax": {
       "count": 5
     }
   },
   "src/router/routes/proxy/helpers.ts": {
-    "no-console": {
-      "count": 1
-    },
     "no-restricted-syntax": {
       "count": 3
     }

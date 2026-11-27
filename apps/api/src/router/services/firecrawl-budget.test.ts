@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
-import type { ProxyServiceConfig } from '../../config/proxy-services';
+import type { ProxyServiceConfig } from '../config/proxy-services';
 
 /**
  * A managed Firecrawl request (Kortix's key) is billed as one flat tool
@@ -11,7 +11,7 @@ let reserveCalls = 0;
 let upstream: Array<{ url: string; body: any }> = [];
 let currentBody = '';
 
-mock.module('./helpers', () => ({
+const helpersMock = () => ({
   tryAuthenticate: async () => ({ isKortixUser: true, accountId: 'acct-synthetic' }),
   buildForwardHeaders: () => new Headers(),
   getRequestBody: async () => currentBody,
@@ -22,12 +22,15 @@ mock.module('./helpers', () => ({
   },
   refundToolReservation: async () => undefined,
   injectApiKey: (_service: unknown, _headers: Headers, body: unknown) => body,
-}));
+});
+mock.module('../routes/proxy/helpers', helpersMock);
+// The billed call reads these from the proxy-billing service; the same fakes stand in there.
+mock.module('./proxy-billing', helpersMock);
 
-const { handleProxy } = await import('./handlers');
+const { handleProxy } = await import('../routes/proxy/handlers');
 const { FIRECRAWL_MAX_PAGES, boundFirecrawlRequest } = await import('./firecrawl-budget');
-const { getToolCost } = await import('../../../config');
-const { getProxyServices, matchAllowedRoute } = await import('../../config/proxy-services');
+const { getToolCost } = await import('../../config');
+const { getProxyServices, matchAllowedRoute } = await import('../config/proxy-services');
 
 const originalFetch = globalThis.fetch;
 const firecrawl = {

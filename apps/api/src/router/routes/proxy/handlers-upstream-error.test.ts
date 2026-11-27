@@ -20,7 +20,7 @@ mock.module('../../../config', () => ({
   config: { KORTIX_BILLING_INTERNAL_ENABLED: true },
 }));
 
-mock.module('./helpers', () => ({
+const helpersMock = () => ({
   tryAuthenticate: async () => ({ isKortixUser: true, accountId: 'acct-synthetic' }),
   buildForwardHeaders: () => new Headers(),
   getRequestBody: async () => JSON.stringify({ url: 'https://93.184.216.34/page' }),
@@ -30,7 +30,10 @@ mock.module('./helpers', () => ({
     refunds.push(description);
   },
   injectApiKey: (_service: unknown, _headers: Headers, body: unknown) => body,
-}));
+});
+mock.module('./helpers', helpersMock);
+// The billed call reads these from the proxy-billing service; the same fakes stand in there.
+mock.module('../../services/proxy-billing', helpersMock);
 
 mock.module('../../../lib/logger', () => ({
   logger: {

@@ -239,6 +239,7 @@ describe('kortix_schedules', () => {
     const weekly = await run('kortix_schedules', { action: 'create', prompt: 'Send the summary', cron: '0 9 * * 1', timezone: 'Europe/Berlin', agent: 'researcher' })
     // An agent's schedule is saved paused until it is tested; a reminder to this session stays live.
     expect(weekly.data).toMatchObject({ id: 'trigger.def456', agent: 'researcher', state: 'paused' })
+    expect(weekly.card.title).toBe('Saved paused: researcher, cron 0 9 * * 1')
     expect(weekly.card.rows).toEqual([{ title: 'Not running yet', detail: 'Test it with run_now, then resume it to put it live' }])
     expect(argvs()).toEqual([
       'triggers add Check the report --runtime --in=2h',
@@ -1110,4 +1111,11 @@ test('kortix_connectors find: an app whose access Kortix knows says what its sig
   const result = await run('kortix_connectors', { action: 'find', query: 'gmail' })
   expect(result.card.rows?.[0]?.detail).toBe('Read, search, send and organize email. Signing in lets agents: Read, search, send, label and archive mail.')
   expect(result.card.rows?.[1]?.detail).toBe('Email.')
+})
+
+test('kortix_schedules runs: an agent schedule is read by its runtime id, as create returned it', async () => {
+  fakeKortix(`'triggers runs trigger.d2ef47e4b15e --limit=20 --json') echo '{"runs":[{"status":"fired","run_status":"completed","session_id":"s_1","started_at":"2026-11-27T01:53:00.000Z"}]}' ;;`)
+  const result = await run('kortix_schedules', { action: 'runs', id: 'trigger.d2ef47e4b15e' })
+  expect(result.ok).toBe(true)
+  expect(result.card.title).toBe('trigger.d2ef47e4b15e: 1 recent runs')
 })

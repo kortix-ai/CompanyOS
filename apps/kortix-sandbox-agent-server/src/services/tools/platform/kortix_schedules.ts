@@ -492,7 +492,8 @@ async function create(args: Record<string, any>, context: PlatformToolContext) {
     TOOL,
     'create',
     {
-      title: agent ? `${agent} runs ${spoken}` : `Reminder set: ${spoken}`,
+      // The title is what the person reads first: "runs" for a schedule that does not run yet read as live (QualiLoop, Company setup journeys).
+      title: agent ? (paused ? `Saved paused: ${agent}, ${spoken}` : `${agent} runs ${spoken}`) : `Reminder set: ${spoken}`,
       subtitle: prompt.length > 140 ? `${prompt.slice(0, 137)}…` : prompt,
       ...(agent ? { rows: [paused ? { title: 'Not running yet', detail: 'Test it with run_now, then resume it to put it live' } : { title: 'Live now', detail: 'It could not be saved paused; pause it if it is not tested' }] } : {}),
       links: [{ label: 'Triggers', href: adminHref(context.env, 'triggers') }],
@@ -764,7 +765,8 @@ async function testAppAutomation(name: string, app: string, filter: Record<strin
 /** `runs`: an automation's recent runs, newest first: what it started, skipped or failed. */
 async function automationRuns(args: Record<string, any>, context: PlatformToolContext) {
   const name = typeof args.name === 'string' ? args.name.trim() : typeof args.id === 'string' ? args.id.trim() : ''
-  if (!TRIGGER_SLUG.test(name)) return fail(TOOL, 'runs', 'Which automation?', { kind: 'invalid', message: '`name` is the automation\'s name, as list shows it.' }, context)
+  // A kortix.yaml automation by its name, or an agent schedule by its runtime id (trigger.<hex>, from create).
+  if (!TRIGGER_SLUG.test(name) && !RUNTIME_ID.test(name)) return fail(TOOL, 'runs', 'Which automation?', { kind: 'invalid', message: '`name` is the automation\'s name or the schedule\'s id, as list shows it.' }, context)
   const read = await runJson<{ runs?: Array<{ status?: string; run_status?: string | null; error?: string | null; run_error?: string | null; session_id?: string | null; started_at?: string }> }>(
     ['triggers', 'runs', name, '--limit=20', '--json'],
     context,

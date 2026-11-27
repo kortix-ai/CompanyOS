@@ -1,18 +1,26 @@
 /**
- * `kortix_web`: web search (Tavily), page reading and site maps (Firecrawl)
- * and image search (Serper), with Kortix's keys. Each call is billed to the
- * workspace's account on the same path as the router proxy the built-in
- * tools use (`router/services/billed-proxy.ts`): the same prices, the same
- * refund when the provider fails, the same fallback when it refuses Kortix's
- * key. As a connector every call also passes the gateway's rules and call log.
+ * `kortix_toolbox`: Kortix Toolbox, the first Kortix-managed connector. Paid
+ * tools with no sign-in, billed to the workspace's credits:
  *
- * The account holds no state: its minted credential only names the workspace.
+ * - search (Tavily), scrape and map (Firecrawl), image_search (Serper), on
+ *   Kortix's own keys, on the same billed path as the router proxy the
+ *   built-in tools use (`router/services/billed-proxy.ts`);
+ * - find_tools, describe_tool and call_tool: the long tail, thousands of data
+ *   tools on hosted treg.to (./treg.ts), billed at the real cost of each call
+ *   times the `toolbox_catalog` markup, held before and settled after.
+ *
+ * As a connector every call also passes the gateway's rules, approvals and
+ * call log. The account holds no state: its credential only names the
+ * workspace.
  */
 import { HTTPException } from 'hono/http-exception';
 import { getProxyServices } from '../../router/config/proxy-services';
 import { callKortixProxy } from '../../router/services/billed-proxy';
+import { getToolMarkup } from '../../config';
+import { reserveToolAmount, settleToolAmount } from '../../router/services/proxy-billing';
 import { accountKeyOfWorkspace } from '../../workspaces/rows';
-import { type AgentTool, i, optInt, optStr, READ, reqStr, s, schema, ToolInputError } from './tool';
+import { offerable, treg, tregConfigured, type TregEndpoint, tregMeta } from './treg';
+import { type AgentTool, i, optInt, optStr, READ, reqStr, s, schema, ToolInputError, WRITE } from './tool';
 
 type Service = 'tavily' | 'firecrawl' | 'serper';
 
@@ -75,7 +83,7 @@ function urlList(args: Record<string, unknown>): string[] {
 
 const clamp = (value: number | undefined, low: number, high: number, fallback: number) => Math.min(Math.max(value ?? fallback, low), high);
 
-export const WEB_TOOLS: readonly AgentTool[] = [
+const NATIVE_TOOLS: readonly AgentTool[] = [
   {
     name: 'search',
     title: 'Search the web',
@@ -201,3 +209,126 @@ export const WEB_TOOLS: readonly AgentTool[] = [
     },
   },
 ];
+
+/** The workspace's billing account and the hold-then-settle billing of a catalog call. Tests replace them. */
+interface CatalogBilling {
+  accountOf(projectId: string): Promise<string | null>;
+  reserve: typeof reserveToolAmount;
+  settle: typeof settleToolAmount;
+}
+const realBilling: CatalogBilling = { accountOf: accountKeyOfWorkspace, reserve: reserveToolAmount, settle: settleToolAmount };
+let billing: CatalogBilling = realBilling;
+/** Tests replace the billing; never called in production. */
+export function setCatalogBillingForTests(next: CatalogBilling | null): void {
+  billing = next ?? realBilling;
+}
+
+/** One catalog call may cost at most this much (USD), before the markup: treg refuses anything above it unbilled. */
+export const CATALOG_CALL_MAX_USD = 0.5;
+
+/** USD → credits (1 credit = $0.01), rounded to 3 places. Pure. */
+const credits = (usd: number) => Math.round(usd * 100 * 1000) / 1000;
+
+/** The markup on a catalog call's real cost (`toolbox_catalog` in the tool prices). */
+const markup = () => getToolMarkup('toolbox_catalog');
+
+function catalogEntry(e: TregEndpoint) {
+  return {
+    id: e.id,
+    name: e.name ?? e.id,
+    summary: e.summary ?? '',
+    kind: e.kind ?? null,
+    method: e.method ?? 'GET',
+    credits_per_call: typeof e.cost?.usd === 'number' ? credits(e.cost.usd * markup()) : null,
+    ...(e.cost?.type && e.cost.type !== 'per_call' ? { priced: e.cost.type } : {}),
+  };
+}
+
+async function offerableEndpoint(id: string): Promise<TregEndpoint> {
+  const e = await treg().get(id);
+  if (!e) throw new ToolInputError(`no tool ${id}; find_tools lists them`);
+  if (!offerable(e)) {
+    throw new ToolInputError(
+      e.scope === 'own_account'
+        ? `${id} acts on an account of your own; connect that app as a regular connector instead`
+        : `${id} is not available in Toolbox (no price on Kortix's account, or it runs as a background task)`,
+    );
+  }
+  return e;
+}
+
+const CATALOG_TOOLS: readonly AgentTool[] = [
+  {
+    name: 'find_tools',
+    title: 'Find a tool',
+    description:
+      'Search thousands of paid data tools by what you need done: people and company data, email finding and checking, SEO and keywords, social profiles and posts, jobs, market data, maps, reviews, more search engines and scrapers. Each result has an id for describe_tool and call_tool and its price in credits. Tools that act on your own accounts (ads, analytics, posting) are regular connectors, not here.',
+    inputSchema: schema({ query: s('What you want to do, e.g. "find a work email", "keyword search volume".'), limit: i('Results, 1 to 20. Default 10.') }, ['query']),
+    annotations: READ,
+    async run(args) {
+      if (!tregConfigured()) throw new ToolInputError('the Toolbox catalog is not set up on this Kortix server');
+      const query = reqStr(args, 'query');
+      const limit = clamp(optInt(args, 'limit'), 1, 20, 10);
+      // Ask for more than shown: some results are not offerable here.
+      const found = (await treg().search(query, Math.min(limit * 3, 60))).filter(offerable).slice(0, limit);
+      return { query, tools: found.map(catalogEntry) };
+    },
+  },
+  {
+    name: 'describe_tool',
+    title: 'Describe a tool',
+    description: 'One catalog tool: what it does, its parameters (query or body), an example, and its price in credits. Read it before call_tool.',
+    inputSchema: schema({ id: s('The tool id from find_tools.') }, ['id']),
+    annotations: READ,
+    async run(args) {
+      if (!tregConfigured()) throw new ToolInputError('the Toolbox catalog is not set up on this Kortix server');
+      const e = await offerableEndpoint(reqStr(args, 'id'));
+      return {
+        ...catalogEntry(e),
+        input: e.input ?? null,
+        ...(e.test_request ? { example: e.test_request } : {}),
+        docs_url: e.docs_url || null,
+      };
+    },
+  },
+  {
+    name: 'call_tool',
+    title: 'Run a tool',
+    description: `Run one catalog tool: query parameters in query, a JSON body in body, as describe_tool lists them. Billed to the workspace at the call's real cost; a call that would cost more than ${credits(CATALOG_CALL_MAX_USD * getToolMarkup('toolbox_catalog'))} credits is refused unbilled. A tool's own error (no result, bad parameter) costs nothing.`,
+    inputSchema: schema({
+      id: s('The tool id from find_tools.'),
+      query: { type: 'object', additionalProperties: true, description: 'Query parameters, e.g. {"domain": "example.com"}.' },
+      body: { type: 'object', additionalProperties: true, description: 'The JSON body, for a POST tool.' },
+    }, ['id']),
+    annotations: WRITE,
+    async run(args, ctx) {
+      if (!tregConfigured()) throw new ToolInputError('the Toolbox catalog is not set up on this Kortix server');
+      const e = await offerableEndpoint(reqStr(args, 'id'));
+      const accountId = await billing.accountOf(ctx.state.projectId);
+      if (!accountId) throw new ToolInputError('this workspace has no billing account');
+      const query = args.query && typeof args.query === 'object' ? Object.fromEntries(Object.entries(args.query as Record<string, unknown>).map(([k, v]) => [k, String(v)])) : undefined;
+      const body = args.body && typeof args.body === 'object' ? args.body : undefined;
+      const rate = markup();
+      const estimate = Math.min(Math.max(e.cost?.usd ?? 0, 0), CATALOG_CALL_MAX_USD);
+      const description = `Toolbox ${e.id}`;
+      let hold;
+      try {
+        hold = await billing.reserve(accountId, estimate * rate, description);
+      } catch (error) {
+        throw new ToolInputError(`not enough credits for this call: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      let result;
+      try {
+        result = await treg().call({ id: e.id, method: e.method ?? 'GET', query, body, meta: tregMeta({ workspaceId: ctx.state.projectId, sessionId: ctx.sessionId }), maxCostUsd: CATALOG_CALL_MAX_USD });
+      } catch (error) {
+        await billing.settle(hold, 0, description);
+        throw error;
+      }
+      const actual = (result.costMicro / 1_000_000) * rate;
+      await billing.settle(hold, actual, description);
+      return { id: e.id, status: result.status, ok: result.status < 400, credits: credits(actual), result: result.body };
+    },
+  },
+];
+
+export const TOOLBOX_TOOLS: readonly AgentTool[] = [...NATIVE_TOOLS, ...CATALOG_TOOLS];

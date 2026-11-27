@@ -14,7 +14,7 @@ import { logger } from '../../lib/logger';
 import { AUTHENTICATOR_TOOLS } from './authenticator';
 import { BROWSER_TOOLS } from './browser';
 import { PHONE_TOOLS } from './phone';
-import { WEB_TOOLS } from './web';
+import { TOOLBOX_TOOLS } from './toolbox';
 import { KORTIX_SESSION_HEADER, kortixAgentServiceForUrl, type KortixAgentService } from './host';
 import { type AccountState, decodeAccountState, InvalidAccountToken, updateAccountState } from './state';
 import { type AgentTool, ToolInputError } from './tool';
@@ -25,14 +25,14 @@ const SERVICE_TITLES: Record<KortixAgentService, string> = {
   authenticator: 'Kortix Agent Authenticator',
   browser: 'Kortix Browser',
   phone: 'Kortix Phone',
-  web: 'Kortix Web',
+  toolbox: 'Kortix Toolbox',
 };
 
 const TOOLS: Record<KortixAgentService, readonly AgentTool<never>[]> = {
   authenticator: AUTHENTICATOR_TOOLS as readonly AgentTool<never>[],
   browser: BROWSER_TOOLS as readonly AgentTool<never>[],
   phone: PHONE_TOOLS as readonly AgentTool<never>[],
-  web: WEB_TOOLS as readonly AgentTool<never>[],
+  toolbox: TOOLBOX_TOOLS as readonly AgentTool<never>[],
 };
 
 export function kortixAgentTools(service: KortixAgentService): readonly AgentTool<never>[] {

@@ -1090,6 +1090,11 @@ const envSchema = z.object({
   AWS_SES_SECRET_ACCESS_KEY: optStr,
   // Twilio (https://www.twilio.com): phone numbers for kortix_phone accounts
   // (connectors/kortix-agent/phone.ts). Unset: the connector is not offered.
+  // treg (https://treg.to): the long tail of paid tools behind Kortix Toolbox
+  // (connectors/kortix-agent/toolbox.ts). An org-scoped agent token. Unset: Toolbox
+  // offers only the tools Kortix holds keys for.
+  TREG_API_TOKEN: optStr,
+  TREG_API_URL: optStrDefault('https://treg.to'),
   TWILIO_ACCOUNT_SID: optStr,
   TWILIO_AUTH_TOKEN: optStr,
   // Resend (https://resend.com).
@@ -1871,6 +1876,8 @@ export const config = {
   AWS_SES_REGION: env.AWS_SES_REGION,
   AWS_SES_ACCESS_KEY_ID: env.AWS_SES_ACCESS_KEY_ID,
   AWS_SES_SECRET_ACCESS_KEY: env.AWS_SES_SECRET_ACCESS_KEY,
+  TREG_API_TOKEN: env.TREG_API_TOKEN,
+  TREG_API_URL: env.TREG_API_URL,
   TWILIO_ACCOUNT_SID: env.TWILIO_ACCOUNT_SID,
   TWILIO_AUTH_TOKEN: env.TWILIO_AUTH_TOKEN,
   RESEND_API_KEY: env.RESEND_API_KEY,
@@ -1983,6 +1990,12 @@ const TOOL_PRICING: Record<string, ToolPricing> = {
     perResultCost: 0,
     markupMultiplier: 1.5,
   },
+  // A Kortix Toolbox catalog call (treg): the provider's real cost times this markup.
+  toolbox_catalog: {
+    baseCost: 0,
+    perResultCost: 0,
+    markupMultiplier: 1.5,
+  },
   // Crawl status polls cost nothing upstream, so they cost nothing here.
   proxy_firecrawl_status: {
     baseCost: 0,
@@ -1995,6 +2008,11 @@ const TOOL_PRICING: Record<string, ToolPricing> = {
     markupMultiplier: 1.5,
   },
 };
+
+/** The markup a tool's price applies (1 when it has none). */
+export function getToolMarkup(toolName: string): number {
+  return TOOL_PRICING[toolName]?.markupMultiplier ?? 1;
+}
 
 export function getToolCost(toolName: string, resultCount = 0): number {
   const pricing = TOOL_PRICING[toolName];

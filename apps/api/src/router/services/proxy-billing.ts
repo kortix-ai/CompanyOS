@@ -6,7 +6,7 @@ import { HTTPException } from 'hono/http-exception';
 import { getToolCost } from '../../config';
 import { logger } from '../../lib/logger';
 import { type ProxyServiceConfig, matchAllowedRoute } from '../config/proxy-services';
-import { deductToolCredits } from './billing';
+import { deductToolAmount, deductToolCredits } from './billing';
 import { refundReservation } from './reservation';
 
 export { matchAllowedRoute };
@@ -92,5 +92,33 @@ export function injectApiKey(
 
     default:
       return body;
+  }
+}
+
+/**
+ * Reserve an exact amount (USD) for a call priced per call, before it runs:
+ * 402 when the account cannot cover it. Settle afterwards with
+ * {@link settleToolAmount}.
+ */
+export async function reserveToolAmount(accountId: string, cost: number, description: string): Promise<ToolCreditReservation | null> {
+  if (cost <= 0) return null;
+  const result = await deductToolAmount(accountId, cost, description);
+  if (!result.success) {
+    throw new HTTPException(result.retryable ? 503 : 402, { message: result.error || 'Insufficient credits' });
+  }
+  return result.cost > 0 ? { accountId, billingToolName: 'toolbox_catalog', cost: result.cost } : null;
+}
+
+/**
+ * Settle a reservation on the real cost: refund what was held beyond it, or
+ * debit the rest when the call cost more (best effort: the call already ran).
+ */
+export async function settleToolAmount(reservation: ToolCreditReservation | null, actual: number, description: string): Promise<void> {
+  if (!reservation) return;
+  if (actual < reservation.cost) {
+    await refundToolReservation({ ...reservation, cost: reservation.cost - actual }, `${description} (refund above the real cost)`);
+  } else if (actual > reservation.cost) {
+    const extra = await deductToolAmount(reservation.accountId, actual - reservation.cost, `${description} (above the hold)`);
+    if (!extra.success) logger.warn('[TOOLBOX] could not debit the cost above the hold', { accountId: reservation.accountId, extra: actual - reservation.cost });
   }
 }

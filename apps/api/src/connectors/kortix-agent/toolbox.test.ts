@@ -3,10 +3,10 @@ import { kortixAgentMcpUrl } from './host';
 import { dispatchKortixAgentMcp } from './server';
 import { encodeAccountState } from './state';
 import { ToolInputError } from './tool';
-import { setWebCallForTests, type WebCall } from './web';
+import { setWebCallForTests, type WebCall } from './toolbox';
 
 const PROJECT = '4f2a9c1e-1111-4222-8333-944445555666';
-const TOKEN = encodeAccountState({ projectId: PROJECT, connectorId: '0f0e0d0c-0000-4000-8000-000000000001', connectionId: '0f0e0d0c-0000-4000-8000-000000000005', service: 'web', data: {} });
+const TOKEN = encodeAccountState({ projectId: PROJECT, connectorId: '0f0e0d0c-0000-4000-8000-000000000001', connectionId: '0f0e0d0c-0000-4000-8000-000000000005', service: 'toolbox', data: {} });
 
 let sent: Array<Parameters<WebCall>[0]>;
 let answer: (input: Parameters<WebCall>[0]) => unknown;
@@ -22,7 +22,7 @@ beforeEach(() => {
 afterAll(() => setWebCallForTests(null));
 
 async function call(name: string, args: Record<string, unknown>) {
-  const res = await dispatchKortixAgentMcp(new Request(kortixAgentMcpUrl('web'), {
+  const res = await dispatchKortixAgentMcp(new Request(kortixAgentMcpUrl('toolbox'), {
     method: 'POST',
     headers: { authorization: `Bearer ${TOKEN}` },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }),

@@ -481,7 +481,8 @@ export function registerAppsRoutes(): void {
       // session token skips the MFA gate without a second factor, so the
       // viewer token it leads to must not count as one.
       const aal = c.get('authType') === 'supabase' && c.get('mfaAal') === 'aal2' ? 'aal2' : undefined;
-      const session = appAccessSessionUrl(appPublicUrl(row), row, loaded.userId, new Date(), aal);
+      const session = appAccessSessionUrl(appPublicUrl(row), row, loaded.userId, new Date(), aal,
+        c.get('authType') === 'supabase' ? 'browser' : 'access_link');
       return c.json({ url: session.url, expires_at: session.expiresAt.toISOString() });
     },
   );

@@ -176,3 +176,7 @@ d61aa124384b7232c32c08d17d566e797f142133:apps/cli/src/__tests__/plan.blackbox.te
 # escaping) that a fake API returns to the CLI's agent-browser plugin. It is no
 # credential anywhere.
 248a69bbc5f339dc154a8e75336b2a890efdff02:apps/cli/src/__tests__/secrets-browser-plugin.test.ts:generic-api-key:8
+# Synthetic workspace-cache content keys in parser/poll fixtures, not API credentials.
+# Both historical literals are constructed ws-<content>-<suffix>-<timestamp> values.
+ce4e12f5c6a841944497179430b4b2cd68d1c708:apps/api/src/__tests__/unit-workspace-cache-builder.test.ts:generic-api-key:78
+6805b7b38bf0f174f9c96b9e4bf695c30f39d069:apps/api/src/__tests__/unit-workspace-cache-builder.test.ts:generic-api-key:50

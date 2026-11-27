@@ -19,6 +19,7 @@ import {
 import { defineFrameParity } from "./frame";
 import { defineQueueParity } from "./queue";
 import { defineShellParity } from "./shell";
+import { defineSessionChildrenParity } from './session-children.spec';
 
 /**
  * The 27 desktop parity journeys for one runtime: `web` (a browser user agent)
@@ -36,6 +37,7 @@ export function defineDesktopParity(runtime: "web" | "desktop"): void {
         (desktop ? " KortixDesktop/0.1.0" : ""),
     });
     defineSessionParity(desktop);
+    defineSessionChildrenParity();
     defineQueueParity();
     defineShellParity();
     defineFrameParity(desktop);

@@ -381,6 +381,14 @@ export function ProjectSessionList({ projectId, secondary = false, hideSpaces = 
     if (activeSection) setExpanded(projectId, `section:${activeSection}`, true);
   }, [projectId, activeParentId, activeSection, setExpanded]);
 
+  // Reveal a runtime child on navigation, not on every render: the viewer
+  // can then fold the tree without leaving the child they are reading.
+  useEffect(() => {
+    if (activeSessionId && activeRuntimeSessionId) {
+      setExpanded(projectId, activeSessionId, true);
+    }
+  }, [projectId, activeSessionId, activeRuntimeSessionId, setExpanded]);
+
   // The session you are in opens when it spawns a session, so the new row is
   // in view. Only a rise while you watch opens it: a row you closed stays
   // closed on every later read.
@@ -536,12 +544,9 @@ export function ProjectSessionList({ projectId, secondary = false, hideSpaces = 
     const isSwitchTarget = switchingToSessionId === session.session_id;
     const children = directSubsessions(session);
     const spawnedCount = nested ? 0 : (session.child_count ?? 0);
-    // Sub-agents and spawned sessions open together, under one toggle. A row
-    // whose sub-agent is the open page stays open, so that row stays visible.
+    // Sub-agents and spawned sessions share the viewer's one saved toggle.
     const childRunsOpen =
-      children.length + spawnedCount > 0 &&
-      (expandedIdSet.has(session.session_id) ||
-        (!!isActive && children.some((child) => child.id === activeRuntimeSessionId)));
+      children.length + spawnedCount > 0 && expandedIdSet.has(session.session_id);
     return (
       <div key={session.session_id} className="space-y-px">
         <ProjectSessionRow

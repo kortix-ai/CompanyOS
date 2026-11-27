@@ -175,6 +175,9 @@ export const WORKSPACE_KEY_CLASSES = {
     'calendar_items',
     // An eval trial carries project_id only (2026-11-13).
     'eval_trials',
+    // The humanoid's identity and event log (flag `humanoid`, 2026-11-27) carry project_id only.
+    'humanoid_events',
+    'humanoid_identities',
     // A goal's event log carries project_id only (dev, 2026-11-06).
     'project_goal_events',
     // The legacy credential move's run record (2026-11-12).

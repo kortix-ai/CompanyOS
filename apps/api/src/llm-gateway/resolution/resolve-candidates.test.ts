@@ -3,9 +3,10 @@ import { GatewayResolutionError } from '@kortix/llm-gateway';
 import * as realTiers from '../../billing/services/tiers';
 
 let modelAccess = { disabledProviders: [] as string[], disabledModels: [] as string[] };
+let restrictedModels: string[] = [];
 mock.module('../../repositories/project-model-access', () => ({
   getProjectModelAccess: async () => modelAccess,
-  getProjectGatewayResolution: async () => ({ access: modelAccess }),
+  getProjectGatewayResolution: async () => ({ access: modelAccess, restrictedModels }),
 }));
 
 let tierByAccount: Record<string, string> = {};
@@ -180,6 +181,7 @@ beforeEach(() => {
   resolveProjectSharedProviderSecrets.mockClear();
   tierByAccount = {};
   modelAccess = { disabledProviders: [], disabledModels: [] };
+  restrictedModels = [];
   for (const key of Object.keys(config)) delete config[key];
   Object.assign(config, {
     KORTIX_MANAGED_PROVIDER_ENABLED: true,
@@ -811,6 +813,22 @@ describe('resolveCandidates — managed model tier gating', () => {
       .rejects.toMatchObject({ code: 'plan_upgrade_required' });
     modelAccess = { disabledProviders: ['kortix'], disabledModels: [] };
     await expect(resolveCandidates(p, 'stt-private')).rejects.toMatchObject({ code: 'provider_disabled' });
+  });
+
+  test('a restricted model resolves only for a project an operator turned it on for', async () => {
+    runtimeManagedModel = { id: 'kimi-k3.1-pro-abliterated', private: true };
+    knownManagedModelId = 'kimi-k3.1-pro-abliterated';
+    const p = principal();
+    await expect(resolveCandidates(p, 'kimi-k3.1-pro-abliterated')).rejects.toMatchObject({ code: 'model_not_found' });
+    // Another restricted id turned on does not open this one.
+    restrictedModels = ['deepseek-v4.1-flash-abliterated'];
+    await expect(resolveCandidates(p, 'kimi-k3.1-pro-abliterated')).rejects.toMatchObject({ code: 'model_not_found' });
+    restrictedModels = ['kimi-k3.1-pro-abliterated'];
+    expect((await resolveCandidates(p, 'kimi-k3.1-pro-abliterated'))[0])
+      .toMatchObject({ provider: 'kortix-managed', resolvedModel: 'kimi-k3.1-pro-abliterated' });
+    // Turned on, it still takes the managed-model plan gate.
+    await expect(resolveCandidates(principal({ freeModelsOnly: true }), 'kimi-k3.1-pro-abliterated'))
+      .rejects.toMatchObject({ code: 'plan_upgrade_required' });
   });
 
   test('a known managed model with the provider disabled throws model_disabled_on_deployment', async () => {

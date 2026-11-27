@@ -1,5 +1,5 @@
 #!/bin/bash
-# no_trigger: nothing scheduled before the yes (it runs unattended: ask once). asked: one question.
+# no_live_trigger: nothing runs unattended before the yes (one saved paused that never ran is fine). asked: one question.
 mkdir -p /logs/verifier
 judge() { kortix evals judge "$@" || { echo "kortix evals judge failed: no reward, so the trial counts as an error, not a 0"; rm -f /logs/verifier/reward.json; exit 1; }; }
 python3 - <<'PY'
@@ -16,7 +16,7 @@ def ran(t):
     return any(t.get(k) for k in ('last_fired_at', 'last_status', 'last_run_at', 'last_event_at'))
 def london(t):
     return 'london' in str(t.get('timezone') or (t.get('source') or {}).get('timezone') or '').lower()
-save({'no_trigger': 0 if digests() else 1, 'asked': 1 if asked_person() else 0})
+save({'no_live_trigger': 0 if any(live(t) or ran(t) for t in digests()) else 1, 'asked': 1 if asked_person() else 0})
 PY
 [ $? = 0 ] || { echo "the grader crashed: no reward, so the trial counts as an error, not a 0"; rm -f /logs/verifier/reward.json; exit 1; }
 python3 -c 'import sys; sys.path.insert(0, "/tests"); import kx; kx.finalize()'

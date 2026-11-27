@@ -560,6 +560,71 @@ adminApp.openapi(
   },
 );
 
+// ── Restricted managed models for a project (operator) ──────────────────────
+// The only way a project reaches a restricted managed model
+// (llm-gateway/restricted-models.ts: the abliterated models). Replaces the
+// project's list; `[]` turns them all off. No workspace role writes it.
+// Audited on the project.
+adminApp.openapi(
+  createRoute({
+    method: 'put',
+    path: '/api/projects/{id}/restricted-models',
+    tags: ['admin'],
+    summary: "Set the restricted managed models a project may use (operator)",
+    ...auth,
+    request: {
+      params: z.object({ id: z.string() }),
+      body: {
+        content: {
+          'application/json': {
+            schema: z.object({
+              models: z.array(z.string()).openapi({ description: 'Restricted model ids to turn on; `[]` turns every one off.' }),
+            }),
+          },
+        },
+      },
+    },
+    responses: {
+      200: json(
+        z.object({ project_id: z.string(), models: z.array(z.string()) }),
+        'Restricted models now on for the project',
+      ),
+      ...errors(400, 401, 403, 404),
+    },
+  }),
+  async (c) => {
+    const { id: projectId } = c.req.valid('param');
+    const { models } = c.req.valid('json');
+    const { RESTRICTED_MANAGED_MODEL_IDS, isRestrictedManagedModelId } = await import('../llm-gateway/restricted-models');
+    const unknown = models.filter((id) => !isRestrictedManagedModelId(id));
+    if (unknown.length) {
+      return c.json({ error: `Not restricted models: ${unknown.join(', ')}. Restricted: ${RESTRICTED_MANAGED_MODEL_IDS.join(', ')}` }, 400);
+    }
+    if (!isUuid(projectId)) return c.json({ error: 'Not found' }, 404);
+    const project = await findProject(projectId);
+    if (!project || project.status === 'archived') return c.json({ error: 'Not found' }, 404);
+    const { setProjectRestrictedModels } = await import('../repositories/project-model-access');
+    const written = await setProjectRestrictedModels(projectId, [...new Set(models)]);
+    if (!written) return c.json({ error: 'Not found' }, 404);
+    const { recordAuditEvent } = await import('../shared/audit');
+    await recordAuditEvent({
+      accountId: written.accountId,
+      projectId,
+      actorUserId: c.get('userId') ?? null,
+      action: 'admin.project.restricted_models.set',
+      resourceType: 'project',
+      resourceId: projectId,
+      before: { restricted_models: written.before },
+      after: { restricted_models: written.after },
+      ip: requestClientIp(c),
+      userAgent: c.req.header('user-agent') || null,
+    }).catch(() => {
+      /* audit is best-effort, as on the other admin writes */
+    });
+    return c.json({ project_id: projectId, models: written.after }, 200);
+  },
+);
+
 // ── Credit ledger ────────────────────────────────────────────────────────────
 adminApp.openapi(
   createRoute({

@@ -6,12 +6,14 @@ import { getAccountModelDefaults } from '../../repositories/model-preferences';
 import { getProjectRoutingPolicy } from '../../repositories/project-routing-policies';
 import { resolveEnablement } from '../model-enablement';
 import { toWireModel } from '../resolution/effective';
-import { gatewayModelCatalog } from './catalog-models';
+import { gatewayModelCatalog, platinumGatewayModel } from './catalog-models';
 import { projectPickerCatalog, type UnavailableModelMark } from './picker-catalog';
 import { platformDefaultModelId } from './served-managed-models';
 import { customProviderCatalog } from '../custom-providers';
 import { PLATINUM_PROVIDER } from '@kortix/llm-catalog';
 import { platinumByokCatalog } from './platinum-byok-models';
+import { getRuntimeManagedModel } from './managed-models';
+import { managedTransportAvailable } from '../resolution/descriptors';
 
 type GatewayModel = ReturnType<typeof gatewayModelCatalog>[string];
 
@@ -98,17 +100,27 @@ export async function servableProjectCatalog(input: {
   const platinum = secretNames.has(platinumKeyName)
     ? await platinumByokCatalog(await firstGatewayKeyValue({ ...keyScope, providerId: PLATINUM_PROVIDER.id, name: platinumKeyName }).catch(() => null))
     : {};
+  // Restricted managed models (restricted-models.ts): only those an operator
+  // turned on for this project, on by default once granted.
+  const restricted: Record<string, GatewayModel> = {};
+  if (!freeManagedOnly) {
+    for (const id of resolution.restrictedModels ?? []) {
+      const model = getRuntimeManagedModel(id);
+      if (model && managedTransportAvailable(model)) restricted[id] = platinumGatewayModel(model, 'kortix');
+    }
+  }
   const models = {
     ...projectPickerCatalog(
       gatewayModelCatalog(projectId, { freeManagedOnly }),
       secretNames,
       requiredModels,
     ),
+    ...restricted,
     ...platinum,
     ...custom,
   };
   const enabled = resolveEnablement(models, routing?.modelOverrides ?? {},
-    [...requiredModels, ...Object.keys(platinum), ...Object.keys(custom)]);
+    [...requiredModels, ...Object.keys(restricted), ...Object.keys(platinum), ...Object.keys(custom)]);
   return {
     models: Object.fromEntries(
       Object.entries(models).map(([id, model]) => [

@@ -1305,6 +1305,14 @@ test('34 — real pi persisted reply survives invalidation during a held page re
       text: message.blocks.filter((block) => block.type === 'text').map((block) => block.text ?? '').join(''),
     }));
     const historyTurns = Number(process.env.E2E_TRANSCRIPT_HISTORY_TURNS ?? 0);
+    if (process.env.E2E_TRANSCRIPT_FINAL_OUTCOME === 'cancelled') {
+      const stoppedTool = allMessages.flatMap((message: { blocks: { type: string; input?: unknown; status?: string; result?: unknown }[] }) => message.blocks)
+        .find((block: { type: string; input?: unknown }) => block.type === 'tool_call' && JSON.stringify(block.input).includes('sleep 30'));
+      expect(stoppedTool).toBeDefined();
+      expect(stoppedTool.status).toBe('error');
+      expect(JSON.stringify(stoppedTool.result)).toContain('Command aborted');
+      expect(texts.some((message: { text: string }) => message.text.includes('cancelled turn must not reach'))).toBe(false);
+    }
     expect(texts.filter((message: { role: string }) => message.role === 'user')).toHaveLength(historyTurns + 1);
     expect(new Set(texts.map((message: { id: string }) => message.id)).size).toBe(texts.length);
     const assertTranscript = async () => {

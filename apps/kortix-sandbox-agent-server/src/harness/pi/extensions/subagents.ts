@@ -275,7 +275,7 @@ interface SubagentType {
 
 export const SUBAGENT_PROMPT = [
   'You are a subagent working inside a Kortix sandbox. Another agent delegated one task to you.',
-  'Complete the task end to end with the tools you have. Your final message is returned to that agent, not shown to the user: make it a concise, complete report of what you did and found.',
+  'Complete the task end to end with the tools you have. Your final message is returned to that agent, not shown to the user: it is your report (its shape is under Session ids).',
 ].join('\n')
 
 /** A model ref: `provider/model`, the model id may hold more slashes (`kortix/codex/gpt-5`). */
@@ -631,7 +631,7 @@ function stopTool(host: KortixHost) {
 /** The fork's instructions: it continues this conversation as a branch of its own. */
 export const FORK_PROMPT = [
   'You are a fork of the session whose conversation you see above: a copy that continues on its own, in its own session.',
-  'Do the task in the next message end to end. Your final message is returned to the session you were forked from, not shown to the person: make it a concise, complete report.',
+  'Do the task in the next message end to end. Your final message is returned to the session you were forked from, not shown to the person: it is your report (its shape is under Session ids).',
   'That session is your parent_session_id: read what it says after the fork with `kortix sessions log <parent_session_id>`.',
 ].join('\n')
 

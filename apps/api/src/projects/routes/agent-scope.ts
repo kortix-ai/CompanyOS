@@ -88,6 +88,9 @@ export function registerAgentScopeRoutes(): void {
     createRoute({
       method: 'put',
       path: '/{workspaceId}/agents/{agentName}/scope',
+      operationId: 'agents.scope.set',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_AGENT_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['projects'],
       summary: 'Set which secrets and connectors an agent may use',
       ...auth,

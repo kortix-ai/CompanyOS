@@ -118,6 +118,9 @@ export function registerChangeRequestsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/change-requests',
+      operationId: 'change_requests.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_GITOPS_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['change-requests'],
       summary: 'List change requests of a project',
       description:
@@ -198,6 +201,9 @@ export function registerChangeRequestsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/change-requests',
+      operationId: 'change_requests.create',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_GITOPS_PUSH,
+      'x-kortix-exposure': 'agent',
       tags: ['change-requests'],
       summary: 'Open a change request',
       description:
@@ -518,6 +524,9 @@ export function registerChangeRequestsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/change-requests/{crId}',
+      operationId: 'change_requests.get',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_GITOPS_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['change-requests'],
       summary: 'Get a change request',
       ...auth,
@@ -557,6 +566,9 @@ export function registerChangeRequestsRoutes(): void {
     createRoute({
       method: 'patch',
       path: '/{workspaceId}/change-requests/{crId}',
+      operationId: 'change_requests.update',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_GITOPS_PUSH,
+      'x-kortix-exposure': 'agent',
       tags: ['change-requests'],
       summary: 'Edit a change request title or description',
       ...auth,
@@ -618,6 +630,9 @@ export function registerChangeRequestsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/change-requests/{crId}/request-changes',
+      operationId: 'change_requests.request_changes',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_REVIEW_ACT,
+      'x-kortix-exposure': 'agent',
       tags: ['change-requests'],
       summary: 'Request changes on a change request',
       ...auth,
@@ -711,6 +726,9 @@ export function registerChangeRequestsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/change-requests/{crId}/diff',
+      operationId: 'change_requests.diff.get',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_GITOPS_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['change-requests'],
       summary: 'Get the diff of a change request',
       ...auth,
@@ -769,6 +787,9 @@ export function registerChangeRequestsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/change-requests/{crId}/merge-preview',
+      operationId: 'change_requests.merge_preview.get',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_GITOPS_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['change-requests'],
       summary: 'Preview merging a change request',
       ...auth,

@@ -179,6 +179,9 @@ headlessAuthRouter.openapi(
   createRoute({
     method: 'get',
     path: '/client-config',
+    operationId: 'auth.client_config.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['auth'],
     summary: 'Public sign-in configuration for a client that knows only the API URL',
     responses: {
@@ -219,6 +222,9 @@ headlessAuthRouter.openapi(
   createRoute({
     method: 'post',
     path: '/signup',
+    operationId: 'auth.signup',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['auth'],
     summary: 'Create an account with email + password (headless)',
     request: {
@@ -282,6 +288,9 @@ headlessAuthRouter.openapi(
   createRoute({
     method: 'post',
     path: '/sign-in/password',
+    operationId: 'auth.sign_in.password',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['auth'],
     summary: 'Sign in with email + password (headless)',
     request: { body: { required: true, content: { 'application/json': { schema: z.object({ email: Email, password: z.string().min(1).max(256) }) } } } },
@@ -312,6 +321,9 @@ headlessAuthRouter.openapi(
   createRoute({
     method: 'post',
     path: '/sign-in/magic-link',
+    operationId: 'auth.sign_in.magic_link',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['auth'],
     summary: 'Email a magic link / one-time code (headless)',
     request: {
@@ -355,6 +367,9 @@ headlessAuthRouter.openapi(
   createRoute({
     method: 'post',
     path: '/verify-otp',
+    operationId: 'auth.otp.verify',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['auth'],
     summary: 'Exchange an emailed code for a session (headless)',
     request: {
@@ -400,6 +415,9 @@ headlessAuthRouter.openapi(
   createRoute({
     method: 'post',
     path: '/sign-in/oauth',
+    operationId: 'auth.sign_in.oauth',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['auth'],
     summary: 'Start a social sign-in (PKCE): returns the provider URL and the code verifier to keep',
     request: {
@@ -445,6 +463,9 @@ headlessAuthRouter.openapi(
   createRoute({
     method: 'post',
     path: '/oauth/exchange',
+    operationId: 'auth.oauth.exchange',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['auth'],
     summary: 'Exchange the social sign-in code (+ PKCE verifier) for a session',
     request: { body: { required: true, content: { 'application/json': { schema: z.object({ code: z.string().min(1), code_verifier: z.string().min(1) }) } } } },
@@ -473,6 +494,9 @@ headlessAuthRouter.openapi(
   createRoute({
     method: 'post',
     path: '/refresh',
+    operationId: 'auth.session.refresh',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['auth'],
     summary: 'Rotate a session with its refresh token (headless)',
     request: { body: { required: true, content: { 'application/json': { schema: z.object({ refresh_token: z.string().min(1) }) } } } },
@@ -520,6 +544,9 @@ headlessAuthRouter.openapi(
   createRoute({
     method: 'post',
     path: '/sign-in/sso',
+    operationId: 'auth.sign_in.sso',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['auth'],
     summary: 'Start enterprise SSO for an email domain (headless)',
     description:
@@ -560,6 +587,9 @@ headlessAuthRouter.openapi(
   createRoute({
     method: 'post',
     path: '/password/reset',
+    operationId: 'auth.password.reset',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['auth'],
     summary: 'Email a password-recovery link / code (headless)',
     request: { body: { required: true, content: { 'application/json': { schema: z.object({ email: Email, redirect_to: z.string().optional() }) } } } },

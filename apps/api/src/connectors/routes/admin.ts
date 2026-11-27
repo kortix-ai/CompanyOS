@@ -110,6 +110,9 @@ export function registerConnectorAdminRoutes(app: OpenAPIHono, deps: ConnectorRo
     createRoute({
       method: 'get',
       path: '/projects/{workspaceId}/connectors',
+      operationId: 'connectors.list',
+      'x-kortix-action': 'project.connector.read',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: "List a project's connectors with status (dashboard)",
       ...auth,
@@ -152,6 +155,9 @@ export function registerConnectorAdminRoutes(app: OpenAPIHono, deps: ConnectorRo
     createRoute({
       method: 'post',
       path: '/projects/{workspaceId}/connectors/mcp-sign-in-check',
+      operationId: 'connectors.mcp_sign_in.check',
+      'x-kortix-action': 'project.connector.write',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: 'Check whether an MCP server supports one-click OAuth sign-in',
       ...auth,
@@ -202,6 +208,9 @@ export function registerConnectorAdminRoutes(app: OpenAPIHono, deps: ConnectorRo
     createRoute({
       method: 'post',
       path: '/projects/{workspaceId}/connectors/auth-discovery',
+      operationId: 'connectors.auth.discover',
+      'x-kortix-action': 'project.connector.write',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: 'Discover authentication advertised by a connector source',
       ...auth,
@@ -247,6 +256,9 @@ export function registerConnectorAdminRoutes(app: OpenAPIHono, deps: ConnectorRo
     createRoute({
       method: 'post',
       path: '/projects/{workspaceId}/connectors',
+      operationId: 'connectors.set',
+      'x-kortix-action': 'project.connector.write',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: 'Create or update a connector in kortix.yaml',
       description:
@@ -347,6 +359,9 @@ export function registerConnectorAdminRoutes(app: OpenAPIHono, deps: ConnectorRo
     createRoute({
       method: 'delete',
       path: '/projects/{workspaceId}/connectors/{slug}',
+      operationId: 'connectors.delete',
+      'x-kortix-action': 'project.connector.write',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: 'Delete a connector from kortix.yaml',
       ...auth,
@@ -374,6 +389,9 @@ export function registerConnectorAdminRoutes(app: OpenAPIHono, deps: ConnectorRo
     createRoute({
       method: 'put',
       path: '/projects/{workspaceId}/connectors/{slug}/credential',
+      operationId: 'connectors.credential.set',
+      'x-kortix-action': 'project.connector.write',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: "Set a connector's credential value",
       ...auth,
@@ -438,6 +456,9 @@ export function registerConnectorAdminRoutes(app: OpenAPIHono, deps: ConnectorRo
     createRoute({
       method: 'put',
       path: '/projects/{workspaceId}/connectors/{slug}/oauth2/connection',
+      operationId: 'connectors.oauth2_connection.set',
+      'x-kortix-action': 'project.connector.write',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: 'Set OAuth2 client credentials on a connector\'s shared account',
       description:
@@ -492,6 +513,9 @@ export function registerConnectorAdminRoutes(app: OpenAPIHono, deps: ConnectorRo
     createRoute({
       method: 'put',
       path: '/projects/{workspaceId}/connectors/{slug}/secret-binding',
+      operationId: 'connectors.secret_binding.set',
+      'x-kortix-action': 'project.connector.write',
+      'x-kortix-exposure': 'agent',
       tags: ['connectors'],
       summary: "Bind a brokered project secret as a connector's credential",
       ...auth,
@@ -542,6 +566,9 @@ export function registerConnectorAdminRoutes(app: OpenAPIHono, deps: ConnectorRo
     createRoute({
       method: 'delete',
       path: '/projects/{workspaceId}/connectors/{slug}/credential',
+      operationId: 'connectors.credential.delete',
+      'x-kortix-action': 'project.connector.write',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: 'Disconnect a connector (remove its credential)',
       ...auth,

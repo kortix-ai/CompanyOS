@@ -508,6 +508,9 @@ export function registerMemberRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/leave',
+      operationId: 'workspaces.leave',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'human',
       tags: ['accounts'],
       summary: 'Leave an account',
       ...auth,

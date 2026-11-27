@@ -16,6 +16,9 @@ export function registerConnectRoutes(app: OpenAPIHono, deps: ConnectorRouterDep
     createRoute({
       method: 'post',
       path: '/projects/{workspaceId}/connectors/{slug}/connect',
+      operationId: 'connectors.connect.start',
+      'x-kortix-action': 'project.connector.connections.manage',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: 'Start an easy-connect authorization',
       ...auth,
@@ -78,6 +81,9 @@ export function registerConnectRoutes(app: OpenAPIHono, deps: ConnectorRouterDep
     createRoute({
       method: 'post',
       path: '/projects/{workspaceId}/connectors/{slug}/connect/finalize',
+      operationId: 'connectors.connect.finalize',
+      'x-kortix-action': 'project.connector.connections.manage',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: 'Finalize an easy-connect authorization',
       ...auth,
@@ -148,6 +154,9 @@ export function registerConnectRoutes(app: OpenAPIHono, deps: ConnectorRouterDep
     createRoute({
       method: 'get',
       path: '/projects/{workspaceId}/sessions/{sessionId}/connect-requests',
+      operationId: 'connectors.connect_requests.list',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: 'Connectors this session asked a human to authorize',
       ...auth,
@@ -224,6 +233,9 @@ export function registerPipedreamWebhookRoutes(app: OpenAPIHono, deps: Connector
     createRoute({
       method: 'post',
       path: '/webhook/pipedream',
+      operationId: 'connectors.pipedream.webhook',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       tags: ['connector'],
       summary: 'Pipedream webhook (HMAC-signed, no user auth)',
       request: {

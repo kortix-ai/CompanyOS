@@ -161,6 +161,9 @@ accountsRouter.openapi(
   createRoute({
     method: 'get',
     path: '/me',
+    operationId: 'me.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'agent',
     tags: ['accounts'],
     summary: 'Identity probe for CLI + dashboard nav',
     ...auth,
@@ -260,6 +263,9 @@ accountsRouter.openapi(
   createRoute({
     method: 'get',
     path: '/me/tokens',
+    operationId: 'me.tokens.list',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['accounts'],
     summary: 'List your personal keys',
     ...auth,
@@ -284,6 +290,9 @@ accountsRouter.openapi(
   createRoute({
     method: 'delete',
     path: '/me/tokens/self',
+    operationId: 'me.tokens.revoke_self',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'local',
     tags: ['accounts'],
     summary: 'Revoke the personal key this request authenticated with',
     ...auth,
@@ -309,6 +318,9 @@ accountsRouter.openapi(
   createRoute({
     method: 'delete',
     path: '/me/tokens/{tokenId}',
+    operationId: 'me.tokens.delete',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['accounts'],
     summary: 'Revoke one of your personal keys, or delete a revoked one',
     ...auth,

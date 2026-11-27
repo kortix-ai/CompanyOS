@@ -33,6 +33,9 @@ export function registerDiscoverRoutes(app: OpenAPIHono, deps: ConnectorRouterDe
     createRoute({
       method: 'get',
       path: '/projects/{workspaceId}/discover/connectors',
+      operationId: 'connectors.discover.list',
+      'x-kortix-action': 'project.connector.write',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: 'Browse the connectors catalog',
       ...auth,
@@ -89,6 +92,9 @@ export function registerDiscoverRoutes(app: OpenAPIHono, deps: ConnectorRouterDe
     createRoute({
       method: 'get',
       path: '/projects/{workspaceId}/discover/sections',
+      operationId: 'connectors.discover.sections.list',
+      'x-kortix-action': 'project.connector.write',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: 'Browse the connectors catalog by category',
       ...auth,
@@ -146,6 +152,9 @@ export function registerDiscoverDetailRoutes(app: OpenAPIHono, deps: ConnectorRo
     createRoute({
       method: 'get',
       path: '/projects/{workspaceId}/discover/connectors/detail',
+      operationId: 'connectors.discover.get',
+      'x-kortix-action': 'project.connector.write',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: 'Resolve the ways to connect one catalog app',
       ...auth,
@@ -197,6 +206,9 @@ function registerDiscoverToolsAndInstallRoutes(app: OpenAPIHono, deps: Connector
     createRoute({
       method: 'get',
       path: '/projects/{workspaceId}/discover/connectors/tools',
+      operationId: 'connectors.discover.tools.list',
+      'x-kortix-action': 'project.connector.write',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: 'List the tools one way to connect a catalogue app offers',
       ...auth,
@@ -243,6 +255,9 @@ function registerDiscoverToolsAndInstallRoutes(app: OpenAPIHono, deps: Connector
     createRoute({
       method: 'post',
       path: '/projects/{workspaceId}/discover/install',
+      operationId: 'connectors.discover.install',
+      'x-kortix-action': 'project.connector.write',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: 'Install a catalogue app as a connector profile',
       description:
@@ -422,6 +437,9 @@ export function registerConnectCatalogueRoutes(app: OpenAPIHono, deps: Connector
     createRoute({
       method: 'get',
       path: '/projects/{workspaceId}/connect/toolkits',
+      operationId: 'connectors.connect.toolkits.list',
+      'x-kortix-action': 'project.connector.write',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: 'Browse the configured easy-connect toolkit catalogue',
       ...auth,
@@ -462,6 +480,9 @@ export function registerConnectCatalogueRoutes(app: OpenAPIHono, deps: Connector
     createRoute({
       method: 'get',
       path: '/projects/{workspaceId}/connect/sections',
+      operationId: 'connectors.connect.sections.list',
+      'x-kortix-action': 'project.connector.write',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: 'Browse the easy-connect toolkit catalogue by category',
       ...auth,
@@ -499,6 +520,9 @@ export function registerConnectCatalogueRoutes(app: OpenAPIHono, deps: Connector
     createRoute({
       method: 'get',
       path: '/projects/{workspaceId}/pipedream/apps',
+      operationId: 'connectors.pipedream.apps.list',
+      'x-kortix-action': 'project.connector.write',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: 'Browse the Pipedream app catalogue',
       ...auth,
@@ -542,6 +566,9 @@ export function registerConnectCatalogueRoutes(app: OpenAPIHono, deps: Connector
     createRoute({
       method: 'get',
       path: '/projects/{workspaceId}/pipedream/sections',
+      operationId: 'connectors.pipedream.sections.list',
+      'x-kortix-action': 'project.connector.write',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: 'Browse the Pipedream catalogue by category',
       ...auth,
@@ -581,6 +608,9 @@ export function registerConnectCatalogueRoutes(app: OpenAPIHono, deps: Connector
     createRoute({
       method: 'get',
       path: '/connect-status',
+      operationId: 'connectors.connect.status.get',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: 'Whether an easy-connect provider is configured on this deployment',
       ...auth,

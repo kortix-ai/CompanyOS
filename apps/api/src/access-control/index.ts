@@ -16,6 +16,9 @@ accessControlApp.openapi(
   createRoute({
     method: 'get',
     path: '/signup-status',
+    operationId: 'access.signup_status.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['access'],
     summary: 'Whether public signups are currently open',
     responses: {
@@ -32,6 +35,9 @@ accessControlApp.openapi(
   createRoute({
     method: 'get',
     path: '/branding',
+    operationId: 'access.branding.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['access'],
     summary: 'Instance branding for the sign-in page',
     responses: {
@@ -65,6 +71,9 @@ accessControlApp.openapi(
   createRoute({
     method: 'post',
     path: '/check-email',
+    operationId: 'access.email.check',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['access'],
     summary: 'Resolve how an email should proceed through the auth flow',
     middleware: [createCheckEmailRateLimitMiddleware()] as const,
@@ -111,6 +120,9 @@ accessControlApp.openapi(
   createRoute({
     method: 'post',
     path: '/request-access',
+    operationId: 'access.early_access.request',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['access'],
     summary: 'Submit an early-access / waitlist request',
     middleware: [createCheckEmailRateLimitMiddleware()] as const,

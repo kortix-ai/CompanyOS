@@ -212,6 +212,9 @@ function deadSecretLinkMessage(names: string[]): string {
 setupLinksPublicApp.openapi(createRoute({
   method: 'get',
   path: '/secret/{token}',
+  operationId: 'setup_links.secret.get',
+  'x-kortix-action': 'none',
+  'x-kortix-exposure': 'human',
   tags: ['setup-links'],
   summary: 'Read what a secret setup link asks for',
   request: { params: TokenParams },
@@ -262,6 +265,9 @@ setupLinksPublicApp.openapi(createRoute({
 setupLinksPublicApp.openapi(createRoute({
   method: 'post',
   path: '/secret/{token}',
+  operationId: 'setup_links.secret.submit',
+  'x-kortix-action': 'none',
+  'x-kortix-exposure': 'human',
   tags: ['setup-links'],
   summary: 'Submit the values a secret setup link asks for',
   request: {
@@ -471,6 +477,9 @@ setupLinksPublicApp.openapi(createRoute({
 setupLinksPublicApp.openapi(createRoute({
   method: 'get',
   path: '/connectors/{token}',
+  operationId: 'setup_links.connector.get',
+  'x-kortix-action': 'none',
+  'x-kortix-exposure': 'human',
   tags: ['setup-links'],
   summary: 'Read which app a connector setup link connects',
   request: { params: TokenParams },
@@ -639,6 +648,9 @@ async function resolveConnectorLink(c: Context): Promise<
 setupLinksPublicApp.openapi(createRoute({
   method: 'post',
   path: '/connectors/{token}/start',
+  operationId: 'setup_links.connector.start',
+  'x-kortix-action': 'none',
+  'x-kortix-exposure': 'human',
   tags: ['setup-links'],
   summary: 'Mint a hosted authorization URL for a connector setup link',
   request: { params: TokenParams },
@@ -709,6 +721,9 @@ setupLinksPublicApp.openapi(createRoute({
 setupLinksPublicApp.openapi(createRoute({
   method: 'post',
   path: '/connectors/{token}/finalize',
+  operationId: 'setup_links.connector.finalize',
+  'x-kortix-action': 'none',
+  'x-kortix-exposure': 'human',
   tags: ['setup-links'],
   summary: 'Record the account a connector setup link connected',
   request: {

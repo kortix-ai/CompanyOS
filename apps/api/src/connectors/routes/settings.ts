@@ -25,6 +25,9 @@ export function registerConnectorSettingsRoutes(app: OpenAPIHono, deps: Connecto
     createRoute({
       method: 'post',
       path: '/projects/{workspaceId}/connectors/sync',
+      operationId: 'connectors.sync',
+      'x-kortix-action': 'project.connector.write',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: 'Re-materialize connectors from kortix.yaml',
       ...auth,
@@ -50,6 +53,9 @@ export function registerConnectorSettingsRoutes(app: OpenAPIHono, deps: Connecto
     createRoute({
       method: 'put',
       path: '/projects/{workspaceId}/connectors/{slug}/credential-mode',
+      operationId: 'connectors.credential_mode.set',
+      'x-kortix-action': 'project.connector.write',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: "Set a connector's credential mode (shared only — per_user was removed)",
       ...auth,
@@ -99,6 +105,9 @@ export function registerConnectorSettingsRoutes(app: OpenAPIHono, deps: Connecto
     createRoute({
       method: 'put',
       path: '/projects/{workspaceId}/connectors/{slug}/authorization-strategy',
+      operationId: 'connectors.authorization_strategy.set',
+      'x-kortix-action': 'project.connector.write',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: "Set a connector's connection strategy",
       ...auth,
@@ -138,6 +147,9 @@ export function registerConnectorSettingsRoutes(app: OpenAPIHono, deps: Connecto
     createRoute({
       method: 'put',
       path: '/projects/{workspaceId}/connectors/{slug}/sensitive',
+      operationId: 'connectors.sensitive.set',
+      'x-kortix-action': 'project.connector.write',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: "Toggle a connector's sensitive flag (gate reads too)",
       ...auth,
@@ -177,6 +189,9 @@ export function registerConnectorSettingsRoutes(app: OpenAPIHono, deps: Connecto
     createRoute({
       method: 'put',
       path: '/projects/{workspaceId}/connectors/{slug}/name',
+      operationId: 'connectors.name.set',
+      'x-kortix-action': 'project.connector.write',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: 'Rename a connector (display label)',
       ...auth,
@@ -215,6 +230,9 @@ export function registerConnectorSettingsRoutes(app: OpenAPIHono, deps: Connecto
     createRoute({
       method: 'get',
       path: '/projects/{workspaceId}/connectors/{slug}/policies',
+      operationId: 'connectors.policies.get',
+      'x-kortix-action': 'project.connector.write',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: "Read a connector's tool-call policies (base rules, or one policy set's)",
       ...auth,
@@ -245,6 +263,9 @@ export function registerConnectorSettingsRoutes(app: OpenAPIHono, deps: Connecto
     createRoute({
       method: 'get',
       path: '/projects/{workspaceId}/connectors/{slug}/config',
+      operationId: 'connectors.config.get',
+      'x-kortix-action': 'project.connector.write',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: "Read a connector's connection config (provider, url, auth, …)",
       ...auth,
@@ -271,6 +292,9 @@ export function registerConnectorSettingsRoutes(app: OpenAPIHono, deps: Connecto
     createRoute({
       method: 'put',
       path: '/projects/{workspaceId}/connectors/{slug}/policies',
+      operationId: 'connectors.policies.set',
+      'x-kortix-action': 'project.connector.write',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: "Replace a connector's tool-call policies (base rules, or one policy set's)",
       ...auth,
@@ -316,6 +340,9 @@ function registerRulesReadModelRoutes(app: OpenAPIHono, deps: ConnectorRouterDep
     createRoute({
       method: 'get',
       path: '/projects/{workspaceId}/connectors/{slug}/agents',
+      operationId: 'connectors.agents.list',
+      'x-kortix-action': 'project.connector.write',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: 'Every agent: may it use this connector, and under which rule set',
       ...auth,
@@ -343,6 +370,9 @@ function registerRulesReadModelRoutes(app: OpenAPIHono, deps: ConnectorRouterDep
     createRoute({
       method: 'get',
       path: '/projects/{workspaceId}/rules-matrix',
+      operationId: 'connectors.rules_matrix.get',
+      'x-kortix-action': 'project.connector.write',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: 'Every connector × every agent: granted, and the rule set it runs under',
       ...auth,
@@ -393,6 +423,9 @@ function registerConnectorPolicySetRoutes(app: OpenAPIHono, deps: ConnectorRoute
     createRoute({
       method: 'get',
       path: '/projects/{workspaceId}/connectors/{slug}/policy-sets',
+      operationId: 'connectors.policy_sets.list',
+      'x-kortix-action': 'project.connector.write',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: "List a connector's policy sets, with their rules and the agents using each",
       ...auth,
@@ -418,6 +451,9 @@ function registerConnectorPolicySetRoutes(app: OpenAPIHono, deps: ConnectorRoute
     createRoute({
       method: 'put',
       path: '/projects/{workspaceId}/connectors/{slug}/policy-sets/{name}',
+      operationId: 'connectors.policy_sets.set',
+      'x-kortix-action': 'project.connector.write',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: 'Create a policy set, or change its description',
       ...auth,
@@ -484,6 +520,9 @@ function registerConnectorPolicySetRoutes(app: OpenAPIHono, deps: ConnectorRoute
     createRoute({
       method: 'put',
       path: '/projects/{workspaceId}/connectors/{slug}/policy-sets/{name}/name',
+      operationId: 'connectors.policy_sets.rename',
+      'x-kortix-action': 'project.connector.write',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: 'Rename a policy set and every agent assignment of it, in one commit',
       ...auth,
@@ -519,6 +558,9 @@ function registerConnectorPolicySetRoutes(app: OpenAPIHono, deps: ConnectorRoute
     createRoute({
       method: 'delete',
       path: '/projects/{workspaceId}/connectors/{slug}/policy-sets/{name}',
+      operationId: 'connectors.policy_sets.delete',
+      'x-kortix-action': 'project.connector.write',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: 'Delete a policy set (409 policy_set_in_use while an agent uses it)',
       ...auth,
@@ -546,6 +588,9 @@ export function registerProjectPolicyRoutes(app: OpenAPIHono, deps: ConnectorRou
     createRoute({
       method: 'get',
       path: '/projects/{workspaceId}/policies',
+      operationId: 'connectors.workspace_policies.get',
+      'x-kortix-action': 'project.connector.write',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: 'Read project policies and default mode',
       ...auth,
@@ -571,6 +616,9 @@ export function registerProjectPolicyRoutes(app: OpenAPIHono, deps: ConnectorRou
     createRoute({
       method: 'put',
       path: '/projects/{workspaceId}/policies',
+      operationId: 'connectors.workspace_policies.set',
+      'x-kortix-action': 'project.connector.write',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: 'Replace project policies and default mode',
       ...auth,

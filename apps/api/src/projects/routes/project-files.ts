@@ -616,6 +616,9 @@ export function registerProjectFilesRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/branches',
+      operationId: 'branches.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_GITOPS_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['files'],
       summary: 'List repository branches',
       ...auth,

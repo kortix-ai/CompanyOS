@@ -128,6 +128,9 @@ export function registerWorkspaceRootRoutes(): void {
     createRoute({
       method: 'get',
       path: '/',
+      operationId: 'workspaces.list',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['workspaces'],
       summary: 'List workspaces',
       description:
@@ -143,6 +146,9 @@ export function registerWorkspaceRootRoutes(): void {
     createRoute({
       method: 'post',
       path: '/',
+      operationId: 'workspaces.create',
+      'x-kortix-action': 'project.create',
+      'x-kortix-exposure': 'agent',
       tags: ['workspaces'],
       summary: 'Create a workspace',
       description:

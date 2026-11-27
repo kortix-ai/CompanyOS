@@ -35,6 +35,9 @@ export function registerProjectInvitesRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/access/invite',
+      operationId: 'access.invites.create',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_MEMBERS_MANAGE,
+      'x-kortix-exposure': 'agent',
       tags: ['access'],
       summary: 'Invite a member to a project',
       ...auth,
@@ -241,6 +244,9 @@ export function registerProjectInvitesRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/access/pending-invites',
+      operationId: 'access.invites.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_MEMBERS_MANAGE,
+      'x-kortix-exposure': 'agent',
       tags: ['access'],
       summary: 'List pending project invites',
       ...auth,
@@ -330,6 +336,9 @@ export function registerProjectInvitesRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/access/pending-invites/{inviteId}',
+      operationId: 'access.invites.delete',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_MEMBERS_MANAGE,
+      'x-kortix-exposure': 'agent',
       tags: ['access'],
       summary: 'Cancel a pending project invite',
       ...auth,
@@ -405,6 +414,9 @@ export function registerProjectInvitesRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/access/pending-invites/{inviteId}/resend',
+      operationId: 'access.invites.resend',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_MEMBERS_MANAGE,
+      'x-kortix-exposure': 'agent',
       tags: ['access'],
       summary: 'Resend a project invite',
       ...auth,

@@ -48,6 +48,9 @@ export function registerChangeRequestActionsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/change-requests/{crId}/merge',
+      operationId: 'change_requests.merge',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_GITOPS_MERGE,
+      'x-kortix-exposure': 'agent',
       tags: ['change-requests'],
       summary: 'Merge a change request',
       ...auth,
@@ -445,6 +448,9 @@ export function registerChangeRequestActionsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/change-requests/{crId}/close',
+      operationId: 'change_requests.close',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_GITOPS_PUSH,
+      'x-kortix-exposure': 'agent',
       tags: ['change-requests'],
       summary: 'Close a change request',
       ...auth,
@@ -492,6 +498,9 @@ export function registerChangeRequestActionsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/change-requests/{crId}/reopen',
+      operationId: 'change_requests.reopen',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_GITOPS_PUSH,
+      'x-kortix-exposure': 'agent',
       tags: ['change-requests'],
       summary: 'Reopen a change request',
       ...auth,

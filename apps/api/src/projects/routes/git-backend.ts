@@ -43,6 +43,9 @@ export function registerGitBackendRoutes(): void {
     createRoute({
       method: 'get',
       path: '/git/backend',
+      operationId: 'workspaces.git_backend.get',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'agent',
       tags: ['github'],
       summary: 'Read the instance git backend',
       ...auth,
@@ -74,6 +77,9 @@ export function registerGitBackendRoutes(): void {
     createRoute({
       method: 'get',
       path: '/git/backend/repositories',
+      operationId: 'workspaces.git_backend.repositories.list',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       tags: ['github'],
       summary: 'List repositories under the instance git backend owner',
       ...auth,

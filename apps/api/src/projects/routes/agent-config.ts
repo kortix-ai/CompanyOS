@@ -194,6 +194,9 @@ export function registerAgentConfigRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/agents/{agentName}/config',
+      operationId: 'agents.config.get',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['projects'],
       summary: 'Get an agent\'s configuration',
       ...auth,
@@ -388,6 +391,9 @@ export function registerAgentConfigRoutes(): void {
     createRoute({
       method: 'put',
       path: '/{workspaceId}/agents/{agentName}/config',
+      operationId: 'agents.config.set',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_AGENT_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['projects'],
       summary: 'Set an agent\'s configuration',
       ...auth,

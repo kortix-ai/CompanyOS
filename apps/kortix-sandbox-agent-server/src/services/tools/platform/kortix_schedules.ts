@@ -574,6 +574,11 @@ async function automate(args: Record<string, any>, context: PlatformToolContext)
     if (!APP_PATH.test(targetPath)) return invalid('Which path?', '`target_path` is the App path each run calls, starting with "/", e.g. "/tick".')
     if (typeof args.agent === 'string' && args.agent.trim()) return invalid('An App or an agent', 'A run calls `target_app` or starts `agent`, not both.')
   }
+  // No agent runs the workspace's default agent, My Kortix in a new workspace, and a schedule cannot start My Kortix:
+  // every run failed with "My Kortix cannot start another My Kortix session" (QualiLoop e2e on dev).
+  if (!targetApp && !(typeof args.agent === 'string' && args.agent.trim())) {
+    return invalid('Who does the work?', 'Pass `agent`: the workspace agent each run starts a session of (kortix_agents list shows them; "worker" for general work). A schedule cannot start My Kortix.')
+  }
   const prompt = typeof args.prompt === 'string' ? args.prompt.trim() : ''
   if (!prompt && !targetApp) return invalid('What should each run do?', 'Missing `prompt`: what each run starts with. Read the event with {{ event.data.<field> }} (connector and App events) or {{ body.<field> }} (webhooks). If you did send it, it did not arrive: send this call from codemode.')
   const badPrompt = prompt ? cliArgProblem('prompt', prompt, 'text') : null
@@ -654,7 +659,7 @@ async function automate(args: Record<string, any>, context: PlatformToolContext)
       title: paused ? `Automation saved, paused: ${name}` : `Automation set: ${name}`,
       subtitle: targetApp
         ? `Calls the App ${targetApp} (${targetPath}) on ${reacts}`
-        : `${typeof args.agent === 'string' && args.agent.trim() ? args.agent.trim() : 'My Kortix'} runs on ${reacts}${key ? ', one session per key' : ''}`,
+        : `${String(args.agent).trim()} runs on ${reacts}${key ? ', one session per key' : ''}`,
       rows: [
         ...(filter.length ? [{ title: 'Only when', detail: short(filter.map((f) => f.replace('--filter=', '')).join(' · '), 140) }] : []),
         ...(url ? [{ title: 'Webhook URL', detail: url }] : []),
@@ -869,7 +874,7 @@ export default {
       app: { type: 'string', description: 'For wake_on app_event: the App slug.' },
       expect_event_within: { type: 'string', description: 'For wake_on and automate with on=app_event: the silence alert, e.g. "1h" (5m to 30d, a few check intervals). No App event for that long tells the person once; the next event clears it.' },
       prompt: { type: 'string', description: 'For create and automate: the message each run starts with. In automate, read the event with {{ event.data.<field> }} or {{ body.<field> }}.' },
-      agent: { type: 'string', description: 'For create and automate: the agent each run starts a session of. Without it, create is a reminder to this session (prefer follow_up), and automate runs the project default agent.' },
+      agent: { type: 'string', description: 'For create and automate: the agent each run starts a session of. Without it, create is a reminder to this session (prefer follow_up). automate needs it unless target_app is set: a schedule cannot start My Kortix ("worker" for general work).' },
       every: { type: 'string', description: 'For follow_up, create and automate (schedule): repeat interval, e.g. "4h", "1d".' },
       cron: { type: 'string', description: 'For follow_up and create: a cron expression, e.g. "0 9 * * 1-5". For automate (schedule): 6 fields, seconds first, e.g. "0 0 9 * * 1-5".' },
       timezone: { type: 'string', description: 'With cron: an IANA time zone, e.g. "Europe/Berlin".' },
@@ -891,8 +896,9 @@ export default {
     if (action === 'runs') return automationRuns(args, context)
     if (!(ACTIONS as readonly string[]).includes(action)) return fail(TOOL, action, 'Unknown action', { kind: 'invalid', message: `Use one of: ${ACTIONS.join(', ')}.` }, context)
     const verb = (action === 'delete' ? 'remove' : action) as keyof typeof VERB
-    const id = typeof args.id === 'string' ? args.id.trim() : ''
-    if (!id) return fail(TOOL, action, 'Which one?', { kind: 'invalid', message: 'Pass id, as list shows it.' }, context)
+    // `automate` names an automation by `name`; the verbs that follow it take the same word as `id`.
+    const id = typeof args.id === 'string' && args.id.trim() ? args.id.trim() : typeof args.name === 'string' ? args.name.trim() : ''
+    if (!id) return fail(TOOL, action, 'Which one?', { kind: 'invalid', message: 'Pass id (or name), as list shows it.' }, context)
     // Exactly the shapes `list` prints. The id goes into the CLI's request path, where `/` or `..` would address
     // another endpoint (CWE-22), and an option-shaped one would leave pause/resume with no trigger, so the CLI
     // would flip the project-wide switch (CWE-88). Neither shape can be either.

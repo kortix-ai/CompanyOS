@@ -901,6 +901,23 @@ describe('kortix_schedules automations', () => {
 })
 
 describe('kortix_schedules automate tolerance', () => {
+  // QualiLoop e2e on dev: an automation with no agent ran My Kortix, and every run failed
+  // ("My Kortix cannot start another My Kortix session").
+  test('an automation names the agent that does the work; with none it is refused before any command', async () => {
+    fakeKortix(``)
+    const result = await run('kortix_schedules', { action: 'automate', name: 'digest', on: 'schedule', cron: '0 9 * * 1-5', prompt: 'Write the digest.' })
+    expect(result.error?.kind).toBe('invalid')
+    expect(result.error?.message).toContain('worker')
+    expect(argvs()).toEqual([''])
+  })
+
+  test('pause, resume, remove and run_now take the name automate used when id is missing', async () => {
+    fakeKortix(`'triggers resume weekday-digest --apply') printf 'Resumed\\n' ;;`)
+    const result = await run('kortix_schedules', { action: 'resume', name: 'weekday-digest' })
+    expect(result.ok).toBe(true)
+    expect(argvs()).toEqual(['triggers resume weekday-digest --apply'])
+  })
+
   test('a missing `on` is read from the fields the call gave: secret_env is a webhook, connector + event a connector event, app an App event, cron or every a schedule', async () => {
     fakeKortix(`'triggers add '*' --apply') printf 'Added (live)\\n' ;;`)
     const calls_ = [
@@ -910,19 +927,19 @@ describe('kortix_schedules automate tolerance', () => {
       { args: { every: '1d' }, type: 'cron' },
     ]
     for (const [i, c] of calls_.entries()) {
-      const result = await run('kortix_schedules', { action: 'automate', name: `a${i}`, prompt: 'Go.', ...c.args })
+      const result = await run('kortix_schedules', { action: 'automate', name: `a${i}`, agent: 'worker', prompt: 'Go.', ...c.args })
       expect({ i, ok: result.ok }).toEqual({ i, ok: true })
       expect(argvs()[i]).toContain(`--type=${c.type}`)
     }
     // Nothing to read it from: still refused, before any command.
-    expect((await run('kortix_schedules', { action: 'automate', name: 'a9', prompt: 'Go.' })).error?.kind).toBe('invalid')
+    expect((await run('kortix_schedules', { action: 'automate', name: 'a9', agent: 'worker', prompt: 'Go.' })).error?.kind).toBe('invalid')
     expect(argvs()).toHaveLength(4)
   })
 
   test('a webhook secret that is missing or stored for agents: the result carries a link where the person saves it for webhooks', async () => {
     fakeKortix(`'triggers add form-leads '*' --apply') echo '{"kortix_error":{"kind":"invalid","status":422,"message":"Webhook secret is not configured for webhooks (webhook_secret_delivery_mismatch)"}}' >&2; exit 1 ;;
   'secrets request FORM_SECRET --scope=connector') printf '\\n  Hand this link to whoever has the value (FORM_SECRET)\\n  https://app.example.test/secret-intake/ksl_abc123\\n' ;;`)
-    const result = await run('kortix_schedules', { action: 'automate', name: 'form-leads', on: 'webhook', secret_env: 'FORM_SECRET', prompt: 'Draft a reply.' })
+    const result = await run('kortix_schedules', { action: 'automate', name: 'form-leads', on: 'webhook', secret_env: 'FORM_SECRET', agent: 'sales', prompt: 'Draft a reply.' })
     expect(result.ok).toBe(false)
     expect(result.card.title).toBe('FORM_SECRET needs saving for webhooks')
     // The person saves it from the card: one link, a plain note, no model instruction.
@@ -955,11 +972,11 @@ describe('kortix_schedules automate: an App as the event source', () => {
   'triggers add status-work '*' --apply') printf 'Added status-work (live)\\n' ;;`)
     const woken = await run('kortix_schedules', { action: 'wake_on', text: TEXT, on: 'app_event', app: 'github-status', expect_event_within: '1h' })
     expect(woken.ok).toBe(true)
-    const work = await run('kortix_schedules', { action: 'automate', name: 'status-work', on: 'app_event', app: 'github-status', prompt: 'Status changed.', expect_event_within: '1h' })
+    const work = await run('kortix_schedules', { action: 'automate', name: 'status-work', on: 'app_event', app: 'github-status', agent: 'worker', prompt: 'Status changed.', expect_event_within: '1h' })
     expect(work.ok).toBe(true)
     expect(argvs()).toEqual([
       `triggers add ${TEXT} --on=app --app=github-status --expect-event-within=1h --json`,
-      'triggers add status-work --type=app --prompt=Status changed. --app=github-status --expect-event-within=1h --apply',
+      'triggers add status-work --type=app --prompt=Status changed. --agent=worker --app=github-status --expect-event-within=1h --apply',
     ])
     for (const bad of [
       { action: 'wake_on', text: TEXT, on: 'cr_merged', cr: '42', expect_event_within: '1h' },

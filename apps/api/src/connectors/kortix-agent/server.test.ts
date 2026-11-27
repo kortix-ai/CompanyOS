@@ -1,18 +1,21 @@
 import { afterAll, expect, test } from 'bun:test';
 import { kortixAgentMcpUrl } from './host';
 import { dispatchKortixAgentMcp, setKortixAgentClockForTests } from './server';
-import { type AccountState, decodeAccountState, encodeAccountState, setAccountStatePersistForTests } from './state';
+import { type AccountState, decodeAccountState, encodeAccountState, setAccountStateStoreForTests } from './state';
 import { totp } from './totp';
 
 const PROJECT = '4f2a9c1e-1111-4222-8333-944445555666';
 let stored: AccountState | null = null;
-setAccountStatePersistForTests(async (state) => {
-  stored = state;
+setAccountStateStoreForTests(async <D,>(state: AccountState<D>, mutate: (d: D) => D) => {
+  const base = (stored?.connectionId === state.connectionId ? stored : state) as AccountState<D>;
+  const next = { ...base, data: mutate(base.data) };
+  stored = next as AccountState;
+  return next;
 });
 const NOW = 1_795_800_000_000;
 setKortixAgentClockForTests(() => NOW);
 afterAll(() => {
-  setAccountStatePersistForTests(null);
+  setAccountStateStoreForTests(null);
   setKortixAgentClockForTests(null);
 });
 

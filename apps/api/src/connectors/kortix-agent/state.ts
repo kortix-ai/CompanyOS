@@ -7,9 +7,16 @@
  * new value back to the same credential row. It is never returned to a model.
  *
  *   ka1.<workspace id>.<encryptProjectSecret(workspace id, JSON)>
+ *
+ * Every session of an account can call it at once (one browser, many
+ * sessions), so a change is a read-modify-write under the connection's row
+ * lock ({@link updateAccountState}), never a blind overwrite.
  */
+import { and, eq, sql } from 'drizzle-orm';
+import { connectionCredentials, connectorConnections } from '@kortix/db';
 import { decryptProjectSecret, encryptProjectSecret } from '../../projects/surface';
-import { upsertConnectionCredential } from '../credentials';
+import { db } from '../../shared/db';
+import { ConnectionRevokedError } from '../credentials';
 import type { KortixAgentService } from './host';
 
 const PREFIX = 'ka1';
@@ -46,24 +53,49 @@ export function decodeAccountState(token: string, service: KortixAgentService): 
   return { projectId, ...parsed, data: parsed.data ?? {} };
 }
 
-// No `startedAt` and no `connectNow`: the write lands only on a live account,
-// so a revoke always wins and the account stays revoked.
-const writeCredential = async (state: AccountState): Promise<void> => {
-  await upsertConnectionCredential({
-    projectId: state.projectId,
-    connectorId: state.connectorId,
-    connectionId: state.connectionId,
-    value: encodeAccountState(state),
-  });
-};
-let persist = writeCredential;
+export type StateMutation<D> = (data: D) => D;
+type StateStore = <D>(state: AccountState<D>, mutate: StateMutation<D>) => Promise<AccountState<D>>;
 
-/** Tests replace the credential write; never called in production. */
-export function setAccountStatePersistForTests(fn: ((state: AccountState) => Promise<void>) | null): void {
-  persist = fn ?? writeCredential;
+/**
+ * Apply `mutate` to the account's CURRENT stored state and write the result,
+ * under the connection row's lock: two calls at once both land. A revoked
+ * account refuses (`ConnectionRevokedError`) and stays revoked.
+ */
+const updateStored: StateStore = (state, mutate) =>
+  db.transaction(async (tx) => {
+    const [connection] = await tx
+      .select({ status: connectorConnections.status })
+      .from(connectorConnections)
+      .where(and(eq(connectorConnections.connectionId, state.connectionId), eq(connectorConnections.connectorId, state.connectorId)))
+      .for('update')
+      .limit(1);
+    if (!connection || connection.status === 'revoked') throw new ConnectionRevokedError(state.connectionId);
+    const [row] = await tx
+      .select({ valueEnc: connectionCredentials.valueEnc })
+      .from(connectionCredentials)
+      .where(eq(connectionCredentials.connectionId, state.connectionId))
+      .limit(1);
+    // The stored row is the truth; the Bearer this call carried may be a few writes old.
+    const current = row ? (decodeAccountState(decryptProjectSecret(state.projectId, row.valueEnc), state.service) as typeof state) : state;
+    const next = { ...current, data: mutate(current.data) };
+    // The credential column holds the token encrypted once more, as every connection credential is.
+    const valueEnc = encryptProjectSecret(state.projectId, encodeAccountState(next as AccountState));
+    if (row) {
+      await tx.update(connectionCredentials).set({ valueEnc, updatedAt: sql`now()` }).where(eq(connectionCredentials.connectionId, state.connectionId));
+    } else {
+      await tx.insert(connectionCredentials).values({ connectorId: state.connectorId, connectionId: state.connectionId, userId: null, kind: 'secret', valueEnc });
+    }
+    return next;
+  });
+
+let store: StateStore = updateStored;
+
+/** Tests replace the store; never called in production. */
+export function setAccountStateStoreForTests(fn: StateStore | null): void {
+  store = fn ?? updateStored;
 }
 
-/** Write an account's new state to its credential. */
-export function saveAccountState(state: AccountState): Promise<void> {
-  return persist(state);
+/** Change an account's state atomically; returns the state as written. */
+export function updateAccountState<D>(state: AccountState<D>, mutate: StateMutation<D>): Promise<AccountState<D>> {
+  return store(state, mutate);
 }

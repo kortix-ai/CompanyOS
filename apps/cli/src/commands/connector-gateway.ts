@@ -40,7 +40,7 @@ import {
   parseExecArgs,
   stringValue,
 } from '../connector-gateway/io.ts';
-import { saveResult } from '../connector-gateway/result-spill.ts';
+import { saveFileOutput, saveResult } from '../connector-gateway/result-spill.ts';
 import { resolveProjectId } from '../project-link.ts';
 import { tokenRejectedLine } from '../command-helpers.ts';
 import { fromWorkspaceAlias } from '../command-argv.ts';
@@ -328,7 +328,8 @@ async function call({ args, flags, repeated }: Invocation): Promise<void> {
     throw new ExitAfterOutput(1);
   }
   const outPath = stringValue(flags.out);
-  out(outPath ? await saveResult(result, resolve(outPath)) : result);
+  const file = await saveFileOutput(result, outPath ? resolve(outPath) : undefined);
+  out(file ?? (outPath ? await saveResult(result, resolve(outPath)) : result));
 }
 
 async function upload({ args, flags }: Invocation): Promise<void> {

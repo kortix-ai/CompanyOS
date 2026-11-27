@@ -141,7 +141,7 @@ export const faq = {
       id: 'price',
       question: 'What does it cost?',
       answer:
-        'Free is $0: 500 credits a month on your first workspace and every feature, with your own key or ChatGPT subscription for models. Kortix-managed models need a paid plan. Paid plans are credits: pick a monthly amount, members are free and unlimited, and one pool covers the whole workspace. Self-hosting the software costs nothing; you pay your own model bill and your own compute bill instead.',
+        'Free is $0: 500 credits a month on your first workspace and every feature, with your own key or ChatGPT subscription for models. Kortix-managed models need a paid plan. Paid plans are credits: pick a monthly amount, members are free and unlimited, and one pool covers the whole workspace. With self-hosting, you run the infrastructure and pay for your own compute and models.',
     },
   ] satisfies readonly FaqItem[],
 } as const;

@@ -533,6 +533,7 @@
     "./workspace/admin/project-admin-dashboard": "./src/workspace/admin/project-admin-dashboard.tsx",
     "./workspace/calendar/calendar-page": "./src/workspace/calendar/calendar-page.tsx",
     "./workspace/home/access-requests-bell": "./src/workspace/home/access-requests-bell.tsx",
+    "./workspace/home/onboarding-art": "./src/workspace/home/onboarding-art.tsx",
     "./workspace/home/first-chat": "./src/workspace/home/first-chat.tsx",
     "./workspace/home/mobile-app-promo": "./src/workspace/home/mobile-app-promo.tsx",
     "./workspace/home/sandbox-picker": "./src/workspace/home/sandbox-picker.tsx",
@@ -2597,6 +2598,10 @@
       "./workspace/home/access-requests-bell": {
         "types": "./dist/workspace/home/access-requests-bell.d.ts",
         "import": "./dist/workspace/home/access-requests-bell.js"
+      },
+      "./workspace/home/onboarding-art": {
+        "types": "./dist/workspace/home/onboarding-art.d.ts",
+        "import": "./dist/workspace/home/onboarding-art.js"
       },
       "./workspace/home/first-chat": {
         "types": "./dist/workspace/home/first-chat.d.ts",

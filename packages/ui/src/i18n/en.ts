@@ -2356,6 +2356,7 @@ const catalog = {
     }
   },
   "workspaceOnboarding": {
+    "art": { "workspace": "Your Kortix workspace", "shared": "Shared agents, skills and memory" },
     "progress": "Step {current} of {total}",
     "back": "Back",
     "continue": "Continue",
@@ -2394,6 +2395,10 @@ const catalog = {
     "apps": {
       "title": "Bring your tools",
       "description": "Connect the apps your team works in. Connector credentials are brokered server-side and never enter the machine.",
+      "search": "Find an app to connect",
+      "loading": "Loading apps…",
+      "loadMore": "Show more apps",
+      "noResults": "No matching apps here. Browse all apps below to find yours.",
       "slackMeta": "Mention Kortix in a channel with a task",
       "addSlack": "Add to Slack",
       "connect": "Connect",

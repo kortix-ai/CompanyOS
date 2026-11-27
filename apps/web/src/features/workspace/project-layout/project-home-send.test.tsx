@@ -380,7 +380,7 @@ async function mountedHome(run: (rerender: () => Promise<void>, onSend: ReturnTy
     Object.defineProperty(globalThis, key, { configurable: true, value });
   }
   const { createRoot } = await import('react-dom/client');
-  const root = createRoot(browser.document.createElement('div'));
+  const root = createRoot(document.createElement('div'));
   const onSend = mock(async () => {});
   const rerender = async () => {
     firstChat = undefined;

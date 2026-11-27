@@ -5,25 +5,21 @@ import {
   ArrowRightIcon,
   CheckIcon,
   EnvelopeSimpleIcon,
-  FileIcon,
-  FolderIcon,
-  GitPullRequestIcon,
   UserIcon,
-  UsersThreeIcon,
 } from '@phosphor-icons/react';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 
 import { useTranslations } from '@/i18n/use-translations';
 import { trackCtaSignup } from '@/lib/analytics/gtm';
-import { FULL_COLOR_LOGOS, WORKS_WITH } from '@/features/marketing/landing-sections/works-with-logos';
-import { Button } from '@kortix/ui/button';
-import { KortixLogo } from '@kortix/ui/kortix-logo';
 import { cn } from '@kortix/ui';
+import { Button } from '@kortix/ui/button';
 import { AuthLegalFooter } from '@kortix/ui/internal/auth/auth-card-shell';
 import { Rise } from '@kortix/ui/internal/auth/auth-primitives';
 import { MicrosoftTeams } from '@kortix/ui/internal/icons/microsoft-teams';
 import { Slack } from '@kortix/ui/internal/icons/slack';
+import { KortixLogo } from '@kortix/ui/kortix-logo';
+import { OnboardingArt } from '@kortix/ui/workspace/home/onboarding-art';
 
 import { signupAuthHref } from './signup-handoff';
 
@@ -32,34 +28,6 @@ type TeamChannel = 'slack' | 'teams' | 'email' | 'solo';
 
 const STEPS = ['team', 'alone', 'together', 'memory', 'tools', 'work', 'finish'] as const;
 type Step = (typeof STEPS)[number];
-
-/** The repository a workspace is: the real top-level layout of a Kortix project. */
-const REPO_TREE = [
-  { name: 'kortix.yaml', folder: false },
-  { name: 'agents/', folder: true },
-  { name: 'skills/', folder: true },
-  { name: 'memory/', folder: true },
-  { name: 'connectors/', folder: true },
-] as const;
-
-/** Capabilities, not customers: the same rule as the landing works-with strip. */
-const TOOL_SLUGS = [
-  'slack',
-  'github',
-  'notion',
-  'linear',
-  'gmail',
-  'googledrive',
-  'googlecalendar',
-  'figma',
-  'hubspot',
-  'jira',
-  'stripe',
-  'salesforce',
-] as const;
-const TOOLS = TOOL_SLUGS.map((slug) => WORKS_WITH.find((logo) => logo.slug === slug)).filter(
-  (logo): logo is (typeof WORKS_WITH)[number] => Boolean(logo),
-);
 
 /**
  * `/signup`: what Kortix is, one idea per screen, before the account. It asks
@@ -117,16 +85,20 @@ export function SignupWizard({ params }: { params: URLSearchParams }) {
           className="bg-muted h-1 w-full overflow-hidden rounded-full"
         >
           <div
-            className="bg-foreground h-full w-full origin-left transition-transform duration-moderate ease-out motion-reduce:transition-none"
+            className="bg-foreground duration-moderate h-full w-full origin-left transition-transform ease-out motion-reduce:transition-none"
             style={{ transform: `scaleX(${(index + 1) / STEPS.length})` }}
           />
         </div>
       </div>
 
       <main className="flex flex-1 flex-col items-center justify-center px-6 py-12">
-        <div className="w-full max-w-md">
+        <div className="w-full max-w-lg">
           <Rise key={step}>
-            {step !== 'team' && step !== 'finish' ? <StepArt step={step} /> : null}
+            <OnboardingArt
+              kind={step === 'together' ? 'workspace' : step === 'memory' ? 'framework' : step}
+              label={t('art.workspace')}
+              detail={step === 'work' ? t('art.changeTitle') : t('art.shared')}
+            />
             <h1
               ref={headingRef}
               tabIndex={-1}
@@ -134,7 +106,9 @@ export function SignupWizard({ params }: { params: URLSearchParams }) {
             >
               {t(`${step}.title`)}
             </h1>
-            <p className="text-muted-foreground mt-2 text-sm text-pretty">{t(`${step}.description`)}</p>
+            <p className="text-muted-foreground mt-2 text-sm text-pretty">
+              {t(`${step}.description`)}
+            </p>
             {step === 'tools' && channelName ? (
               <p className="text-muted-foreground mt-2 text-sm text-pretty">
                 {t('tools.channel', { channel: channelName })}
@@ -156,14 +130,25 @@ export function SignupWizard({ params }: { params: URLSearchParams }) {
                   </Link>
                 </Button>
               ) : step === 'team' ? null : (
-                <Button type="button" size="lg" className="hit-area-y-1 w-full" onClick={() => go(index + 1)}>
+                <Button
+                  type="button"
+                  size="lg"
+                  className="hit-area-y-1 w-full"
+                  onClick={() => go(index + 1)}
+                >
                   {t('continue')}
                   <ArrowRightIcon className="size-4 shrink-0" />
                 </Button>
               )}
               <div className="flex items-center justify-between gap-2">
                 {index > 0 ? (
-                  <Button type="button" variant="ghost" size="sm" className="hit-area-y-2 gap-1.5" onClick={() => go(index - 1)}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="hit-area-y-2 gap-1.5"
+                    onClick={() => go(index - 1)}
+                  >
                     <ArrowLeftIcon className="size-3.5 shrink-0" />
                     {t('back')}
                   </Button>
@@ -199,13 +184,25 @@ function ChannelPicker({
 }) {
   const t = useTranslations('signup');
   const options: Array<{ id: TeamChannel; label: string; mark: React.ReactNode }> = [
-    { id: 'slack', label: 'Slack', mark: <Slack className="size-3.5" /> },
-    { id: 'teams', label: t('team.teams'), mark: <MicrosoftTeams className="size-3.5" /> },
-    { id: 'email', label: t('team.email'), mark: <EnvelopeSimpleIcon className="text-muted-foreground size-3.5" /> },
-    { id: 'solo', label: t('team.solo'), mark: <UserIcon className="text-muted-foreground size-3.5" /> },
+    { id: 'slack', label: 'Slack', mark: <Slack className="size-5" /> },
+    { id: 'teams', label: t('team.teams'), mark: <MicrosoftTeams className="size-5" /> },
+    {
+      id: 'email',
+      label: t('team.email'),
+      mark: <EnvelopeSimpleIcon className="text-muted-foreground size-5" />,
+    },
+    {
+      id: 'solo',
+      label: t('team.solo'),
+      mark: <UserIcon className="text-muted-foreground size-5" />,
+    },
   ];
   return (
-    <div role="group" aria-label={t('team.title')} className="mt-6 grid grid-cols-1 gap-2 sm:grid-cols-2">
+    <div
+      role="group"
+      aria-label={t('team.title')}
+      className="mt-6 grid grid-cols-1 gap-2 sm:grid-cols-2"
+    >
       {options.map((option) => (
         <button
           key={option.id}
@@ -213,12 +210,15 @@ function ChannelPicker({
           aria-pressed={value === option.id}
           onClick={() => onPick(option.id)}
           className={cn(
-            'bg-popover text-foreground hover:bg-accent flex h-12 items-center gap-3 rounded-md border px-3 text-left text-sm transition-colors duration-fast',
+            'bg-popover text-foreground hover:bg-accent duration-fast flex min-h-16 items-center gap-3 rounded-md border px-3 text-left text-sm transition-colors',
             value === option.id && 'border-foreground',
           )}
         >
           {/* The connector banner's tile: background, hairline border. */}
-          <span aria-hidden className="bg-background flex size-6 shrink-0 items-center justify-center rounded-sm border">
+          <span
+            aria-hidden
+            className="bg-background flex size-10 shrink-0 items-center justify-center rounded-sm border"
+          >
             {option.mark}
           </span>
           <span className="min-w-0 truncate">{option.label}</span>
@@ -239,97 +239,5 @@ function FinishPoints() {
         </li>
       ))}
     </ul>
-  );
-}
-
-/** One picture per idea, drawn from real product nouns, never a fake screenshot. */
-function StepArt({ step }: { step: Exclude<Step, 'team' | 'finish'> }) {
-  const t = useTranslations('signup');
-  return (
-    <div aria-hidden className="mb-8 flex h-40 items-center justify-center">
-      {step === 'alone' ? (
-        <div className="flex gap-3">
-          {[0, 1, 2].map((n) => (
-            <div key={n} className="bg-popover flex w-24 flex-col gap-1.5 rounded-md border p-2.5">
-              <UserIcon className="text-muted-foreground size-3.5" />
-              <span className="bg-muted h-1.5 w-full rounded-full" />
-              <span className="bg-muted h-1.5 w-2/3 rounded-full" />
-              <span className="bg-muted h-1.5 w-4/5 rounded-full" />
-            </div>
-          ))}
-        </div>
-      ) : step === 'together' ? (
-        <div className="bg-popover flex w-64 flex-col gap-2 rounded-md border p-3">
-          <div className="flex items-center gap-2">
-            <KortixLogo variant="icon" size={16} className="text-foreground" />
-            <span className="text-foreground text-sm font-medium">{t('art.workspace')}</span>
-          </div>
-          <div className="text-muted-foreground flex items-center gap-2 text-xs">
-            <UsersThreeIcon className="size-3.5 shrink-0" />
-            {t('art.shared')}
-          </div>
-          <div className="flex gap-1.5">
-            {[0, 1, 2, 3].map((n) => (
-              <span key={n} className="bg-background flex size-7 items-center justify-center rounded-full border">
-                <UserIcon className="text-muted-foreground size-3.5" />
-              </span>
-            ))}
-            <span className="bg-background flex size-7 items-center justify-center rounded-full border">
-              <KortixLogo variant="icon" size={12} className="text-foreground" />
-            </span>
-          </div>
-        </div>
-      ) : step === 'memory' ? (
-        <ul className="bg-popover w-56 rounded-md border py-1.5 font-mono text-xs">
-          {REPO_TREE.map((entry) => (
-            <li key={entry.name} className="text-muted-foreground flex items-center gap-2 px-3 py-1">
-              {entry.folder ? (
-                <FolderIcon className="size-3.5 shrink-0" />
-              ) : (
-                <FileIcon className="size-3.5 shrink-0" />
-              )}
-              <span className={entry.folder ? undefined : 'text-foreground'}>{entry.name}</span>
-            </li>
-          ))}
-        </ul>
-      ) : step === 'tools' ? (
-        <ul className="grid grid-cols-6 gap-2">
-          {TOOLS.map((logo) => (
-            <li key={logo.slug} className="bg-popover flex size-11 items-center justify-center rounded-md border">
-              {FULL_COLOR_LOGOS.has(logo.slug) ? (
-                // eslint-disable-next-line @next/next/no-img-element -- a 20px static SVG; next/image adds nothing here
-                <img
-                  src={`/media/landing/logos/color/${logo.slug}.svg`}
-                  alt=""
-                  decoding="async"
-                  className="size-5 object-contain"
-                />
-              ) : (
-                <span
-                  className="bg-foreground size-5"
-                  style={{
-                    maskImage: `url(/media/landing/logos/${logo.slug}.svg)`,
-                    maskSize: 'contain',
-                    maskRepeat: 'no-repeat',
-                    maskPosition: 'center',
-                  }}
-                />
-              )}
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <div className="bg-popover flex w-72 flex-col gap-2 rounded-md border p-3">
-          <div className="flex items-center gap-2">
-            <GitPullRequestIcon className="text-muted-foreground size-4 shrink-0" />
-            <span className="text-foreground min-w-0 truncate text-sm">{t('art.changeTitle')}</span>
-          </div>
-          <span className="text-muted-foreground text-xs">{t('art.changeMeta')}</span>
-          <div className="flex justify-end">
-            <span className="bg-foreground text-background rounded-sm px-2 py-0.5 text-xs">{t('art.review')}</span>
-          </div>
-        </div>
-      )}
-    </div>
   );
 }

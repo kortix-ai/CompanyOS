@@ -875,7 +875,7 @@ const catalog = {
         },
         "platinum_cache": {
           "name": "Workspace cache",
-          "description": "New sessions start with /workspace restored from this project's saved workspace cache on Platinum: a prepared checkout with its node_modules and pnpm store, in about a second instead of minutes of setup. A project admin saves a prepared session as the cache. Off, every session starts with an empty /workspace."
+          "description": "New sessions start with /workspace restored from this workspace's saved cache on Platinum: a prepared checkout with its node_modules and pnpm store, in about a second instead of minutes of setup. A workspace admin saves a prepared session as the cache. Off, every session starts with an empty /workspace."
         },
         "sidebar_rail": {
           "name": "Sidebar rail",
@@ -1878,6 +1878,7 @@ const catalog = {
     },
     "unified": {
       "welcome": "Welcome to {name}",
+      "sessionEnded": "You were signed out. Sign in again to continue.",
       "email": "Email",
       "emailPlaceholder": "Enter your email address…",
       "password": "Password",
@@ -6267,7 +6268,6 @@ const catalog = {
       "textced57bebd466": "Turns this workspace’s schedules and webhooks back on.",
       "agentsListSubagentsTitle": "Subagents",
       "agentsListSubagentsHint": "Other agents call these during a session. Nobody starts a chat with them.",
-      "agentsListAlsoSubagent": "Also a subagent",
       "servedModelTurnRow": "{requested} failed ({reason}) — switched to {served}.",
       "servedModelTurnRowRepeated": "{requested} failed ({reason}) on {count, number} requests — switched to {served}.",
       "servedModelReason": "{reason, select, provider_pool_rate_limited {limit reached} rate_limit_exceeded {rate limited} model_busy {busy} provider_reauth_required {needs reconnection} authentication_error {sign-in rejected} provider_not_connected {not connected} model_unavailable {unavailable} context_length_exceeded {context too long} upstream_timeout {timed out} upstream_inactivity_timeout {timed out} upstream_incomplete_stream {stream cut off} upstream_stream_error {stream cut off} other {error}}",

@@ -465,30 +465,31 @@ async function agentsScope(
     const block = cfg.block ?? {};
     const assigned = (block as { policy_sets?: Record<string, string> }).policy_sets ?? {};
     const permissions = block.kortix_permissions ?? block.kortix_cli;
+    // An omitted grant grants nothing (kortix.yaml: "Omitted means none"); say so, never `all`.
     if (opts.json) {
       emitJson({
         agent: cfg.agent,
-        secrets: block.secrets ?? 'all',
+        secrets: block.secrets ?? 'none',
         connectors: block.connectors ?? [],
         connectors_required: block.connectors_required ?? [],
         apps: block.apps ?? 'none',
         policy_sets: assigned,
-        skills: block.skills ?? 'all',
-        kortix_permissions: permissions ?? 'all',
+        skills: block.skills ?? 'none',
+        kortix_permissions: permissions ?? 'none',
         /** @deprecated Same value as kortix_permissions; kept for scripts written before the rename. */
-        kortix_cli: permissions ?? 'all',
+        kortix_cli: permissions ?? 'none',
       });
       return 0;
     }
     process.stdout.write(
       `\n  ${C.bold}${cfg.agent}${C.reset}\n` +
-        `  ${C.dim}${pad('secrets', 20)}${C.reset} ${renderGrantSet(block.secrets, 'all (default)')}\n` +
+        `  ${C.dim}${pad('secrets', 20)}${C.reset} ${renderGrantSet(block.secrets, 'none (default)')}\n` +
         `  ${C.dim}${pad('connectors', 20)}${C.reset} ${renderGrantSet(block.connectors, 'none (default)')}\n` +
         `  ${C.dim}${pad('required connectors', 20)}${C.reset} ${block.connectors_required?.join(', ') || 'none'}\n` +
         `  ${C.dim}${pad('apps', 20)}${C.reset} ${renderGrantSet(block.apps, 'none (default)')}\n` +
         `  ${C.dim}${pad('policy sets', 20)}${C.reset} ${renderPolicySets(assigned, 'base rules (default)')}\n` +
-        `  ${C.dim}${pad('skills', 20)}${C.reset} ${renderGrantSet(block.skills, 'all (default)')}\n` +
-        `  ${C.dim}${pad('kortix permissions', 20)}${C.reset} ${renderGrantSet(permissions, 'all (default)')}\n\n`,
+        `  ${C.dim}${pad('skills', 20)}${C.reset} ${renderGrantSet(block.skills, 'none (default)')}\n` +
+        `  ${C.dim}${pad('kortix permissions', 20)}${C.reset} ${renderGrantSet(permissions, 'none (default)')}\n\n`,
     );
     if (!opts.show) {
       process.stdout.write(

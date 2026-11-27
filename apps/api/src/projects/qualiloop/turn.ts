@@ -13,6 +13,7 @@ import { and, desc, eq, gt, ne, sql } from 'drizzle-orm';
 import { config } from '../../config';
 import { logger } from '../../lib/logger';
 import { db } from '../../shared/db';
+import { qualifiedColumn } from '../../shared/sql-qualified-column';
 import { projectsView } from '../../workspaces/rows';
 import { readSessionLogPage } from '../session-log-read';
 import {
@@ -21,6 +22,7 @@ import {
   enqueueContinueSessionCommand,
   resolveProjectAutomationActor,
 } from '../session-lifecycle';
+import { turnReply } from './reply';
 import { buildTurnTrace, kortixSessionIdFor, type LogMessage } from './spans';
 
 // Origin `user` (not a `system:` source): the test must meet the agent a person meets in their own chat.
@@ -38,7 +40,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 /** The text of the user messages after `afterSeq`: the prompts delivered since. */
 async function userTextsAfter(sessionId: string, afterSeq: number): Promise<string[]> {
   const rows = await db
-    .select({ text: sql<string | null>`(select string_agg(b->>'text', '') from jsonb_array_elements(${sessionLogMessages.record}->'blocks') b where b->>'type' = 'text')` })
+    .select({ text: sql<string | null>`(select string_agg(b->>'text', '') from jsonb_array_elements(${qualifiedColumn(sessionLogMessages.record)}->'blocks') b where b->>'type' = 'text')` })
     .from(sessionLogMessages)
     .where(and(eq(sessionLogMessages.sessionId, sessionId), eq(sessionLogMessages.role, 'user'), gt(sessionLogMessages.seq, afterSeq)));
   return rows.map((row) => row.text ?? '');
@@ -187,12 +189,7 @@ export async function runQualiloopTurn(input: { conversationId: string; turnInde
   // The session's system prompt rides in a `context` message at the start: every model call of the turn saw it.
   const systemPrompt = log.find((m) => m.role === 'system')?.blocks.map((b) => (b.type === 'text' ? b.text : '')).join('') ?? null;
   const messages = log.filter((m) => m.seq > lastSeq && m.role !== 'system');
-  const reply = messages
-    .filter((m) => m.role === 'assistant')
-    .map((m) => m.blocks.map((b) => (b.type === 'text' ? b.text : '')).join(''))
-    .filter((text) => text.trim())
-    .join('\n\n')
-    .trim();
+  const reply = turnReply(messages);
 
   await sendTrace(buildTurnTrace({
     conversationId: input.conversationId,

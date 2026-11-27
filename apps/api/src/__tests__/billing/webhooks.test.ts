@@ -131,7 +131,7 @@ describe('checkout.session.completed', () => {
     expect(upsertCustomerCalls.length).toBe(1);
   });
 
-  test('payment mode: grants non-expiring credits for purchase, plus the top-up bonus', async () => {
+  test('payment mode: grants non-expiring credits for purchase at the flat rate, no bonus', async () => {
     const session = createMockStripeCheckoutSession({
       mode: 'payment',
       amount_total: 5000,
@@ -152,12 +152,11 @@ describe('checkout.session.completed', () => {
 
     await processStripeWebhook(JSON.stringify(event), 'sig');
 
-    expect(walletGrants.length).toBe(2);
+    // One row: top-ups carry no bonus; the plan is the volume discount.
+    expect(walletGrants.length).toBe(1);
     expect(walletGrants[0].amount).toBe(50);
     expect(walletGrants[0].expiring).toBe(false);
     expect(walletGrants[0].key).toEqual({ event: session.id });
-    // $50 is the first bonus step: +1%, its own ledger row, keyed on the session.
-    expect(walletGrants[1]).toMatchObject({ amount: 0.5, kind: 'topup_bonus', expiring: false, key: { event: `${session.id}:bonus` } });
     // The purchase row is found through its PaymentIntent and marked settled.
     expect(purchaseUpdates).toEqual([['purchase_123', 'completed', expect.anything()]]);
   });
@@ -575,6 +574,32 @@ describe('invoice.paid (renewal)', () => {
     expect(walletResets[0].amount).toBe(50); // tier_6_50 = $50 monthly credits
     // A renewal writes exactly one ledger entry: the reset.
     expect(walletGrants.length).toBe(0);
+  });
+
+  test('a $1,000 plan renews with its +20% bonus, rolls over at most one month of credits, and stores the billed $1,000', async () => {
+    const invoice = createMockStripeInvoice();
+    const event = createMockStripeEvent('invoice.paid', invoice);
+    mockRegistry.stripeClient.webhooks.constructEvent = () => event;
+    mockRegistry.stripeClient.subscriptions.retrieve = async () =>
+      createMockStripeSubscription({
+        metadata: { account_id: 'acc_test_123' },
+        items: { data: [{ id: 'si_1', quantity: 100_000, price: { id: resolveCreditsPriceId(), unit_amount: 1, currency: 'usd' } }] },
+      });
+    mockRegistry.getCreditAccount = async () =>
+      createMockCreditAccount({ tier: 'credits', planMonthlyUsd: '1000', lastRenewalPeriodStart: null });
+    const balance = fakeWallet.wallet.balance;
+    // More unused monthly credits than one month grants: the carry stops at 1,200.
+    fakeWallet.wallet.balance = async () => ({ balance: 2_000, expiring: 2_000, nonExpiring: 0, daily: 0 });
+    try {
+      await processStripeWebhook(JSON.stringify(event), 'sig');
+    } finally {
+      fakeWallet.wallet.balance = balance;
+    }
+
+    expect(walletResets.map((reset) => reset.amount)).toEqual([2_400]);
+    expect(walletResets[0].description).toBe('Monthly renewal: 120000 credits + 120000 rolled over');
+    const persisted = updateCreditAccountCalls.find((c: any) => c.data.planMonthlyUsd !== undefined);
+    expect(persisted?.data.planMonthlyUsd).toBe('1000');
   });
 
 });
@@ -1350,13 +1375,14 @@ describe('the allowance is the subscription list price per month', () => {
   const recovering = () =>
     createMockCreditAccount({ tier: 'free', planMonthlyUsd: null, stripeSubscriptionId: null });
 
-  test('a recovering credits subscription is reset to quantity x $0.01', async () => {
+  test('a recovering credits subscription is reset to quantity x $0.01 plus its volume bonus', async () => {
     mockRegistry.getCreditAccount = async () => recovering();
 
     await syncPlan(planSub({ priceId: resolveCreditsPriceId(), quantity: 10_000 }));
 
+    // $100 billed (+5%): 10,500 credits granted, $100 stored as the plan.
     expect(walletResets.length).toBe(1);
-    expect(walletResets[0].amount).toBe(100);
+    expect(walletResets[0].amount).toBe(105);
     expect(walletGrants.length).toBe(0);
     const persisted = updateCreditAccountCalls.find((c: any) => c.data.planMonthlyUsd !== undefined);
     expect(persisted?.data.tier).toBe('credits');
@@ -1368,7 +1394,8 @@ describe('the allowance is the subscription list price per month', () => {
 
     await syncPlan(planSub({ priceId: 'price_1TdyruG6l1KZGqIrMzPVmQSO', quantity: 6, unitAmount: 4000 }));
 
-    expect(walletResets.map((reset) => reset.amount)).toEqual([240]);
+    // $240 billed earns the $200 step (+10%): 26,400 credits.
+    expect(walletResets.map((reset) => reset.amount)).toEqual([264]);
     const seatTouching = updateCreditAccountCalls.find(
       (c: any) => c.data.seatCount !== undefined || c.data.billingModel !== undefined,
     );

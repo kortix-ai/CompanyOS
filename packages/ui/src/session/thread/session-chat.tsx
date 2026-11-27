@@ -232,6 +232,7 @@ import { useModelPricingLookup } from '../../internal/lib/model-pricing';
 import { isAbortError, latestPromptModel, SESSION_NOTICE, turnEndNotice } from '@kortix/sdk';
 import {
   failureShownByTurn,
+  failurePredatesModelChange,
   failureSupersededByTurn,
   persistedFailureText,
 } from './persisted-turn-failure';
@@ -961,7 +962,14 @@ export function SessionChat({
   // The composer opens on the model the session already runs (its pin, or its
   // last prompt's model), so a session set from the CLI, the SDK or Slack does
   // not switch model on its first web message.
+  const [commandError, setCommandError] = useState<KortixSendError | null>(null);
+  const [modelErrorReset, setModelErrorReset] = useState<{ sessionId: string; atMs: number } | null>(null);
+  const clearCommandError = useCallback((pickedAtMs: number) => {
+    setCommandError((current) => current === commandError ? null : current);
+    setModelErrorReset({ sessionId, atMs: pickedAtMs });
+  }, [sessionId, commandError]);
   const local = useSessionModelSelection({
+    onModelChanged: clearCommandError,
     agents,
     providers,
     config,
@@ -1046,7 +1054,6 @@ export function SessionChat({
 
   const pendingPromptHandled = useRef(false);
 
-  const [commandError, setCommandError] = useState<KortixSendError | null>(null);
   // The last prompt handed to the runtime, verbatim. Only read by the
   // connector-refusal card, to re-send exactly what was refused.
   const lastSubmittedRef = useRef<{ parts: unknown[]; options: Record<string, unknown> } | null>(
@@ -2150,13 +2157,14 @@ export function SessionChat({
         id === freshSend.messageId || optimisticOriginOf(sessionId, id) === freshSend.messageId,
     );
   }, [working.turnId, freshSend, sessionId, projectedTurns, optimisticOriginOf]);
-  const turns: SessionLogTurn[] = useMemo(
-    () =>
-      freshSendTurnId && turnThread
-        ? sessionLogTurns(turnThread, turnOptions(freshSendTurnId))
-        : projectedTurns,
-    [freshSendTurnId, turnThread, turnOptions, projectedTurns],
-  );
+  const turns: SessionLogTurn[] = useMemo(() => {
+    const grouped = freshSendTurnId && turnThread
+      ? sessionLogTurns(turnThread, turnOptions(freshSendTurnId))
+      : projectedTurns;
+    return grouped.map((turn) => turn.error && modelErrorReset?.sessionId === sessionId &&
+      turn.assistant.every((reply) => failurePredatesModelChange(reply.completed_at, modelErrorReset.atMs))
+      ? { ...turn, error: null } : turn);
+  }, [freshSendTurnId, turnThread, turnOptions, projectedTurns, modelErrorReset, sessionId]);
   // P5.6: a switch `harness.history` records, drawn before the turn it lands on.
   const harnessSwitches = useMemo(
     () => sessionLogHarnessSwitches(sessionRecord?.harness?.history, turns),
@@ -5000,7 +5008,11 @@ export function SessionChat({
                               }
                               stoppedBy={stoppedByName(messageAuthors, turn.id, viewerId)}
                               servedModel={servedModelOfTurn(modelUsage, turn.id, turns[turnIndex - 1]?.id)}
-                              turnOutcome={turnOutcome}
+                              turnOutcome={modelErrorReset?.sessionId === sessionId ? {
+                                ...turnOutcome,
+                                recent_failures: turnOutcome.recent_failures?.filter((failure) => !failurePredatesModelChange(failure.ended_at, modelErrorReset.atMs)),
+                                last_ended: failurePredatesModelChange(turnOutcome.last_ended?.ended_at, modelErrorReset.atMs) ? undefined : turnOutcome.last_ended,
+                              } : turnOutcome}
                               isLast={turn.id === lastUserMessageId}
                               ownsPlan={turn.id === planAnchorId}
                               sessionId={sessionId}
@@ -5131,6 +5143,7 @@ export function SessionChat({
                         ? [turnOutcome.last_ended]
                         : []),
                     ].filter((failure) =>
+                      !(modelErrorReset?.sessionId === sessionId && failurePredatesModelChange(failure.ended_at, modelErrorReset.atMs)) &&
                       !isAbortError(failure.error) &&
                       !failureShownByTurn(failure, turns) &&
                       !failureSupersededByTurn(failure, turns) &&

@@ -203,6 +203,13 @@ describe('save', () => {
 });
 
 describe('list', () => {
+  test('list refusals retain their typed status and safe code', async () => {
+    answer = () => Response.json({ code: 'unavailable', message: 'upstream refused' }, { status: 503 });
+    await expect(listWorkspaceCache(PROJECT, null)).rejects.toMatchObject({
+      name: 'WorkspaceCacheError', status: 502, code: 'cache_upstream',
+    });
+  });
+
   test('reads the project namespace and the shared budget', async () => {
     answer = () =>
       Response.json({ entries: [{ id: 'vce_1', key: 'ws-k1', size_bytes: 10, file_count: 2, hits: 3, created_at: null, last_hit_at: null, expires_at: null }], used_bytes: 10, max_bytes: 21_474_836_480 });

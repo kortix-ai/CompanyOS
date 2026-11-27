@@ -1551,17 +1551,30 @@ A workspace is on one of two plans: Free or Credits. See [kortix.com/pricing](ht
 
 | | Free | Credits |
 | --- | --- | --- |
-| Price | No charge | A monthly amount you choose, from $50 to $50,000 |
-| Credits | 500 credits every month | 100 credits per dollar of your monthly amount, every billing cycle |
+| Price | No charge | A monthly amount you choose, from $50 to $10,000 |
+| Credits | 500 credits every month | 100 credits per dollar of your monthly amount, plus a volume bonus from $100, every billing cycle |
 | Members | Unlimited | Unlimited, no charge per member |
 | Kortix-managed models | None | All |
-| Buy extra credits | Yes | Yes |
-| Auto top-up | No | Yes |
+| More credits | Move to Credits | Raise the monthly amount, at once |
+| One-off top-ups and auto top-up | No | No (Enterprise only) |
 | Workspaces | 1 | 200 |
 
 - Every plan can use models on your own provider key or a ChatGPT subscription. See [Models](/docs/guide#models).
 - On Free, credits pay for compute, storage and the fee on your own models only.
-- Every monthly amount has the same rate: a bigger plan buys more credits, never cheaper ones.
+- A bigger monthly amount buys more credits per dollar:
+
+  | Monthly amount | Bonus | Example |
+  | --- | --- | --- |
+  | $50–$99 | None | $50 → 5,000 credits |
+  | $100–$199 | +5% | $100 → 10,500 credits |
+  | $200–$499 | +10% | $200 → 22,000 credits |
+  | $500–$999 | +15% | $500 → 57,500 credits |
+  | $1,000–$2,999 | +20% | $1,000 → 120,000 credits |
+  | $3,000–$7,499 | +25% | $3,000 → 375,000 credits |
+  | $7,500–$10,000 | +30% | $10,000 → 1,300,000 credits |
+
+- The bonus is part of each monthly grant. A raise during the month adds the bonus of the new amount for the rest of the month.
+- For more than $10,000 a month, select **Talk to sales**.
 
 #### Enterprise
 
@@ -1587,20 +1600,22 @@ The wallet holds two kinds of credits:
 | Kind | Comes from | Expires |
 | --- | --- | --- |
 | Expiring | Your plan's monthly grant | On Credits, unused credits roll over for one month, then expire. On Free, each monthly grant replaces what is left. |
-| Non-expiring | Top-ups, bonuses, refunds and promotions | Never |
+| Non-expiring | Enterprise top-ups, refunds and promotions | Never |
 
 Kortix spends expiring credits first. Work that already finished is always recorded, even if the balance goes below zero, but a new run needs a positive balance.
 
 ### Add credits
 
-Every plan can buy credits, and purchased credits never expire. A top-up of $50 or more adds bonus credits, from 1% up to 5% for $1,000 or more.
+To get more credits, raise the monthly amount on **Billing** → **Plan**. The raise takes effect at once: you pay the difference for the rest of the cycle, and the new amount's credits for the rest of the cycle land in the wallet. A bigger amount also buys more credits per dollar (see [Plans](/docs/guide#plans)).
+
+One-off top-ups and auto top-up come with an Enterprise contract. They buy 100 credits per dollar, and the credits never expire.
 
 <Steps>
-  <Step title="Add credits once">
+  <Step title="Add credits once (Enterprise)">
     On **Billing** → **Plan**, select **Add credits**, choose an amount, and pay.
   </Step>
-  <Step title="Or turn on auto top-up">
-    In **Auto top-up**, set the amount to add and the balance that triggers it. Both are at least 100 credits. Auto top-up needs the Credits plan and a saved payment method.
+  <Step title="Or turn on auto top-up (Enterprise)">
+    In **Auto top-up**, set the amount to add and the balance that triggers it. Both are at least 100 credits. Auto top-up needs a saved payment method.
   </Step>
 </Steps>
 

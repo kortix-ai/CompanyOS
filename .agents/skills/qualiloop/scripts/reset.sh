@@ -6,7 +6,8 @@
 #
 #   KORTIX_TOKEN=<test user's access token> QUALILOOP_KORTIX_PROJECT_ID=<id> reset.sh
 #
-# KORTIX_API defaults to dev. Exits 1 when anything is left over.
+# KORTIX_API defaults to dev. Refuses while a QualiLoop run is open (QUALILOOP_RESET_FORCE=1 skips
+# that check). Exits 1 when anything is left over.
 set -euo pipefail
 A="${KORTIX_API:-https://dev-api.kortix.com/v1}"
 P="${QUALILOOP_KORTIX_PROJECT_ID:?}"
@@ -24,6 +25,14 @@ api() { # api METHOD PATH [BODY] -> body; fails on a non-2xx status
 }
 uri() { jq -rn --arg v "$1" '$v|@uri'; }
 step() { printf '%-22s' "$1"; }
+
+# A reset during a run deletes the sessions of the conversations still talking to the agent.
+# QualiLoop says whether one is open; when it cannot say (signed out, offline), nothing is reset.
+if [ "${QUALILOOP_RESET_FORCE:-}" != 1 ]; then
+  open=$(npx -y qualiloop@0.2.0 --json runs list --limit 200 2>/dev/null | jq '[(.runs // .)[] | select(.finished == false)] | length') \
+    || { echo "QualiLoop did not answer: sign in (npx qualiloop login), or set QUALILOOP_RESET_FORCE=1" >&2; exit 1; }
+  [ "$open" = 0 ] || { echo "$open QualiLoop runs are still open: reset after they finish" >&2; exit 1; }
+fi
 
 # Nothing fires while the project is half reset.
 api PATCH "/projects/$P/triggers/activation" '{"paused":true}' >/dev/null

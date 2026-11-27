@@ -298,6 +298,8 @@ export interface SessionListViewer {
   myKortixTriggerRuns?: boolean;
   /** Recently deleted: `SessionListFilter.deleted`. */
   deleted?: boolean;
+  /** Content read authorization keeps tombstones; session lists never opt in. */
+  allowDeleted?: boolean;
   /** The private channels the viewer may not see (`hiddenSpaceIds`). REQUIRED: their sessions never list. */
   hiddenSpaceIds: ReadonlySet<string>;
   /**
@@ -348,9 +350,7 @@ export function sessionListViewerSql(viewer: SessionListViewer): SQL {
       sql`(${t.metadata} ? 'deletedAt') is true
         and ${t.metadata} ->> 'deletedAt' > ${restorableSinceIso()}
         ${viewer.canManageProject ? sql`` : sql`and ${t.createdBy} = ${viewer.viewerId}`}`
-    : viewer.scope === 'visible'
-      ? liveSessionSql
-      : undefined;
+    : viewer.allowDeleted ? undefined : liveSessionSql;
   // A session-bound credential reaches its own session and the ones it spawned.
   const own = bound === null
     ? undefined
@@ -410,10 +410,6 @@ export function sessionListViewerSql(viewer: SessionListViewer): SQL {
     : canAccess === undefined
       ? undefined
       : and(spaceVisible, canAccess);
-  // The `project` scope has no tombstone rule: it lists soft-deleted rows too,
-  // so it never detoasts `metadata` (~6 KB a row) for one. The `visible` scope
-  // keeps the AND, which the partial index `idx_project_sessions_project_live`
-  // and the keyset pages need.
   return and(tombstone, access) ?? sql`true`;
 }
 

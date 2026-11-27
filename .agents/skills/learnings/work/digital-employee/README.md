@@ -147,7 +147,23 @@ A permanent, append-only log per employee: `kortix.employee_events`.
 - **Kept for good.** Unlike `job_queue` rows, events are never pruned while the
   employee exists. They are the episodic memory.
 
-## 3. The dispatcher and the mind
+## 3. The dispatcher, the conversation and the working threads
+
+**Everything goes through the log, both ways.** Every inbound message and
+event is written to the log first; only the dispatcher acts on it. Every
+outbound action (a reply, a sent mail, an SMS, a post) is also an event, so
+the log holds both sides of every conversation.
+
+**Two kinds of sessions.**
+
+- **The conversation.** You talk to the employee in one regular, ongoing
+  conversation: the web chat, your DM with it, or a call. It answers short
+  things itself and hands real work to a working thread. One conversation per
+  person; the employee's own conversation (the mind) gets everything nobody
+  addressed to it.
+- **Working threads.** One session per piece of work: one email thread, one
+  Slack thread, one task, one outcome. They run in parallel and in the
+  background, and report back into the conversation that started them.
 
 The dispatcher is code. For each event, in order per subject:
 
@@ -167,7 +183,25 @@ the same identity, Drive and memory. Every turn, a worker sees the live list
 of the other workers ("now"), so two copies never do the same work or
 contradict each other.
 
-## 4. Memory
+## 4. Day one: the default action space
+
+The moment an employee is created, it has every base capability without a
+person setting anything up, and its first job is to make itself autonomous.
+
+**Configured by Kortix at create:** the Base Identity; the `employee` flag;
+My Kortix as the default agent with every tool; the employee skills
+(identity, accounts, authenticator, browser, event log, self-configuration);
+the Employee drive; and three built-in schedules: a morning plan, the
+nightly review (section 5), and a weekly harness review.
+
+**Configured by the employee on its first run:** it reads its self and its
+outcomes, then sets up what makes it autonomous for this company: connector
+watches for the tools it was invited to, triggers and schedules for recurring
+work, agents for repeated jobs, and API keys where an API is faster than the
+browser. It records each choice in its Drive. It asks a person only for what
+it cannot do alone: an invite, an approval, a payment.
+
+## 5. Memory
 
 | Memory | Holds | Where | Written by |
 |---|---|---|---|
@@ -196,7 +230,12 @@ per employee per night. It reads the day's events and every session log, then:
    if it passes replay of the past cases it covers;
 4. checks open outcomes and plans the next day.
 
-## 5. Outcomes
+**Harness review, weekly.** One session reviews the week's failures, slow
+paths and repeated work across all sessions, and changes the employee's own
+setup: prompts in `self.md`, agents, triggers and skills, each through a
+change request that its eval gate checks before merge.
+
+## 6. Outcomes
 
 The employee is hired for outcomes. An outcome extends Kortix Goals
 (`project_goals`): a statement, a metric read from the source system by the
@@ -207,7 +246,7 @@ but it keeps its own state in its log, memory and goals, and writes outward
 only when someone needs to know. A separate verifier, blind to the actor's
 transcript, decides when an outcome is met.
 
-## 6. The Drive
+## 7. The Drive
 
 One project drive named `Employee`, mounted read-write in every employee
 session at `/drives/employee`:
@@ -224,7 +263,7 @@ session at `/drives/employee`:
   Browser/             profile backups and screenshots of key steps
 ```
 
-## 7. UX
+## 8. UX
 
 - **Create employee.** One click on the workspaces page: name and role,
   optional. A live checklist shows each part of the Base Identity as it is
@@ -235,7 +274,7 @@ session at `/drives/employee`:
   approvals, the event feed, accounts. No chat box: people talk to it in
   their tools, by email, SMS or a call. A call button stays.
 
-## 8. Phases
+## 9. Phases
 
 Each phase ends with a proof on dev, from a real input to a real result.
 

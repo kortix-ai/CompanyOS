@@ -17,16 +17,20 @@ outcomes, the employee home UI, the card.
 
 ## Core decisions
 
-1. **Channels keep their own thread routing in phase 1.** Email, Slack,
-   Teams, Telegram and Discord already map a thread to its owning session
-   (`routeChannelMessage`, `createOrJoinThreadSession`,
-   `createOrJoinTeamsConversationSession`). The adapter records the event and
-   the session it reached. Moving their routing behind the dispatcher is a
-   later refactor; doing it now would touch five channels for no new
-   behavior.
-2. **The dispatcher owns every event no channel routes:** connector events,
-   schedules, goal wakes, session ends, events a person posts by API. In
-   phase 1 these go to the mind's digest.
+1. **Log first, then dispatch, for every source.** For an employee project,
+   the ingress writes the event and its dispatch job and returns. The
+   dispatcher job then delivers. For a channel event, delivery calls that
+   channel's existing thread routing (`routeChannelMessage`,
+   `createOrJoinThreadSession`, `createOrJoinTeamsConversationSession`), which
+   already binds a thread to its owning session and sends follow-ups to it.
+   Those functions become the dispatcher's delivery step; they are not
+   rewritten. Projects without the flag keep today's path unchanged.
+2. **The dispatcher also owns every event no channel routes:** connector
+   events, schedules, goal wakes, session ends, events a person posts by API.
+   In phase 1 these go to the mind's digest.
+2a. **Outbound is logged too.** Replies through the channel turn relay and the
+   `kortix_email` send actions record `<source>.message.sent` events, so the
+   log holds both sides.
 3. **The log is a table, not the job queue.** `job_queue` rows are deleted
    after 7 days (`pruneFinishedJobs`); the log is the episodic memory and is
    kept. The dispatch job rides on `job_queue` (queue `employee.dispatch`,
@@ -34,9 +38,10 @@ outcomes, the employee home UI, the card.
    same transaction as the event (`enqueueJobs` with `executor`).
 4. **The employee is My Kortix.** Sessions use `agent_name: mykortix`. The
    flag adds the employee context to its prompt; it does not fork the agent.
-5. **Recording never blocks or breaks a channel.** An adapter call is
-   best-effort: a failure is logged and counted, and the channel goes on.
-   Only the dispatcher path (decision 2) depends on the log.
+5. **A failed write is a failed ingress.** For an employee project the
+   webhook answers 5xx when the event cannot be stored, so the upstream
+   retries (Slack, Resend and Composio all retry). This is the write-ahead
+   guarantee: an event is never acted on without a row.
 
 ## Data model (migration)
 
@@ -53,7 +58,7 @@ outcomes, the employee home UI, the card.
 `occurred_at`, `received_at` default now(), `actor` jsonb null,
 `audience` text default `team`, `summary` text, `payload` jsonb,
 `routed_session_id` uuid null, `routed_at` null, `dispatch_status`
-(`pending | routed | digested | dead | channel`).
+(`pending | routed | digested | recorded | dead`; `recorded` = an outbound or informational event that needs no delivery).
 Unique `(project_id, source, external_id)`. Index `(project_id, seq desc)`,
 `(project_id, subject, seq)`.
 

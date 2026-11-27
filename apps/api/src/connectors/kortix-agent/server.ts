@@ -12,6 +12,7 @@
 import { bearerToken } from '../../shared/bearer-token';
 import { logger } from '../../lib/logger';
 import { AUTHENTICATOR_TOOLS } from './authenticator';
+import { BROWSER_TOOLS } from './browser';
 import { kortixAgentServiceForUrl, type KortixAgentService } from './host';
 import { type AccountState, decodeAccountState, InvalidAccountToken, saveAccountState } from './state';
 import { type AgentTool, ToolInputError } from './tool';
@@ -24,17 +25,11 @@ const SERVICE_TITLES: Record<KortixAgentService, string> = {
   phone: 'Kortix Phone',
 };
 
-// replica-local: the tool lists are code, identical on every process; services register theirs at import.
 const TOOLS: Record<KortixAgentService, readonly AgentTool<never>[]> = {
   authenticator: AUTHENTICATOR_TOOLS as readonly AgentTool<never>[],
-  browser: [],
+  browser: BROWSER_TOOLS as readonly AgentTool<never>[],
   phone: [],
 };
-
-/** A service adds its tools (the browser and phone files call this at import). */
-export function registerKortixAgentTools(service: KortixAgentService, tools: readonly AgentTool<never>[]): void {
-  TOOLS[service] = tools;
-}
 
 export function kortixAgentTools(service: KortixAgentService): readonly AgentTool<never>[] {
   return TOOLS[service];

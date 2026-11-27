@@ -148,6 +148,10 @@ export const MCP_APPS: readonly McpApp[] = [
     slug: 'kortix_agent_authenticator', name: 'Kortix Agent Authenticator', description: 'An authenticator app for agents: stores 2FA (TOTP) keys and gives the current code.', domain: 'authenticator.kortix', categories: ['security'], url: kortixAgentMcpUrl('authenticator'), icon: false, auth: NONE,
     access: 'Store two-factor (TOTP) keys for the sites an agent signs in to and read their current codes. The keys stay encrypted in Kortix and are never shown.',
   },
+  {
+    slug: 'kortix_browser', name: 'Kortix Browser', description: 'A browser of its own for an agent: a Chromium on Platinum that keeps its logins, shared by every session.', domain: 'browser.kortix', categories: ['developer-tools'], url: kortixAgentMcpUrl('browser'), icon: false, auth: NONE,
+    access: 'Start, connect to, pause and reset a browser that belongs to the account, and back up its logins. The connection URL is short-lived.',
+  },
   { slug: 'cloudflare', name: 'Cloudflare', description: 'Accounts, Workers and DNS.', domain: 'cloudflare.com', categories: ['developer-tools', 'hosting'], url: 'https://mcp.cloudflare.com/mcp', icon: true, auth: DCR },
   // Kortix's own Google MCP servers (./google): Composio-compatible tools over
   // Google's REST APIs, served in-process. The URLs never reach the network.

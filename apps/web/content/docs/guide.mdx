@@ -1551,8 +1551,8 @@ A workspace is on one of two plans: Free or Credits. See [kortix.com/pricing](ht
 
 | | Free | Credits |
 | --- | --- | --- |
-| Price | No charge | A monthly amount you choose, from $50 to $50,000 |
-| Credits | 500 credits every month | 100 credits per dollar of your monthly amount, every billing cycle |
+| Price | No charge | A monthly amount you choose, from $50 to $10,000 |
+| Credits | 500 credits every month | 100 credits per dollar of your monthly amount, plus a volume bonus from $100, every billing cycle |
 | Members | Unlimited | Unlimited, no charge per member |
 | Kortix-managed models | None | All |
 | Buy extra credits | Yes | Yes |
@@ -1561,7 +1561,18 @@ A workspace is on one of two plans: Free or Credits. See [kortix.com/pricing](ht
 
 - Every plan can use models on your own provider key or a ChatGPT subscription. See [Models](/docs/guide#models).
 - On Free, credits pay for compute, storage and the fee on your own models only.
-- Every monthly amount has the same rate: a bigger plan buys more credits, never cheaper ones.
+- A bigger monthly amount buys more credits per dollar:
+
+  | Monthly amount | Bonus | Example |
+  | --- | --- | --- |
+  | $50–$99 | None | $50 → 5,000 credits |
+  | $100–$199 | +5% | $100 → 10,500 credits |
+  | $200–$999 | +10% | $200 → 22,000 credits |
+  | $1,000–$4,999 | +15% | $1,000 → 115,000 credits |
+  | $5,000–$10,000 | +20% | $10,000 → 1,200,000 credits |
+
+- The bonus is part of each monthly grant. A raise during the month adds the bonus of the new amount for the rest of the month.
+- For more than $10,000 a month, select **Talk to sales**.
 
 #### Enterprise
 
@@ -1593,7 +1604,7 @@ Kortix spends expiring credits first. Work that already finished is always recor
 
 ### Add credits
 
-Every plan can buy credits, and purchased credits never expire. A top-up of $50 or more adds bonus credits, from 1% up to 5% for $1,000 or more.
+Every plan can buy credits, and purchased credits never expire. A top-up buys 100 credits per dollar at every amount. For more credits per dollar, choose a larger monthly amount.
 
 <Steps>
   <Step title="Add credits once">

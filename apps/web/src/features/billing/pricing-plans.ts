@@ -28,7 +28,7 @@ export type PricingPlan = {
 /** How many `f<n>` feature keys each plan has in the catalogs. */
 export const PRICING_FEATURE_COUNTS: Record<PricingPlanId, number> = {
   free: 4,
-  credits: 7,
+  credits: 8,
   enterprise: 6,
 };
 
@@ -62,6 +62,8 @@ export const PRICING_PLANS: PricingPlan[] = [
       'Top up any time. Top-ups never expire',
       'Higher model rate limits',
       'Support via email',
+      // PLAN_BONUS_STEPS' top percent (compute-pricing.ts); pricing-copy.test.ts checks it.
+      'Up to 20% bonus credits on bigger tiers',
     ],
   },
   {

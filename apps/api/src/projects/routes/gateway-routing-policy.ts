@@ -113,6 +113,9 @@ export function registerGatewayRoutingPolicyRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/gateway/routing-policy',
+      operationId: 'gateway.routing_policy.get',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['gateway'],
       summary: 'Get the project model routing policy',
       ...auth,
@@ -147,6 +150,9 @@ export function registerGatewayRoutingPolicyRoutes(): void {
     createRoute({
       method: 'put',
       path: '/{workspaceId}/gateway/routing-policy',
+      operationId: 'gateway.routing_policy.set',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_MODEL_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['gateway'],
       summary: 'Set the project model routing policy',
       ...auth,
@@ -241,6 +247,9 @@ export function registerGatewayRoutingPolicyRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/gateway/routing-policy',
+      operationId: 'gateway.routing_policy.delete',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_MODEL_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['gateway'],
       summary: 'Remove the project model routing policy',
       ...auth,
@@ -277,6 +286,9 @@ export function registerGatewayRoutingPolicyRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/gateway/routing-policy/preview',
+      operationId: 'gateway.routing_policy.preview',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['gateway'],
       summary: 'Preview a model routing policy',
       ...auth,

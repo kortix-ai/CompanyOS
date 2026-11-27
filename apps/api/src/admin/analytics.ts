@@ -172,6 +172,9 @@ analyticsApp.openapi(
   createRoute({
     method: 'get',
     path: '/activity',
+    operationId: 'admin.analytics.activity.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['admin'],
     summary: 'Daily platform activity (admin console)',
     description:
@@ -290,6 +293,9 @@ analyticsApp.openapi(
   createRoute({
     method: 'get',
     path: '/usage',
+    operationId: 'admin.analytics.usage.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['admin'],
     summary: 'Daily credit burn (admin console)',
     description:

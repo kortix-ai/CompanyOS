@@ -88,6 +88,9 @@ const ApprovalLinkSchema = z.object({
 approvalLinksApp.openapi(createRoute({
   method: 'get',
   path: '/{token}',
+  operationId: 'approval_links.get',
+  'x-kortix-action': 'project.read',
+  'x-kortix-exposure': 'human',
   tags: ['approvals'],
   summary: 'Read the decision an approval link asks for',
   ...auth,

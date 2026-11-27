@@ -60,6 +60,9 @@ export function registerGatewayPlaygroundRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/gateway/playground',
+      operationId: 'gateway.playground.run',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_MODEL_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['gateway'],
       summary: 'Run a prompt in the project LLM gateway playground',
       ...auth,

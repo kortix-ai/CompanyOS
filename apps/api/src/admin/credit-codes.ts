@@ -62,6 +62,9 @@ creditCodesApp.openapi(
   createRoute({
     method: 'get',
     path: '/',
+    operationId: 'admin.credit_codes.list',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['admin'],
     summary: 'List credit codes',
     ...auth,
@@ -77,6 +80,9 @@ creditCodesApp.openapi(
   createRoute({
     method: 'post',
     path: '/',
+    operationId: 'admin.credit_codes.create',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['admin'],
     summary: 'Create a credit code',
     ...auth,
@@ -133,6 +139,9 @@ creditCodesApp.openapi(
   createRoute({
     method: 'patch',
     path: '/{id}',
+    operationId: 'admin.credit_codes.update',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['admin'],
     summary: 'Switch a credit code on or off',
     ...auth,

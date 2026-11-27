@@ -19,6 +19,9 @@ export function registerGatewayKeysRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/gateway/keys',
+      operationId: 'gateway.keys.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_GATEWAY_KEYS_MANAGE,
+      'x-kortix-exposure': 'human',
       tags: ['gateway'],
       summary: 'List project LLM gateway API keys',
       ...auth,
@@ -62,6 +65,9 @@ export function registerGatewayKeysRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/gateway/keys',
+      operationId: 'gateway.keys.create',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_GATEWAY_KEYS_MANAGE,
+      'x-kortix-exposure': 'human',
       tags: ['gateway'],
       summary: 'Create a project LLM gateway API key',
       ...auth,
@@ -116,6 +122,9 @@ export function registerGatewayKeysRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/gateway/keys/{keyId}',
+      operationId: 'gateway.keys.delete',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_GATEWAY_KEYS_MANAGE,
+      'x-kortix-exposure': 'human',
       tags: ['gateway'],
       summary: 'Revoke a project LLM gateway API key',
       ...auth,

@@ -746,6 +746,9 @@ function registerChannelsOnboardingRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/onboarding/channels',
+      operationId: 'onboarding.channels.get',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'human',
       tags: ['spaces'],
       summary: 'Read the caller’s Channels onboarding state',
       description:
@@ -768,6 +771,9 @@ function registerChannelsOnboardingRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/onboarding/channels/marks',
+      operationId: 'onboarding.channels.marks.create',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'human',
       tags: ['spaces'],
       summary: 'Record a Channels onboarding mark for the caller',
       ...auth,

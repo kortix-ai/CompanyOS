@@ -49,6 +49,9 @@ export function registerChatThreadRoutes(): void {
   projectsApp.openapi(createRoute({
     method: 'post',
     path: '/{workspaceId}/chat/threads',
+    operationId: 'chat.threads.create',
+    'x-kortix-action': 'project.session.start',
+    'x-kortix-exposure': 'agent',
     tags: ['sessions'],
     summary: 'Start a thread in the person’s chat',
     description: 'A session posts a top-level message to the person it works for, in their chat with Kortix (their DM with My Kortix). The person’s reply runs in that thread. Only a `private` session filed in no space or in one of the person’s own DMs may post; any other session gets 403 `not_the_persons_chat`. Flag `chat`.',

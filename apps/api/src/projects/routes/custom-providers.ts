@@ -58,6 +58,9 @@ function view(provider: CustomLlmProviderDefinition, secretNames: string[]): Cus
 export function registerCustomProvidersRoutes(): void {
   projectsApp.openapi(createRoute({
     method: 'get', path: '/{workspaceId}/custom-providers', tags: ['projects'],
+    operationId: 'custom_providers.list',
+    'x-kortix-action': 'project.read',
+    'x-kortix-exposure': 'agent',
     summary: 'List the custom LLM providers of a project', ...auth,
     request: { params: Params.omit({ providerId: true }) },
     responses: { 200: json(z.object({ providers: z.array(CustomLlmProviderSchema) }), 'Custom providers'), ...errors(403, 404) },
@@ -78,6 +81,9 @@ export function registerCustomProvidersRoutes(): void {
 
   projectsApp.openapi(createRoute({
     method: 'put', path: '/{workspaceId}/custom-providers/{providerId}', tags: ['projects'],
+    operationId: 'custom_providers.set',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_MODEL_WRITE,
+    'x-kortix-exposure': 'agent',
     summary: 'Create or replace a custom LLM provider', ...auth,
     request: { params: Params, body: { content: { 'application/json': { schema: CustomLlmProviderInputSchema } } } },
     responses: { 200: json(CustomLlmProviderSchema, 'The saved provider'), ...errors(400, 403, 404) },
@@ -126,6 +132,9 @@ export function registerCustomProvidersRoutes(): void {
 
   projectsApp.openapi(createRoute({
     method: 'delete', path: '/{workspaceId}/custom-providers/{providerId}', tags: ['projects'],
+    operationId: 'custom_providers.delete',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_MODEL_WRITE,
+    'x-kortix-exposure': 'agent',
     summary: 'Remove a custom LLM provider', ...auth,
     request: { params: Params },
     responses: { 204: { description: 'Removed' }, ...errors(403, 404) },

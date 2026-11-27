@@ -137,6 +137,9 @@ export function registerRuntimeTriggersRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/triggers/all',
+      operationId: 'triggers.list_all',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_TRIGGER_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['triggers'],
       summary: 'List the kortix.yaml and runtime triggers of a project',
       description:
@@ -188,6 +191,9 @@ export function registerRuntimeTriggersRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/triggers/runtime',
+      operationId: 'triggers.runtime.create',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_TRIGGER_CREATE,
+      'x-kortix-exposure': 'agent',
       tags: ['triggers'],
       summary: 'Create a runtime trigger',
       description:
@@ -268,6 +274,9 @@ export function registerRuntimeTriggersRoutes(): void {
     createRoute({
       method: 'patch',
       path: '/{workspaceId}/triggers/runtime/{id}',
+      operationId: 'triggers.runtime.update',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_TRIGGER_UPDATE,
+      'x-kortix-exposure': 'agent',
       tags: ['triggers'],
       summary: 'Pause or resume a runtime trigger',
       ...auth,
@@ -304,6 +313,9 @@ export function registerRuntimeTriggersRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/triggers/runtime/{id}',
+      operationId: 'triggers.runtime.delete',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_TRIGGER_DELETE,
+      'x-kortix-exposure': 'agent',
       tags: ['triggers'],
       summary: 'Delete a runtime trigger',
       ...auth,
@@ -334,6 +346,9 @@ export function registerRuntimeTriggersRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/triggers/runtime/{id}/run',
+      operationId: 'triggers.runtime.run',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_TRIGGER_FIRE,
+      'x-kortix-exposure': 'agent',
       tags: ['triggers'],
       summary: 'Run a runtime trigger now',
       description: 'One fire with an empty payload. The schedule does not move.',

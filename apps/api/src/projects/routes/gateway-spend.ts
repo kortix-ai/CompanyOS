@@ -34,6 +34,9 @@ export function registerGatewaySpendRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/gateway/overview',
+      operationId: 'gateway.overview.get',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_GATEWAY_SPEND_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['gateway'],
       summary: 'Get LLM gateway usage overview',
       ...auth,
@@ -96,6 +99,9 @@ export function registerGatewaySpendRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/gateway/series',
+      operationId: 'gateway.series.get',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_GATEWAY_SPEND_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['gateway'],
       summary: 'Get LLM gateway usage time series',
       ...auth,
@@ -166,6 +172,9 @@ export function registerGatewaySpendRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/gateway/sessions',
+      operationId: 'gateway.sessions.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_GATEWAY_SPEND_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['gateway'],
       summary: 'List LLM gateway usage per session',
       ...auth,
@@ -204,6 +213,9 @@ export function registerGatewaySpendRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/gateway/sources',
+      operationId: 'gateway.sources.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_GATEWAY_SPEND_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['gateway'],
       summary: 'List LLM gateway spend by source (trigger, member, channel, API)',
       ...auth,
@@ -239,6 +251,9 @@ export function registerGatewaySpendRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/gateway/breakdown',
+      operationId: 'gateway.breakdown.get',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_GATEWAY_SPEND_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['gateway'],
       summary: 'Get LLM gateway usage breakdown',
       ...auth,
@@ -269,6 +284,9 @@ export function registerGatewaySpendRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/gateway/usage',
+      operationId: 'gateway.usage.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_GATEWAY_SPEND_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['gateway'],
       summary: 'Cross-session gateway spend + token usage, grouped and paginated',
       description:
@@ -342,6 +360,9 @@ export function registerGatewaySpendRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/gateway/budgets',
+      operationId: 'gateway.budgets.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_GATEWAY_SPEND_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['gateway'],
       summary: 'List LLM gateway budgets',
       ...auth,
@@ -424,6 +445,9 @@ export function registerGatewaySpendRoutes(): void {
     createRoute({
       method: 'put',
       path: '/{workspaceId}/gateway/budgets',
+      operationId: 'gateway.budgets.set',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_GATEWAY_BUDGET_SET,
+      'x-kortix-exposure': 'agent',
       tags: ['gateway'],
       summary: 'Set an LLM gateway budget',
       ...auth,
@@ -507,6 +531,9 @@ export function registerGatewaySpendRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/gateway/budgets/{budgetId}',
+      operationId: 'gateway.budgets.delete',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_GATEWAY_BUDGET_SET,
+      'x-kortix-exposure': 'agent',
       tags: ['gateway'],
       summary: 'Delete an LLM gateway budget',
       ...auth,

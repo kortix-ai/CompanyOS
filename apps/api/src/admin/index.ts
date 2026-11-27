@@ -116,6 +116,9 @@ adminApp.openapi(
   createRoute({
     method: 'get',
     path: '/api/accounts',
+    operationId: 'admin.accounts.list',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['admin'],
     summary: 'List accounts (admin console)',
     ...auth,
@@ -255,6 +258,9 @@ adminApp.openapi(
   createRoute({
     method: 'get',
     path: '/api/accounts/{id}/users',
+    operationId: 'admin.accounts.users.list',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['admin'],
     summary: 'List members of an account',
     ...auth,
@@ -286,6 +292,9 @@ adminApp.openapi(
   createRoute({
     method: 'post',
     path: '/api/accounts/{id}/members/{userId}/role',
+    operationId: 'admin.accounts.members.role.set',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['admin'],
     summary: "Set an account member's role (platform-admin override)",
     ...auth,
@@ -388,6 +397,9 @@ adminApp.openapi(
   createRoute({
     method: 'get',
     path: '/api/accounts/{id}/projects',
+    operationId: 'admin.accounts.projects.list',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['admin'],
     summary: 'List projects owned by an account',
     ...auth,
@@ -427,6 +439,9 @@ adminApp.openapi(
   createRoute({
     method: 'get',
     path: '/api/projects',
+    operationId: 'admin.projects.list',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['admin'],
     summary: 'List projects across all accounts (admin console)',
     ...auth,
@@ -492,6 +507,9 @@ adminApp.openapi(
   createRoute({
     method: 'put',
     path: '/api/projects/{id}/features',
+    operationId: 'admin.projects.features.set',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['admin'],
     summary: "Set or clear a project's feature flag (operator)",
     ...auth,
@@ -569,6 +587,9 @@ adminApp.openapi(
   createRoute({
     method: 'put',
     path: '/api/projects/{id}/restricted-models',
+    operationId: 'admin.projects.restricted_models.set',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['admin'],
     summary: "Set the restricted managed models a project may use (operator)",
     ...auth,
@@ -630,6 +651,9 @@ adminApp.openapi(
   createRoute({
     method: 'get',
     path: '/api/accounts/{id}/ledger',
+    operationId: 'admin.accounts.ledger.list',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['admin'],
     summary: 'List credit ledger entries for an account',
     ...auth,
@@ -663,6 +687,9 @@ adminApp.openapi(
   createRoute({
     method: 'get',
     path: '/api/accounts/{id}/subscription',
+    operationId: 'admin.accounts.subscription.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['admin'],
     summary: "The account's live Stripe subscription, as Stripe reports it",
     ...auth,
@@ -726,6 +753,9 @@ adminApp.openapi(
   createRoute({
     method: 'post',
     path: '/api/accounts/{id}/credits',
+    operationId: 'admin.accounts.credits.grant',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['admin'],
     summary: 'Grant credits to an account',
     ...auth,
@@ -781,6 +811,9 @@ adminApp.openapi(
   createRoute({
     method: 'post',
     path: '/api/accounts/{id}/credits/debit',
+    operationId: 'admin.accounts.credits.debit',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['admin'],
     summary: 'Debit credits from an account',
     ...auth,
@@ -839,6 +872,9 @@ adminApp.openapi(
   createRoute({
     method: 'post',
     path: '/api/accounts/{id}/tier',
+    operationId: 'admin.accounts.tier.set',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['admin'],
     summary: "Set an account's plan tier (Free or Credits)",
     ...auth,
@@ -1001,6 +1037,9 @@ adminApp.openapi(
   createRoute({
     method: 'get',
     path: '/api/accounts/{id}/enterprise-contracts',
+    operationId: 'admin.accounts.enterprise_contracts.list',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['admin'],
     summary: "List an account's Enterprise contracts, newest first",
     ...auth,
@@ -1021,6 +1060,9 @@ adminApp.openapi(
   createRoute({
     method: 'post',
     path: '/api/accounts/{id}/enterprise-contract',
+    operationId: 'admin.accounts.enterprise_contracts.create',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['admin'],
     summary: 'Create an Enterprise contract (offer, invoice, or manual)',
     ...auth,
@@ -1073,6 +1115,9 @@ adminApp.openapi(
   createRoute({
     method: 'post',
     path: '/api/accounts/{id}/enterprise-contract/checkout-link',
+    operationId: 'admin.accounts.enterprise_contracts.checkout_link.create',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['admin'],
     summary: 'A fresh Stripe Checkout link for the open offer (valid up to 24 h)',
     ...auth,
@@ -1104,6 +1149,9 @@ adminApp.openapi(
   createRoute({
     method: 'delete',
     path: '/api/accounts/{id}/enterprise-offer',
+    operationId: 'admin.accounts.enterprise_offer.withdraw',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['admin'],
     summary: 'Withdraw the open Enterprise offer',
     ...auth,
@@ -1143,6 +1191,9 @@ adminApp.openapi(
   createRoute({
     method: 'post',
     path: '/api/accounts/{id}/enterprise-contract/end',
+    operationId: 'admin.accounts.enterprise_contracts.end',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['admin'],
     summary: "End the account's active Enterprise contract now",
     ...auth,
@@ -1191,6 +1242,9 @@ adminApp.openapi(
   createRoute({
     method: 'put',
     path: '/api/accounts/{id}/sso-domain-verification',
+    operationId: 'admin.accounts.sso_domain_verification.set',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['admin'],
     summary: "Mark the account's SSO primary domain verified or unverified",
     ...auth,
@@ -1292,6 +1346,9 @@ adminApp.openapi(
   createRoute({
     method: 'put',
     path: '/api/accounts/{id}/overrides',
+    operationId: 'admin.accounts.overrides.update',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['admin'],
     summary: "Merge-patch an account's entitlement overrides",
     ...auth,
@@ -1400,6 +1457,9 @@ adminApp.openapi(
 adminApp.openapi(
   createRoute({
     method: 'get', path: '/api/provider-distribution', tags: ['admin'],
+    operationId: 'admin.provider_distribution.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     summary: 'Get provider split weights', ...auth,
     responses: { 200: json(z.record(z.string(), z.any()), 'weights'), ...errors(401, 403) },
   }),
@@ -1414,6 +1474,9 @@ adminApp.openapi(
 adminApp.openapi(
   createRoute({
     method: 'put', path: '/api/provider-distribution', tags: ['admin'],
+    operationId: 'admin.provider_distribution.set',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     summary: 'Set provider split weights', ...auth,
     request: { body: { content: { 'application/json': { schema: z.record(z.string(), z.number()) } } } },
     responses: { 200: json(z.record(z.string(), z.any()), 'ok'), ...errors(401, 403) },
@@ -1441,6 +1504,9 @@ adminApp.openapi(
 adminApp.openapi(
   createRoute({
     method: 'get', path: '/api/provider-fallback', tags: ['admin'],
+    operationId: 'admin.provider_fallback.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     summary: 'Get provider failover config', ...auth,
     responses: { 200: json(z.record(z.string(), z.any()), 'config'), ...errors(401, 403) },
   }),
@@ -1454,6 +1520,9 @@ adminApp.openapi(
 adminApp.openapi(
   createRoute({
     method: 'put', path: '/api/provider-fallback', tags: ['admin'],
+    operationId: 'admin.provider_fallback.set',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     summary: 'Set provider failover config', ...auth,
     request: { body: { content: { 'application/json': { schema: z.object({ enabled: z.boolean() }) } } } },
     responses: { 200: json(z.record(z.string(), z.any()), 'ok'), ...errors(401, 403) },
@@ -1473,6 +1542,9 @@ adminApp.openapi(
 adminApp.openapi(
   createRoute({
     method: 'get', path: '/api/sandboxes', tags: ['admin'],
+    operationId: 'admin.sandboxes.list',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     summary: 'List sandboxes with provider type', ...auth,
     request: { query: z.object({ limit: z.string().optional(), provider: z.string().optional(), status: z.string().optional() }) },
     responses: { 200: json(z.record(z.string(), z.any()), 'sandboxes'), ...errors(401, 403) },
@@ -1494,6 +1566,9 @@ adminApp.openapi(
 adminApp.openapi(
   createRoute({
     method: 'post', path: '/api/sandboxes/{sessionId}/migrate', tags: ['admin'],
+    operationId: 'admin.sandboxes.migrate',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     summary: 'Migrate sandbox to another provider', ...auth,
     request: { params: z.object({ sessionId: z.string() }), body: { content: { 'application/json': { schema: z.object({ targetProvider: z.string() }) } } } },
     responses: { 200: json(z.record(z.string(), z.any()), 'ok'), ...errors(400, 401, 403, 404) },
@@ -1547,6 +1622,9 @@ adminApp.openapi(
 adminApp.openapi(
   createRoute({
     method: 'get', path: '/api/provider-analytics', tags: ['admin'],
+    operationId: 'admin.provider_analytics.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     summary: 'Provider performance analytics', ...auth,
     request: { query: z.object({ days: z.string().optional() }) },
     responses: { 200: json(z.record(z.string(), z.any()), 'analytics'), ...errors(401, 403) },
@@ -1577,6 +1655,9 @@ adminApp.openapi(
   createRoute({
     method: 'post',
     path: '/api/impersonate',
+    operationId: 'admin.impersonations.start',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['admin'],
     summary: 'Start acting as an account',
     ...auth,
@@ -1685,6 +1766,9 @@ adminApp.openapi(
   createRoute({
     method: 'delete',
     path: '/api/impersonate/{grantId}',
+    operationId: 'admin.impersonations.end',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['admin'],
     summary: 'Stop acting as an account',
     ...auth,
@@ -1744,6 +1828,9 @@ adminApp.openapi(
   createRoute({
     method: 'get',
     path: '/api/impersonate/active',
+    operationId: 'admin.impersonations.active.list',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['admin'],
     summary: 'List the caller-held impersonation grants',
     ...auth,

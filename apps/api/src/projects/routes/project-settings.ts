@@ -200,6 +200,9 @@ export function registerProjectSettingsRoutes(): void {
     createRoute({
       method: 'patch',
       path: '/{workspaceId}/onboarding',
+      operationId: 'onboarding.update',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SETTINGS_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['projects'],
       summary: 'Update project onboarding state',
       ...auth,
@@ -404,6 +407,9 @@ export function registerProjectSettingsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/setup',
+      operationId: 'workspaces.setup',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'human',
       tags: ['projects'],
       summary: 'Set up a workspace',
       description:

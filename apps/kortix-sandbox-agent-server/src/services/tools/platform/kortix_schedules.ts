@@ -833,6 +833,7 @@ export default {
     '4) Tell the person in one line, e.g. "I\'ll check for replies every 3 hours until 14 Nov." ' +
     '5) On each fire: check, act, report what changed; widen the cadence after repeated empty checks (remove, then a slower follow_up); `remove` every follow-up and wake-on the moment the work is done or the end date passes. ' +
     'No follow-up for work that finishes this turn, for background hand-offs, teammates and workflows (they report back by themselves), or when the person said not to track it. ' +
+    'A follow-up wakes THIS chat to check on something. Work the person wants done on a schedule (a weekly report, a daily digest, a Monday summary) is `create` with an agent, or `automate`, never a cron follow-up: a follow-up lives only as long as this chat. ' +
     'If it answers that Loops are not enabled, tell the person and ask them or a workspace admin to turn Loops on in Workspace settings → Feature flags. ' +
     'Actions: `follow_up` (text + ONE of in "3h", at ISO time, every "4h" (min 5m), cron "0 9 * * 1-5" + timezone; with several, the first of at, in, cron, every is used); ' +
     '`wake_on` (text + on); `events` (connector); `list` (this session\'s follow-ups and wake-ons, and the project schedules, with ids); ' +

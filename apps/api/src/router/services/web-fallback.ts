@@ -1,9 +1,9 @@
 import { extractReadableHtml } from '@kortix/shared/tools';
-import type { ProxyServiceConfig } from '../../config/proxy-services';
-import { readCapped } from '../../../channels/core/download';
-import { config } from '../../../config';
-import { logger } from '../../../lib/logger';
-import { safeEgressFetch } from '../../../shared/ssrf-guard';
+import type { ProxyServiceConfig } from '../config/proxy-services';
+import { readCapped } from '../../channels/core/download';
+import { config } from '../../config';
+import { logger } from '../../lib/logger';
+import { safeEgressFetch } from '../../shared/ssrf-guard';
 
 /**
  * The router's fallback for web search and page reading (KRTX-5162). It

@@ -12,7 +12,7 @@ let reserveCalls = 0;
 let fetchCalls: string[] = [];
 let currentBody = '';
 
-mock.module('./helpers', () => ({
+const helpersMock = () => ({
   tryAuthenticate: async () => ({ isKortixUser: true, accountId: 'acct-synthetic' }),
   buildForwardHeaders: () => new Headers(),
   getRequestBody: async () => currentBody,
@@ -29,7 +29,10 @@ mock.module('./helpers', () => ({
   },
   refundToolReservation: async () => undefined,
   injectApiKey: () => undefined,
-}));
+});
+mock.module('./helpers', helpersMock);
+// The billed call reads these from the proxy-billing service; the same fakes stand in there.
+mock.module('../../services/proxy-billing', helpersMock);
 
 const { handleProxy } = await import('./handlers');
 const originalFetch = globalThis.fetch;

@@ -1,18 +1,17 @@
 import { HTTPException } from 'hono/http-exception';
-import { config, getToolCost } from '../../../config';
+import { config } from '../../../config';
 import { getTraceHeaders } from '../../../lib/request-context';
 import { validateAccountToken } from '../../../repositories/account-tokens';
 import { keyScopeAllows } from '../../../iam/key-scope';
 import { validateSecretKey } from '../../../repositories/api-keys';
 import { isAccountToken, isKortixToken } from '../../../shared/crypto';
 import { type ProxyServiceConfig, matchAllowedRoute } from '../../config/proxy-services';
-import { deductToolCredits } from '../../services/billing';
-import { refundReservation } from '../../services/reservation';
-import type { AuthResult, ToolCreditReservation } from './app';
+import type { AuthResult } from './app';
 import { bearerToken } from '../../../shared/bearer-token';
 
-// Re-export matchAllowedRoute for handlers (kept here so handlers import from one place)
+// Re-export for handlers (kept here so handlers import from one place)
 export { matchAllowedRoute };
+export { reserveToolProxyCredits, refundToolReservation, injectApiKey } from '../../services/proxy-billing';
 
 /**
  * Resolve ANY Kortix credential to the account it bills.
@@ -143,80 +142,3 @@ export async function getRequestBody(
   return await c.req.raw.clone().arrayBuffer();
 }
 
-export async function reserveToolProxyCredits(
-  accountId: string,
-  billingToolName: string,
-  description: string,
-): Promise<ToolCreditReservation | null> {
-  const expectedCost = getToolCost(billingToolName, 0);
-  if (expectedCost <= 0) return null;
-
-  let creditReservation: Awaited<ReturnType<typeof deductToolCredits>>;
-  try {
-    creditReservation = await deductToolCredits(
-      accountId,
-      billingToolName,
-      0,
-      description,
-      undefined,
-      { skipDevCheck: true },
-    );
-  } catch (error) {
-    throw new HTTPException(402, {
-      message: error instanceof Error ? error.message : 'Insufficient credits',
-    });
-  }
-  if (!creditReservation.success) {
-    throw new HTTPException(creditReservation.retryable ? 503 : 402, {
-      message: creditReservation.error || 'Insufficient credits',
-    });
-  }
-
-  return {
-    accountId,
-    billingToolName,
-    cost: creditReservation.cost,
-  };
-}
-
-export async function refundToolReservation(
-  reservation: ToolCreditReservation | null,
-  description: string,
-): Promise<void> {
-  await refundReservation(reservation, 'tool_reservation_refund', description);
-}
-
-export function injectApiKey(
-  service: ProxyServiceConfig,
-  headers: Headers,
-  body: ArrayBuffer | string | undefined,
-): ArrayBuffer | string | undefined {
-  const injection = service.keyInjection;
-  const key = service.getKortixApiKey();
-
-  switch (injection.type) {
-    case 'header': {
-      const value = injection.prefix ? `${injection.prefix}${key}` : key;
-      headers.set(injection.headerName, value);
-      return body;
-    }
-
-    case 'json_body_field': {
-      if (!body) return body;
-      try {
-        const text = typeof body === 'string' ? body : new TextDecoder().decode(body);
-        const json = JSON.parse(text);
-        json[injection.field] = key;
-        const newBody = JSON.stringify(json);
-        headers.set('Content-Length', new TextEncoder().encode(newBody).length.toString());
-        return newBody;
-      } catch {
-        console.warn(`[PROXY] Could not inject API key into body for ${service.name}`);
-        return body;
-      }
-    }
-
-    default:
-      return body;
-  }
-}

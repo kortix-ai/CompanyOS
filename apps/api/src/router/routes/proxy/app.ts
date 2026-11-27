@@ -9,12 +9,6 @@ const proxy = makeOpenApiApp();
 
 const services = getProxyServices();
 
-interface ToolCreditReservation {
-  accountId: string;
-  billingToolName: string;
-  cost: number;
-}
-
 interface AuthResult {
   isKortixUser: boolean;
   accountId?: string;
@@ -23,4 +17,5 @@ interface AuthResult {
 }
 
 export { proxy, services };
-export type { ToolCreditReservation, AuthResult };
+export type { AuthResult };
+export type { ToolCreditReservation } from '../../services/proxy-billing';

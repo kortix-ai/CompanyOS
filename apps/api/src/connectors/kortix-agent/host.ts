@@ -1,6 +1,6 @@
 /**
- * Kortix's own agent-identity MCP servers: the authenticator, the browser and
- * the phone an agent uses as its own. Served by this API in-process, like the
+ * Kortix's own MCP servers: the authenticator, the browser and the phone an
+ * agent uses as its own, and the web (search, page reading, images). Served by this API in-process, like the
  * Google servers (../google/host.ts): `../egress.ts` hands every request for
  * {@link KORTIX_AGENT_MCP_ORIGIN} to `dispatchKortixAgentMcp`, and the name
  * does not resolve in DNS, so a request that bypassed the egress fails closed.
@@ -12,7 +12,7 @@
 
 export const KORTIX_AGENT_MCP_ORIGIN = 'https://agent.mcp.kortix.com';
 
-export const KORTIX_AGENT_SERVICES = ['authenticator', 'browser', 'phone'] as const;
+export const KORTIX_AGENT_SERVICES = ['authenticator', 'browser', 'phone', 'web'] as const;
 export type KortixAgentService = (typeof KORTIX_AGENT_SERVICES)[number];
 
 const SERVICE_SET: ReadonlySet<string> = new Set(KORTIX_AGENT_SERVICES);
@@ -22,6 +22,7 @@ export const KORTIX_AGENT_SLUGS: Record<KortixAgentService, string> = {
   authenticator: 'kortix_agent_authenticator',
   browser: 'kortix_browser',
   phone: 'kortix_phone',
+  web: 'kortix_web',
 };
 
 export function kortixAgentMcpUrl(service: KortixAgentService): string {

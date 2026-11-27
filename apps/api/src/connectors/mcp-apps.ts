@@ -164,6 +164,10 @@ export const MCP_APPS: readonly McpApp[] = [
     slug: 'kortix_toolbox', name: 'Kortix Toolbox', description: 'Paid tools with no sign-in: web search, page reading, images, and thousands of data tools (people, companies, SEO, social, jobs, markets), billed to credits.', domain: 'toolbox.kortix', categories: ['search'], url: kortixAgentMcpUrl('toolbox'), icon: false, auth: NONE,
     access: 'Run paid data tools with Kortix\'s keys (search, scraping, people and company data, SEO, social, markets), billed to this workspace\'s credits.',
   },
+  {
+    slug: 'kortix_events', name: 'Kortix Events', description: 'The workspace event log: every email, message, webhook and schedule it received. Search it, read one, or wait for the next one, such as a verification code.', domain: 'events.kortix', categories: ['productivity'], url: kortixAgentMcpUrl('events'), icon: false, auth: NONE,
+    access: 'Read the workspace\'s event log (who sent what, and when) and the text of received emails, and wait for new events.',
+  },
   { slug: 'cloudflare', name: 'Cloudflare', description: 'Accounts, Workers and DNS.', domain: 'cloudflare.com', categories: ['developer-tools', 'hosting'], url: 'https://mcp.cloudflare.com/mcp', icon: true, auth: DCR },
   // Kortix's own Google MCP servers (./google): Composio-compatible tools over
   // Google's REST APIs, served in-process. The URLs never reach the network.

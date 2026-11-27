@@ -536,3 +536,17 @@ export function isEmailSenderAllowed(from: string, policy: EmailSenderPolicy): b
   }
   return false;
 }
+
+/**
+ * One received email's text, read from Resend when asked (the ledger keeps
+ * the sender and subject, never a copy of the body). Null when the inbox
+ * left the project or has no key.
+ */
+export async function loadReceivedEmail(input: { projectId: string; inboxId: string; threadId: string; emailId: string }): Promise<{ from: string | null; subject: string | null; text: string } | null> {
+  const account = await loadEmailInboxAccountForInbox(input.projectId, input.inboxId);
+  if (!account) return null;
+  const apiKey = resolveEmailApiKey(await emailOwnKeyForAccount(account));
+  if (!apiKey) return null;
+  const full = await threadEmailLoader({ apiKey, inboxId: input.inboxId, threadId: input.threadId, emailId: input.emailId });
+  return { from: full.from ?? null, subject: full.subject ?? null, text: full.text ?? stripHtml(full.html) };
+}

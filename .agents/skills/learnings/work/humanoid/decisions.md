@@ -232,3 +232,7 @@
   across sources). No copied rows.
 - **2026-11-27 (Marko)** Kortix pays for Twilio (managed numbers). A workspace
   can also bring its own provider, as email allows its own sending domain.
+- **2026-11-27 (Marko)** The Humanoid is the core UX to ship now: an
+  Autonomous Cognitive Entity. CompanyOS is the base it is built on and runs
+  on; every idea that aggregates events, data and actions in one place is
+  core to it.

@@ -15,7 +15,7 @@ export const KORTIX_AGENT_MCP_ORIGIN = 'https://agent.mcp.kortix.com';
 /** The calling session, which the gateway sets on every request to these servers; empty outside a session. */
 export const KORTIX_SESSION_HEADER = 'x-kortix-session';
 
-export const KORTIX_AGENT_SERVICES = ['authenticator', 'browser', 'phone', 'toolbox'] as const;
+export const KORTIX_AGENT_SERVICES = ['authenticator', 'browser', 'phone', 'toolbox', 'events'] as const;
 export type KortixAgentService = (typeof KORTIX_AGENT_SERVICES)[number];
 
 const SERVICE_SET: ReadonlySet<string> = new Set(KORTIX_AGENT_SERVICES);
@@ -26,6 +26,7 @@ export const KORTIX_AGENT_SLUGS: Record<KortixAgentService, string> = {
   browser: 'kortix_browser',
   phone: 'kortix_phone',
   toolbox: 'kortix_toolbox',
+  events: 'kortix_events',
 };
 
 export function kortixAgentMcpUrl(service: KortixAgentService): string {

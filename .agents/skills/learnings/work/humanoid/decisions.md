@@ -192,3 +192,17 @@
   Sandboxes as a connector is a future intent: `../compute-as-connector/`.
 - **2026-11-27 (Marko)** Kortix-managed connectors are our own build, modeled
   on treg; no treg code is copied. Hosted treg.to is the bridge for now.
+
+## Decided: the Humanoid is My Kortix at full strength (2026-11-27)
+
+- **2026-11-27 (Marko)** First the action space, then the harness and the
+  experience. The Humanoid approaches every role like a forward deployed
+  engineer: it builds software, agents, triggers, unified data and
+  connections, over long horizons.
+- **2026-11-27 (Marko)** One infinite write-ahead event log is its
+  notification centre; every message from a person or a system lands there
+  and is dispatched to a session or routed to the one linked to it. One place
+  configures all event sources and the procedures they start. Design:
+  `event-ledger.md`.
+- **Open** Adopt the Vercel Board method (topics, tasks with claim and lease,
+  dependencies) as the work layer above the ledger.

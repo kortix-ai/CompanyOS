@@ -70,17 +70,25 @@ export async function edgeTlsCheckStatus(
   return previewTlsCheckStatus(domain, deps.sandboxExists);
 }
 
-/** Build the edge app; the existence checks are injectable for tests. */
+/**
+ * Build the edge app; the existence checks are injectable for tests. Each mount
+ * is its own catalog operation (`operationId`), and the mounts of one process
+ * share one `limiter`, so a client gets one budget across both paths.
+ */
 export function createEdgeApp(
   deps: { appExists?: AppExistsCheck; sandboxExists?: SandboxExistsCheck } = {},
+  mount: { operationId?: string; limiter?: TokenBucketRateLimiter } = {},
 ) {
   const edgeApp = makeOpenApiApp();
-  const limiter = new TokenBucketRateLimiter('edge_tls_check');
+  const limiter = mount.limiter ?? new TokenBucketRateLimiter('edge_tls_check');
 
   edgeApp.openapi(
     createRoute({
       method: 'get',
       path: '/tls-check',
+      operationId: mount.operationId ?? 'edge.tls_check',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       tags: ['apps'],
       summary: 'On-demand-TLS gate: 200 iff <domain> is a host this instance serves',
       request: { query: z.object({ domain: z.string().optional() }) },
@@ -114,4 +122,8 @@ export function createEdgeApp(
   return edgeApp;
 }
 
-export const edgeApp = createEdgeApp();
+const edgeLimiter = new TokenBucketRateLimiter('edge_tls_check');
+/** `/v1/edge`: the gate for every wildcard family. */
+export const edgeApp = createEdgeApp({}, { limiter: edgeLimiter });
+/** `/v1/apps/edge`: the same gate, where every already-installed Caddyfile points. */
+export const appsEdgeApp = createEdgeApp({}, { operationId: 'apps.edge.tls_check', limiter: edgeLimiter });

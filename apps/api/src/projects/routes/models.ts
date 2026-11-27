@@ -192,6 +192,9 @@ export function registerModelsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/model-picker',
+      operationId: 'model_picker.list',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['projects'],
       summary: 'List models for the project model picker',
       ...auth,

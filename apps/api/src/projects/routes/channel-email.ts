@@ -61,6 +61,9 @@ export function registerChannelEmailRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/channels/email/inboxes',
+      operationId: 'channels.email.inboxes.list',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: 'List the email inboxes (accounts of the email connector)',
       ...auth,
@@ -81,6 +84,9 @@ export function registerChannelEmailRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/channels/email/inboxes',
+      operationId: 'channels.email.inboxes.create',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: 'Add an email inbox (a new account of the email connector)',
       ...auth,
@@ -102,6 +108,9 @@ export function registerChannelEmailRoutes(): void {
     createRoute({
       method: 'patch',
       path: '/{workspaceId}/channels/email/inboxes/{connectionId}',
+      operationId: 'channels.email.inboxes.update',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: 'Update an email inbox: who may email it, its agent, its names',
       ...auth,
@@ -145,6 +154,9 @@ export function registerChannelEmailRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/channels/email/inboxes/{connectionId}',
+      operationId: 'channels.email.inboxes.delete',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: 'Remove an email inbox; deletes it on Resend when Kortix created it',
       ...auth,
@@ -165,6 +177,9 @@ export function registerChannelEmailRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/channels/email/installation',
+      operationId: 'channels.email.installation.get',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: 'Get the email channel installation (the default inbox)',
       ...auth,
@@ -185,6 +200,9 @@ export function registerChannelEmailRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/channels/email/mode',
+      operationId: 'channels.email.mode.get',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: 'Get the email channel mode',
       ...auth,
@@ -221,6 +239,9 @@ export function registerChannelEmailRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/channels/email/connect',
+      operationId: 'channels.email.connect',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: 'Connect an email channel (adds a shared inbox)',
       ...auth,
@@ -244,6 +265,9 @@ export function registerChannelEmailRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/channels/email/domains',
+      operationId: 'channels.email.domains.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: 'List the email domains a Resend key can use',
       ...auth,
@@ -286,6 +310,9 @@ export function registerChannelEmailRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/channels/email/domains/add',
+      operationId: 'channels.email.domains.add',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: 'Add a custom email domain to a Resend team',
       ...auth,
@@ -318,6 +345,9 @@ export function registerChannelEmailRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/channels/email/domains/verify',
+      operationId: 'channels.email.domains.verify',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: 'Check a custom email domain\'s DNS records again',
       ...auth,
@@ -347,6 +377,9 @@ export function registerChannelEmailRoutes(): void {
     createRoute({
       method: 'patch',
       path: '/{workspaceId}/channels/email/installation',
+      operationId: 'channels.email.installation.update',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: 'Update the email channel (the default inbox)',
       ...auth,
@@ -385,6 +418,9 @@ export function registerChannelEmailRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/channels/email/installation',
+      operationId: 'channels.email.disconnect',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: 'Disconnect the email channel (removes the default inbox)',
       ...auth,

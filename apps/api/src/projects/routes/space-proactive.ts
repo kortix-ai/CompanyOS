@@ -73,6 +73,9 @@ export function registerSpaceProactiveRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/spaces/{spaceId}/proactive',
+      operationId: 'spaces.proactive.get',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'agent',
       tags: ['spaces'],
       summary: 'Read a channel’s Proactive settings',
       description:
@@ -93,6 +96,9 @@ export function registerSpaceProactiveRoutes(): void {
     createRoute({
       method: 'put',
       path: '/{workspaceId}/spaces/{spaceId}/proactive',
+      operationId: 'spaces.proactive.set',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'human',
       tags: ['spaces'],
       summary: 'Change a channel’s Proactive settings',
       description:

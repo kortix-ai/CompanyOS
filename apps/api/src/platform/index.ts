@@ -19,6 +19,9 @@ platformApp.openapi(
   createRoute({
     method: 'get',
     path: '/',
+    operationId: 'platform.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['platform'],
     summary: 'Platform sub-app info',
     responses: {

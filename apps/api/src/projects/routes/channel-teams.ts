@@ -35,6 +35,9 @@ export function registerChannelTeamsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/channels/teams/installation',
+      operationId: 'channels.teams.installation.get',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: 'Get the Microsoft Teams installation',
       ...auth,
@@ -54,6 +57,9 @@ export function registerChannelTeamsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/channels/teams/mode',
+      operationId: 'channels.teams.mode.get',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: 'Get the Microsoft Teams connection mode',
       ...auth,
@@ -85,6 +91,9 @@ export function registerChannelTeamsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/channels/teams/oauth/complete',
+      operationId: 'channels.teams.oauth.complete',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE,
+      'x-kortix-exposure': 'human',
       tags: ['channels'],
       summary: 'Complete the Microsoft Teams OAuth connection',
       ...auth,
@@ -131,6 +140,9 @@ export function registerChannelTeamsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/channels/teams/manifest',
+      operationId: 'channels.teams.manifest.get',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: 'Download the Microsoft Teams app manifest',
       ...auth,
@@ -162,6 +174,9 @@ export function registerChannelTeamsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/channels/teams/connect',
+      operationId: 'channels.teams.connect',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: 'Connect Microsoft Teams',
       ...auth,
@@ -253,6 +268,9 @@ export function registerChannelTeamsRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/channels/teams/installation',
+      operationId: 'channels.teams.disconnect',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: 'Disconnect Microsoft Teams',
       ...auth,
@@ -282,6 +300,9 @@ export function registerChannelTeamsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/channels/teams/file',
+      operationId: 'channels.teams.file.download',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: 'Download a Microsoft Teams file',
       ...auth,
@@ -312,6 +333,9 @@ export function registerChannelTeamsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/channels/teams/conversations',
+      operationId: 'channels.teams.conversations.list',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: 'List Microsoft Teams conversations the bot can post to',
       ...auth,
@@ -336,6 +360,9 @@ export function registerChannelTeamsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/channels/teams/message',
+      operationId: 'channels.teams.message.send',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: 'Post a Microsoft Teams message',
       ...auth,
@@ -383,6 +410,9 @@ export function registerChannelTeamsRoutes(): void {
       createRoute({
         method: 'post',
         path: `/{workspaceId}/channels/teams/message/${op}`,
+        operationId: `channels.teams.message.${op}`,
+        'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE,
+        'x-kortix-exposure': 'agent',
         tags: ['channels'],
         summary: `${op === "edit" ? "Edit" : "Delete"} a Microsoft Teams bot message`,
         ...auth,
@@ -422,6 +452,9 @@ export function registerChannelTeamsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/channels/teams/file/upload',
+      operationId: 'channels.teams.file.upload',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: 'Upload a file to Microsoft Teams',
       description:

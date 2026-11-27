@@ -301,6 +301,9 @@ versionRouter.openapi(
   createRoute({
     method: 'get',
     path: '/',
+    operationId: 'platform.sandbox_version.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'agent',
     tags: ['platform'],
     summary: 'Running sandbox version and channel',
     responses: {
@@ -319,6 +322,9 @@ versionRouter.openapi(
   createRoute({
     method: 'get',
     path: '/latest',
+    operationId: 'platform.sandbox_version.latest.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'agent',
     tags: ['platform'],
     summary: 'Latest available sandbox version for a channel',
     request: {
@@ -339,6 +345,9 @@ versionRouter.openapi(
   createRoute({
     method: 'get',
     path: '/all',
+    operationId: 'platform.sandbox_version.list',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'agent',
     tags: ['platform'],
     summary: 'All known sandbox versions plus the current running version',
     responses: {
@@ -361,6 +370,9 @@ versionRouter.openapi(
   createRoute({
     method: 'get',
     path: '/changelog',
+    operationId: 'platform.sandbox_version.changelog.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'agent',
     tags: ['platform'],
     summary: 'Sandbox changelog entries for a channel',
     request: {

@@ -43,6 +43,9 @@ export function registerChannelSlackRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/channels/slack/installation',
+      operationId: 'channels.slack.installation.get',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: 'Get the Slack installation',
       ...auth,
@@ -72,6 +75,9 @@ export function registerChannelSlackRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/channels/slack/mode',
+      operationId: 'channels.slack.mode.get',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: 'Get the Slack connection mode',
       ...auth,
@@ -108,6 +114,9 @@ export function registerChannelSlackRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/channels/slack/join',
+      operationId: 'channels.slack.join',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: 'Join the Slack bot to channels',
       description:
@@ -166,6 +175,9 @@ export function registerChannelSlackRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/channels/slack/oauth/complete',
+      operationId: 'channels.slack.oauth.complete',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE,
+      'x-kortix-exposure': 'human',
       tags: ['channels'],
       summary: 'Complete the Slack OAuth connection',
       ...auth,
@@ -214,6 +226,9 @@ export function registerChannelSlackRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/channels/slack/connect',
+      operationId: 'channels.slack.connect',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: 'Connect Slack',
       ...auth,
@@ -300,6 +315,9 @@ export function registerChannelSlackRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/channels/slack/installation',
+      operationId: 'channels.slack.disconnect',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: 'Disconnect Slack',
       ...auth,
@@ -343,6 +361,9 @@ export function registerChannelSlackRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/channels/slack/file',
+      operationId: 'channels.slack.file.download',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: 'Download a Slack file',
       ...auth,
@@ -376,6 +397,9 @@ export function registerChannelSlackRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/channels/slack/file/upload',
+      operationId: 'channels.slack.file.upload',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: 'Upload a file to Slack',
       ...auth,
@@ -449,6 +473,9 @@ export function registerChannelSlackRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/channels/slack/bind-thread',
+      operationId: 'channels.slack.bind_thread',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: 'Bind a Slack thread to a session',
       ...auth,

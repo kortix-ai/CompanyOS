@@ -1,6 +1,6 @@
 {
   "generatedAt": "static",
-  "count": 1841,
+  "count": 1838,
   "aliases": 719,
   "routes": [
     {
@@ -5222,10 +5222,6 @@
       "path": "/v1/runtime-assets/agent"
     },
     {
-      "method": "HEAD",
-      "path": "/v1/runtime-assets/agent"
-    },
-    {
       "method": "GET",
       "path": "/v1/runtime-assets/chunk/:sha256"
     },
@@ -5238,15 +5234,7 @@
       "path": "/v1/runtime-assets/cli"
     },
     {
-      "method": "HEAD",
-      "path": "/v1/runtime-assets/cli"
-    },
-    {
       "method": "GET",
-      "path": "/v1/runtime-assets/entrypoint"
-    },
-    {
-      "method": "HEAD",
       "path": "/v1/runtime-assets/entrypoint"
     },
     {

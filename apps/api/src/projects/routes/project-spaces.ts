@@ -214,6 +214,9 @@ function registerSpaceRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/spaces',
+      operationId: 'spaces.list',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'agent',
       tags: ['spaces'],
       summary: 'List the channels of a project and the caller’s direct messages',
       ...auth,
@@ -245,6 +248,9 @@ function registerSpaceRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/spaces/private',
+      operationId: 'spaces.private.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_MEMBERS_MANAGE,
+      'x-kortix-exposure': 'human',
       tags: ['spaces'],
       summary: 'List the private channels the caller is not in (project managers)',
       description:
@@ -270,6 +276,9 @@ function registerSpaceRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/spaces',
+      operationId: 'spaces.create',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'human',
       tags: ['spaces'],
       summary: 'Create a channel',
       ...auth,
@@ -305,6 +314,9 @@ function registerSpaceRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/spaces/dm',
+      operationId: 'spaces.dm.open',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'agent',
       tags: ['spaces'],
       summary: 'Open the caller’s direct message with an agent',
       ...auth,
@@ -340,6 +352,9 @@ function registerSpaceRoutes(): void {
     createRoute({
       method: 'patch',
       path: '/{workspaceId}/spaces/{spaceId}',
+      operationId: 'spaces.update',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'agent',
       tags: ['spaces'],
       summary: 'Update a channel',
       description:
@@ -405,6 +420,9 @@ function registerSpaceRoutes(): void {
     createRoute({
       method: 'put',
       path: '/{workspaceId}/spaces/{spaceId}/tabs',
+      operationId: 'spaces.tabs.set',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'agent',
       tags: ['spaces'],
       summary: 'Replace the tabs of a channel',
       description:
@@ -452,6 +470,9 @@ function registerSpaceRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/spaces/{spaceId}/apps',
+      operationId: 'spaces.apps.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_APP_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['spaces'],
       summary: 'List the Apps of a channel',
       description:
@@ -484,6 +505,9 @@ function registerSpaceLinkRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/spaces/{spaceId}/links',
+      operationId: 'spaces.links.list',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'agent',
       tags: ['spaces'],
       summary: 'List the links of a channel',
       ...auth,
@@ -507,6 +531,9 @@ function registerSpaceLinkRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/spaces/{spaceId}/links',
+      operationId: 'spaces.links.create',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'agent',
       tags: ['spaces'],
       summary: 'Add a link to a channel',
       description:
@@ -538,6 +565,9 @@ function registerSpaceLinkRoutes(): void {
     createRoute({
       method: 'patch',
       path: '/{workspaceId}/spaces/{spaceId}/links/{linkId}',
+      operationId: 'spaces.links.update',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'agent',
       tags: ['spaces'],
       summary: 'Pin or unpin a link of a channel',
       description:
@@ -572,6 +602,9 @@ function registerSpaceLinkRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/spaces/{spaceId}/links/{linkId}',
+      operationId: 'spaces.links.delete',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'agent',
       tags: ['spaces'],
       summary: 'Remove a link from a channel',
       ...auth,
@@ -601,6 +634,9 @@ function registerSpaceMemberRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/spaces/{spaceId}/members',
+      operationId: 'spaces.members.list',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'agent',
       tags: ['spaces'],
       summary: 'List the people in a channel',
       description:
@@ -623,6 +659,9 @@ function registerSpaceMemberRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/spaces/{spaceId}/activity',
+      operationId: 'spaces.activity.list',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'agent',
       tags: ['spaces'],
       summary: 'List a channel’s activity',
       description:
@@ -646,6 +685,9 @@ function registerSpaceMemberRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/spaces/{spaceId}/members',
+      operationId: 'spaces.members.add',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'agent',
       tags: ['spaces'],
       summary: 'Add people to a channel',
       description:
@@ -683,6 +725,9 @@ function registerSpaceMemberRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/spaces/{spaceId}/members/{userId}',
+      operationId: 'spaces.members.remove',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'agent',
       tags: ['spaces'],
       summary: 'Remove a person from a channel, or leave it',
       description:
@@ -720,6 +765,9 @@ function registerSpaceMemberRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/spaces/{spaceId}/join',
+      operationId: 'spaces.join',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'human',
       tags: ['spaces'],
       summary: 'Join a channel',
       description: 'Any member of the project joins a public channel; a private channel they are not in is 404 `space_not_found`. Idempotent. `#general` is 400 `default_channel`.',

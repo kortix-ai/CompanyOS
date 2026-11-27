@@ -230,6 +230,9 @@ export function registerChannelBindingsRoutes(): void {
     createRoute({
       method: "get",
       path: "/{workspaceId}/channels/bindings",
+      operationId: "channels.bindings.list",
+      "x-kortix-action": PROJECT_ACTIONS.PROJECT_CONNECTOR_READ,
+      "x-kortix-exposure": "agent",
       tags: ["channels"],
       summary: "List channel bindings of a project",
       ...auth,
@@ -330,6 +333,9 @@ export function registerChannelBindingsRoutes(): void {
     createRoute({
       method: "patch",
       path: "/{workspaceId}/channels/bindings/{bindingId}",
+      operationId: "channels.bindings.update",
+      "x-kortix-action": PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE,
+      "x-kortix-exposure": "agent",
       tags: ["channels"],
       summary: "Update a channel binding",
       ...auth,

@@ -178,6 +178,9 @@ export function registerSessionGroupsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/session-groups',
+      operationId: 'session_groups.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'List the session groups (Spaces) the caller sees',
       description: 'The groups the caller sees, in the project order: `project` ones, ones they created, ones shared with them (all of them under account session oversight). List a group’s sessions with `GET /sessions?group=<group_id>`.',
@@ -212,6 +215,9 @@ export function registerSessionGroupsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/session-groups',
+      operationId: 'session_groups.create',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'Create a session group',
       description: 'The new group is private to its creator (`visibility: private`, no members) and goes last in the order. A name another group of the project has, in any case, is refused (409 `group_name_taken`); a project holds at most 50 groups (409 `group_limit`).',
@@ -255,6 +261,9 @@ export function registerSessionGroupsRoutes(): void {
     createRoute({
       method: 'put',
       path: '/{workspaceId}/session-groups/order',
+      operationId: 'session_groups.order.set',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'Reorder the session groups of a project',
       description: 'Send every group id the caller sees once, in the new order; a group they do not see keeps its place. A list that is out of date (a group missing, added or foreign) changes nothing and answers 409 `group_order_stale`: read the list again.',
@@ -285,6 +294,9 @@ export function registerSessionGroupsRoutes(): void {
     createRoute({
       method: 'patch',
       path: '/{workspaceId}/session-groups/{groupId}',
+      operationId: 'session_groups.update',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'Rename a session group, or change its description or icon',
       ...auth,
@@ -312,6 +324,9 @@ export function registerSessionGroupsRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/session-groups/{groupId}',
+      operationId: 'session_groups.delete',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'human',
       tags: ['sessions'],
       summary: 'Delete a session group',
       description: 'Its creator (or an owner or admin under account session oversight) only: 403 `group_manage_forbidden` for anyone else who sees it. Its sessions stay and are in no group, back to their own sharing; the groups after it move up one place.',
@@ -334,6 +349,9 @@ export function registerSessionGroupsRoutes(): void {
     createRoute({
       method: 'put',
       path: '/{workspaceId}/session-groups/{groupId}/sharing',
+      operationId: 'session_groups.sharing.set',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'human',
       tags: ['sessions'],
       summary: 'Change who sees a session group (Space)',
       description:
@@ -373,6 +391,9 @@ export function registerSessionGroupsRoutes(): void {
     createRoute({
       method: 'put',
       path: '/{workspaceId}/session-groups/{groupId}/tabs',
+      operationId: 'session_groups.tabs.set',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'Replace the tabs of a session group (Space)',
       description:

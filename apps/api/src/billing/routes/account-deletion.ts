@@ -97,6 +97,9 @@ accountDeletionRouter.openapi(
   createRoute({
     method: 'get',
     path: '/deletion-plan',
+    operationId: 'account.deletion_plan.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['billing'],
     summary: 'What deleting your account would do',
     description:
@@ -114,6 +117,9 @@ accountDeletionRouter.openapi(
   createRoute({
     method: 'get',
     path: '/deletion-status',
+    operationId: 'account.deletion_status.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['billing'],
     summary: 'Get the current account-deletion status',
     ...auth,
@@ -140,6 +146,9 @@ accountDeletionRouter.openapi(
   createRoute({
     method: 'post',
     path: '/request-deletion',
+    operationId: 'account.deletion.request',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['billing'],
     summary: 'Schedule the deletion of your account',
     description:
@@ -189,6 +198,9 @@ accountDeletionRouter.openapi(
   createRoute({
     method: 'post',
     path: '/cancel-deletion',
+    operationId: 'account.deletion.cancel',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['billing'],
     summary: 'Cancel a pending account deletion',
     ...auth,
@@ -208,6 +220,9 @@ accountDeletionRouter.openapi(
   createRoute({
     method: 'delete',
     path: '/delete-immediately',
+    operationId: 'account.delete',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['billing'],
     summary: 'Delete your account immediately',
     description:

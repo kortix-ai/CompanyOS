@@ -71,6 +71,9 @@ export function registerChannelAccessRoutes(port: ChannelAccessPort): void {
     createRoute({
       method: 'get',
       path: `${base}/users`,
+      operationId: `channels.${platform}.users.list`,
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: `List the allowed ${label} users and the access requests`,
       description:
@@ -93,6 +96,9 @@ export function registerChannelAccessRoutes(port: ChannelAccessPort): void {
     createRoute({
       method: 'get',
       path: `${base}/users/{user_id}/photo`,
+      operationId: `channels.${platform}.users.photo.get`,
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: `An allowed or requesting ${label} user's profile photo`,
       description:
@@ -133,6 +139,9 @@ export function registerChannelAccessRoutes(port: ChannelAccessPort): void {
     createRoute({
       method: 'post',
       path: `${base}/allowed-users`,
+      operationId: `channels.${platform}.allowed_users.add`,
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: `Allow one ${label} user`,
       description: 'Adds the id unless it is listed, and drops its access request. Answers the installation.',
@@ -164,6 +173,9 @@ export function registerChannelAccessRoutes(port: ChannelAccessPort): void {
     createRoute({
       method: 'delete',
       path: `${base}/allowed-users/{user_id}`,
+      operationId: `channels.${platform}.allowed_users.remove`,
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: `Remove one allowed ${label} user`,
       description: 'Idempotent. Answers the installation.',
@@ -178,6 +190,9 @@ export function registerChannelAccessRoutes(port: ChannelAccessPort): void {
     createRoute({
       method: 'delete',
       path: `${base}/access-requests/{user_id}`,
+      operationId: `channels.${platform}.access_requests.dismiss`,
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: `Dismiss one ${label} access request`,
       description: 'Idempotent. The user can ask again by messaging the bot. Answers the installation.',

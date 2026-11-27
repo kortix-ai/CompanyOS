@@ -37,6 +37,9 @@ bootTimelineRouter.openapi(
   createRoute({
     method: 'post',
     path: '/',
+    operationId: 'platform.boot_timeline.relay',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['platform'],
     summary: 'Relay a sandbox in-guest boot timeline for server-side persistence',
     ...auth,

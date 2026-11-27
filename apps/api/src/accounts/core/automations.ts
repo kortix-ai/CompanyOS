@@ -38,6 +38,9 @@ export function registerAutomationRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/automations',
+      operationId: 'automations.get',
+      'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['accounts'],
       summary: "Whether the account's automations are paused",
       ...auth,
@@ -60,6 +63,9 @@ export function registerAutomationRoutes(): void {
     createRoute({
       method: 'patch',
       path: '/{workspaceId}/automations',
+      operationId: 'automations.update',
+      'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['accounts'],
       summary: 'Pause or resume every automation of the account',
       description:

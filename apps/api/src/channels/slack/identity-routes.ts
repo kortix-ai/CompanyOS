@@ -35,6 +35,9 @@ slackIdentityApp.openapi(
   createRoute({
     method: 'get',
     path: '/login/{token}',
+    operationId: 'channels.slack.identity.login',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['channels'],
     summary: 'Redirect a Slack login link to the web login page',
     request: { params: z.object({ token: z.string().min(1) }) },
@@ -79,6 +82,9 @@ slackIdentityApp.openapi(
   createRoute({
     method: 'post',
     path: '/preview',
+    operationId: 'channels.slack.identity.preview',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['channels'],
     summary: 'Show which Slack account a /login token would link',
     ...auth,
@@ -131,6 +137,9 @@ slackIdentityApp.openapi(
   createRoute({
     method: 'post',
     path: '/bind',
+    operationId: 'channels.slack.identity.bind',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['channels'],
     summary: 'Bind the calling Kortix user to a Slack user from a /login token',
     ...auth,

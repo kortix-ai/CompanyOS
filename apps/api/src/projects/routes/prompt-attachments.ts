@@ -110,6 +110,9 @@ export function registerPromptAttachmentsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/attachments',
+      operationId: 'attachments.create',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_START,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'Begin a private prompt attachment upload, or re-sign an unfinished one',
       ...auth,
@@ -147,6 +150,9 @@ export function registerPromptAttachmentsRoutes(): void {
     createRoute({
       method: 'put',
       path: '/{workspaceId}/attachments/{attachmentId}/chunks/{index}',
+      operationId: 'attachments.chunks.upload',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_START,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'Upload one ordered attachment chunk (chunked upload mode only)',
       ...auth,
@@ -184,6 +190,9 @@ export function registerPromptAttachmentsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/attachments/{attachmentId}/complete',
+      operationId: 'attachments.complete',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_START,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'Finalize and verify a private prompt attachment',
       ...auth,
@@ -201,6 +210,9 @@ export function registerPromptAttachmentsRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/attachments/{attachmentId}',
+      operationId: 'attachments.delete',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_START,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'Remove an unsubmitted prompt attachment',
       ...auth,

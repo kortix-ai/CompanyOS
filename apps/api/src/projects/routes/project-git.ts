@@ -30,6 +30,9 @@ export function registerProjectGitRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/git-token',
+      operationId: 'git_token.create',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_GITOPS_PUSH,
+      'x-kortix-exposure': 'local',
       tags: ['github'],
       summary: 'Mint a short-lived Git token for the project repository',
       ...auth,

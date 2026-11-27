@@ -43,6 +43,9 @@ export function registerChannelTelegramRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/channels/telegram/installation',
+      operationId: 'channels.telegram.installation.get',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: 'Get the Telegram bot installation',
       ...auth,
@@ -62,6 +65,9 @@ export function registerChannelTelegramRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/channels/telegram/connect',
+      operationId: 'channels.telegram.connect',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: 'Connect a Telegram bot',
       ...auth,
@@ -129,6 +135,9 @@ export function registerChannelTelegramRoutes(): void {
     createRoute({
       method: 'put',
       path: '/{workspaceId}/channels/telegram/allowed-users',
+      operationId: 'channels.telegram.allowed_users.set',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: 'Set the Telegram users allowed to talk to the bot',
       ...auth,
@@ -156,6 +165,9 @@ export function registerChannelTelegramRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/channels/telegram',
+      operationId: 'channels.telegram.disconnect',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['channels'],
       summary: 'Disconnect the Telegram bot',
       ...auth,

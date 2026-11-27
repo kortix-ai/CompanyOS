@@ -65,6 +65,9 @@ export function registerApprovalsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/approvals',
+      operationId: 'approvals.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_MEMBERS_MANAGE,
+      'x-kortix-exposure': 'agent',
       tags: ['access'],
       summary: 'List approvals of a project',
       ...auth,
@@ -149,6 +152,9 @@ export function registerApprovalsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/approvals/needs-input',
+      operationId: 'approvals.needs_input.list',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['access'],
       summary: 'List approvals waiting for input',
       ...auth,
@@ -282,6 +288,9 @@ export function registerApprovalsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/approvals/{executionId}',
+      operationId: 'approvals.resolve',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'human',
       tags: ['access'],
       summary: 'Approve or deny a gated action',
       ...auth,

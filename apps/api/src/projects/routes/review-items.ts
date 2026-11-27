@@ -51,6 +51,9 @@ export function registerReviewItemsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/review/summary',
+      operationId: 'review.summary.get',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_REVIEW_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['review'],
       summary: 'Count the review items that need you',
       description:
@@ -97,6 +100,9 @@ export function registerReviewItemsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/review/items',
+      operationId: 'review.items.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_REVIEW_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['review'],
       summary: 'List review items (approvals and change requests)',
       description:
@@ -178,6 +184,9 @@ export function registerReviewItemsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/review/items/{reviewItemId}',
+      operationId: 'review.items.get',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_REVIEW_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['review'],
       summary: 'Get a review item',
       ...auth,
@@ -220,6 +229,9 @@ export function registerReviewItemsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/review/items',
+      operationId: 'review.items.submit',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_REVIEW_SUBMIT,
+      'x-kortix-exposure': 'agent',
       tags: ['review'],
       summary: 'Create a review item',
       ...auth,
@@ -317,6 +329,9 @@ export function registerReviewItemsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/review/items/{reviewItemId}/act',
+      operationId: 'review.items.act',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_REVIEW_ACT,
+      'x-kortix-exposure': 'agent',
       tags: ['review'],
       summary: 'Approve, reject or act on a review item',
       ...auth,
@@ -377,6 +392,9 @@ export function registerReviewItemsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/review/bulk',
+      operationId: 'review.items.bulk_act',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_REVIEW_ACT,
+      'x-kortix-exposure': 'agent',
       tags: ['review'],
       summary: 'Act on several review items at once',
       ...auth,

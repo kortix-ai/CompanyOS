@@ -204,6 +204,9 @@ export function registerGatewayLogsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/gateway/logs',
+      operationId: 'gateway.logs.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_GATEWAY_LOGS_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['gateway'],
       summary: 'List LLM gateway request logs',
       ...auth,
@@ -273,6 +276,9 @@ export function registerGatewayLogsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/gateway/logs/facets',
+      operationId: 'gateway.logs.facets.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_GATEWAY_LOGS_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['gateway'],
       summary: 'List the values the gateway log filters can take',
       ...auth,
@@ -363,6 +369,9 @@ export function registerGatewayLogsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/gateway/logs/{logId}',
+      operationId: 'gateway.logs.get',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_GATEWAY_LOGS_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['gateway'],
       summary: 'Get an LLM gateway request log',
       ...auth,
@@ -424,6 +433,9 @@ export function registerGatewayLogsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/gateway/errors',
+      operationId: 'gateway.errors.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_GATEWAY_LOGS_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['gateway'],
       summary: 'List LLM gateway errors',
       ...auth,

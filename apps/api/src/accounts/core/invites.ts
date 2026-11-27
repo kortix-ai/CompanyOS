@@ -53,6 +53,9 @@ export function registerMemberInviteRoute(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/members',
+      operationId: 'members.invite',
+      'x-kortix-action': ACCOUNT_ACTIONS.MEMBER_UPDATE,
+      'x-kortix-exposure': 'agent',
       tags: ['accounts'],
       summary: 'Invite a user by email (added immediately or pending invite)',
       ...auth,
@@ -335,6 +338,9 @@ export function registerInviteRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/invites',
+      operationId: 'invites.list',
+      'x-kortix-action': ACCOUNT_ACTIONS.MEMBER_INVITE,
+      'x-kortix-exposure': 'agent',
       tags: ['accounts'],
       summary: 'List pending invitations',
       ...auth,
@@ -388,6 +394,9 @@ export function registerInviteRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/invites/{inviteId}',
+      operationId: 'invites.cancel',
+      'x-kortix-action': ACCOUNT_ACTIONS.MEMBER_INVITE,
+      'x-kortix-exposure': 'agent',
       tags: ['accounts'],
       summary: 'Cancel a pending invite',
       ...auth,
@@ -429,6 +438,9 @@ export function registerInviteRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/invites/{inviteId}/resend',
+      operationId: 'invites.resend',
+      'x-kortix-action': ACCOUNT_ACTIONS.MEMBER_INVITE,
+      'x-kortix-exposure': 'agent',
       tags: ['accounts'],
       summary: 'Resend an invite email and refresh its expiry',
       ...auth,

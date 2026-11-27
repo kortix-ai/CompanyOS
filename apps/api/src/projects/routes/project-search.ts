@@ -56,6 +56,9 @@ export function registerProjectSearchRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/search',
+      operationId: 'workspaces.search',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['projects'],
       summary: "Search the project's Files",
       description:

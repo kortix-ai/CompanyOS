@@ -127,6 +127,9 @@ export function registerProjectDetailRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/detail',
+      operationId: 'workspaces.detail.get',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['projects'],
       summary: 'Get project detail with configuration',
       ...auth,

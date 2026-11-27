@@ -174,6 +174,9 @@ export function registerTriggersRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/triggers',
+      operationId: 'triggers.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_TRIGGER_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['triggers'],
       summary: 'List project triggers',
       ...auth,
@@ -210,6 +213,9 @@ export function registerTriggersRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/triggers/event-apps',
+      operationId: 'triggers.event_apps.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_TRIGGER_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['triggers'],
       summary: 'List the apps that can trigger an event',
       description:
@@ -290,6 +296,9 @@ export function registerTriggersRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/triggers/event-types',
+      operationId: 'triggers.event_types.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_TRIGGER_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['triggers'],
       summary: 'List the connector events a connector or an app can trigger on',
       description: 'Send `connector` (a project connector slug) or `app` (an app of an event source, no connector needed) with an optional `source`, not both.',
@@ -370,6 +379,9 @@ export function registerTriggersRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/triggers',
+      operationId: 'triggers.create',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_TRIGGER_CREATE,
+      'x-kortix-exposure': 'agent',
       tags: ['triggers'],
       summary: 'Create a project trigger (cron, webhook, event or app)',
       description:
@@ -544,6 +556,9 @@ export function registerTriggersRoutes(): void {
     createRoute({
       method: 'patch',
       path: '/{workspaceId}/triggers/activation',
+      operationId: 'triggers.activation.set',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_TRIGGER_UPDATE,
+      'x-kortix-exposure': 'agent',
       tags: ['triggers'],
       summary: "Pause or resume all of a project's triggers server-side",
       ...auth,
@@ -593,6 +608,9 @@ export function registerTriggersRoutes(): void {
     createRoute({
       method: 'patch',
       path: '/{workspaceId}/triggers/{slug}',
+      operationId: 'triggers.update',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_TRIGGER_UPDATE,
+      'x-kortix-exposure': 'agent',
       tags: ['triggers'],
       summary: 'Update a project trigger',
       description:
@@ -792,6 +810,9 @@ export function registerTriggersRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/triggers/{slug}',
+      operationId: 'triggers.delete',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_TRIGGER_DELETE,
+      'x-kortix-exposure': 'agent',
       tags: ['triggers'],
       summary: 'Delete a project trigger',
       ...auth,
@@ -865,6 +886,9 @@ export function registerTriggersRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/triggers/{slug}/fire',
+      operationId: 'triggers.fire',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_TRIGGER_FIRE,
+      'x-kortix-exposure': 'agent',
       tags: ['triggers'],
       summary: 'Fire a project trigger now, or dry-run it',
       ...auth,
@@ -922,6 +946,9 @@ export function registerTriggersRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/triggers/{slug}/runs',
+      operationId: 'triggers.runs.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_TRIGGER_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['triggers'],
       summary: "List a trigger's runs",
       description: 'Newest first. A run whose session the caller may not open is left out, so a page can hold fewer than `limit` runs.',
@@ -977,6 +1004,9 @@ export function registerTriggersRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/triggers/{slug}/runs/{run_id}/replay',
+      operationId: 'triggers.runs.replay',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_TRIGGER_FIRE,
+      'x-kortix-exposure': 'agent',
       tags: ['triggers'],
       summary: 'Replay a trigger run',
       description: 'A run whose webhook signature never verified needs `confirm_unverified: true`. A truncated payload cannot be replayed.',

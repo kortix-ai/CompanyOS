@@ -331,6 +331,9 @@ accountInvitesRouter.openapi(
   createRoute({
     method: 'get',
     path: '/',
+    operationId: 'invites.list_mine',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['accounts'],
     summary: "List the caller's pending invites",
     ...auth,
@@ -388,6 +391,9 @@ accountInvitesRouter.openapi(
   createRoute({
     method: 'get',
     path: '/{inviteId}',
+    operationId: 'invites.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['accounts'],
     summary: 'Describe an invite (redacted unless caller email matches)',
     ...auth,
@@ -472,6 +478,9 @@ accountInvitesRouter.openapi(
   createRoute({
     method: 'post',
     path: '/{inviteId}/accept',
+    operationId: 'invites.accept',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['accounts'],
     summary: 'Accept an invite',
     ...auth,
@@ -604,6 +613,9 @@ accountInvitesRouter.openapi(
   createRoute({
     method: 'post',
     path: '/{inviteId}/decline',
+    operationId: 'invites.decline',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['accounts'],
     summary: 'Decline an invite',
     ...auth,

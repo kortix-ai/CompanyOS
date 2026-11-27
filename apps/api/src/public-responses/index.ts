@@ -30,6 +30,9 @@ export function registerPublicResponseRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{token}',
+      operationId: 'public_responses.get',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'agent',
       tags: ['public-responses'],
       summary: 'View a shared assistant response (anonymous)',
       request: { params: z.object({ token: z.string().min(1).max(200) }) },

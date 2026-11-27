@@ -22,6 +22,9 @@ export function registerGatewayProvidersRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/gateway/providers/{providerId}/verify',
+      operationId: 'gateway.providers.verify',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SECRET_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['gateway'],
       summary: 'Verify a project LLM provider credential',
       ...auth,

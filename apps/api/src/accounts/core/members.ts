@@ -122,6 +122,9 @@ export function registerMemberRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/members',
+      operationId: 'members.list',
+      'x-kortix-action': ACCOUNT_ACTIONS.MEMBER_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['accounts'],
       summary: 'List account members',
       ...auth,
@@ -331,6 +334,9 @@ export function registerMemberRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/members/{userId}',
+      operationId: 'members.remove',
+      'x-kortix-action': ACCOUNT_ACTIONS.MEMBER_REMOVE,
+      'x-kortix-exposure': 'agent',
       tags: ['accounts'],
       summary: 'Remove a member',
       ...auth,
@@ -374,6 +380,9 @@ export function registerMemberRoutes(): void {
     createRoute({
       method: 'patch',
       path: '/{workspaceId}/members/{userId}',
+      operationId: 'members.update',
+      'x-kortix-action': ACCOUNT_ACTIONS.MEMBER_SUPER_ADMIN_GRANT,
+      'x-kortix-exposure': 'agent',
       tags: ['accounts'],
       summary: "Change a member's role",
       ...auth,

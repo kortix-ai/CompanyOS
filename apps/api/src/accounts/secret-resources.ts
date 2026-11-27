@@ -196,6 +196,9 @@ export function registerSecretResourceRoutes() {
 
   accountsRouter.openapi(createRoute({
     method: 'get', path: '/{workspaceId}/secret-resources', tags: ['secrets'],
+    operationId: 'secret_resources.list',
+    'x-kortix-action': 'project.read',
+    'x-kortix-exposure': 'agent',
     summary: 'List account secret resources granted to the caller', ...auth,
     request: { params: AccountIdParam },
     responses: { 200: json(z.object({ secrets: z.array(View) }), 'Granted secret resources'), ...errors(403) },
@@ -219,6 +222,9 @@ export function registerSecretResourceRoutes() {
 
   accountsRouter.openapi(createRoute({
     method: 'post', path: '/{workspaceId}/secret-resources', tags: ['secrets'],
+    operationId: 'secret_resources.create',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_SECRET_WRITE,
+    'x-kortix-exposure': 'agent',
     summary: 'Create an account secret resource', ...auth,
     request: { params: AccountIdParam, body: { content: { 'application/json': { schema: Create } } } },
     responses: { 201: json(View, 'Created secret metadata'), ...errors(400, 403) },
@@ -299,6 +305,9 @@ export function registerSecretResourceRoutes() {
 
   accountsRouter.openapi(createRoute({
     method: 'put', path: '/{workspaceId}/secret-resources/{secretId}/access', tags: ['secrets'],
+    operationId: 'secret_resources.access.set',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_SECRET_WRITE,
+    'x-kortix-exposure': 'agent',
     summary: 'Set project or selected-member access for one resource', ...auth,
     request: { params: SecretIdParam, body: { content: { 'application/json': { schema: z.object({
       mode: z.enum(['project', 'members']), user_ids: z.array(z.string().uuid()).max(200),
@@ -341,6 +350,9 @@ export function registerSecretResourceRoutes() {
 
   accountsRouter.openapi(createRoute({
     method: 'put', path: '/{workspaceId}/secret-resources/{secretId}/value', tags: ['secrets'],
+    operationId: 'secret_resources.value.set',
+    'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_WRITE,
+    'x-kortix-exposure': 'agent',
     summary: 'Rotate one secret value', ...auth,
     request: { params: SecretIdParam, body: { content: { 'application/json': { schema: z.object({ value: z.string().min(1).max(65536) }) } } } },
     responses: { 200: json(View, 'Rotated secret metadata'), ...errors(400, 403, 404) },
@@ -366,6 +378,9 @@ export function registerSecretResourceRoutes() {
   // "Check again" on a saved key: the same one call that runs on save.
   accountsRouter.openapi(createRoute({
     method: 'post', path: '/{workspaceId}/secret-resources/{secretId}/verify', tags: ['secrets'],
+    operationId: 'secret_resources.verify',
+    'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_WRITE,
+    'x-kortix-exposure': 'agent',
     summary: 'Check one saved provider API key against its provider', ...auth,
     request: { params: SecretIdParam },
     responses: { 200: json(View, 'Secret metadata with the check result'), ...errors(400, 403, 404) },
@@ -385,6 +400,9 @@ export function registerSecretResourceRoutes() {
   // the provider named; the rest ends now instead of on the next 15-min re-try.
   accountsRouter.openapi(createRoute({
     method: 'post', path: '/{workspaceId}/secret-resources/{secretId}/retry', tags: ['secrets'],
+    operationId: 'secret_resources.retry',
+    'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_WRITE,
+    'x-kortix-exposure': 'agent',
     summary: 'End the rate-limit rest of one stored account', ...auth,
     request: { params: SecretIdParam },
     responses: { 200: json(View, 'Secret metadata with no cooldown'), ...errors(403, 404) },
@@ -403,6 +421,9 @@ export function registerSecretResourceRoutes() {
   // provider again when the last read is over a minute old (no plan quota).
   accountsRouter.openapi(createRoute({
     method: 'post', path: '/{workspaceId}/secret-resources/{secretId}/usage', tags: ['secrets'],
+    operationId: 'secret_resources.usage.refresh',
+    'x-kortix-action': 'project.read',
+    'x-kortix-exposure': 'agent',
     summary: 'Refresh the plan usage of one subscription login (ChatGPT, Claude)', ...auth,
     request: { params: SecretIdParam, query: z.object({ project_id: z.string().uuid().optional() }) },
     responses: { 200: json(z.object({ usage: SubscriptionUsageSchema.nullable(), provider_account: SubscriptionAccountSchema.nullable() }), 'Current plan usage and who the login signs in as; null when the provider does not say'), ...errors(400, 403, 404) },
@@ -429,6 +450,9 @@ export function registerSecretResourceRoutes() {
 
   accountsRouter.openapi(createRoute({
     method: 'delete', path: '/{workspaceId}/secret-resources/{secretId}', tags: ['secrets'],
+    operationId: 'secret_resources.delete',
+    'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_WRITE,
+    'x-kortix-exposure': 'agent',
     summary: 'Delete one secret resource and its grants', ...auth,
     request: { params: SecretIdParam },
     responses: { 200: json(z.object({ ok: z.boolean() }), 'Deleted'), ...errors(403, 404) },
@@ -449,6 +473,9 @@ export function registerSecretResourceRoutes() {
 
   accountsRouter.openapi(createRoute({
     method: 'put', path: '/{workspaceId}/secret-resources/{secretId}/grants/{userId}', tags: ['secrets'],
+    operationId: 'secret_resources.grants.set',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_SECRET_WRITE,
+    'x-kortix-exposure': 'agent',
     summary: 'Grant a member use of one secret', ...auth,
     request: { params: GrantParam },
     responses: { 200: json(View, 'Updated secret grants'), ...errors(400, 403, 404) },
@@ -482,6 +509,9 @@ export function registerSecretResourceRoutes() {
 
   accountsRouter.openapi(createRoute({
     method: 'delete', path: '/{workspaceId}/secret-resources/{secretId}/grants/{userId}', tags: ['secrets'],
+    operationId: 'secret_resources.grants.delete',
+    'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_WRITE,
+    'x-kortix-exposure': 'agent',
     summary: 'Revoke a member secret grant', ...auth,
     request: { params: GrantParam },
     responses: { 200: json(View, 'Updated secret grants'), ...errors(400, 403, 404) },

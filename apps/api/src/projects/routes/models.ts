@@ -240,6 +240,9 @@ export function registerModelsRoutes(): void {
 
   projectsApp.openapi(createRoute({
     method: 'get', path: '/{workspaceId}/model-access', tags: ['projects'],
+    operationId: 'model_access.get',
+    'x-kortix-action': 'project.read',
+    'x-kortix-exposure': 'agent',
     summary: 'Read project provider and model access', ...auth,
     request: { params: z.object({ workspaceId: z.string() }) },
     responses: { 200: { description: 'OK', content: { 'application/json': { schema: z.any() } } }, ...errors(403, 404) },
@@ -258,6 +261,9 @@ export function registerModelsRoutes(): void {
 
   projectsApp.openapi(createRoute({
     method: 'put', path: '/{workspaceId}/model-access', tags: ['projects'],
+    operationId: 'model_access.set',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_MODEL_WRITE,
+    'x-kortix-exposure': 'agent',
     summary: 'Enable or disable a project provider or model', ...auth,
     request: { params: z.object({ workspaceId: z.string() }),
       body: { content: { 'application/json': { schema: modelAccessChangeBody } } } },

@@ -234,6 +234,9 @@ export function registerProjectCredentialsRoutes(): void {
     createRoute({
       method: 'put',
       path: '/{workspaceId}/git-credential',
+      operationId: 'git_credential.set',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['github'],
       summary: 'Set the project Git credential',
       ...auth,

@@ -3977,6 +3977,7 @@
     }
   },
   "workspaceOnboarding": {
+    "setup": {"title": "Ausgewählte Apps einrichten", "description": "Verbinde die ausgewählten Apps. Gehe zurück, um deine Auswahl zu ändern, oder verbinde sie später."},
     "progress": "Schritt {current} von {total}",
     "back": "Zurück",
     "continue": "Weiter",

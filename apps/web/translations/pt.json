@@ -3977,6 +3977,7 @@
     }
   },
   "workspaceOnboarding": {
+    "setup": {"title": "Configure os apps selecionados", "description": "Conecte os apps escolhidos. Volte para alterar a seleção ou conecte-os mais tarde."},
     "progress": "Passo {current} de {total}",
     "back": "Voltar",
     "continue": "Continuar",

@@ -3977,6 +3977,7 @@
     }
   },
   "workspaceOnboarding": {
+    "setup": {"title": "選択したアプリを設定", "description": "選択したアプリを接続します。戻って選択を変更するか、後で接続できます。"},
     "progress": "ステップ {current}/{total}",
     "back": "戻る",
     "continue": "続ける",

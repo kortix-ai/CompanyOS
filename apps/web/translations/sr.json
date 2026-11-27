@@ -3977,6 +3977,7 @@
     }
   },
   "workspaceOnboarding": {
+    "setup": {"title": "Podesite izabrane aplikacije", "description": "Povežite izabrane aplikacije. Vratite se da promenite izbor ili ih povežite kasnije."},
     "progress": "Корак {current} од {total}",
     "back": "Назад",
     "continue": "Настави",

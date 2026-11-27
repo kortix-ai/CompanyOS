@@ -3977,6 +3977,7 @@
     }
   },
   "workspaceOnboarding": {
+    "setup": {"title": "设置所选应用", "description": "连接你选择的应用。返回以更改选择，或稍后再连接。"},
     "progress": "第 {current} 步，共 {total} 步",
     "back": "返回",
     "continue": "继续",

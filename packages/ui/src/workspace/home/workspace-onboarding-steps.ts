@@ -5,7 +5,7 @@ import type {
   OnboardingUseCase,
 } from '@kortix/sdk';
 
-export const ONBOARDING_STEPS = ['profile', 'model', 'apps', 'finish'] as const;
+export const ONBOARDING_STEPS = ['profile', 'model', 'apps', 'setup', 'finish'] as const;
 export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];
 
 /** Every use case the API keeps (`ONBOARDING_USE_CASES` in project-settings.ts), in display order. */

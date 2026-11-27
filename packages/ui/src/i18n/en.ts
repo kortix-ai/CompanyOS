@@ -2356,6 +2356,7 @@ const catalog = {
     }
   },
   "workspaceOnboarding": {
+    "setup": { "title": "Set up your selected apps", "description": "Connect only the apps you chose. Go back to change your selection, or continue and connect later." },
     "art": { "workspace": "Your Kortix workspace", "shared": "Shared agents, skills and memory" },
     "progress": "Step {current} of {total}",
     "back": "Back",

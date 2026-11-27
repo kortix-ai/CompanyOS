@@ -6,7 +6,6 @@ import {
   getSlackMode,
   getWorkspaceModelPicker,
   listConnectors,
-  listConnectToolkits,
   setWorkspaceOnboardingComplete,
   setWorkspaceOnboardingProfile,
   type AdminConnector,
@@ -17,9 +16,13 @@ import {
 } from "@kortix/sdk";
 import { contract, FRESHNESS, qk } from "@kortix/sdk/react";
 import { ArrowLeftIcon, ArrowRightIcon, KeyIcon } from "@phosphor-icons/react";
-import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
+import { ConnectorBrowse } from "../../customize/connectors/catalog/connector-browse";
+import { useCatalog } from "../../customize/connectors/catalog/use-catalog";
+import { connectedCatalogKeys, type CatalogEntry } from "../../customize/connectors/catalog/catalog-entry";
+import { appHref, appRefFromEntry } from "../../customize/connectors/connector-routes";
 import { useTranslations } from "../../i18n";
 import { Rise } from "../../internal/auth/auth-primitives";
 import { ConnectorLogo } from "../../internal/connector-logo/connector-logo";
@@ -43,10 +46,8 @@ import {
 } from "../projects/onboarding/connect-app";
 import { OnboardingArt } from "./onboarding-art";
 import {
-  ONBOARDING_APPS,
   ONBOARDING_STEPS,
   appConnector,
-  appLogoUrl,
   companySizes,
   firstOnboardingStep,
   hasSavedProfile,
@@ -95,6 +96,7 @@ export function WorkspaceOnboardingWizard({
   const next = () =>
     go(ONBOARDING_STEPS[Math.min(index + 1, ONBOARDING_STEPS.length - 1)]);
 
+  const [selectedApps, setSelectedApps] = useState<CatalogEntry[]>([]);
   const models = useWorkspaceModels(projectId);
   const apps = useWorkspaceApps(projectId);
 
@@ -134,7 +136,7 @@ export function WorkspaceOnboardingWizard({
               kind={
                 step === "profile"
                   ? "workspace"
-                  : step === "apps"
+                  : (step === "apps" || step === "setup")
                     ? "tools"
                     : step
               }
@@ -170,9 +172,14 @@ export function WorkspaceOnboardingWizard({
                 <AppsStep
                   projectId={projectId}
                   apps={apps}
-                  onNext={next}
+                  selected={selectedApps}
+                  onSelected={setSelectedApps}
+                  onNext={() => go(selectedApps.length ? "setup" : "finish")}
                   onBack={back}
                 />
+              ) : step === "setup" ? (
+                <AppsStep projectId={projectId} apps={apps} selected={selectedApps}
+                  onSelected={setSelectedApps} setup onNext={next} onBack={back} />
               ) : (
                 <FinishStep
                   projectId={projectId}
@@ -180,7 +187,7 @@ export function WorkspaceOnboardingWizard({
                   models={models}
                   apps={apps}
                   onFinished={onFinished}
-                  onBack={back}
+                  onBack={() => go(selectedApps.length ? "setup" : "apps")}
                 />
               )}
             </div>
@@ -567,30 +574,21 @@ function connectorState(
     : "needs_account";
 }
 
-function AppsStep({
-  projectId,
-  apps,
-  onNext,
-  onBack,
-}: {
+function AppsStep({ projectId, apps, selected, onSelected, setup = false, onNext, onBack }: {
   projectId: string;
   apps: AppsView;
+  selected: CatalogEntry[];
+  onSelected: (entries: CatalogEntry[]) => void;
+  setup?: boolean;
   onNext: () => void;
   onBack?: () => void;
 }) {
   const t = useTranslations("workspaceOnboarding");
   const [search, setSearch] = useState("");
-  const matches = (name: string) =>
-    name.toLowerCase().includes(search.trim().toLowerCase());
-  const catalog = useInfiniteQuery({
-    queryKey: ["onboarding-app-catalog", projectId, search.trim()],
-    queryFn: ({ pageParam }) => listConnectToolkits(projectId, { q: search.trim(), cursor: pageParam, limit: 24 }),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (page) => page.hasMore ? page.nextCursor : undefined,
-    staleTime: 60_000,
-  });
-  const catalogApps = catalog.data?.pages.flatMap((page) => page.toolkits) ?? [];
-  const shownApps = [...ONBOARDING_APPS.filter((app) => matches(app.name)), ...catalogApps.filter((app) => app.slug.toLowerCase() !== 'slack' && !ONBOARDING_APPS.some((featured) => featured.slug === app.slug))];
+  const catalog = useCatalog(projectId, search, { enabled: !setup });
+  const selectedKeys = new Set(selected.map((entry) => entry.key));
+  const toggle = (entry: CatalogEntry) => onSelected(selectedKeys.has(entry.key)
+    ? selected.filter((item) => item.key !== entry.key) : [...selected, entry]);
   const [connecting, setConnecting] = useState<string | null>(null);
   const [failures, setFailures] = useState<Record<string, string>>({});
   // The connector slug a first attempt chose, so a retry reuses the connector
@@ -634,113 +632,36 @@ function AppsStep({
 
   return (
     <div className="flex flex-col gap-5">
-      <Input
-        aria-label={t("apps.search")}
-        placeholder={t("apps.search")}
-        value={search}
-        onChange={(event) => setSearch(event.target.value)}
-      />
-      {apps.loading ? (
-        <div className="flex flex-col gap-2">
-          {Array.from({ length: ONBOARDING_APPS.length + 1 }, (_, n) => (
-            <Skeleton key={n} className="h-12 w-full" />
-          ))}
+      {apps.failed ? <Alert variant="destructive"><AlertDescription>{t("apps.readFailed")}</AlertDescription>
+        <AlertActions><Button onClick={apps.refresh} variant="outline">{t("tryAgain")}</Button></AlertActions></Alert> : null}
+      {!setup ? <>
+        <Input aria-label={t("apps.search")} placeholder={t("apps.search")}
+          value={search} onChange={(event) => setSearch(event.target.value)} />
+        <div className="max-h-96 overflow-y-auto rounded-md border p-3">
+        <ConnectorBrowse state={catalog} connectedKeys={connectedCatalogKeys(apps.connectors)}
+          hrefFor={(entry) => appHref(projectId, appRefFromEntry(entry))}
+          install={{ ready: !apps.loading, canWrite: false, pendingKey: null, onInstall: () => {} }}
+          selection={{ keys: selectedKeys, onToggle: toggle }}
+          emptyTitle={t("apps.noResults")} emptyDescription={t("apps.more")} />
         </div>
-      ) : apps.failed ? (
-        <Alert variant="destructive">
-          <AlertDescription>{t("apps.readFailed")}</AlertDescription>
-          <AlertActions>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={apps.refresh}
-            >
-              {t("tryAgain")}
-            </Button>
-          </AlertActions>
-        </Alert>
-      ) : (
-        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {matches("Slack") ? (
-            <AppRow
-              logo={<ConnectorLogo source={{ nativeApp: "slack" }} size="md" />}
-              name="Slack"
-              meta={t("apps.slackMeta")}
-              done={apps.slackInstalled}
-              action={
-                apps.slackInstallUrl ? (
-                  <Button
-                    asChild
-                    variant="outline"
-                    size="sm"
-                    className="hit-area-y-2"
-                  >
-                    <a
-                      href={apps.slackInstallUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      {t("apps.addSlack")}
-                    </a>
-                  </Button>
-                ) : (
-                  <Button
-                    asChild
-                    variant="outline"
-                    size="sm"
-                    className="hit-area-y-2"
-                  >
-                    <UiLink
-                      href={`/workspaces/${projectId}/admin/connectors?scope=channels`}
-                    >
-                      {t("apps.connect")}
-                    </UiLink>
-                  </Button>
-                )
-              }
-            />
-          ) : null}
-          {shownApps.map((app) => {
-            const busy = connecting === app.slug;
-            return (
-              <AppRow
-                key={app.slug}
-                logo={
-                  <ConnectorLogo source={{ icon: appLogoUrl(app) }} size="md" />
-                }
-                name={app.name}
-                meta={ONBOARDING_APPS.some((featured) => featured.slug === app.slug) ? t(`apps.meta.${app.slug}`) : app.name}
-                done={
-                  connectorState(appConnector(apps.connectors, app)) ===
-                  "connected"
-                }
-                error={failures[app.slug]}
-                action={
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    // The 29px button, a 44px tap target inside its row.
-                    className="hit-area-y-2"
-                    disabled={connecting !== null}
-                    aria-busy={busy || undefined}
-                    aria-label={t("apps.connectName", { name: app.name })}
-                    onClick={() => connect(app)}
-                  >
-                    {busy ? <Loading className="size-4 shrink-0" /> : null}
-                    {t("apps.connect")}
-                  </Button>
-                }
-              />
-            );
-          })}
-        </ul>
-      )}
-      {catalog.isLoading ? <p role="status" className="text-muted-foreground text-sm">{t('apps.loading')}</p> : null}
-      {catalog.isError ? <Alert variant="destructive"><AlertDescription>{t('apps.readFailed')}</AlertDescription><AlertActions><Button type="button" variant="outline" size="sm" onClick={() => void catalog.refetch()}>{t('tryAgain')}</Button></AlertActions></Alert> : null}
-      {!apps.loading && !apps.failed && !catalog.isLoading && !catalog.isError && !matches('Slack') && shownApps.length === 0 ? <p role="status" className="text-muted-foreground text-sm">{t('apps.noResults')}</p> : null}
-      {catalog.hasNextPage ? <Button type="button" variant="outline" disabled={catalog.isFetchingNextPage} aria-busy={catalog.isFetchingNextPage || undefined} onClick={() => void catalog.fetchNextPage()}>{t('apps.loadMore')}</Button> : null}
+      </> : <ul className="flex flex-col gap-3">
+        {selected.map((entry) => {
+          const app = entry.connector.composio ?? entry;
+          const managed = entry.connector.kind === "composio";
+          const slack = entry.connector.kind === "kortix" && entry.slug === "slack";
+          const done = slack ? apps.slackInstalled : connectorState(appConnector(apps.connectors, app)) === "connected";
+          return <AppRow key={entry.key} name={entry.name} meta={entry.description ?? entry.name}
+            logo={<ConnectorLogo source={{ icon: entry.icon }} size="md" />}
+            done={done} error={failures[app.slug]}
+            action={managed ? <Button type="button" variant="outline" size="sm"
+              disabled={connecting !== null} aria-busy={connecting === app.slug || undefined}
+              aria-label={t("apps.connectName", { name: entry.name })} onClick={() => connect(app)}>
+              {connecting === app.slug ? <Loading className="size-4 shrink-0" /> : null}{t("apps.connect")}
+            </Button> : <Button asChild variant="outline" size="sm"><UiLink target="_blank" rel="noopener noreferrer"
+              href={slack && apps.slackInstallUrl ? apps.slackInstallUrl : appHref(projectId, appRefFromEntry(entry))}>
+              {t("apps.connect")}</UiLink></Button>} />;
+        })}
+      </ul>}
       <p className="text-muted-foreground text-xs text-pretty">
         {t("apps.more")}{" "}
         <UiLink
@@ -757,7 +678,7 @@ function AppsStep({
           className="hit-area-y-1 gap-1.5"
           onClick={onNext}
         >
-          {apps.connected > 0 ? t("continue") : t("skip")}
+          {setup || selected.length > 0 ? t("continue") : t("skip")}
           <ArrowRightIcon className="size-4 shrink-0" />
         </Button>
       </StepFooter>

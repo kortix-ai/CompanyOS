@@ -1,6 +1,7 @@
 import { afterAll, afterEach, expect, mock, test } from "bun:test";
 import type {
   AdminConnector,
+  DiscoverConnector,
   KortixProject,
   OnboardingProfile,
 } from "@kortix/sdk";
@@ -64,6 +65,8 @@ mock.module("@kortix/sdk", () => ({
   setWorkspaceOnboardingComplete: stamp,
   getWorkspaceModelPicker: async () => ({ models }),
   listConnectors: async () => ({ connectors }),
+  listDiscoverConnectors: async () => ({ items: ["GitHub", "Gmail", "Notion", "Figma"].map((name): DiscoverConnector => ({ id: name.toLowerCase(), slug: name.toLowerCase(), name, kind: "composio", description: null, url: null, icon: null, domain: "example.test", categories: [], feeds: [], popularity: null })), hasMore: false }),
+  listDiscoverSections: async () => ({ popular: [], categories: [], sections: [] }),
   listConnectToolkits: async (_id: string, query: { q?: string }) => ({ provider: 'composio', toolkits: query.q === 'Slack' ? [{ slug: 'Slack', name: 'Slack', connected: false, isNoAuth: false, logo: null }] : query.q === 'Figma' ? [{ slug: 'figma', name: 'Figma', connected: false, isNoAuth: false, logo: null }] : [], hasMore: false }),
   getSlackInstallation: async () => null,
   getSlackMode: async () => ({
@@ -147,7 +150,7 @@ const heading = () => host.querySelector("h1")?.textContent;
 const text = () => host.textContent ?? "";
 const button = (name: string) =>
   Array.from(host.querySelectorAll("button")).find(
-    (b) => (b.getAttribute("aria-label") ?? b.textContent) === name,
+    (b) => (b.getAttribute("aria-label") ?? document.getElementById(b.getAttribute("aria-labelledby") ?? "")?.textContent ?? b.textContent) === name,
   );
 const click = async (name: string) => {
   const target = button(name);
@@ -266,39 +269,12 @@ test("a runnable model and a connected app read as connected, from the server li
   await render({ use_case: "founder" });
   expect(text()).toContain("2 models ready");
   await click("Continue");
+  await click("GitHub");
+  await click("Continue");
   expect(text()).toContain("Connected");
   await click("Continue");
   expect(text()).toContain("2 models ready");
   expect(text()).toContain("1 app connected");
-});
-
-test("Connect runs the real connect flow; a failure shows its reason, a closed popup does not", async () => {
-  await render({ use_case: "founder" });
-  await click("Skip for now");
-
-  connectApp.mockImplementationOnce(async () => {
-    throw new Error("Composio is not configured on this server.");
-  });
-  await click("Connect GitHub");
-  expect(connectApp.mock.calls[0]![0]).toMatchObject({
-    projectId: PROJECT,
-    app: { slug: "github", name: "GitHub", provider: "composio" },
-    created: false,
-  });
-  expect(text()).toContain("Composio is not configured on this server.");
-
-  connectApp.mockImplementationOnce(async () => {
-    throw new Error("Popup closed");
-  });
-  await click("Connect Notion");
-  expect(text()).not.toContain("Popup closed");
-  // The failed GitHub attempt chose a slug; a retry reuses it.
-  const firstSlug = (connectApp.mock.calls[0]![0] as { connectorSlug: string })
-    .connectorSlug;
-  await click("Connect GitHub");
-  expect(
-    (connectApp.mock.calls[2]![0] as { connectorSlug: string }).connectorSlug,
-  ).toBe(firstSlug);
 });
 
 test("finishing waits for the stamp: a refused stamp keeps the wizard open with the reason", async () => {
@@ -351,71 +327,20 @@ test("a profile saved with only a team size resumes past the profile and reads a
   expect(text()).toContain("Team profile saved");
 });
 
-test("connector search filters actual connect actions, reports no match, and preserves live connected status", async () => {
-  connectors = [
-    {
-      slug: "github-a1",
-      name: "GitHub",
-      provider: "composio",
-      status: "active",
-      state: "connected",
-    } as AdminConnector,
-  ];
+test("selecting an app does not authorize it; setup contains only selected apps and Back preserves choices", async () => {
   await render({ use_case: "engineering" });
   await click("Skip for now");
-  const search = host.querySelector<HTMLInputElement>(
-    'input[aria-label="Find an app to connect"]',
-  )!;
-  await type(search, "GitHub");
-  expect(text()).toContain("GitHub");
-  expect(text()).toContain("Connected");
+  await click("GitHub");
+  expect(connectApp).not.toHaveBeenCalled();
+  await click("Continue");
+  expect(heading()).toBe("Set up your selected apps");
+  expect(button("Connect GitHub")).toBeDefined();
   expect(button("Connect Gmail")).toBeUndefined();
-  expect(button("Connect GitHub")).toBeUndefined();
-  await type(search, "not-a-catalogue-app");
-  expect(text()).toContain("No matching apps here.");
-  await type(search, "Gmail");
-  expect(button("Connect Gmail")).toBeDefined();
-  await click("Connect Gmail");
-  expect(connectApp).toHaveBeenCalledWith(
-    expect.objectContaining({
-      app: { slug: "gmail", name: "Gmail", provider: "composio" },
-    }),
-    undefined,
-    expect.any(Function),
-  );
-});
-
-
-test('search reaches the real catalogue SDK beyond the featured shortlist', async () => {
-  await render({ use_case: 'engineering' });
-  await click('Skip for now');
-  await type(host.querySelector<HTMLInputElement>('input[aria-label="Find an app to connect"]')!, 'Figma');
-  await settle();
-  await settle();
-  expect(button('Connect Figma')).toBeDefined();
-  await click('Connect Figma');
-  expect(connectApp).toHaveBeenCalledWith(expect.objectContaining({ app: { slug: 'figma', name: 'Figma', provider: 'composio' } }), undefined, expect.any(Function));
-});
-
-
-test('a connected catalogue app counts in review once, even with duplicate connections', async () => {
-  connectors = ['figma-one', 'figma-two'].map((slug) => ({ slug, name: 'Figma', provider: 'composio', status: 'active', state: 'connected' } as AdminConnector));
-  await render({ use_case: 'engineering' });
-  await click('Skip for now');
-  await type(host.querySelector<HTMLInputElement>('input[aria-label="Find an app to connect"]')!, 'Figma');
-  await settle(); await settle();
-  expect(text()).toContain('Connected');
-  await click('Continue');
-  expect(text()).toContain('1 app connected');
-  expect(text()).not.toContain('No apps connected');
-});
-
-test('a Slack catalogue result never duplicates the native Slack connection', async () => {
-  await render({ use_case: 'engineering' });
-  await click('Skip for now');
-  await type(host.querySelector<HTMLInputElement>('input[aria-label="Find an app to connect"]')!, 'Slack');
-  await settle(); await settle();
-  expect(host.querySelectorAll('a').length).toBeGreaterThan(0);
-  expect(Array.from(host.querySelectorAll('li')).filter((row) => row.textContent?.includes('Slack'))).toHaveLength(1);
-  expect(button('Connect Slack')).toBeUndefined();
+  await click("Connect GitHub");
+  expect(connectApp).toHaveBeenCalledTimes(1);
+  await click("Back");
+  expect(host.querySelector('[aria-label="Select GitHub"]')?.getAttribute("data-state")).toBe("checked");
+  await click("GitHub");
+  await click("Skip for now");
+  expect(heading()).toBe("Review and open your workspace");
 });

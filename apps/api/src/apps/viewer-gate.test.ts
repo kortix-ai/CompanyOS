@@ -345,6 +345,8 @@ describe('GET /_kortix/viewer', () => {
       account_id: ACCOUNT_ID,
       project_id: '66666666-6666-4666-8666-666666666666',
       user_id: USER_ID,
+      session_kind: null,
+      auth_time: null,
       email: `${USER_ID}@example.test`,
       name: 'Viewer Name',
       picture: null,
@@ -394,5 +396,23 @@ describe('GET /_kortix/viewer', () => {
       appRow(),
     );
     expect(refused.status).toBe(401);
+  });
+});
+
+
+describe('App viewer session provenance', () => {
+  test('viewer exposes signed cookie provenance and original authentication time', async () => {
+    for (const sessionKind of ['browser', 'access_link'] as const) {
+      const token = createAppAccessToken({
+        appId: APP_ID, kind: 'kortix', userId: USER_ID, revision: 3,
+        sessionKind, authTime: 900, expiresAt: new Date(Date.now() + 3600_000),
+      });
+      const response = await appViewerEndpointResponse(
+        req({ headers: { cookie: `__Host-kortix_app_access=${token}` } }, '/_kortix/viewer'),
+        URL_HTTPS, appRow(),
+      );
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ session_kind: sessionKind, auth_time: 900 });
+    }
   });
 });

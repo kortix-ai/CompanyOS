@@ -10,6 +10,7 @@ import {
 } from '../../core/session-sync/session-sync-controller';
 import { getCurrentRuntimeSandboxId, getCurrentRuntimeUrl } from '../../core/session/current-runtime';
 import { useSyncStore } from '../stores/sync-store';
+import { compareStrings } from '../stores/sync-store/binary';
 import { getSessionLogPage } from '../../core/rest/projects-client/sessions';
 import { EMPTY_SESSION_LOG_STATE, applySessionLogPage, type SessionLogState } from '../../core/session-log/store';
 import { loadSessionLogPage, readSessionLogAnswer } from '../../core/session-log/source';
@@ -95,11 +96,6 @@ function findExistingSessionEntry(
     match = entry;
   }
   return match;
-}
-
-/** Lexicographic compare, as upstream's `cmp` (`server-session.ts:28`). */
-function cmp(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
 }
 
 /**
@@ -204,9 +200,9 @@ export async function readSessionMessagePage(
         info: item.info,
         parts: (Array.isArray(item.parts) ? item.parts : [])
           .filter((part) => !!part?.id)
-          .sort((a, b) => cmp(a.id, b.id)),
+          .sort((a, b) => compareStrings(a.id, b.id)),
       }))
-      .sort((a, b) => cmp(messageKey(a.info), messageKey(b.info))),
+      .sort((a, b) => compareStrings(messageKey(a.info), messageKey(b.info))),
     nextCursor: result.response?.headers.get('x-next-cursor') || undefined,
   };
 }

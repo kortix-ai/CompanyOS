@@ -438,6 +438,58 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
     const promise = new Promise<SessionLogPage | null>((done) => { resolve = done; });
     return { promise, resolve };
   }
+  test('KRTX-5046: disposal aborts pending stored and live reads without repainting', async () => {
+    for (const live of [false, true]) {
+      const pending = deferredPage();
+      let signal: AbortSignal | undefined;
+      const loader: LoadSessionLogPage = async (_p, _s, query, abort) => {
+        signal = abort;
+        return !!query.live === live ? pending.promise : page();
+      };
+      mount({ loader, boxReady: live });
+      await flush();
+      act(() => renderer?.unmount());
+      renderer = null;
+      expect(signal?.aborted).toBe(true);
+      await act(async () => pending.resolve(page()));
+      await flush();
+      expect(useSyncStore.getState().sessionLogs[SESSION]).toBeUndefined();
+    }
+  });
+
+  test('KRTX-5046: disposal cancels pending retries', async () => {
+    let reads = 0;
+    mount({ loader: async () => { reads++; throw new Error('offline'); } });
+    await flush();
+    expect(timers.filter((timer) => !timer.cancelled)).toHaveLength(1);
+    act(() => renderer?.unmount());
+    renderer = null;
+    expect(timers.every((timer) => timer.cancelled)).toBe(true);
+    await runTimers();
+    expect(reads).toBe(1);
+  });
+
+  test('KRTX-5046: replacing the loader disposes the old read before the new answer', async () => {
+    const pending = deferredPage();
+    const first: LoadSessionLogPage = () => pending.promise;
+    const second: LoadSessionLogPage = async () => userPage();
+    let replace = (_loader: LoadSessionLogPage) => {};
+    render(() => {
+      const [loader, setLoader] = useState<LoadSessionLogPage>(() => first);
+      replace = (next) => setLoader(() => next);
+      useSessionLogSync(PROJECT, SESSION, { enabled: true, loader, joinStream, schedule });
+      return null;
+    });
+    await flush();
+    act(() => replace(second));
+    await flush();
+    const held = useSyncStore.getState().sessionLogs[SESSION];
+    expect(held).toBeDefined();
+    await act(async () => pending.resolve(page()));
+    await flush();
+    expect(useSyncStore.getState().sessionLogs[SESSION]).toBe(held);
+  });
+
   const userPage = (): SessionLogPage => ({ ...page(), messages: page().messages.filter((m) => m.role === 'user') });
   // What a user-only page settles to: every reply inside its span leaves; the reply after its
   // last seq is newer than the page (the journal had not posted it) and stays.
@@ -658,11 +710,11 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
       act(() => stream.onControl(ended('new')));
       act(() => switchSession('kses_other'));
       await flush();
-      const before = reads;
-      await act(async () => pending.resolve(null));
+      const before = [reads, liveReads];
+      await act(async () => pending.resolve(page()));
       await flush();
       await runTimers();
-      expect(reads).toBe(before);
+      expect([reads, liveReads]).toEqual(before);
       expect(useSyncStore.getState().sessionLogs[SESSION]).toBeUndefined();
       expect(useSyncStore.getState().sessionLogs.kses_other).toBeDefined();
       expect(timers.filter((t) => !t.cancelled)).toHaveLength(0);
@@ -1115,7 +1167,101 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
       expect(joined.at(-1)!.options.schema).toBe('v2');
     });
 
-    test('overlapping reload triggers share one in-flight box read', async () => {
+    for (const signal of ['reconnect', 'resync', 'visible'] as const) {
+      test(`KRTX-4973: ${signal} during a pre-gap box read queues one fresh read and restores the assistant`, async () => {
+        const pending = deferredPage();
+        let apiReads = 0;
+        let boxReads = 0;
+        let committed = false;
+        mount({
+          loader: async () => { apiReads++; return userPage(); },
+          livePage: async () => {
+            boxReads++;
+            if (boxReads === 2) return pending.promise;
+            return committed ? page() : userPage();
+          },
+        });
+        await flush();
+        expect([apiReads, boxReads]).toEqual([1, 1]);
+        expect(heldMessages()).toEqual(userPage().messages);
+        const stream = latestStream();
+        act(() => stream.onConnectionChange(true));
+        // This snapshot was taken before the gap; hold its response on the wire.
+        act(() => stream.onRuntimeResync());
+        await flush();
+        expect(boxReads).toBe(2);
+        committed = true;
+        const notify = () => {
+          if (signal === 'reconnect') {
+            stream.onConnectionChange(false);
+            stream.onConnectionChange(true);
+          } else if (signal === 'resync') {
+            stream.onRuntimeResync();
+          } else {
+            notifyHostSignal('visible');
+          }
+        };
+        // Repeated invalidations must not start parallel reads or queue one per signal.
+        act(() => { notify(); notify(); notify(); });
+        await flush();
+        expect([apiReads, boxReads]).toEqual([1, 2]);
+        expect(heldMessages()).toEqual(userPage().messages);
+        await act(async () => pending.resolve(userPage()));
+        await flush();
+        expect([apiReads, boxReads]).toEqual([1, 3]);
+        expect(heldMessages()).toEqual(page().messages);
+        // No turn-end, reload, or further signal is needed to recover the reply.
+        await flush();
+        await runTimers();
+        expect([apiReads, boxReads]).toEqual([1, 3]);
+        expect(heldMessages()).toEqual(page().messages);
+      });
+    }
+
+    test('KRTX-4973: invalidations during stored fallback after a failed live read queue one fresh live read', async () => {
+      const fallback = deferredPage();
+      let storedReads = 0;
+      let liveReads = 0;
+      mount({
+        boxReady: true,
+        loader: async (_project, _session, query) => {
+          if (!query.live) {
+            storedReads++;
+            return storedReads === 1 ? userPage() : fallback.promise;
+          }
+          liveReads++;
+          if (liveReads === 2) throw new Error('daemon 503');
+          return { ...(liveReads === 1 ? userPage() : page()), source: 'box' };
+        },
+      });
+      await flush();
+      expect([storedReads, liveReads]).toEqual([1, 1]);
+      expect(heldMessages()).toEqual(userPage().messages);
+      const stream = latestStream();
+      act(() => stream.onRuntimeResync());
+      await flush();
+      expect([storedReads, liveReads]).toEqual([2, 2]);
+      // The failed live read is now awaiting its stale stored fallback.
+      act(() => {
+        stream.onConnectionChange(false);
+        stream.onConnectionChange(true);
+        stream.onRuntimeResync();
+        stream.onRuntimeResync();
+      });
+      await flush();
+      expect([storedReads, liveReads]).toEqual([2, 2]);
+      expect(heldMessages()).toEqual(userPage().messages);
+      await act(async () => fallback.resolve(userPage()));
+      await flush();
+      expect([storedReads, liveReads]).toEqual([2, 3]);
+      expect(heldMessages()).toEqual(page().messages);
+      await flush();
+      await runTimers();
+      expect([storedReads, liveReads]).toEqual([2, 3]);
+      expect(heldMessages()).toEqual(page().messages);
+    });
+
+    test('overlapping reconnects share the pending read and coalesce one post-gap read', async () => {
       let boxReads = 0;
       let hang = false;
       let release: ((v: unknown) => void) | null = null;
@@ -1138,14 +1284,15 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
       act(() => v2.options.onConnectionChange(true));
       await flush();
       expect(boxReads).toBe(2); // the second reload joined the in-flight read
+      hang = false;
       await act(async () => release?.(undefined));
       await flush();
-      expect(boxReads).toBe(2); // the failed read counted once; one failure arms nothing
-      // A later reconnect reads again (one failure so far).
+      expect(boxReads).toBe(3); // one fresh snapshot follows the pre-gap read
+      // A later reconnect starts a new read.
       act(() => v2.options.onConnectionChange(false));
       act(() => v2.options.onConnectionChange(true));
       await flush();
-      expect(boxReads).toBe(3);
+      expect(boxReads).toBe(4);
     });
 
   });

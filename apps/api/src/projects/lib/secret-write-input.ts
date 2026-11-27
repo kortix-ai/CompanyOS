@@ -26,7 +26,7 @@ import { CODEX_AUTH_JSON_SECRET_NAME, isTeamsInstallSecretName, normalizeString 
  * like an exact connector URL. Not a refusal of the agent as such.
  */
 export const SECRET_DELIVERY_NEEDS_PERSON =
-  "A secret's delivery policy decides which hosts may receive its value, so a person approves it: an owner, admin or manager sets it in Customize → Secrets. An agent session may create a plain runtime secret or a connector-scoped one.";
+  "A secret's delivery policy decides which hosts may receive its value, so a person approves it: an owner, admin or manager opens the secret in Customize → Secrets, sets \"Can your code read this value?\" to \"Enforce at the network\" and lists its approved hosts, or runs `kortix secrets delivery <IDENTIFIER> enforced --allow-host <host>`. An agent session may create a plain runtime secret or a connector-scoped one.";
 
 export type SecretWriteInput = {
   name: string;

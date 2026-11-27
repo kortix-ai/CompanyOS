@@ -94,7 +94,7 @@ export const THEME = {
     accentForeground: 'hsl(0 0% 12.2%)', // --accent-foreground
     destructive: 'hsl(357.2 100% 45.3%)', // --destructive
     destructiveForeground: 'hsl(60 0% 98%)', // --destructive-foreground
-    border: 'hsl(0 0% 88.6%)', // --border
+    border: 'hsl(0 0% 86.4%)', // --border
     input: 'hsl(0 0% 92.9%)', // --input
     ring: 'hsl(204 100% 50%)', // --ring
     pane: 'hsl(0 0% 100%)', // --pane
@@ -134,7 +134,7 @@ export const THEME = {
     accentForeground: 'hsl(0 0% 100%)', // --accent-foreground
     destructive: 'hsl(358.8 100% 69.6%)', // --destructive
     destructiveForeground: 'hsl(60 0% 98%)', // --destructive-foreground
-    border: 'hsl(0 0% 14.9%)', // --border
+    border: 'hsl(0 0% 17.2%)', // --border
     input: 'hsl(0 0% 11%)', // --input
     ring: 'hsl(204 100% 50%)', // --ring
     pane: 'hsl(0 0% 4.7%)', // --pane

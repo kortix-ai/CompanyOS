@@ -10,7 +10,7 @@
  */
 import { describe, expect, test } from 'bun:test';
 import { appAccessCookieName, appAccessSecret, appAccessSessionUrl, createAppAccessToken, verifyAppAccessToken } from './access';
-import { appViewerSessionAal, authorizeAppRequest, renewedAppAccessCookie } from './public-proxy-access';
+import { appViewerSessionAal, appViewerSessionProvenance, authorizeAppRequest, renewedAppAccessCookie } from './public-proxy-access';
 
 const APP_ID = '00000000-0000-4000-a000-0000000000b1';
 const VIEWER = '00000000-0000-4000-a000-0000000000b2';
@@ -33,7 +33,7 @@ describe('the App cookie records the second factor of the session that opened it
   test('access-session marks the link only when asked to; redeeming keeps exactly that', async () => {
     for (const aal of ['aal2', undefined] as const) {
       const link = new URL(appAccessSessionUrl(`${origin}/`, { appId: APP_ID, accessRevision: 3 }, VIEWER, new Date(), aal).url);
-      expect(verifyAppAccessToken(link.searchParams.get('__kortix_access')!, APP_ID)?.aal).toBe(aal);
+      expect(verifyAppAccessToken(link.searchParams.get('__kortix_access') ?? '', APP_ID)?.aal).toBe(aal);
       const redeemed = await authorizeAppRequest(new Request(link), link, app, async () => true);
       expect(redeemed?.status).toBe(303);
       expect(payloadOf(redeemed!.headers.get('set-cookie')).aal).toBe(aal);
@@ -60,4 +60,48 @@ describe('the App cookie records the second factor of the session that opened it
     expect(renewed('aal2').userId).toBe(VIEWER);
     expect(renewed().aal).toBeUndefined();
   });
+});
+
+
+describe('App access-session provenance survives redemption and renewal', () => {
+  test('browser and access-link cookies keep their original provenance and timestamp', async () => {
+    for (const sessionKind of ['browser', 'access_link'] as const) {
+      const openedAt = new Date();
+      const link = new URL(appAccessSessionUrl(origin, app, VIEWER, openedAt, undefined, sessionKind).url);
+      const linkPayload = verifyAppAccessToken(link.searchParams.get('__kortix_access') ?? '', APP_ID);
+      expect(linkPayload?.sessionKind).toBe(sessionKind);
+      expect(linkPayload?.authTime).toBe(Math.floor(openedAt.getTime() / 1000));
+      const redeemed = await authorizeAppRequest(new Request(link), link, app, async () => true);
+      const cookie = redeemed?.headers.get('set-cookie');
+      expect(cookie).toBeTruthy();
+      const value = cookie?.split(';')[0]?.split('=').slice(1).join('=') ?? '';
+      const redeemedPayload = verifyAppAccessToken(value, APP_ID);
+      expect(redeemedPayload?.sessionKind).toBe(sessionKind);
+      expect(redeemedPayload?.authTime).toBe(linkPayload?.authTime);
+      const later = new Date(openedAt.getTime() + 5 * 3600_000);
+      const renewed = renewedAppAccessCookie(withCookie(value), new URL(origin), app, VIEWER, later);
+      expect(renewed).toBeTruthy();
+      const renewedValue = renewed?.split(';')[0]?.split('=').slice(1).join('=') ?? '';
+      const renewedPayload = verifyAppAccessToken(renewedValue, APP_ID, appAccessSecret(), later);
+      expect(renewedPayload?.sessionKind).toBe(sessionKind);
+      expect(renewedPayload?.authTime).toBe(linkPayload?.authTime);
+    }
+  });
+
+  test('an unclassified access-session caller defaults to access_link', () => {
+    const link = new URL(appAccessSessionUrl(origin, app, VIEWER).url);
+    expect(verifyAppAccessToken(link.searchParams.get('__kortix_access') ?? '', APP_ID)?.sessionKind).toBe('access_link');
+  });
+});
+
+
+test('provenance is not borrowed across viewers, revisions, missing or legacy cookies', () => {
+  const signed = createAppAccessToken({ appId: APP_ID, kind: 'kortix', userId: VIEWER,
+    revision: 3, sessionKind: 'browser', authTime: 900, expiresAt: new Date(Date.now() + 3600_000) });
+  const url = new URL(origin);
+  expect(appViewerSessionProvenance(withCookie(signed), url, app, VIEWER)).toEqual({ sessionKind: 'browser', authTime: 900 });
+  expect(appViewerSessionProvenance(withCookie(signed), url, app, OTHER)).toEqual({});
+  expect(appViewerSessionProvenance(withCookie(signed), url, { appId: APP_ID, accessMode: 'public', accessRevision: 4 }, VIEWER)).toEqual({});
+  expect(appViewerSessionProvenance(new Request(url), url, app, VIEWER)).toEqual({});
+  expect(appViewerSessionProvenance(withCookie(cookieValue()), url, app, VIEWER).sessionKind).toBeUndefined();
 });

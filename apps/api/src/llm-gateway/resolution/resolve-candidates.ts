@@ -7,6 +7,7 @@ import {
   resolveSessionProviderSecrets,
 } from '../../secrets/account-resource';
 import { modelAccessAllows, modelAccessProvider } from '../model-access';
+import { isRestrictedManagedModelId } from '../restricted-models';
 import { toWireModel } from './effective';
 import {
   type AuthedPrincipal,
@@ -458,10 +459,16 @@ async function resolveCustomCandidates(context: Context, provider: CustomLlmProv
  * A managed audio model (the gateway's `/audio/*` routes) takes the same gates.
  */
 async function resolveManagedCandidates(principal: AuthedPrincipal, effectiveModel: string,
-  access: Awaited<ReturnType<typeof getProjectModelAccess>>): Promise<UpstreamDescriptor[]> {
+  access: Awaited<ReturnType<typeof getProjectModelAccess>>, restrictedModels: readonly string[]): Promise<UpstreamDescriptor[]> {
   const managed = getRuntimeManagedModel(effectiveModel)
     ?? (isManagedAudioModelId(effectiveModel) ? { id: effectiveModel } : undefined);
   if (!managed || !config.KORTIX_MANAGED_PROVIDER_ENABLED) return [];
+  // Restricted (restricted-models.ts): a project an operator did not turn it on
+  // for is answered as for a model that does not exist, before any plan gate.
+  if (isRestrictedManagedModelId(effectiveModel) && !restrictedModels.includes(effectiveModel)) {
+    throw new GatewayResolutionError('model_not_found', `"${effectiveModel}" is not a recognized model.`,
+      'Check the model id, or choose a different model.');
+  }
   if (access.disabledProviders.includes('kortix')) throw new GatewayResolutionError('provider_disabled',
     'Kortix Managed Models are disabled for this project.',
     'Choose a model from an enabled provider, or enable Kortix Managed Models in Models.');
@@ -551,7 +558,7 @@ export async function resolveCandidates(
       byokMiss = resolved;
     }
   }
-  const candidates = await resolveManagedCandidates(principal, effectiveModel, access);
+  const candidates = await resolveManagedCandidates(principal, effectiveModel, access, resolution?.restrictedModels ?? []);
   if (candidates.length) return candidates;
 
   // A BYOK-recognized provider with no usable key wins over the generic

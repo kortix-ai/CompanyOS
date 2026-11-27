@@ -11,7 +11,8 @@ import {
   readCustomProviders,
   upsertCustomProvider,
 } from '../llm-gateway/custom-providers';
-import { projectsView, updateProjectRows } from '../workspaces/rows';
+import { projectsView, updateProjectRows, updateProjectRowsReturning } from '../workspaces/rows';
+import { readRestrictedModelGrants } from '../llm-gateway/restricted-models';
 
 /** The transaction handle a `db.transaction` callback receives. */
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -47,7 +48,25 @@ async function readProjectGatewayResolution(projectId: string) {
   return {
     access: readModelAccess(metadata),
     customProviders: readCustomProviders(metadata),
+    restrictedModels: readRestrictedModelGrants(metadata),
   };
+}
+
+/**
+ * Replace the restricted managed models turned on for a project
+ * (`metadata.restricted_models`, RESTRICTED_MODELS_METADATA_KEY; operators
+ * only: admin/index.ts). Returns the grants before and after, and the project's
+ * account for the audit row, or null when the project does not exist.
+ */
+export async function setProjectRestrictedModels(projectId: string, models: readonly string[]) {
+  return db.transaction(async (tx) => {
+    const before = readRestrictedModelGrants(await lockProjectMetadata(tx, projectId).catch(() => null));
+    const [row] = await updateProjectRowsReturning(eq(projectsView.projectId, projectId), {
+      metadata: sql`jsonb_set(coalesce(${projectsView.metadata}, '{}'::jsonb), '{restricted_models}', ${JSON.stringify(models)}::jsonb)`,
+      updatedAt: new Date(),
+    }, tx);
+    return row ? { accountId: row.accountId, before, after: readRestrictedModelGrants(row.metadata) } : null;
+  });
 }
 
 /** Row locking prevents two switches from replacing each other's changes. */

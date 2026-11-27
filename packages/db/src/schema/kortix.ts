@@ -1370,7 +1370,10 @@ export const accountSecretResources = kortixSchema.table('account_secret_resourc
   providerAccount: jsonb('provider_account'),
   /** The last check of a provider API key against its provider, run when the
    *  key is saved or rotated and on request: `verified`, `invalid` (the
-   *  provider refused it) or `unknown` (no clean answer). NULL: never checked. */
+   *  provider refused it) or `unknown` (no clean answer). NULL: never checked.
+   *  A Claude login: `invalid` when Anthropic forbade it (403) on a model call;
+   *  the gateway skips it for 15 min after `verified_at`, and the next answer
+   *  Anthropic gives on it clears all three columns. */
   verifyStatus: varchar('verify_status', { length: 16 }),
   verifiedAt: timestamp('verified_at', { withTimezone: true }),
   /** The provider's words for `invalid`, or why the check had no answer. */
@@ -1656,6 +1659,36 @@ export const projectSpaceMembers = kortixSchema.table(
     primaryKey({ columns: [table.spaceId, table.userId] }),
     // "My channels" and the cleanup when someone leaves the account.
     index('idx_project_space_members_user').on(table.userId),
+  ],
+);
+
+/**
+ * A channel's agent changes, for the lines its timeline shows ("Kortix was
+ * added by <person>"). People's joins need no row here: `project_space_members`
+ * keeps `added_by` and `added_at`. Written by the agents PATCH
+ * (`projects/lib/project-space-activity.ts`); read by
+ * `GET /spaces/:spaceId/activity`. Best effort: a failed write is logged,
+ * never a failed PATCH.
+ */
+export const projectSpaceActivity = kortixSchema.table(
+  'project_space_activity',
+  {
+    activityId: uuid('activity_id').primaryKey().defaultRandom(),
+    spaceId: uuid('space_id')
+      .notNull()
+      .references(() => projectSpaces.spaceId, { onDelete: 'cascade' }),
+    /** `agent_added` or `agent_removed`. */
+    kind: text('kind').notNull(),
+    /** The agent's name in kortix.yaml. */
+    agentName: text('agent_name').notNull(),
+    /** Who changed the agent list. Null: not known. */
+    actorUserId: uuid('actor_user_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    check('project_space_activity_kind_check', sql`${table.kind} in ('agent_added', 'agent_removed')`),
+    // The timeline reads one channel's newest lines.
+    index('idx_project_space_activity_space').on(table.spaceId, table.createdAt.desc()),
   ],
 );
 

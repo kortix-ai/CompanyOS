@@ -262,7 +262,7 @@ function ApprovalActionRow({
           {/* The concrete arguments — recipients, amount, command — so the human
               decides on the real thing, not just the verb. */}
           {args.length > 0 && (
-            <dl className="border-border/60 mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 border-t pt-2 text-xs">
+            <dl className="border-border mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 border-t pt-2 text-xs">
               {args.map((a) => (
                 <div key={a.key} className="col-span-2 grid grid-cols-subgrid">
                   <dt className="text-muted-foreground font-mono">{a.key}</dt>

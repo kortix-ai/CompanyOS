@@ -1,7 +1,7 @@
 {
   "generatedAt": "static",
-  "count": 1826,
-  "aliases": 713,
+  "count": 1841,
+  "aliases": 719,
   "routes": [
     {
       "method": "GET",
@@ -58,6 +58,10 @@
     {
       "method": "POST",
       "path": "/internal/gateway/claude-credentials"
+    },
+    {
+      "method": "POST",
+      "path": "/internal/gateway/claude-forbidden"
     },
     {
       "method": "POST",
@@ -1180,6 +1184,10 @@
     {
       "method": "PUT",
       "path": "/v1/admin/api/projects/:id/features"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/admin/api/projects/:id/restricted-models"
     },
     {
       "method": "GET",
@@ -2490,6 +2498,16 @@
       "method": "POST",
       "path": "/v1/projects/:workspaceId/access/pending-invites/:inviteId/resend",
       "aliasOf": "/v1/workspaces/:workspaceId/access/pending-invites/:inviteId/resend"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/agent-directory",
+      "aliasOf": "/v1/workspaces/:workspaceId/agent-directory"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/agent-directory/:name/pause",
+      "aliasOf": "/v1/workspaces/:workspaceId/agent-directory/:name/pause"
     },
     {
       "method": "GET",
@@ -4806,6 +4824,11 @@
     },
     {
       "method": "GET",
+      "path": "/v1/projects/:workspaceId/spaces/:spaceId/activity",
+      "aliasOf": "/v1/workspaces/:workspaceId/spaces/:spaceId/activity"
+    },
+    {
+      "method": "GET",
       "path": "/v1/projects/:workspaceId/spaces/:spaceId/apps",
       "aliasOf": "/v1/workspaces/:workspaceId/spaces/:spaceId/apps"
     },
@@ -4985,6 +5008,21 @@
       "aliasOf": "/v1/workspaces/:workspaceId/version-diff"
     },
     {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/workspace-cache",
+      "aliasOf": "/v1/workspaces/:workspaceId/workspace-cache"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/workspace-cache",
+      "aliasOf": "/v1/workspaces/:workspaceId/workspace-cache"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/workspace-cache/build",
+      "aliasOf": "/v1/workspaces/:workspaceId/workspace-cache/build"
+    },
+    {
       "method": "POST",
       "path": "/v1/projects/create-repo",
       "aliasOf": "/v1/workspaces/create-repo"
@@ -5086,6 +5124,10 @@
     {
       "method": "GET",
       "path": "/v1/public/responses/:token"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/qualiloop/chat"
     },
     {
       "method": "POST",
@@ -5495,6 +5537,14 @@
     {
       "method": "POST",
       "path": "/v1/workspaces/:workspaceId/access/pending-invites/:inviteId/resend"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/agent-directory"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/agent-directory/:name/pause"
     },
     {
       "method": "GET",
@@ -7794,6 +7844,10 @@
     },
     {
       "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/spaces/:spaceId/activity"
+    },
+    {
+      "method": "GET",
       "path": "/v1/workspaces/:workspaceId/spaces/:spaceId/apps"
     },
     {
@@ -7959,6 +8013,18 @@
     {
       "method": "GET",
       "path": "/v1/workspaces/:workspaceId/version-diff"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/workspace-cache"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/workspace-cache"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/workspace-cache/build"
     },
     {
       "method": "POST",

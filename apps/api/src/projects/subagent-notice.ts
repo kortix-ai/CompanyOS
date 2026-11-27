@@ -116,7 +116,7 @@ export function subagentNoticeText(input: {
     '</kortix_system>',
     ...(taskLines.length > 0 ? ['', ...taskLines] : []),
     '',
-    `Continue your task with this result. To send this subagent a follow-up, call \`agent\` with task_id ${input.childId}. To read its whole transcript: \`kortix sessions log ${input.childId}\`.`,
+    `The person has not seen this report: relay what matters. Say what finished and what still runs, its findings as specific facts, anything it corrects, and where its evidence is. To send this subagent a follow-up, call \`agent\` with task_id ${input.childId}. To read its whole transcript: \`kortix sessions log ${input.childId}\`.`,
   ].join('\n');
 }
 

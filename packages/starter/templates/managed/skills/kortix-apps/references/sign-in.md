@@ -51,6 +51,38 @@ id of the App they signed in to. Check `groups`, `role` or `via_app_id` in
 every function whose data is not meant for all of them; `via_app_id` lets one
 backend serve each App's readers only that App's data.
 
+## Require a human browser session for sensitive actions
+
+App JWTs from `/_kortix/token` carry `session_kind: "browser"` when the
+App session was opened with a verified Kortix browser sign-in, or
+`session_kind: "access_link"` when opened with a PAT or agent credential
+(including `kortix apps access-link`). `auth_time` is Unix seconds when that
+App sign-in link was issued, not when the JWT was refreshed. Redemption and
+cookie renewal preserve both values. This is session provenance, not proof
+that a human clicked a particular button, and not MFA or fresh reauthentication.
+
+`/_kortix/viewer` exposes the same `session_kind` and `auth_time`. Legacy
+cookies and bearer-only callers have no proven browser provenance: JWT
+claims are absent and viewer fields are `null`. Direct CLI/API token mints
+do not claim browser provenance. Treat missing values as a denial.
+
+Check the **verified JWT on the backend**, not a client-supplied viewer field,
+before approving payments or sending messages as a person. Keep the normal
+membership, role and group checks too. For example, after signature, issuer
+and audience verification (or `ctx.auth.getUserIdentity()` in Convex):
+
+```ts
+if (identity?.session_kind !== "browser") {
+  throw new Error("Open this App from your own Kortix browser sign-in.");
+}
+```
+
+Optionally require a recent numeric `auth_time` for a sensitive operation.
+Renewing the cookie does not make that time fresh. There is no step-up
+endpoint in this contract; reopening from Kortix establishes a new App session.
+Never infer a human sign-in from a member's name, role, groups, or absence of
+`kind: "agent"` alone.
+
 ## A Convex backend App: accept the token
 
 Convex reads three deployment variables: `KORTIX_AUTH_ISSUER` (the workspace

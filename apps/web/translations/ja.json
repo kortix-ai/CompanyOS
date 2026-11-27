@@ -87,6 +87,7 @@
     "reconnectTitle": "{label} を再接続",
     "reconnectDescription": "ChatGPT にもう一度サインインしてください。アカウントの名前、アクセス、セッションの選択はそのまま維持されます。",
     "needsReconnection": "再接続が必要です",
+    "refusedByAnthropic": "Anthropic が拒否",
     "accountLabelPlaceholder": "例: 自分の ChatGPT アカウント",
     "chooseProvider": "プロバイダーを選択してください。",
     "saved": "シークレットを保存しました",
@@ -108,6 +109,7 @@
     "coolingDown": "クールダウン中",
     "keyVerified": "確認済み: {provider} がこのキーを受け付けました",
     "keyInvalid": "{provider} がこのキーを拒否しました: {message}",
+    "loginForbidden": "Anthropic がこのアカウントを拒否しました: {message} Kortix は拒否のたびに 15 分間このアカウントをスキップします。",
     "keyUnchecked": "未確認: {message}",
     "checkKey": "再確認",
     "savedVerified": "キーを保存して確認しました",
@@ -1313,8 +1315,12 @@
           "name": "メールチャネル",
           "description": "エージェントに Resend のメール受信箱を用意します。届いたメールでセッションを開始・継続し、エージェントはその受信箱で読み、返信し、送信します。自分の Resend API キーとドメインを使います。"
         },
+        "channels": {
+          "name": "チャンネル",
+          "description": "Slack スタイルのチャンネルと、ワークスペースの各エージェントとのチャットを 1 つのサイドバー（エージェントとチャンネル）にまとめます。チャンネルの各メッセージからスレッドを開始します。セッション一覧の代わりに表示され、既存のセッションは #general に移動します。"
+        },
         "chat": {
-          "name": "Slack スタイルのスペース",
+          "name": "Slack スタイルのチャンネル",
           "description": "Slack スタイルのチャンネルとダイレクトメッセージを使い、各メッセージからスレッドを開始します。サイドバーをチャット形式に切り替えます。セッション、ファイル、タブをまとめるスペースとは別の機能です。"
         },
         "session_groups": {
@@ -1334,16 +1340,16 @@
           "description": "チーム全体で使えるドライブです。管理者がドライブを作成してエージェントを追加します。そのエージェントの各セッションがドライブをマウントし、いずれかのエージェントを使える人は誰でも開けます。オフのときは、各自のマイファイルだけになります。"
         },
         "chat_input": {
-          "name": "Spaces-ChatInput",
+          "name": "Channels-ChatInput",
           "description": "入力欄の下にある 1 つのコントロールで、誰がどう答えるかを決めます。エージェントを選ぶと、他の設定はすべてそのエージェントから引き継ぐ自動のままです。行を開くと、このセッションのモデル、思考レベル、シークレット、プロバイダーキー、サンドボックスを上書きでき、1 クリックで自動に戻せます。"
         },
         "chat_front": {
-          "name": "Spaces-Router",
-          "description": "Slack スタイルのスペースをオンにすると、スレッドで話すエージェントはルーターになります。短い作業（回答、短い文章、スレッドのファイルの確認）は自分で行い、長い作業はスペースのエージェントに任せます。人のように短いメッセージで返信します。エージェントは完全な結果をスレッド内のファイルに保存し、ルーターはそれを書き直さずにそのファイルへリンクします。メッセージの下の「作業を表示」で、その裏の作業を開けます。kortix.yaml で My Kortix をオンにする必要があります。"
+          "name": "Channels-Router",
+          "description": "Slack スタイルのチャンネルをオンにすると、スレッドで話すエージェントはルーターになります。短い作業（回答、短い文章、スレッドのファイルの確認）は自分で行い、長い作業はチャンネルのエージェントに任せます。人のように短いメッセージで返信します。エージェントは完全な結果をスレッド内のファイルに保存し、ルーターはそれを書き直さずにそのファイルへリンクします。メッセージの下の「作業を表示」で、その裏の作業を開けます。kortix.yaml で My Kortix をオンにする必要があります。"
         },
         "spaces_proactive": {
-          "name": "Spaces-Proactive",
-          "description": "Slack スタイルのスペースがオンのとき、スペースは自分自身を見守れます。詳細でプロアクティブをオンにすると、エージェントがそこで起きたこと（完了したスレッド、未回答の質問、参加した人）を読み、共有する価値のある結果、あなたが下すべき判断、期限切れの項目など、重要なときだけチャットに書き込みます。作業を行うスレッドを始めることもできます。9:00 のデイリーブリーフも選べます。"
+          "name": "Channels-Proactive",
+          "description": "Slack スタイルのチャンネルがオンのとき、チャンネルは自分自身を見守れます。詳細でプロアクティブをオンにすると、エージェントがそこで起きたこと（完了したスレッド、未回答の質問、参加した人）を読み、共有する価値のある結果、あなたが下すべき判断、期限切れの項目など、重要なときだけチャットに書き込みます。作業を行うスレッドを始めることもできます。9:00 のデイリーブリーフも選べます。"
         },
         "program_agents": {
           "name": "プログラムエージェント",
@@ -1364,16 +1370,24 @@
         "review_swipe": {
           "name": "レビューカード",
           "description": "レビューページの「対応待ち」をカードの山で表示します。1 枚に 1 件。右にスワイプで承認またはマージ、左にスワイプで変更点を添えてエージェントに差し戻します。"
+        },
+        "platinum_cache": {
+          "name": "ワークスペースキャッシュ",
+          "description": "新しいセッションは、Platinum に保存されたこのワークスペースのワークスペースキャッシュから /workspace を復元して始まります。node_modules と pnpm ストアを含む準備済みのチェックアウトが、数分のセットアップではなく約 1 秒で用意されます。ワークスペース管理者が準備済みのセッションをキャッシュとして保存します。オフの場合、各セッションは空の /workspace で始まります。"
+        },
+        "sidebar_rail": {
+          "name": "サイドバーのアイコンレール",
+          "description": "デスクトップでは、サイドバーの横に固定のアイコンレールが表示されます。上部にホーム、検索、その他、下部にヘルプ、カスタマイズ、パネルの切り替えがあります。その他には他のすべてのページが並び、行のピンでそのページをレールに追加できます。パネルを折りたたんだ状態でホーム、スペース、カスタマイズにカーソルを合わせると、その一覧のパネルが表示されます。"
         }
       },
       "channelsSwitch": {
-        "onTitle": "{project} で Slack スタイルのスペースをオンにしますか？",
-        "onBody": "このワークスペースの全員に、セッション一覧の代わりに Slack スタイルのスペースが表示されます。既存のセッションはすべて #general に移動します。いつでもオフにでき、何も削除されません。",
-        "drive": "ドライブもオンにして、スペースでファイルを使えるようにする。",
+        "onTitle": "{project} で Slack スタイルのチャンネルをオンにしますか？",
+        "onBody": "このワークスペースの全員に、セッション一覧の代わりに Slack スタイルのチャンネルが表示されます。既存のセッションはすべて #general に移動します。いつでもオフにでき、何も削除されません。",
+        "drive": "ドライブもオンにして、チャンネルでファイルを使えるようにする。",
         "turnOn": "オンにする",
         "cancel": "キャンセル",
-        "offTitle": "Slack スタイルのスペースをオフにしますか？",
-        "offBody": "スペース、メモリ、ファイル、リンクは保存されたままです。全員にセッション一覧が戻ります。",
+        "offTitle": "Slack スタイルのチャンネルをオフにしますか？",
+        "offBody": "チャンネル、メモリ、ファイル、リンクは保存されたままです。全員にセッション一覧が戻ります。",
         "turnOff": "オフにする"
       },
       "wip": "Work in progress",
@@ -1666,6 +1680,13 @@
     "pin": "サイドバーを固定",
     "resize": "サイドバーのサイズを変更",
     "resizeHelp": "ドラッグしてサイズ変更 — ダブルクリックでリセット",
+    "iconRail": {
+      "navigation": "ワークスペースのナビゲーション",
+      "home": "ホーム",
+      "more": "その他",
+      "pinTab": "タブを表示",
+      "unpinTab": "タブを非表示"
+    },
     "customize": "カスタマイズ",
     "sessions": "セッション",
     "sessionViewOptions": "セッション表示オプション",
@@ -1920,16 +1941,18 @@
     "searchArtifacts": "アーティファクトを検索",
     "appsNoMatches": "一致するものはありません",
     "spaces": {
-      "channels": "スペース",
-      "addChannel": "新しいスペース",
-      "loadError": "スペースを読み込めませんでした。",
+      "channels": "チャンネル",
+      "chat": "チャット",
+      "addChannel": "新しいチャンネル",
+      "loadError": "チャンネルを読み込めませんでした。",
       "newAgent": "新しいエージェント",
       "review": "レビュー",
       "personal": "あなたのスペース",
       "personalNamed": "{name} のスペース",
       "private": "非公開",
       "noMessages": "まだメッセージはありません",
-      "more": "その他"
+      "more": "その他",
+      "title": "チャンネル"
     },
     "calendar": "カレンダー",
     "running": "実行中",
@@ -1939,7 +1962,15 @@
     "runningFailed": "実行中のものを読み込めませんでした。",
     "runningRetry": "再試行",
     "runningIn": "{title} 内",
-    "runningFirst": "最初の {count} 件を表示しています。"
+    "runningFirst": "最初の {count} 件を表示しています。",
+    "agents": {
+      "title": "エージェント",
+      "paused": "一時停止中",
+      "off": "オフ",
+      "noMessages": "まだメッセージはありません",
+      "newAgent": "新しいエージェント",
+      "newAgentPrompt": "新しいエージェントがほしいです。何を担当させるか、どうなれば完了と判断するかを私に聞いてください。それから提案し、私が承認したら、ワークスペースのすべてのアプリ（connectors: all）を持つエージェントとして kortix.yaml に追加してください。"
+    }
   },
   "dashboard": {
     "title": "ダッシュボード",
@@ -2232,8 +2263,6 @@
     "turn": {
       "autoRetried": "Kortix はこの失敗の前にモデルを自動で {count, plural, other {# 回}}再試行しました。",
       "typing": "{name} が入力中…",
-      "showWork": "作業を表示",
-      "hideWork": "作業を隠す",
       "starting": "起動中…",
       "workingFor": "作業中 · {time}",
       "agentWorking": "が作業中",
@@ -2257,6 +2286,30 @@
       "finishedCount": "{count} 件完了",
       "running": "実行中",
       "resizePane": "ペインのサイズを変更"
+    },
+    "changeRequest": {
+      "merge": "マージ",
+      "merging": "マージ中…",
+      "moreActions": "その他の操作",
+      "close": "変更リクエストを閉じる",
+      "openInReview": "レビューで開く",
+      "resolveConflict": "競合を解決",
+      "open": "オープン",
+      "merged": "マージ済み",
+      "closed": "クローズ済み",
+      "conflicts": "{count, plural, other {# 件の競合}}",
+      "mergedToast": "変更リクエスト #{number} をマージしました",
+      "closedToast": "変更リクエスト #{number} を閉じました",
+      "mergeFailed": "変更リクエストをマージできませんでした。",
+      "closeFailed": "変更リクエストを閉じられませんでした。",
+      "files": "{count, plural, other {# ファイル}}",
+      "into": "{branch} へ",
+      "number": "変更リクエスト #{number}",
+      "openedAgo": "{time}に作成",
+      "mergeInto": "{branch} にマージ",
+      "readyToMerge": "マージ可能",
+      "mergedInto": "{branch} にマージ済み",
+      "closedNote": "マージせずにクローズ"
     }
   },
   "agents": {
@@ -2507,7 +2560,7 @@
       "minimum": "最低チャージ額は {amount} です。",
       "contactSales": "{amount} を超える場合は、営業担当にお問い合わせください。",
       "creditHint": "{credits} クレジット · 支払い後すぐに追加されます。",
-      "noExpiry": "クレジットは無期限です。1 ドル = 100 クレジット。50 ドル以上はボーナス付き。",
+      "noExpiry": "クレジットは無期限です。1 ドル = 100 クレジット。",
       "processing": "処理中",
       "addAmount": "{amount} を追加",
       "addCredits": "クレジットを追加",
@@ -2516,7 +2569,6 @@
       "amountGroup": "チャージ額",
       "customAmount": "ドル単位のカスタム金額",
       "custom": "カスタム",
-      "creditHintBonus": "{credits} クレジット + ボーナス {bonus} · 支払い後すぐに追加されます。",
       "autoTopupOff": "自動チャージ: オフ",
       "autoTopupOn": "自動チャージ: 残高が {threshold} クレジットを下回ると {amount} を追加",
       "ledgerBonus": "チャージボーナス"
@@ -2560,8 +2612,7 @@
       "paymentNeeded": "自動チャージを実行するには支払い方法を追加してください。",
       "turnedOffAfterFailure": "{date} に自動チャージがオフになりました。直近の請求が失敗しました（{reason}）。支払い方法を更新してから、自動チャージを再度オンにしてください。",
       "lastChargeFailed": "{date} の自動チャージの請求が失敗しました（{reason}）。Kortix は再試行します。請求が 3 回連続で失敗すると、自動チャージはオフになります。",
-      "bonusHint": "毎回のチャージで {credits} クレジット + {bonus} ボーナスが追加されます。",
-      "bonusFrom": "{min} 以上のチャージでボーナスクレジットが付きます。"
+      "creditsHint": "チャージごとに {credits} クレジットが追加されます。"
     },
     "title": "請求とサブスクリプション",
     "subscription": "サブスクリプション",
@@ -2636,6 +2687,7 @@
         "creditsPerMonth": "月 {credits} クレジット",
         "credits": "{credits} クレジット",
         "price": "{amount} / 月",
+        "bonus": "+{percent}% ボーナス",
         "current": "現在",
         "choose": "ティアを選択",
         "chooseHint": "ティアは月 {min} からです。",
@@ -2644,8 +2696,7 @@
         "groups": {
           "small": "小規模チーム",
           "growing": "成長中のチーム",
-          "scale": "スケール",
-          "large": "大規模組織"
+          "scale": "スケール"
         },
         "once": "1回",
         "onceLabel": "1回分のクレジット額"
@@ -2827,9 +2878,10 @@
           "f2": "マネージドモデル：DeepSeek、GLM。データ保持ゼロ",
           "f3": "メンバー無制限、クレジットプールは 1 つを共有",
           "f4": "未使用のクレジットは 1 か月繰り越し",
-          "f5": "いつでもチャージ可能。チャージ分は無期限",
+          "f5": "ティアはいつでも上げられます。追加のクレジットはすぐに反映されます",
           "f6": "より高いモデルのレート制限",
-          "f7": "メールサポート"
+          "f7": "メールサポート",
+          "f8": "上位ティアは最大 30% のボーナスクレジット"
         },
         "enterprise": {
           "name": "エンタープライズ",
@@ -2854,7 +2906,7 @@
         },
         "amounts": {
           "question": "毎月いくら支払いますか？",
-          "answer": "月 50 ドル（5,000 クレジット）から月 50,000 ドル（5,000,000 クレジット）までのティアを選べます。どのティアもレートは同じで、1 ドルあたり 100 クレジットです。月 50,000 ドルを超える場合は営業にご相談ください。"
+          "answer": "月 {minUsd}（{minCredits} クレジット）から月 {maxUsd}（{maxCredits} クレジット）までのティアを選べます。上位のティアほど 1 ドルあたりのクレジットが増えます。月 {firstBonusUsd} から +{firstBonus}%、{topBonusUsd} 以上で最大 +{topBonus}% です。{firstBonusUsd} 未満は 1 ドルあたり 100 クレジットです。月 {maxUsd} を超える場合は営業にご相談ください。"
         },
         "members": {
           "question": "メンバーごとに料金がかかりますか？",
@@ -2870,7 +2922,7 @@
         },
         "topup": {
           "question": "月の途中でクレジットを追加できますか？",
-          "answer": "はい。いつでも好きな金額をチャージできます。自動チャージをオンにすれば、エージェントが止まることはありません。{smallestBonusUsd} 以上のチャージにはボーナスクレジットが付きます。{smallestBonusUsd} で +{smallestBonus}%、{largestBonusUsd} 以上で最大 +{largestBonus}% です。チャージしたクレジットは無期限です。"
+          "answer": "はい。月額ティアを上げてください。変更はすぐに有効になります。月の残り期間の差額を支払うと、その期間分の新しいティアのクレジットが、上位ティアのレートですぐに追加されます。単発のチャージは Enterprise 契約で利用できます。"
         },
         "change": {
           "question": "ティアを変更できますか？",
@@ -3086,6 +3138,7 @@
     },
     "unified": {
       "welcome": "{name}へようこそ",
+      "sessionEnded": "サインアウトされました。続行するには、もう一度サインインしてください。",
       "email": "メールアドレス",
       "emailPlaceholder": "メールアドレスを入力…",
       "password": "パスワード",
@@ -8176,6 +8229,7 @@
       "legendAssistant": "応答",
       "legendTool": "ツール結果",
       "legendOther": "その他",
+      "skillsUsedLabel": "使用したスキル",
       "subAgentsLabel": "サブエージェント",
       "subAgentsNote": "このセッション内で実行された補助エージェントです。その費用はこのセッションの費用に含まれます。",
       "combinedMessages": "合計メッセージ",
@@ -21360,7 +21414,11 @@
       "textf543a9f99ce7": "アクションバー",
       "textca4067071fcf": "選択",
       "text4cea356a17a1": "未保存の編集",
-      "text2358f7b37c07": "一時的なモードのためのフローティングバー：選択、未保存の編集、保留中の貼り付け。タイトル、控えめな説明、キーヒント付きのアクション、閉じるボタン。"
+      "text2358f7b37c07": "一時的なモードのためのフローティングバー：選択、未保存の編集、保留中の貼り付け。タイトル、控えめな説明、キーヒント付きのアクション、閉じるボタン。",
+      "textf14554abf742": "セッションの再開",
+      "text9b166fdc8348": "停止したサンドボックスを起動してからランタイムが応答するまでの時間と、各フェーズの平均。",
+      "text2c501fc3ba5b": "再開数",
+      "text421f441370b1": "フェーズ (平均)"
     },
     "publicShareConfirm": {
       "title": "公開リンクを作成しますか？",
@@ -21633,7 +21691,7 @@
     "copyFailed": "クリップボードにコピーできませんでした",
     "threads": "スレッド",
     "recentThreads": "最近のスレッド",
-    "searchChannels": "スペース、スレッド、コマンドを検索…"
+    "searchChannels": "チャンネル、スレッド、コマンドを検索…"
   },
   "personalWelcome": {
     "dismiss": "閉じる",
@@ -21854,9 +21912,9 @@
     "perDay": "1日あたり",
     "noLimit": "上限なし",
     "postTo": "投稿先",
-    "postToHint": "実行ごとにそこで新しいスレッドが始まります。スペースがない場合、実行は #{channel} に入ります。",
-    "postToNone": "スペースなし",
-    "postToUnavailable": "利用できないスペース",
+    "postToHint": "実行ごとにそこで新しいスレッドが始まります。チャンネルがない場合、実行は #{channel} に入ります。",
+    "postToNone": "チャンネルなし",
+    "postToUnavailable": "利用できないチャンネル",
     "postToPrivate": "非公開: トリガーはここに投稿できません",
     "appLabel": "アプリ",
     "appPlaceholder": "アプリを選択",
@@ -21957,14 +22015,14 @@
     "loadErrorBody": "接続を確認して、もう一度お試しください。"
   },
   "sessionOversight": {
-    "label": "管理者はすべてのセッションとスペースを開ける",
-    "description": "ワークスペースのオーナーと管理者は、非公開のものも含め、このワークスペースのすべてのセッションとスペースを開けます。この方法で開いたセッションは監査ログに記録されます。",
-    "ownerOnlyDescription": "ワークスペースのオーナーと管理者は、非公開のものも含め、このワークスペースのすべてのセッションとスペースを開けます。変更できるのはワークスペースのオーナーだけです。",
+    "label": "管理者はすべてのセッションとチャンネルを開ける",
+    "description": "ワークスペースのオーナーと管理者は、非公開のものも含め、このワークスペースのすべてのセッションとチャンネルを開けます。この方法で開いたセッションは監査ログに記録されます。",
+    "ownerOnlyDescription": "ワークスペースのオーナーと管理者は、非公開のものも含め、このワークスペースのすべてのセッションとチャンネルを開けます。変更できるのはワークスペースのオーナーだけです。",
     "enableTitle": "管理者がすべてのセッションを開けるようにしますか？",
-    "enableDescription": "ワークスペースのオーナーと管理者は、メンバーが非公開にしたものも含め、このワークスペースのすべてのセッションとスペースを開けるようになります。メンバーには共有ダイアログに通知が表示されます。この方法で開いた各セッションは監査ログに記録されます。",
+    "enableDescription": "ワークスペースのオーナーと管理者は、メンバーが非公開にしたものも含め、このワークスペースのすべてのセッションとチャンネルを開けるようになります。メンバーには共有ダイアログに通知が表示されます。この方法で開いた各セッションは監査ログに記録されます。",
     "enableConfirm": "オンにする",
     "disableTitle": "管理者がすべてのセッションを開けないようにしますか？",
-    "disableDescription": "非公開のセッションとスペースは、所有者と共有された人だけのものに戻ります。管理者は自分と共有されたものにだけアクセスできます。",
+    "disableDescription": "非公開のセッションとチャンネルは、所有者と共有された人だけのものに戻ります。管理者は自分と共有されたものにだけアクセスできます。",
     "disableConfirm": "オフにする",
     "enabledToast": "管理者はすべてのセッションを開けるようになりました",
     "disabledToast": "非公開セッションは再びオーナーのみになりました",
@@ -24856,7 +24914,7 @@
       "off": "Off",
       "on": "On",
       "projectWide": "ワークスペース全体",
-      "spaceValue": "Space: {space}",
+      "spaceValue": "チャンネル：{space}",
       "startPrimary": "People start it",
       "startSubagent": "Agents call it",
       "startBoth": "メンバーとエージェントが開始可能",
@@ -24886,8 +24944,8 @@
       "accessKindConnectors": "Connectors",
       "accessKindSecrets": "Secrets",
       "accessKindActions": "Permissions",
-      "newSpace": "New space…",
-      "newSpacePlaceholder": "space-name",
+      "newSpace": "新しいチャンネル…",
+      "newSpacePlaceholder": "channel-name",
       "managersOnly": "Managers only",
       "projectModelsLink": "ワークスペースのモデル、プロバイダー、ルーティングは<link>ワークスペース管理</link>にあります。",
       "reviewLead": "エージェントからあなたへの依頼：判断、承認、完了した作業の確認。",
@@ -24932,7 +24990,7 @@
       "showInPickersHelp": "メンバーがセッション開始時に選択します。",
       "whoStarts": "開始できる人",
       "modeDefault": "ワークスペースのデフォルト",
-      "space": "Space",
+      "space": "チャンネル",
       "model": "Model",
       "tools": "Tools",
       "workspace": "Workspace",
@@ -25049,7 +25107,7 @@
       "models": "モデル",
       "tabCapabilities": "機能",
       "summaryExcept": "{all} except {list}",
-      "spaceHelp": "このエージェントが作業するスペース。engineeringやsalesなどの識別子を指定します。空欄の場合はワークスペース全体です。",
+      "spaceHelp": "このエージェントが作業するチャンネル。engineeringやsalesなどの識別子を指定します。空欄の場合はワークスペース全体です。",
       "spacePlaceholder": "例: engineering"
     },
     "myKortix": {
@@ -25075,8 +25133,8 @@
           "help": "目標のコーディネーターセッションを開始します。検証者が確認するまで目標を担い、毎日チェックインします。"
         },
         "spaces": {
-          "label": "スペースを構築",
-          "help": "変更リクエストを通じて、kortix.yaml のスペースのブロックを追加・配置します。"
+          "label": "チャンネルを構築",
+          "help": "変更リクエストを通じて、kortix.yaml のチャンネルのブロックを追加・配置します。"
         }
       },
       "access": {
@@ -25342,7 +25400,7 @@
     "embedConvert": "リンクに変換",
     "embedCopy": "リンクをコピー",
     "embedDelete": "削除",
-    "moveTo": "スペースに移動",
+    "moveTo": "チャンネルに移動",
     "projectWide": "ワークスペース全体",
     "moved": "成果物を移動しました",
     "moveFailed": "成果物を移動できませんでした",
@@ -25680,41 +25738,41 @@
       }
     },
     "create": {
-      "title": "スペースを作成",
+      "title": "チャンネルを作成",
       "description": "スペースは、マーケティング、採用、運用などの 1 つの業務領域を整理します。メンバーとエージェントはそのスレッドで作業します。",
       "nameLabel": "名前",
       "namePlaceholder": "マーケティング",
-      "slugPlaceholder": "space-name",
+      "slugPlaceholder": "channel-name",
       "descriptionLabel": "説明（任意）",
-      "descriptionPlaceholder": "このスペースの用途",
-      "submit": "スペースを作成",
-      "created": "スペースを作成しました",
+      "descriptionPlaceholder": "このチャンネルの用途",
+      "submit": "チャンネルを作成",
+      "created": "チャンネルを作成しました",
       "nameRequired": "名前を入力してください。",
       "invalidName": "名前には英字か数字を 1 文字以上含めてください。",
       "slugTaken": "<link>#{slug}</link> はすでにあります。",
-      "failed": "スペースを作成できませんでした。もう一度お試しください。",
-      "renameTitle": "スペース名を変更",
-      "renameDescription": "スペースのリンクは名前と一緒に変わります。",
+      "failed": "チャンネルを作成できませんでした。もう一度お試しください。",
+      "renameTitle": "チャンネル名を変更",
+      "renameDescription": "チャンネルのリンクは名前と一緒に変わります。",
       "save": "保存",
-      "renamed": "スペース名を変更しました",
-      "renameFailed": "スペース名を変更できませんでした。もう一度お試しください。",
-      "descriptionPrivate": "追加したメンバーだけがスペースを表示して使用できます。",
+      "renamed": "チャンネル名を変更しました",
+      "renameFailed": "チャンネル名を変更できませんでした。もう一度お試しください。",
+      "descriptionPrivate": "追加したメンバーだけがチャンネルを表示して使用できます。",
       "privateLabel": "プライベート",
       "privateHint": "招待されたメンバーだけが表示できます。",
-      "privateUnavailable": "このワークスペースではプライベートスペースはまだ利用できません。",
-      "privateLimits": "プライベートにすると、他の人からスペースが見えなくなります。コードの変更（git ブランチ）とエージェント自身のツールはプライベートになりません。",
+      "privateUnavailable": "このワークスペースではプライベートチャンネルはまだ利用できません。",
+      "privateLimits": "プライベートにすると、他の人からチャンネルが見えなくなります。コードの変更（git ブランチ）とエージェント自身のツールはプライベートになりません。",
       "name": "名前",
-      "taken": "スペース #{slug} はすでに存在します。",
+      "taken": "チャンネル #{slug} はすでに存在します。",
       "about": "説明",
-      "aboutPlaceholder": "このスペースの用途",
+      "aboutPlaceholder": "このチャンネルの用途",
       "template": "初期タブ",
-      "error": "スペースを作成できませんでした"
+      "error": "チャンネルを作成できませんでした"
     },
     "view": {
       "welcomeTitle": "#{name} へようこそ",
       "welcomeEmpty": "スペースは 1 つの業務領域を整理する場所です。メンバーとエージェントはここでスレッドごとに作業し、各メッセージが新しいスレッドになります。",
       "welcomeStart": "ここが #{name} の始まりです。",
-      "dmIntro": "このスペースを見られるのはあなたと {agent} だけです。",
+      "dmIntro": "このチャットを見られるのはあなたと {agent} だけです。",
       "today": "今日",
       "yesterday": "昨日",
       "openThread": "スレッドを開く",
@@ -25728,24 +25786,24 @@
       "messageAgent": "{agent} へのメッセージ",
       "threadsEmptyTitle": "スレッドはまだありません",
       "threadsEmpty": "始めたスレッドがここに表示されます。",
-      "loadError": "このスペースを読み込めませんでした。",
+      "loadError": "このチャンネルを読み込めませんでした。",
       "threadsLoadError": "スレッドを読み込めませんでした。",
       "retry": "もう一度試す",
-      "notFound": "このスペースは存在しません。",
-      "notFoundHint": "リンクが間違っているか、誰かがスペース名を変更した可能性があります。",
+      "notFound": "このチャンネルは存在しません。",
+      "notFoundHint": "リンクが間違っているか、誰かがチャンネル名を変更した可能性があります。",
       "openDefault": "#{name} を開く",
       "archivedTitle": "#{name} はアーカイブされています。",
       "archivedHint": "アーカイブを解除すると、ここでまたスレッドを読んだり始めたりできます。",
       "archivedLocked": "アーカイブを解除できるのは、作成者またはワークスペース管理者のみです。",
-      "unarchive": "スペースのアーカイブを解除",
-      "unarchived": "スペースのアーカイブを解除しました",
-      "unarchiveFailed": "スペースのアーカイブを解除できませんでした。もう一度お試しください。",
+      "unarchive": "チャンネルのアーカイブを解除",
+      "unarchived": "チャンネルのアーカイブを解除しました",
+      "unarchiveFailed": "チャンネルのアーカイブを解除できませんでした。もう一度お試しください。",
       "dmFailed": "この会話を開けませんでした。",
-      "archive": "スペースをアーカイブ",
+      "archive": "チャンネルをアーカイブ",
       "archiveTitle": "#{name} をアーカイブしますか？",
       "archiveDescription": "スペースはすべてのメンバーのサイドバーから消えます。スレッドは残り、作成者またはワークスペース管理者がアーカイブを解除できます。",
-      "archived": "スペースをアーカイブしました",
-      "archiveFailed": "スペースをアーカイブできませんでした。もう一度お試しください。",
+      "archived": "チャンネルをアーカイブしました",
+      "archiveFailed": "チャンネルをアーカイブできませんでした。もう一度お試しください。",
       "threadTitle": "スレッド",
       "closeThread": "スレッドを閉じる",
       "sendFailed": "スレッドを開始できませんでした。もう一度お試しください。",
@@ -25810,8 +25868,8 @@
         "titlePlaceholder": "内容",
         "invalidUrl": "example.com のような有効なリンクを入力してください。",
         "addFailed": "リンクを追加できませんでした。もう一度お試しください。",
-        "limit": "このスペースにはすでに 200 件の固定リンクがあります。先に 1 件の固定を解除してください。",
-        "addLimit": "このスペースにはすでに 200 件の追加済みリンクがあります。先に 1 件を削除してください。",
+        "limit": "このチャンネルにはすでに 200 件の固定リンクがあります。先に 1 件の固定を解除してください。",
+        "addLimit": "このチャンネルにはすでに 200 件の追加済みリンクがあります。先に 1 件を削除してください。",
         "added": "追加日",
         "remove": "リンクを削除",
         "removeTitle": "このリンクを削除しますか？",
@@ -25831,7 +25889,7 @@
         "all": "すべて",
         "sharedBy": "共有者",
         "earlier": "それ以前",
-        "pinHint": "固定します。スペースのすべてのエージェントが固定リンクを読みます。",
+        "pinHint": "固定します。チャンネルのすべてのエージェントが固定リンクを読みます。",
         "unpinHint": "固定を解除します。エージェントは読まなくなります。",
         "copyLink": "リンクをコピー",
         "linkCopied": "リンクをコピーしました",
@@ -25887,9 +25945,9 @@
         "rememberHint": "すべてのエージェントが読むメモ"
       },
       "allAgents": "すべてのエージェント",
-      "join": "スペースに参加",
+      "join": "チャンネルに参加",
       "joined": "#{name} に参加しました。",
-      "joinFailed": "スペースに参加できませんでした。もう一度お試しください。",
+      "joinFailed": "チャンネルに参加できませんでした。もう一度お試しください。",
       "openFullSession": "Open full session",
       "tabEdit": {
         "kind": {
@@ -25900,10 +25958,10 @@
           "link": "Link"
         },
         "add": "Add tab",
-        "full": "A space holds at most {max} tabs. Remove one first.",
+        "full": "チャンネルに置けるタブは最大 {max} 個です。先に 1 つ削除してください。",
         "noArtifacts": "No artifacts yet",
         "noApps": "このワークスペースに Apps はありません",
-        "spaceFiles": "This space’s files",
+        "spaceFiles": "このチャンネルのファイル",
         "otherFolder": "Another folder…",
         "fileItem": "ファイル…",
         "linkItem": "Link…",
@@ -25939,17 +25997,51 @@
           "description": "削除または名前変更されたか、あなたに共有されていません。"
         }
       },
-      "spaceDetails": "{name} の詳細"
+      "spaceDetails": "{name} の詳細",
+      "moreActions": "その他の操作",
+      "copyMessage": "メッセージをコピー",
+      "copyMarkdown": "Markdown としてコピー",
+      "deleteMessage": "メッセージを削除",
+      "messageCopied": "メッセージをコピーしました",
+      "memberJoined": "が参加しました",
+      "findInThread": "スレッド内を検索",
+      "findPlaceholder": "検索",
+      "findCount": "{count} 件中 {index} 件目",
+      "findNone": "一致なし",
+      "findPrevious": "前の一致",
+      "findNext": "次の一致",
+      "closeFind": "検索を閉じる",
+      "openInNewWindow": "新しいウィンドウで開く",
+      "copyThreadText": "スレッドをテキストでコピー",
+      "copyJson": "JSON としてコピー",
+      "threadCopied": "コピーしました",
+      "jump": {
+        "label": "{day}、日付へ移動",
+        "title": "移動先",
+        "today": "今日",
+        "yesterday": "昨日",
+        "week": "1 週間前",
+        "month": "1 か月前",
+        "first": "最初のメッセージ",
+        "pick": "日付を選択…"
+      },
+      "activity": {
+        "joined": "<b>{name}</b> が参加しました",
+        "added": "<b>{actor}</b> が <b>{name}</b> を追加しました",
+        "addedUnknown": "<b>{name}</b> が追加されました",
+        "removed": "<b>{actor}</b> が <b>{name}</b> を削除しました",
+        "removedUnknown": "<b>{name}</b> が削除されました"
+      }
     },
     "details": {
       "about": "概要",
       "members": "メンバー",
-      "name": "スペース名",
+      "name": "チャンネル名",
       "description": "説明",
       "noDescription": "説明を追加",
       "created": "作成日",
       "editField": "{field}を編集",
-      "archiveTitle": "このスペースをアーカイブ",
+      "archiveTitle": "このチャンネルをアーカイブ",
       "archiveHint": "すべてのメンバーのサイドバーから消えます。スレッドは残ります。",
       "archive": "アーカイブ",
       "find": "メンバーやエージェントを検索",
@@ -25973,9 +26065,9 @@
       "peopleFailed": "メンバーを更新できませんでした。もう一度お試しください。",
       "personMenu": "{person} のオプション",
       "removePerson": "#{name} から外す",
-      "leave": "スペースを抜ける",
+      "leave": "チャンネルを抜ける",
       "left": "#{name} を抜けました。",
-      "leaveTitle": "このスペースを抜ける",
+      "leaveTitle": "このチャンネルを抜ける",
       "leaveHint": "抜けた後も閲覧でき、いつでも再参加できます。",
       "visibilityPrivate": "メンバーのみ",
       "privateNote": "#{name} はメンバーだけが表示できます。",
@@ -25989,7 +26081,7 @@
       "leaveHintPrivate": "自分のスレッドを含め、スレッド、ファイル、メモリにアクセスできなくなります。再参加するにはメンバーに追加してもらう必要があります。",
       "leavePrivateTitle": "#{name} を抜けますか？",
       "addMembers": "メンバーを追加",
-      "privateLimits": "プライベートにすると、他の人からスペースが見えなくなります。コードの変更（git ブランチ）とエージェント自身のツールはプライベートになりません。",
+      "privateLimits": "プライベートにすると、他の人からチャンネルが見えなくなります。コードの変更（git ブランチ）とエージェント自身のツールはプライベートになりません。",
       "agentAdded": "{agent} を #{name} に追加しました。"
     },
     "folder": {
@@ -26003,18 +26095,18 @@
       }
     },
     "onboarding": {
-      "reenabled": "スペースがオフの間に始まったセッションはここにあります。",
+      "reenabled": "チャンネルがオフの間に始まったセッションはここにあります。",
       "intro": {
-        "title": "スペースへようこそ",
-        "channels": "スペースはチームごとに作業をまとめます。",
+        "title": "チャンネルへようこそ",
+        "channels": "チャンネルはチームごとに作業をまとめます。",
         "threads": "新しいメッセージごとにスレッドが始まります。",
-        "memory": "エージェントは各スペースで決まったことを覚えます。",
+        "memory": "エージェントは各チャンネルで決まったことを覚えます。",
         "gotIt": "OK",
-        "tabs": "スペースごとに専用のタブがあります。タブの追加、名前変更、並べ替えができます。Kortixに依頼することもできます。"
+        "tabs": "チャンネルごとに専用のタブがあります。タブの追加、名前変更、並べ替えができます。Kortixに依頼することもできます。"
       },
       "getStarted": {
         "dismiss": "閉じる",
-        "channel": "チーム用のスペースを作成する",
+        "channel": "チーム用のチャンネルを作成する",
         "done": "完了"
       }
     },
@@ -26043,9 +26135,9 @@
       "noMatches": "「{query}」に一致する項目はありません。"
     },
     "privateNotIn": {
-      "row": "参加していないプライベートスペース",
-      "title": "参加していないプライベートスペース",
-      "description": "名前の変更、アーカイブ、メンバーの追加ができます。スペースの内容を読めるのはメンバーだけなので、自分を追加することはできません。",
+      "row": "参加していないプライベートチャンネル",
+      "title": "参加していないプライベートチャンネル",
+      "description": "名前の変更、アーカイブ、メンバーの追加ができます。チャンネルの内容を読めるのはメンバーだけなので、自分を追加することはできません。",
       "meta": "{count, plural, =0 {メンバーなし} other {#人のメンバー}} · 作成者: {name}",
       "metaNoCreator": "{count, plural, =0 {メンバーなし} other {#人のメンバー}}",
       "archived": "アーカイブ済み",
@@ -26068,13 +26160,13 @@
     "templates": {
       "board": {
         "brief": "概要",
-        "text": "このスペースの目的と協力の方法。",
+        "text": "このチャンネルの目的と協力の方法。",
         "label": "ボードと目標",
         "description": "概要とリンクのボード、続いて目標。"
       },
       "standard": {
         "label": "目標、アプリ、成果物",
-        "description": "このスペースに紐づくコンテンツ。"
+        "description": "このチャンネルに紐づくコンテンツ。"
       }
     },
     "tabs": {
@@ -26089,7 +26181,7 @@
     },
     "addTab": "タブを追加",
     "gone": {
-      "title": "このスペースは存在しません",
+      "title": "このチャンネルは存在しません",
       "hint": "kortix.yaml から削除されたか、リンクが間違っています。",
       "back": "ワークスペースに戻る"
     },
@@ -26097,9 +26189,9 @@
     "loadError": "このタブを読み込めませんでした",
     "retry": "もう一度",
     "empty": {
-      "goals": "このスペースに紐づく目標がここに表示されます",
-      "apps": "このスペースに紐づくアプリがここに表示されます",
-      "artifacts": "このスペースに紐づく成果物がここに表示されます",
+      "goals": "このチャンネルに紐づく目標がここに表示されます",
+      "apps": "このチャンネルに紐づくアプリがここに表示されます",
+      "artifacts": "このチャンネルに紐づく成果物がここに表示されます",
       "folder": "このフォルダーは空です",
       "board": "このボードのブロックがここに表示されます",
       "boardHint": "My Kortix に、メモ、アプリ、ファイル、埋め込みページなどのブロックの追加を依頼してください。"
@@ -26128,7 +26220,7 @@
     },
     "add": {
       "linkTitle": "リンクを追加",
-      "linkHint": "このスペースのメンバーがよく開くページです。",
+      "linkHint": "このチャンネルのメンバーがよく開くページです。",
       "folderTitle": "フォルダーを追加",
       "folderHint": "パスで指定するワークスペースのフォルダーです。",
       "url": "URL",
@@ -26149,25 +26241,25 @@
       "remove": "{name} を削除"
     },
     "nav": {
-      "title": "スペース",
-      "new": "新しいスペース",
+      "title": "チャンネル",
+      "new": "新しいチャンネル",
       "unread": "{count, plural, other {未読メッセージ # 件}}"
     },
     "leave": "{name} から退出",
-    "agents": "このスペースのエージェント",
+    "agents": "このチャンネルのエージェント",
     "openAgent": "{name} を開く",
     "needsYou": "あなたの対応待ち",
     "newSession": "新しいセッション",
     "askMyKortix": "My Kortix に依頼",
-    "askPrompt": "{name} スペース（kortix.yaml の `spaces.{slug}`）のタブ、ヘッダー、またはエージェントを変更したいです。何を変更するか聞いてください。",
+    "askPrompt": "{name} チャンネル（kortix.yaml の `spaces.{slug}`）のタブ、ヘッダー、またはエージェントを変更したいです。何を変更するか聞いてください。",
     "intro": {
       "title": "#{name} はここから始まります",
-      "body": "このスペースで作業する全員のための場所です。",
+      "body": "このチャンネルで作業する全員のための場所です。",
       "agents": "{count, plural, other {{names} がここに更新を投稿します。}}",
-      "noAgents": "このスペースに追加したエージェントがここに更新を投稿します。",
+      "noAgents": "このチャンネルに追加したエージェントがここに更新を投稿します。",
       "addTab": "+ でタブを追加すると、目標、アプリ、ファイル、ボードをここに固定できます。"
     },
-    "filter": "スペースで絞り込み",
+    "filter": "チャンネルで絞り込み",
     "all": "すべて",
     "projectWide": "ワークスペース全体",
     "panel": {
@@ -26177,7 +26269,7 @@
       "private": "非公開",
       "rename": "名前と説明を変更",
       "personalDescription": "My Kortix とのあなた専用の非公開スペースです。見られるのはあなただけです。",
-      "privateDescription": "このスペースを見られるのは、参加しているメンバーとエージェントだけです。",
+      "privateDescription": "このチャンネルを見られるのは、参加しているメンバーとエージェントだけです。",
       "noDescription": "まだ説明はありません。",
       "agents": "エージェント",
       "addAgent": "エージェントを追加",
@@ -26186,20 +26278,18 @@
       "people": "メンバー",
       "addPeople": "メンバーを追加",
       "you": "あなた",
-      "tabs": "タブ",
-      "addTab": "タブを追加",
       "routines": "ルーティン",
       "addRoutine": "ルーティンを追加",
-      "routinesPrivate": "非公開スペースではまだルーティンを使えません。",
+      "routinesPrivate": "非公開チャンネルではまだルーティンを使えません。",
       "proactive": "プロアクティブ",
-      "proactiveWatch": "このスペースを見守る",
+      "proactiveWatch": "このチャンネルを見守る",
       "proactiveWatchHint": "エージェントがここで起きたことを読み、重要なときだけ書き込みます。",
       "proactiveBrief": "デイリーブリーフ",
       "proactiveBriefHint": "新しい動きがあった日の 9:00 に短いまとめを送ります。",
       "proactiveFailed": "設定を保存できませんでした。もう一度お試しください。",
       "allSettings": "すべての設定",
-      "askHint": "チャットで頼むこともできます:「ここにエージェントを追加して」「ローンチ資料をタブに固定して」。",
-      "noAgentsToAdd": "ワークスペースのすべてのエージェントがこのスペースにいます。"
+      "noAgentsToAdd": "ワークスペースのすべてのエージェントがこのチャンネルにいます。",
+      "members": "メンバー"
     },
     "profile": {
       "viewProfile": "{name} のプロフィールを表示",
@@ -26208,7 +26298,7 @@
       "openProfile": "プロフィールを開く",
       "you": "(あなた)",
       "message": "メッセージ",
-      "messageFailed": "非公開スペースを開けませんでした。もう一度お試しください。",
+      "messageFailed": "非公開チャンネルを開けませんでした。もう一度お試しください。",
       "dmSpaceName": "{a} と {b}",
       "heading": "プロフィール",
       "close": "プロフィールを閉じる",
@@ -26220,14 +26310,21 @@
       "projectDefault": "ワークスペースのデフォルト",
       "projectDefaultYes": "エージェント未指定の新しいスレッドに応答します",
       "email": "メール",
-      "sharedSpaces": "共通のスペース",
-      "yourSpaces": "あなたのスペース",
+      "sharedSpaces": "共通のチャンネル",
+      "yourSpaces": "あなたのチャンネル",
       "addTo": "{space} に追加",
       "addedTo": "{agent} を {space} に追加しました",
       "addFailed": "エージェントを追加できませんでした。もう一度お試しください。",
-      "spacesIn": "参加しているスペース",
-      "spacesInNone": "まだどのスペースにも参加していません",
-      "default": "デフォルト"
+      "spacesIn": "参加しているチャンネル",
+      "spacesInNone": "まだどのチャンネルにも参加していません",
+      "default": "デフォルト",
+      "paused": "一時停止中",
+      "off": "オフ",
+      "copyLink": "リンクをコピー",
+      "linkCopied": "リンクをコピーしました",
+      "roleOwner": "ワークスペースのオーナー",
+      "roleAdmin": "ワークスペースの管理者",
+      "roleMember": "ワークスペースのメンバー"
     },
     "mentions": {
       "people": "メンバー",
@@ -26238,8 +26335,39 @@
       "askAdd": "{agent} を {space} に追加しますか？",
       "askAddConfirm": "追加",
       "askNotNow": "今はしない",
-      "askAdmin": "{agent} は {space} にいません。スペースの管理者に追加を依頼してください。",
+      "askAdmin": "{agent} は {space} にいません。チャンネルの管理者に追加を依頼してください。",
       "dismiss": "閉じる"
+    },
+    "agentChat": {
+      "pausedBar": "{name} は一時停止中です。再開するまで、スケジュールやイベントでは起動しません。",
+      "resume": "再開",
+      "resumeFailed": "{name} を再開できませんでした。",
+      "settings": {
+        "settingsButton": "エージェントの設定",
+        "status": "ステータス",
+        "active": "稼働中",
+        "paused": "一時停止中",
+        "off": "オフ",
+        "pauseFailed": "エージェントのステータスを変更できませんでした。",
+        "description": "説明",
+        "save": "保存",
+        "saveFailed": "説明を保存できませんでした。",
+        "model": "モデル",
+        "allSettings": "エージェントのすべての設定",
+        "general": "一般",
+        "appsTab": "アプリ",
+        "routines": "ルーティン",
+        "workspaceDefault": "ワークスペースのデフォルト",
+        "modelDefault": "ワークスペースのデフォルト",
+        "modelDefaultNamed": "ワークスペースのデフォルト（{model}）",
+        "cancel": "キャンセル",
+        "searchApps": "アプリを検索",
+        "noApps": "このワークスペースにはまだコネクタがありません。",
+        "noAppsMatch": "「{query}」に一致するアプリはありません。",
+        "appsUnavailable": "このエージェントのアプリはエージェントページで設定します。",
+        "appsFailed": "エージェントのアプリを変更できませんでした。",
+        "role": "役割"
+      }
     }
   },
   "imageGen": {
@@ -27459,6 +27587,10 @@
     "completeDescription": "ターミナルでセットアップを開始した場合、そちらで自動的に続行されます。",
     "slackName": "Slack",
     "sectionOpen": "対応が必要",
+    "sectionOptional": "任意のコネクター",
+    "skip": "スキップ",
+    "skipNamed": "{name}をスキップ",
+    "showSkipped": "スキップしたコネクターを表示",
     "doneSummary": "{count} 件は設定済み",
     "done": "完了",
     "connect": "{name} を接続",
@@ -27602,5 +27734,31 @@
   "appsList": {
     "search": "アプリを検索",
     "noMatch": "一致するアプリはありません"
+  },
+  "helpMenu": {
+    "trigger": "ヘルプ",
+    "shortcuts": "キーボードショートカット",
+    "status": "ステータス",
+    "downloadApps": "アプリをダウンロード",
+    "community": "Discord コミュニティ",
+    "whatsNew": "新機能",
+    "fullChangelog": "すべての変更履歴"
+  },
+  "questionPrompt": {
+    "submitFailed": "回答を送信できませんでした。回答はここに保存されています。もう一度お試しください。",
+    "submitted": "回答を送信しました",
+    "submitting": "回答を送信中…",
+    "review": "回答を確認",
+    "removeCustom": "自由回答を削除: {answer}",
+    "customAnswer": "自由回答",
+    "customPlaceholder": "回答を入力",
+    "submitAnswer": "回答を送信",
+    "addAnswer": "回答を追加",
+    "nextQuestion": "次の質問",
+    "submitAnswers": "回答を送信",
+    "askClarification": "説明を求める",
+    "clarificationFailed": "説明の依頼を送信できませんでした。もう一度お試しください。",
+    "discussionLabel": "回答せずに質問について話し合う",
+    "sendClarification": "説明の依頼を送信"
   }
 }

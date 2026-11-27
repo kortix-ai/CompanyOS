@@ -52,6 +52,15 @@ export const uncoveredAllow: AllowEntry[] = [
     path: "/v1/system/confirmed-signups",
     reason: "sales reconciliation export behind its own token; covered by sales-outbox.integration.test.ts",
   },
+  // QualiLoop's test endpoint: a machine route behind its own secret
+  // (QUALILOOP_AGENT_SECRET), off (404) unless that and QUALILOOP_KORTIX_PROJECT_ID
+  // are set. Every turn runs a real agent in a cloud sandbox, which the local
+  // profile excludes.
+  {
+    method: "POST",
+    path: "/v1/qualiloop/chat",
+    reason: "QualiLoop test endpoint behind its own secret, off unless configured; each turn needs a cloud sandbox. Verified against dev with `qualiloop connect check` (.agents/skills/qualiloop)",
+  },
   // Routes of this cycle proven over real HTTP + PostgreSQL in apps/api's
   // integration suites rather than a flow: the subscription ones read a
   // connected ChatGPT/Claude plan (an external login the local profile has
@@ -151,6 +160,12 @@ export const uncoveredAllow: AllowEntry[] = [
     path: "/v1/projects/:*/git/connection",
     reason:
       "DEBT, not a considered exemption, and NOT introduced by this branch. The route exists on the app but was missing from tests/spec/routes.generated.json, so the gate never saw it; regenerating the manifest for the headless-auth routes surfaced it. Nothing covers it — it needs a flow. This entry keeps the gap visible instead of letting a stale manifest re-hide it.",
+  },
+  {
+    method: "PUT",
+    path: "/v1/admin/api/projects/:*/restricted-models",
+    reason:
+      "Kortix staff only (platform operator): turns restricted managed models on for one workspace. Covered against the real route and database in apps/api/src/__tests__/integration-restricted-models-http.test.ts: a workspace manager gets 403 and nothing is stored; an operator write is read back by the gateway; a non-restricted id is 400; an unknown or archived project is 404.",
   },
   {
     method: "POST",

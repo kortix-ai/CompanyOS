@@ -5,6 +5,7 @@
 export * from './accounts';
 export * from './workspaces';
 export * from './spaces';
+export * from './agent-directory';
 export * from './projects';
 export * from './skills';
 export * from './github';

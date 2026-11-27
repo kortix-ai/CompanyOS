@@ -49,8 +49,16 @@ export type SessionInvocationSource =
    * person gets (their Drive and memory). The workspace is empty and theirs.
    */
   | 'eval:trial'
+  /**
+   * A QualiLoop test conversation (`qualiloop/`): one session per QualiLoop
+   * conversation. Not `system:`, so its origin is `user` and it runs as the
+   * project owner's own private chat, with their Drive and memory.
+   */
+  | 'qualiloop'
   /** A person's reply on a calendar item an agent session created (`projects/calendar/`, flag `calendar`). */
   | 'system:calendar'
+  /** The workspace cache's daily rebuild (`projects/workspace-cache/builder.ts`, flag `platinum_cache`): no model turn. */
+  | 'system:workspace-cache'
   | 'admin';
 
 /** `on_backpressure` is for trigger fires only; see `backpressure.ts`. */

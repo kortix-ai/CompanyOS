@@ -150,7 +150,16 @@ if [ "$(id -u)" -eq 0 ] && id kortix >/dev/null 2>&1; then
   # runtime user reaches the socket through the docker group.
   if [ "${KORTIX_CONTAINER_RUNTIME:-}" = 1 ] && command -v dockerd >/dev/null 2>&1 \
       && ! pgrep -x dockerd >/dev/null 2>&1; then
-    nohup dockerd >/var/log/dockerd.log 2>&1 </dev/null &
+    # Workspace cache (project flag `platinum_cache`, KORTIX_WORKSPACE_CACHE): Docker keeps its images,
+    # layers and volumes in /workspace/.docker, so they come back with the cached workspace instead of
+    # being loaded again at every boot (the Supabase image load alone is ~64 s on a 6 vCPU box).
+    # A cached session always has its /workspace volume; wait out a late mount as the volume check below does.
+    docker_root=
+    if [ -n "${KORTIX_WORKSPACE_CACHE:-}" ]; then
+      for _ in $(seq 1 240); do mountpoint -q /workspace && break; sleep 0.25; done
+      if mountpoint -q /workspace; then mkdir -p /workspace/.docker && docker_root=/workspace/.docker; fi
+    fi
+    nohup dockerd ${docker_root:+--data-root "$docker_root"} >/var/log/dockerd.log 2>&1 </dev/null &
   fi
   export HOME=/home/kortix USER=kortix LOGNAME=kortix SHELL=/bin/bash
   if command -v setpriv >/dev/null 2>&1; then

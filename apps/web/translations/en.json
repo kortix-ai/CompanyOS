@@ -4022,7 +4022,10 @@
     }
   },
   "workspaceOnboarding": {
-    "setup": { "title": "Set up your selected apps", "description": "Connect only the apps you chose. Go back to change your selection, or continue and connect later." },
+    "setup": {
+      "title": "Set up your selected apps",
+      "description": "Connect only the apps you chose. Go back to change your selection, or continue and connect later."
+    },
     "progress": "Step {current} of {total}",
     "back": "Back",
     "continue": "Continue",

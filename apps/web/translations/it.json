@@ -3977,7 +3977,10 @@
     }
   },
   "workspaceOnboarding": {
-    "setup": {"title": "Configura le app selezionate", "description": "Collega le app scelte. Torna indietro per cambiare la selezione oppure collegale più tardi."},
+    "setup": {
+      "title": "Configura le app selezionate",
+      "description": "Collega le app scelte. Torna indietro per cambiare la selezione oppure collegale più tardi."
+    },
     "progress": "Passaggio {current} di {total}",
     "back": "Indietro",
     "continue": "Continua",

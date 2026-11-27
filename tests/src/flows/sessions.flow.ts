@@ -3346,15 +3346,25 @@ flow(
         if (second.cursor) throw new Error('the last page carries a cursor');
       });
 
-      await ctx.step('a deleted session keeps its place: the manager inventory lists the tombstone where the session was', async () => {
+      await ctx.step('a deleted session keeps its timestamp but leaves normal lists and remains restorable', async () => {
         const deleted = live[5]!;
         (await ctx.client
           .as(reader)
           .del('/v1/workspaces/:projectId/sessions/:sessionId', { params: { projectId: trash.id, sessionId: deleted } })
         ).status(200);
         const inventory = await list(ctx.client.as(ctx.P.OWNER), trash.id, { scope: 'project', limit: '10' });
-        expectIds(inventory.rows, live.slice(0, 10), 'manager inventory');
-        if (!inventory.rows[5]!.deleted_at) throw new Error('the deleted session carries no deleted_at');
+        expectIds(inventory.rows, [...live.slice(0, 5), ...live.slice(6, 11)], 'manager inventory');
+        const removed = await list(ctx.client.as(ctx.P.OWNER), trash.id, { scope: 'project', deleted: 'only', limit: '200' });
+        if (removed.rows.some((row) => !row.deleted_at)) throw new Error('recently deleted contains a live session');
+        // The seeded newer tombstones fill page 1; page through to the deletion.
+        let deletedRow = removed.rows.find((row) => row.session_id === deleted);
+        let cursor = removed.cursor;
+        while (!deletedRow && cursor) {
+          const page = await list(ctx.client.as(ctx.P.OWNER), trash.id, { scope: 'project', deleted: 'only', limit: '200', cursor });
+          deletedRow = page.rows.find((row) => row.session_id === deleted);
+          cursor = page.cursor;
+        }
+        if (!deletedRow?.deleted_at) throw new Error('Recently deleted lost the deleted session');
         const visible = await list(ctx.client.as(reader), trash.id, { limit: '50' });
         expectIds(visible.rows, [...live.slice(0, 5), ...live.slice(6, 51)], 'owner after delete');
       });

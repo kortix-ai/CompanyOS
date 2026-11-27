@@ -1373,7 +1373,7 @@
         },
         "platinum_cache": {
           "name": "工作区缓存",
-          "description": "新会话会从本项目保存在 Platinum 上的工作区缓存恢复 /workspace：一个已准备好的代码检出，包含 node_modules 和 pnpm 存储，大约一秒即可就绪，而不是数分钟的安装。项目管理员将准备好的会话保存为缓存。关闭时，每个会话都从空的 /workspace 开始。"
+          "description": "新会话会从本工作区保存在 Platinum 上的工作区缓存恢复 /workspace：一个已准备好的代码检出，包含 node_modules 和 pnpm 存储，大约一秒即可就绪，而不是数分钟的安装。工作区管理员将准备好的会话保存为缓存。关闭时，每个会话都从空的 /workspace 开始。"
         },
         "sidebar_rail": {
           "name": "侧边栏图标栏",

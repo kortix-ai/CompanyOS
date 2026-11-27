@@ -15,6 +15,7 @@ import {
   SESSION_LOG_FIRST_PAGE_LIMIT,
   SESSION_LOG_OLDER_PAGE_LIMIT,
   type LoadSessionLogPage,
+  type ScheduleSessionLogRead,
   type SessionLogDialect,
   type SessionLogSyncState,
 } from '../core/session-log/source';
@@ -282,6 +283,8 @@ export function useSessionLogSync(
     joinStream?: (options: SessionControlStreamOptions) => { close: () => void };
     /** Test seam: runs a timed retry after `ms`; returns its cancel. */
     schedule?: (run: () => void, ms: number) => () => void;
+    /** Test seam: runs each read's deadline; a real timer by default. */
+    readSchedule?: ScheduleSessionLogRead;
     /** Each first-page read's outcome: a page, no log yet (`missing`), or a failed read. */
     onRead?: (outcome: 'page' | 'missing' | 'failed') => void;
     /** A new value reads the log again from the start (a host's "Try again"). */
@@ -291,6 +294,7 @@ export function useSessionLogSync(
   const loader = options.loader === undefined ? loadSessionLogPage : options.loader;
   const joinStream = options.joinStream ?? openSessionStream;
   const schedule = options.schedule ?? scheduleRetry;
+  const readSchedule = options.readSchedule;
   const active = options.enabled && !!loader && !!projectId && !!sessionId;
   const onRead = useRef(options.onRead);
   useEffect(() => {
@@ -314,7 +318,7 @@ export function useSessionLogSync(
     if (negotiated !== 'v2' || !loader) return;
     const sync = startSessionLogSync({
       projectId, sessionId, loader, store: useSyncStore.getState,
-      copies: currentSavedCopyStore(), joinStream, schedule, onTabVisible,
+      copies: currentSavedCopyStore(), joinStream, schedule, readSchedule, onTabVisible,
       boxReady: () => boxReadyRef.current,
       onRead: (outcome) => onRead.current?.(outcome),
       setMissing: (missing) => setMissingKey(missing ? key : null),
@@ -326,7 +330,7 @@ export function useSessionLogSync(
       sync.dispose();
     };
     // `revision` is read only as a dependency: a new value re-runs the whole read.
-  }, [negotiated, loader, joinStream, schedule, projectId, sessionId, revision]);
+  }, [negotiated, loader, joinStream, schedule, readSchedule, projectId, sessionId, revision]);
 
   // The box got ready after mount: the first read could not read it live.
   const hadBoxReady = useRef(boxReady);

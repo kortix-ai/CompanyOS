@@ -13,6 +13,7 @@ import { bearerToken } from '../../shared/bearer-token';
 import { logger } from '../../lib/logger';
 import { AUTHENTICATOR_TOOLS } from './authenticator';
 import { BROWSER_TOOLS } from './browser';
+import { PHONE_TOOLS } from './phone';
 import { kortixAgentServiceForUrl, type KortixAgentService } from './host';
 import { type AccountState, decodeAccountState, InvalidAccountToken, saveAccountState } from './state';
 import { type AgentTool, ToolInputError } from './tool';
@@ -28,7 +29,7 @@ const SERVICE_TITLES: Record<KortixAgentService, string> = {
 const TOOLS: Record<KortixAgentService, readonly AgentTool<never>[]> = {
   authenticator: AUTHENTICATOR_TOOLS as readonly AgentTool<never>[],
   browser: BROWSER_TOOLS as readonly AgentTool<never>[],
-  phone: [],
+  phone: PHONE_TOOLS as readonly AgentTool<never>[],
 };
 
 export function kortixAgentTools(service: KortixAgentService): readonly AgentTool<never>[] {

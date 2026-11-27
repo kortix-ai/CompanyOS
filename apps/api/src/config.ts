@@ -1088,6 +1088,10 @@ const envSchema = z.object({
   AWS_SES_REGION: optStrDefault('us-east-2'),
   AWS_SES_ACCESS_KEY_ID: optStr,
   AWS_SES_SECRET_ACCESS_KEY: optStr,
+  // Twilio (https://www.twilio.com): phone numbers for kortix_phone accounts
+  // (connectors/kortix-agent/phone.ts). Unset: the connector is not offered.
+  TWILIO_ACCOUNT_SID: optStr,
+  TWILIO_AUTH_TOKEN: optStr,
   // Resend (https://resend.com).
   RESEND_API_KEY: optStr,
   // Override sender for the Resend leg only — needed while the primary from-
@@ -1867,6 +1871,8 @@ export const config = {
   AWS_SES_REGION: env.AWS_SES_REGION,
   AWS_SES_ACCESS_KEY_ID: env.AWS_SES_ACCESS_KEY_ID,
   AWS_SES_SECRET_ACCESS_KEY: env.AWS_SES_SECRET_ACCESS_KEY,
+  TWILIO_ACCOUNT_SID: env.TWILIO_ACCOUNT_SID,
+  TWILIO_AUTH_TOKEN: env.TWILIO_AUTH_TOKEN,
   RESEND_API_KEY: env.RESEND_API_KEY,
   RESEND_FROM_EMAIL: env.RESEND_FROM_EMAIL,
   EXPO_ACCESS_TOKEN: env.EXPO_ACCESS_TOKEN,

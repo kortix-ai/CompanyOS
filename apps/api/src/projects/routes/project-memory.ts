@@ -152,6 +152,9 @@ export function registerProjectMemoryRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/memory/layers/{layerKey}',
+      operationId: 'memory.layers.get',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'agent',
       tags: ['memory'],
       summary: 'Read a memory layer: its Drive folder and page counts',
       description: '`layerKey` is `company` or the space id of a channel or the caller’s DM. Another member’s DM is 404 `memory_not_found`.',
@@ -171,6 +174,9 @@ export function registerProjectMemoryRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/memory/layers/{layerKey}/pages',
+      operationId: 'memory.layers.pages.list',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'agent',
       tags: ['memory'],
       summary: 'List the pages of a memory layer',
       description: 'One summary per Markdown file, newest first (a DM’s agent folder first), at most 500 (`truncated` past it).',
@@ -194,6 +200,9 @@ export function registerProjectMemoryRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/memory/layers/{layerKey}/pages',
+      operationId: 'memory.layers.pages.create',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'agent',
       tags: ['memory'],
       summary: 'Create a memory page',
       description:
@@ -218,6 +227,9 @@ export function registerProjectMemoryRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/memory/layers/{layerKey}/notes',
+      operationId: 'memory.layers.notes.create',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'agent',
       tags: ['memory'],
       summary: 'Save a note to a memory layer',
       description:
@@ -247,6 +259,9 @@ export function registerProjectMemoryRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/memory/pages/{pageId}',
+      operationId: 'memory.pages.get',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'agent',
       tags: ['memory'],
       summary: 'Read a memory page',
       description: '413 `page_too_large` (with `path`) for a file over 256 KiB: open it in Files.',
@@ -267,6 +282,9 @@ export function registerProjectMemoryRoutes(): void {
     createRoute({
       method: 'patch',
       path: '/{workspaceId}/memory/pages/{pageId}',
+      operationId: 'memory.pages.update',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'agent',
       tags: ['memory'],
       summary: 'Edit the body of a memory page',
       description: 'The body only: front-matter and the `# ` title line are kept. 409 `version_conflict` when the file changed since `base_version`.',
@@ -288,6 +306,9 @@ export function registerProjectMemoryRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/memory/pages/{pageId}',
+      operationId: 'memory.pages.delete',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'agent',
       tags: ['memory'],
       summary: 'Delete a memory page',
       description: 'Deletes the file for good (a Drive delete). Anyone who may write the layer.',
@@ -310,6 +331,9 @@ export function registerProjectMemoryRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/memory/pages/{pageId}/history',
+      operationId: 'memory.pages.history.list',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'agent',
       tags: ['memory'],
       summary: 'List the versions of a memory page',
       description: 'From the drive’s newest 100 Drive commits, one entry per distinct file version, newest first, at most 20. Older versions: Files → Versions.',
@@ -330,6 +354,9 @@ export function registerProjectMemoryRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/memory/search',
+      operationId: 'memory.search',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'agent',
       tags: ['memory'],
       summary: 'Search memory pages',
       description:

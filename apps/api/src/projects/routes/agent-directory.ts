@@ -18,6 +18,9 @@ export function registerAgentDirectoryRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/agent-directory',
+      operationId: 'agent_directory.list',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'agent',
       tags: ['agents'],
       summary: 'List the agents the caller can message',
       description:
@@ -44,6 +47,9 @@ export function registerAgentDirectoryRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/agent-directory/{name}/pause',
+      operationId: 'agent_directory.pause.set',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_TRIGGER_UPDATE,
+      'x-kortix-exposure': 'agent',
       tags: ['agents'],
       summary: 'Pause or resume an agent',
       description:

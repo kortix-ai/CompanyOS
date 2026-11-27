@@ -194,6 +194,9 @@ export function createCliSetupEventsApp(deps: CliSetupEventsDeps = {}) {
     createRoute({
       method: 'post',
       path: '/',
+      operationId: 'cli.setup_events.create',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'local',
       tags: ['cli'],
       summary: 'Report a guided-setup milestone from the CLI',
       description:

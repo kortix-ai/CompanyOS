@@ -103,6 +103,9 @@ function hasCause(error: unknown, predicate: (candidate: unknown) => boolean): b
 export function registerProjectSkillsRoutes(): void {
   projectsApp.openapi(createRoute({
     method: 'post', path: '/{workspaceId}/skills/remove', tags: ['projects'],
+    operationId: 'skills.remove',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_SKILL_WRITE,
+    'x-kortix-exposure': 'agent',
     summary: 'Remove a selected project skill folder, including edits', ...auth,
     request: {
       params: z.object({ workspaceId: z.string() }),
@@ -170,6 +173,9 @@ export function registerProjectSkillsRoutes(): void {
   createRoute({
     method: 'post',
     path: '/{workspaceId}/skills',
+    operationId: 'skills.create',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_SKILL_WRITE,
+    'x-kortix-exposure': 'agent',
     tags: ['projects'],
     summary: 'Create a skill on the default branch',
     ...auth,

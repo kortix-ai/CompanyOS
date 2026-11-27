@@ -77,6 +77,9 @@ billingApp.openapi(
   createRoute({
     method: 'post',
     path: '/cron/yearly-rotation',
+    operationId: 'billing.cron.yearly_rotation.run',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['billing'],
     security: [{ bearerAuth: [] }],
     summary: 'Run the yearly credit rotation (cron)',
@@ -102,6 +105,9 @@ billingApp.openapi(
   createRoute({
     method: 'post',
     path: '/cron/free-tier-rotation',
+    operationId: 'billing.cron.free_tier_rotation.run',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['billing'],
     security: [{ bearerAuth: [] }],
     summary: 'Run the free-tier monthly credit rotation (cron)',
@@ -129,6 +135,9 @@ billingApp.openapi(
   createRoute({
     method: 'post',
     path: '/cron/trial-expiry',
+    operationId: 'billing.cron.trial_expiry.run',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['billing'],
     security: [{ bearerAuth: [] }],
     summary: 'Sweep Enterprise licenses: end and warn (cron)',

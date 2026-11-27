@@ -128,6 +128,9 @@ export function registerConnectionActionsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/connections/{connectionId}/share',
+      operationId: 'connections.share',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_CONNECTIONS_MANAGE,
+      'x-kortix-exposure': 'agent',
       tags: ['connectors'],
       summary: 'Share your own private connection',
       description:
@@ -286,14 +289,18 @@ export function registerConnectionActionsRoutes(): void {
     },
   );
 
-  for (const [method, path] of [
-    ['put', '/{workspaceId}/connections/{connectionId}/label'],
-    ['patch', '/{workspaceId}/connections/{connectionId}'],
+  for (const [method, path, operationId] of [
+    ['put', '/{workspaceId}/connections/{connectionId}/label', 'connections.label.set'],
+    ['patch', '/{workspaceId}/connections/{connectionId}', 'connections.update'],
   ] as const) {
     projectsApp.openapi(
       createRoute({
         method,
         path,
+        operationId,
+        // Strictest case: a shared account needs the manage permission; the caller's own private account needs only `read`.
+        'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_CONNECTIONS_MANAGE,
+        'x-kortix-exposure': 'agent',
         tags: ['connectors'],
         summary: 'Rename connection',
         description:
@@ -312,11 +319,20 @@ export function registerConnectionActionsRoutes(): void {
     );
   }
 
+  const CONNECTION_STATE_OPERATION_IDS = {
+    credential: 'connections.credential.set',
+    revoke: 'connections.revoke',
+    activate: 'connections.activate',
+    default: 'connections.default.set',
+  } as const;
   for (const operation of ['credential', 'revoke', 'activate', 'default'] as const) {
     projectsApp.openapi(
       createRoute({
         method: 'put',
         path: `/{workspaceId}/connections/{connectionId}/${operation}`,
+        operationId: CONNECTION_STATE_OPERATION_IDS[operation],
+        'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_CONNECTIONS_MANAGE,
+        'x-kortix-exposure': 'agent',
         tags: ['connectors'],
         summary: `${operation} connection`,
         ...auth,
@@ -502,6 +518,10 @@ export function registerConnectionActionsRoutes(): void {
       createRoute({
         method: 'post',
         path: `/{workspaceId}/connections/{connectionId}/${operation}`,
+        operationId: operation === 'connect' ? 'connections.connect' : 'connections.connect.finalize',
+        'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_CONNECTIONS_MANAGE,
+        // An agent starts the sign-in and hands the link to its person, then finalizes it.
+        'x-kortix-exposure': 'agent',
         tags: ['connectors'],
         summary:
           operation === 'connect'

@@ -46,6 +46,9 @@ export function registerDictationRoutes(): void {
     createRoute({
       method: 'get',
       path,
+      operationId: 'dictation.get',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['dictation'],
       summary: 'Read whether dictation is available and what it costs',
       ...auth,
@@ -72,6 +75,9 @@ export function registerDictationRoutes(): void {
     createRoute({
       method: 'post',
       path,
+      operationId: 'dictation.transcribe',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_START,
+      'x-kortix-exposure': 'agent',
       tags: ['dictation'],
       summary: 'Transcribe a dictated clip into text',
       description:

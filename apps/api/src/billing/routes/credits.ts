@@ -14,6 +14,9 @@ creditsRouter.openapi(
   createRoute({
     method: 'get',
     path: '/tier-configurations',
+    operationId: 'billing.tier_configurations.list',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'agent',
     tags: ['billing'],
     summary: 'List the credits plan tier ladder and amount bounds',
     ...auth,
@@ -58,6 +61,9 @@ creditsRouter.openapi(
   createRoute({
     method: 'get',
     path: '/credit-breakdown',
+    operationId: 'billing.credit_breakdown.get',
+    'x-kortix-action': 'billing.read',
+    'x-kortix-exposure': 'agent',
     tags: ['billing'],
     summary: 'Get the credit balance breakdown',
     ...auth,
@@ -98,6 +104,9 @@ creditsRouter.openapi(
   createRoute({
     method: 'get',
     path: '/usage-history',
+    operationId: 'billing.usage_history.get',
+    'x-kortix-action': 'billing.read',
+    'x-kortix-exposure': 'agent',
     tags: ['billing'],
     summary: 'Get a credit usage summary over a window of days',
     ...auth,
@@ -119,6 +128,9 @@ creditsRouter.openapi(
   createRoute({
     method: 'post',
     path: '/redeem-code',
+    operationId: 'billing.credit_codes.redeem',
+    'x-kortix-action': 'billing.write',
+    'x-kortix-exposure': 'human',
     tags: ['billing'],
     summary: 'Redeem a credit code for an account',
     description:

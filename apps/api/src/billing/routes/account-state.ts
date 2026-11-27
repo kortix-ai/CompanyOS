@@ -113,6 +113,9 @@ accountStateRouter.openapi(
   createRoute({
     method: 'get',
     path: '/',
+    operationId: 'billing.account_state.get',
+    'x-kortix-action': ACCOUNT_ACTIONS.BILLING_READ,
+    'x-kortix-exposure': 'agent',
     tags: ['billing'],
     summary: 'Authoritative account billing state',
     ...auth,
@@ -130,6 +133,9 @@ accountStateRouter.openapi(
   createRoute({
     method: 'get',
     path: '/minimal',
+    operationId: 'billing.account_state.minimal.get',
+    'x-kortix-action': ACCOUNT_ACTIONS.BILLING_READ,
+    'x-kortix-exposure': 'agent',
     tags: ['billing'],
     summary: 'Minimal authoritative account billing state',
     ...auth,

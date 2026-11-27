@@ -27,6 +27,9 @@ webhooksRouter.openapi(
   createRoute({
     method: 'post',
     path: '/stripe',
+    operationId: 'billing.webhooks.stripe.receive',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['billing'],
     summary: 'Stripe webhook (signature-verified, public)',
     responses: {
@@ -59,6 +62,9 @@ webhooksRouter.openapi(
   createRoute({
     method: 'post',
     path: '/revenuecat',
+    operationId: 'billing.webhooks.revenuecat.receive',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['billing'],
     summary: 'RevenueCat webhook (bearer-secret verified, public)',
     responses: {

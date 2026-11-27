@@ -158,6 +158,9 @@ export function registerEvalRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/evals',
+      operationId: 'evals.suites.list',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['evals'],
       summary: 'List the eval suites of a project',
       description: 'The suites of `evals:` in kortix.yaml at `ref` (default: the default branch), each resolved to its job config, with its latest job. A suite that does not resolve carries `error`. Flag `evals`.',
@@ -180,6 +183,9 @@ export function registerEvalRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/evals/tasks',
+      operationId: 'evals.tasks.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_FILE_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['evals'],
       summary: 'List the tasks of a suite, a path or a dataset',
       description: 'The Harbor-format tasks a suite selects (`suite`), the tasks under a repository path (`path`), or the tasks of a dataset by name (`dataset`, `version`: built-in `kortix/…` or the Harbor registry), parsed at `ref`, with the dataset README. A task Kortix cannot run carries `unsupported`. Flag `evals`.',
@@ -206,6 +212,9 @@ export function registerEvalRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/evals/datasets',
+      operationId: 'evals.datasets.list',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['evals'],
       summary: 'List the datasets a job can name',
       description:
@@ -227,6 +236,9 @@ export function registerEvalRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/evals/tasks/{taskId}',
+      operationId: 'evals.tasks.get',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_FILE_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['evals'],
       summary: 'Get one task',
       description: 'A task by its `task_id` (as a task list or a trial returns it): the parsed task, its README, task.toml and every file of its folder with its size. Needs `project.file.read`. Flag `evals`.',
@@ -249,6 +261,9 @@ export function registerEvalRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/evals/tasks/{taskId}/file',
+      operationId: 'evals.tasks.files.get',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_FILE_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['evals'],
       summary: 'Read one file of a task',
       description: 'The text of a file the task detail lists, by its `path`, as `text/plain` (the first 1 MB). Needs `project.file.read`. Flag `evals`.',
@@ -271,6 +286,9 @@ export function registerEvalRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/evals/tasks/{taskId}/results',
+      operationId: 'evals.tasks.results.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_FILE_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['evals'],
       summary: 'Results of one task across jobs',
       description:
@@ -295,6 +313,9 @@ export function registerEvalRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/evals/compare',
+      operationId: 'evals.jobs.compare',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['evals'],
       summary: 'Compare eval jobs task by task',
       description:
@@ -322,6 +343,9 @@ export function registerEvalRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/evals/jobs',
+      operationId: 'evals.jobs.list',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['evals'],
       summary: 'List eval jobs',
       description:
@@ -377,6 +401,9 @@ export function registerEvalRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/evals/jobs',
+      operationId: 'evals.jobs.create',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_START,
+      'x-kortix-exposure': 'agent',
       tags: ['evals'],
       summary: 'Start an eval job',
       description:
@@ -416,6 +443,9 @@ export function registerEvalRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/evals/jobs/{jobId}',
+      operationId: 'evals.jobs.get',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['evals'],
       summary: 'Get an eval job',
       description: 'The job with its config and its stats: counts per trial status, and per agent and model the metrics over the valid rewards. Flag `evals`.',
@@ -435,6 +465,9 @@ export function registerEvalRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/evals/jobs/{jobId}/trials',
+      operationId: 'evals.jobs.trials.list',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['evals'],
       summary: 'List the trials of an eval job',
       description: 'Every trial of the job, by task, agent and attempt. A retry of an attempt is its own trial with `retry` above 0. Flag `evals`.',
@@ -455,6 +488,9 @@ export function registerEvalRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/evals/jobs/{jobId}/trials/{trialId}',
+      operationId: 'evals.jobs.trials.get',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['evals'],
       summary: 'Get one trial',
       description: 'The trial, the instruction its agent got (null without `project.file.read`: it is repository content), and the files of its folder (`result.json`, `verifier/test-stdout.txt`, …). Flag `evals`.',
@@ -477,6 +513,9 @@ export function registerEvalRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/evals/jobs/{jobId}/trials/{trialId}/file',
+      operationId: 'evals.jobs.trials.files.get',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['evals'],
       summary: 'Read one file of a trial folder',
       description: 'A file the trial detail lists, by its `path`, as `text/plain` exactly as written (the first 1 MB): a `reward.json` that does not parse reads back as it is. Flag `evals`.',
@@ -501,6 +540,9 @@ export function registerEvalRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/evals/jobs/{jobId}/cancel',
+      operationId: 'evals.jobs.cancel',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_START,
+      'x-kortix-exposure': 'agent',
       tags: ['evals'],
       summary: 'Cancel an eval job',
       description: 'No queued trial starts, and every running trial ends `cancelled` with its sandbox stopped. A job that ended stays as it is. Needs `project.session.start`. Flag `evals`.',
@@ -523,6 +565,9 @@ export function registerEvalRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/evals/jobs/{jobId}/rerun',
+      operationId: 'evals.jobs.rerun',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_START,
+      'x-kortix-exposure': 'agent',
       tags: ['evals'],
       summary: 'Run trials of a job again',
       description:
@@ -553,6 +598,9 @@ export function registerEvalRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/evals/jobs/{jobId}/trials/{trialId}/retry',
+      operationId: 'evals.jobs.trials.retry',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_START,
+      'x-kortix-exposure': 'agent',
       tags: ['evals'],
       summary: 'Run one trial again inside its job',
       description:
@@ -582,6 +630,9 @@ export function registerEvalRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/evals/jobs/{jobId}/trials/{trialId}/cancel',
+      operationId: 'evals.jobs.trials.cancel',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_START,
+      'x-kortix-exposure': 'agent',
       tags: ['evals'],
       summary: 'Cancel one trial',
       description: 'A queued or running trial ends `cancelled` and its sandbox stops; the rest of the job runs on. A trial that ended stays as it is. Needs `project.session.start`. Flag `evals`.',
@@ -607,6 +658,9 @@ export function registerEvalRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/evals/jobs/{jobId}',
+      operationId: 'evals.jobs.delete',
+      'x-kortix-action': 'project.write',
+      'x-kortix-exposure': 'agent',
       tags: ['evals'],
       summary: 'Delete an eval job',
       description: 'Deletes an ended job: its trials and its folder in Files. The sessions its trials ran in stay. A running job answers `409 eval_conflict`: cancel it first. Needs project write access. Flag `evals`.',

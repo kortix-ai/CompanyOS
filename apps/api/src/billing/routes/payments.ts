@@ -25,6 +25,9 @@ paymentsRouter.openapi(
   createRoute({
     method: 'post',
     path: '/purchase-credits',
+    operationId: 'billing.credits.purchase',
+    'x-kortix-action': 'billing.write',
+    'x-kortix-exposure': 'human',
     tags: ['billing'],
     summary: 'Create a Stripe checkout session to purchase credits',
     ...auth,
@@ -119,6 +122,9 @@ paymentsRouter.openapi(
   createRoute({
     method: 'get',
     path: '/transactions',
+    operationId: 'billing.transactions.list',
+    'x-kortix-action': 'billing.read',
+    'x-kortix-exposure': 'agent',
     tags: ['billing'],
     summary: 'List credit transactions (paginated)',
     ...auth,
@@ -196,6 +202,9 @@ paymentsRouter.openapi(
   createRoute({
     method: 'get',
     path: '/transactions/summary',
+    operationId: 'billing.transactions.summary.get',
+    'x-kortix-action': 'billing.read',
+    'x-kortix-exposure': 'agent',
     tags: ['billing'],
     summary: 'Get a transaction summary over a window of days',
     ...auth,
@@ -220,6 +229,9 @@ paymentsRouter.openapi(
   createRoute({
     method: 'get',
     path: '/auto-topup/settings',
+    operationId: 'billing.auto_topup.settings.get',
+    'x-kortix-action': 'billing.read',
+    'x-kortix-exposure': 'agent',
     tags: ['billing'],
     summary: 'Get auto-topup settings',
     ...auth,
@@ -245,6 +257,9 @@ paymentsRouter.openapi(
   createRoute({
     method: 'get',
     path: '/auto-topup/setup-status',
+    operationId: 'billing.auto_topup.setup_status.get',
+    'x-kortix-action': 'billing.read',
+    'x-kortix-exposure': 'agent',
     tags: ['billing'],
     summary: 'Get auto-topup setup status',
     ...auth,
@@ -265,6 +280,9 @@ paymentsRouter.openapi(
   createRoute({
     method: 'post',
     path: '/auto-topup/configure',
+    operationId: 'billing.auto_topup.configure',
+    'x-kortix-action': 'billing.write',
+    'x-kortix-exposure': 'human',
     tags: ['billing'],
     summary: 'Configure auto-topup',
     ...auth,
@@ -309,6 +327,9 @@ paymentsRouter.openapi(
   createRoute({
     method: 'get',
     path: '/credit-usage',
+    operationId: 'billing.credit_usage.list',
+    'x-kortix-action': 'billing.read',
+    'x-kortix-exposure': 'agent',
     tags: ['billing'],
     summary: 'List credit usage records (paginated)',
     ...auth,

@@ -152,6 +152,9 @@ export function registerConnectionsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/connections',
+      operationId: 'connections.list',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['connectors'],
       summary: 'List connections',
       ...auth,
@@ -279,6 +282,9 @@ export function registerConnectionsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/connections/all',
+      operationId: 'connections.list_all',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_CONNECTIONS_MANAGE,
+      'x-kortix-exposure': 'agent',
       tags: ['connectors'],
       summary: "List every member's connections",
       ...auth,
@@ -347,6 +353,9 @@ export function registerConnectionsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/connections/me',
+      operationId: 'connections.me.set',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['connectors'],
       summary: "Create or reconcile the calling member's connection",
       ...auth,
@@ -442,6 +451,9 @@ export function registerConnectionsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/connections',
+      operationId: 'connections.set',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_CONNECTIONS_MANAGE,
+      'x-kortix-exposure': 'agent',
       tags: ['connectors'],
       summary: 'Create or reconcile a connection',
       ...auth,

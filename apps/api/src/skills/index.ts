@@ -91,6 +91,9 @@ skillsApp.openapi(
   createRoute({
     method: 'get',
     path: '/',
+    operationId: 'skills.managed.list',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'agent',
     tags: ['skills'],
     summary: 'List the Kortix system skills',
     description:
@@ -115,6 +118,9 @@ skillsApp.openapi(
   createRoute({
     method: 'get',
     path: '/{name}/file',
+    operationId: 'skills.managed.files.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'agent',
     tags: ['skills'],
     summary: 'Read a file of a Kortix system skill (?path=)',
     ...auth,
@@ -149,6 +155,9 @@ skillsApp.openapi(
   createRoute({
     method: 'get',
     path: '/{name}',
+    operationId: 'skills.managed.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'agent',
     tags: ['skills'],
     summary: 'Read a Kortix system skill (full SKILL.md)',
     description:

@@ -217,3 +217,18 @@
   becomes its `people/` part.
 - **Open** No up-front ontology: wiki pages, ledger links and connector
   actions are the ontology, built as the Humanoid works.
+
+## Decided: framing, data and telephony (2026-11-27)
+
+- **2026-11-27 (Marko)** The comparison with Palantir, Databricks, Celonis and
+  RPA is about Kortix CompanyOS as a whole; the Humanoid is its core.
+- **2026-11-27 (Marko)** Kortix unifies every data source (read) and every
+  connector (write, full CRUD) and every event in one place, with no second
+  copy of the data: retrieval happens at run time (the Databricks catalog
+  method, not Palantir's object store). The ledger keeps events, the wiki
+  keeps compiled knowledge with sources; source data stays where it lives.
+- **Open** A long-term ontology: object types defined as how to fetch them
+  from each connector, plus an identity map (one id per real-world object
+  across sources). No copied rows.
+- **2026-11-27 (Marko)** Kortix pays for Twilio (managed numbers). A workspace
+  can also bring its own provider, as email allows its own sending domain.

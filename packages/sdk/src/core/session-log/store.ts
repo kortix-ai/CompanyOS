@@ -20,7 +20,9 @@
  *  - `log.thread`: the thread head replaces the one held.
  *  - `log.state`: an older `generation` (a zombie box) is ignored; the session fields merge.
  *  - A page carries no revs: a page message never replaces a message the stream delivered,
- *    and never revives a tombstoned one. Within its window a page drops a held message it
+ *    and never revives a tombstoned one. Two exceptions: a finished record replaces a held
+ *    streaming one, and a prompt at a real seq replaces its held copy at a queued seq. Within
+ *    its window a page drops a held message it
  *    lacks unless the stream revised it: that message was deleted, or came from an older saved
  *    copy. The window starts at the page's first `seq` (at the start without `has_more`) and
  *    ends at `before_seq` for an older page, at the end of the thread for the box's own page
@@ -103,6 +105,11 @@ function without(state: SessionLogState, id: string): Record<string, SessionLogM
 /** The store holds `message`'s id as a streaming record (a live put the final put has not replaced yet). */
 function heldStreaming(state: SessionLogState, message: SessionLogMessage): boolean {
   return state.messages[message.thread_id]?.some((m) => m.message_id === message.message_id && m.status === 'streaming') ?? false;
+}
+
+/** The store holds `message`'s id at a queued prompt's provisional seq. */
+function heldQueued(state: SessionLogState, message: SessionLogMessage): boolean {
+  return state.messages[message.thread_id]?.some((m) => m.message_id === message.message_id && m.seq >= SESSION_LOG_QUEUED_SEQ_FLOOR) ?? false;
 }
 
 /** The store holds `message`'s id as a finished record (any status but `streaming`). */
@@ -239,7 +246,11 @@ export function applySessionLogPage(state: SessionLogState, page: SessionLogPage
     // final record follows every streaming put of its message, and a stream that lost that final
     // put held the reply's partial text forever. Its rev stays, so a late streaming put cannot win.
     const finishesStreaming = message.status !== 'streaming' && heldStreaming(state, message);
-    if (state.revs[message.message_id] !== undefined && !finishesStreaming) continue;
+    // A queued seq is no position: a page that holds the prompt at a real seq places it even
+    // though the stream put it, as the frame that puts it again at that seq would have (a lost
+    // frame left it below every newer reply). Its rev stays, so a late queued put cannot win.
+    const leavesQueue = message.seq < SESSION_LOG_QUEUED_SEQ_FLOOR && heldQueued(state, message);
+    if (state.revs[message.message_id] !== undefined && !finishesStreaming && !leavesQueue) continue;
     // A page's streaming copy is older than a finished record held (a lagging page read mid-turn),
     // as a streaming put is (`applyMessage`).
     if (message.status === 'streaming' && heldFinished(state, message)) continue;

@@ -78,6 +78,13 @@ export const loadSessionLogPage: LoadSessionLogPage = async (projectId, sessionI
   return response.data;
 };
 
+/**
+ * The longest one read of the log may take, body included. The HTTP client's own deadline ends
+ * at the headers, and a body that stalls after them (a laptop that slept, a proxy that hung)
+ * would leave the read pending for good, and every re-read waiting on it.
+ */
+export const SESSION_LOG_READ_DEADLINE_MS = 20_000;
+
 /** The first window, the same size as the v1 mirror's (`MIRROR_HYDRATE_LIMIT`). */
 export const SESSION_LOG_FIRST_PAGE_LIMIT = 40;
 
@@ -106,20 +113,50 @@ function retryAfterMs(error: unknown): number | null {
   return Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : null;
 }
 
-/** {@link readSessionLogAnswer}, with the failed read's `Retry-After`. Never throws. */
+/** Runs `run` after `ms`; returns its cancel. */
+export type ScheduleSessionLogRead = (run: () => void, ms: number) => () => void;
+
+const scheduleTimeout: ScheduleSessionLogRead = (run, ms) => {
+  const timer = setTimeout(run, ms);
+  return () => clearTimeout(timer);
+};
+
+const EXPIRED = Symbol('expired');
+
+/**
+ * {@link readSessionLogAnswer}, with the failed read's `Retry-After`. Never throws. A read that
+ * has not answered by {@link SESSION_LOG_READ_DEADLINE_MS} is aborted and answers as a failed
+ * read, even when its loader ignores the abort. `schedule` is the test seam for that deadline.
+ */
 export async function readSessionLog(
   load: LoadSessionLogPage,
   projectId: string,
   sessionId: string,
   query: SessionLogPageQuery,
   signal?: AbortSignal,
+  schedule: ScheduleSessionLogRead = scheduleTimeout,
 ): Promise<SessionLogRead> {
+  const request = new AbortController();
+  const abort = () => request.abort();
+  if (signal?.aborted) abort();
+  else signal?.addEventListener('abort', abort);
+  let cancel = () => {};
+  const expired = new Promise<typeof EXPIRED>((resolve) => {
+    cancel = schedule(() => {
+      abort();
+      resolve(EXPIRED);
+    }, SESSION_LOG_READ_DEADLINE_MS);
+  });
   try {
-    const page = await load(projectId, sessionId, query, signal);
+    const page = await Promise.race([load(projectId, sessionId, query, request.signal), expired]);
+    if (page === EXPIRED) return { answer: null, retryAfterMs: null };
     return { answer: isSessionLogPage(page) ? page : null, retryAfterMs: null };
   } catch (error) {
     if ((error as { code?: unknown } | null)?.code === SESSION_LOG_MISSING_CODE) return { answer: 'missing', retryAfterMs: null };
     return { answer: null, retryAfterMs: retryAfterMs(error) };
+  } finally {
+    cancel();
+    signal?.removeEventListener('abort', abort);
   }
 }
 

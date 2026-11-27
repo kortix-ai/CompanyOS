@@ -2,7 +2,7 @@ import { afterEach, describe, expect, mock, test } from 'bun:test';
 import { configureKortix } from '../http/config';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fetchSessionLogPage, loadSessionLogPage, SESSION_LOG_FIRST_PAGE_LIMIT } from './source';
+import { fetchSessionLogPage, loadSessionLogPage, readSessionLog, SESSION_LOG_FIRST_PAGE_LIMIT, SESSION_LOG_READ_DEADLINE_MS } from './source';
 import type { SessionLog } from './types';
 
 const log: SessionLog = JSON.parse(readFileSync(join(import.meta.dir, '../../../../api-contract/src/__tests__/fixtures/session-log/golden21.v2.json'), 'utf8'));
@@ -35,6 +35,28 @@ describe('loadSessionLogPage: GET /v1/workspaces/:p/sessions/:s/log', () => {
   test('a 404 (no stored log, or an unknown thread) reads as no page: the session stays on v1', async () => {
     serve(404, { error: 'No session log for this session' });
     expect(await fetchSessionLogPage(loadSessionLogPage, 'p', 's', { limit: SESSION_LOG_FIRST_PAGE_LIMIT })).toBeNull();
+  });
+
+  test('a response whose body stalls after the headers is a failed read at the deadline, and the request is aborted', async () => {
+    let request: AbortSignal | undefined;
+    globalThis.fetch = mock(async (input: unknown, init?: RequestInit) => {
+      request = init?.signal ?? (input instanceof Request ? input.signal : undefined);
+      // The headers arrive; the body never finishes.
+      return new Response(new ReadableStream({ start() {} }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }) as unknown as typeof fetch;
+    configureKortix({ backendUrl: 'http://test.local/v1', getToken: async () => 'tok' });
+    const deadlines: Array<{ ms: number; run: () => void }> = [];
+    let settled = false;
+    const read = readSessionLog(loadSessionLogPage, 'p', 's', { limit: SESSION_LOG_FIRST_PAGE_LIMIT, live: true }, undefined, (run, ms) => {
+      deadlines.push({ ms, run });
+      return () => {};
+    }).finally(() => { settled = true; });
+    for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
+    expect(settled).toBe(false);
+    expect(deadlines.map((d) => d.ms)).toEqual([SESSION_LOG_READ_DEADLINE_MS]);
+    deadlines[0]!.run();
+    expect(await read).toEqual({ answer: null, retryAfterMs: null });
+    expect(request?.aborted).toBe(true);
   });
 });
 

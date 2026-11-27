@@ -56,6 +56,7 @@ import {
 } from './credentials';
 import { recordFinishedComposioAuthorization } from './db-deps-connect';
 import { connectorEgressFetch } from './egress';
+import { kortixAgentServiceForUrl } from './kortix-agent/host';
 import { CredentialNotSharedError } from './gateway';
 import type { ExecutionRecord, GatewayAction, GatewayConnector, GatewayDeps, HeldApprovalVerdict } from './gateway';
 import { HELD_RUN_CEILING_MS, sealHeldInput } from './held-call-store';
@@ -709,6 +710,19 @@ export function makeDbGatewayDeps(principal: ConnectorPrincipal): GatewayDeps {
           connectionId: connector.connectionId,
         });
         if (credential !== null) return credential;
+        // A Kortix agent-identity account mints its credential on first use (kortix-agent/provision.ts).
+        if (connector.provider === 'mcp') {
+          const [row] = await db
+            .select({ projectId: connectors.projectId, config: connectors.config })
+            .from(connectors)
+            .where(eq(connectors.connectorId, connector.connectorId))
+            .limit(1);
+          const service = row ? kortixAgentServiceForUrl(String((row.config as { url?: unknown } | null)?.url ?? '')) : null;
+          if (row && service) {
+            const { ensureKortixAgentAccount } = await import('./kortix-agent/provision');
+            return ensureKortixAgentAccount({ projectId: row.projectId, connectorId: connector.connectorId, connectionId: connector.connectionId, service });
+          }
+        }
         if (!connector.connectionIsDefault) return null;
       }
       const storedCredential =

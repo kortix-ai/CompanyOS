@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { kortixAgentServiceForUrl } from './kortix-agent/host';
 import { connectorConnections, connectorActions, connectorPolicies, connectorPolicySets, connectors, connectorProjectPolicies, connectorProjectSettings, connectorSyncFences, projectSessionConnectorBindings, tunnelConnections } from '@kortix/db';
 /**
  * Connector materialization sweep — read `connectors:` from kortix.yaml,
@@ -368,6 +369,10 @@ export async function discoverConnectorAuthFromSource(
   // A catalogue app Kortix signs in to with its own OAuth client takes a
   // bearer token, even when its server lists tools without one (Google's do).
   if (provider === 'mcp' && mcpAppForUrl(endpoint)?.auth.kind === 'kortix_client') {
+    return discoverHttpAuthChallenge('Bearer', 'mcp endpoint');
+  }
+  // Kortix's agent-identity servers take the account's minted credential (kortix-agent/state.ts).
+  if (provider === 'mcp' && kortixAgentServiceForUrl(endpoint)) {
     return discoverHttpAuthChallenge('Bearer', 'mcp endpoint');
   }
   assertAllowedEndpointUrl(endpoint);
@@ -1134,7 +1139,13 @@ async function upsertConnector(
     !(spec.provider === 'channel' && spec.platform === 'email') &&
     !skipsEmptyProjectAccount(spec)
   ) {
-    await ensureDefaultConnection({ projectId, connectorId });
+    const connectionId = await ensureDefaultConnection({ projectId, connectorId });
+    // A Kortix agent-identity account needs no sign-in: Kortix mints its credential now.
+    const agentService = spec.provider === 'mcp' && spec.url ? kortixAgentServiceForUrl(spec.url) : null;
+    if (agentService) {
+      const { ensureKortixAgentAccount } = await import('./kortix-agent/provision');
+      await ensureKortixAgentAccount({ projectId, connectorId, connectionId, service: agentService });
+    }
   }
 }
 
@@ -1152,6 +1163,8 @@ async function upsertConnector(
  */
 export function skipsEmptyProjectAccount(spec: ConnectorSpec): boolean {
   if (spec.provider === 'composio' || spec.provider === 'pipedream') return true;
+  // Kortix mints the account of its own agent-identity servers: it is never empty.
+  if (spec.provider === 'mcp' && spec.url && kortixAgentServiceForUrl(spec.url)) return false;
   return !(spec.provider === 'channel' || spec.auth?.type === 'none');
 }
 
@@ -1461,6 +1474,12 @@ export async function resolveCatalog(
         };
       }
       case 'mcp': {
+        // Kortix's agent-identity servers: the tool list is code, no credential or network needed.
+        const agentService = kortixAgentServiceForUrl(spec.url!);
+        if (agentService) {
+          const { kortixAgentTools, toolListing } = await import('./kortix-agent/server');
+          return { actions: normalizeMcp(kortixAgentTools(agentService).map(toolListing) as any[]), server: spec.url };
+        }
         assertAllowedEndpointUrl(spec.url!);
         let tools: unknown[];
         try {

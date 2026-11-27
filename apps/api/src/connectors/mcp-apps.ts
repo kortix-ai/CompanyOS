@@ -30,6 +30,7 @@ import { composioVisibleToolkits, publicToolkit } from './composio-catalog-searc
 import { connectorIdentity } from './catalog-install';
 import { appNameKey } from './connect-direct-twins';
 import { googleMcpUrl } from './google/host';
+import { kortixAgentMcpUrl } from './kortix-agent/host';
 import { kortixOAuthClients } from './kortix-oauth-clients';
 import {
   type ComposioCatalogCard,
@@ -141,6 +142,12 @@ export const MCP_APPS: readonly McpApp[] = [
   { slug: 'vercel', name: 'Vercel', description: 'Projects, deployments and logs.', domain: 'vercel.com', categories: ['developer-tools', 'hosting'], url: 'https://mcp.vercel.com', icon: true, auth: DCR },
   { slug: 'deepwiki', name: 'DeepWiki', description: 'Ask about any public GitHub repository.', domain: 'deepwiki.com', categories: ['developer-tools'], url: 'https://mcp.deepwiki.com/mcp', icon: false, auth: NONE },
   { slug: 'context7', name: 'Context7', description: 'Up-to-date docs for libraries and frameworks.', domain: 'context7.com', categories: ['developer-tools'], url: 'https://mcp.context7.com/mcp', icon: false, auth: NONE },
+  // Kortix's agent-identity servers (./kortix-agent): served in-process, no sign-in;
+  // Kortix mints each account's credential. The URLs never reach the network.
+  {
+    slug: 'kortix_agent_authenticator', name: 'Kortix Agent Authenticator', description: 'An authenticator app for agents: stores 2FA (TOTP) keys and gives the current code.', domain: 'authenticator.kortix', categories: ['security'], url: kortixAgentMcpUrl('authenticator'), icon: false, auth: NONE,
+    access: 'Store two-factor (TOTP) keys for the sites an agent signs in to and read their current codes. The keys stay encrypted in Kortix and are never shown.',
+  },
   { slug: 'cloudflare', name: 'Cloudflare', description: 'Accounts, Workers and DNS.', domain: 'cloudflare.com', categories: ['developer-tools', 'hosting'], url: 'https://mcp.cloudflare.com/mcp', icon: true, auth: DCR },
   // Kortix's own Google MCP servers (./google): Composio-compatible tools over
   // Google's REST APIs, served in-process. The URLs never reach the network.

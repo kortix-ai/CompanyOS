@@ -76,6 +76,9 @@ function taskError(c: Context, err: unknown) {
 export function registerTeamTasksRoutes(): void {
   projectsApp.openapi(createRoute({
     method: 'get', path: '/{workspaceId}/sessions/{sessionId}/tasks', tags: ['sessions'],
+    operationId: 'sessions.tasks.list',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_READ,
+    'x-kortix-exposure': 'agent',
     summary: "List a team's tasks",
     description: '`sessionId` is the lead. Tasks in number order; `blocked` is true while a task in `blocked_by` is not completed. Flag `agent_teams`.',
     ...auth,
@@ -90,6 +93,9 @@ export function registerTeamTasksRoutes(): void {
 
   projectsApp.openapi(createRoute({
     method: 'post', path: '/{workspaceId}/sessions/{sessionId}/tasks', tags: ['sessions'],
+    operationId: 'sessions.tasks.create',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_READ,
+    'x-kortix-exposure': 'agent',
     summary: 'Add a task to a team',
     description: '`owner` is a teammate handle; `blocked_by` lists task numbers of this team. Flag `agent_teams`.',
     ...auth,
@@ -113,6 +119,9 @@ export function registerTeamTasksRoutes(): void {
 
   projectsApp.openapi(createRoute({
     method: 'get', path: '/{workspaceId}/sessions/{sessionId}/tasks/{seq}', tags: ['sessions'],
+    operationId: 'sessions.tasks.get',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_READ,
+    'x-kortix-exposure': 'agent',
     summary: 'Read one task of a team',
     ...auth,
     request: { params: TaskParams },
@@ -130,6 +139,9 @@ export function registerTeamTasksRoutes(): void {
 
   projectsApp.openapi(createRoute({
     method: 'patch', path: '/{workspaceId}/sessions/{sessionId}/tasks/{seq}', tags: ['sessions'],
+    operationId: 'sessions.tasks.update',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_READ,
+    'x-kortix-exposure': 'agent',
     summary: 'Change or claim a task',
     description:
       '`claim: true` takes the task for the calling session in one step: only a pending, unowned task whose blockers are all completed. ' +
@@ -150,6 +162,9 @@ export function registerTeamTasksRoutes(): void {
 
   projectsApp.openapi(createRoute({
     method: 'delete', path: '/{workspaceId}/sessions/{sessionId}/tasks/{seq}', tags: ['sessions'],
+    operationId: 'sessions.tasks.delete',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_READ,
+    'x-kortix-exposure': 'agent',
     summary: 'Delete a task of a team',
     description: 'Tasks that waited for it no longer do. Flag `agent_teams`.',
     ...auth,

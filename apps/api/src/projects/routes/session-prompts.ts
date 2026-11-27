@@ -145,6 +145,9 @@ export function registerSessionPromptsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/sessions/{sessionId}/prompts',
+      operationId: 'sessions.prompts.send',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_START,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'Send a prompt (message) to a session',
       description:
@@ -498,6 +501,9 @@ export function registerSessionPromptsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/sessions/{sessionId}/prompts',
+      operationId: 'sessions.prompts.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'List queued prompts of a session',
       ...auth,
@@ -542,6 +548,9 @@ export function registerSessionPromptsRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/sessions/{sessionId}/prompts/{promptId}',
+      operationId: 'sessions.prompts.delete',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_START,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'Cancel a queued prompt',
       ...auth,
@@ -643,6 +652,9 @@ export function registerSessionPromptsRoutes(): void {
     createRoute({
       method: 'patch',
       path: '/{workspaceId}/sessions/{sessionId}/prompts/{promptId}',
+      operationId: 'sessions.prompts.update',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_START,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'Edit a queued prompt',
       description:
@@ -715,6 +727,9 @@ export function registerSessionPromptsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/sessions/{sessionId}/prompts/{promptId}/retry',
+      operationId: 'sessions.prompts.retry',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_START,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'Retry a failed prompt',
       ...auth,
@@ -764,6 +779,9 @@ export function registerSessionPromptsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/sessions/{sessionId}/prompts/hold',
+      operationId: 'sessions.prompts.hold',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_START,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'Hold or release the prompt queue of a session',
       description:

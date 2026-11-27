@@ -51,6 +51,9 @@ export function registerSessionScopeRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/sessions/{sessionId}/scope',
+      operationId: 'sessions.scope.get',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: "Read a session's secret and connection scope",
       ...auth,
@@ -142,6 +145,9 @@ export function registerSessionScopeRoutes(): void {
     createRoute({
       method: 'put',
       path: '/{workspaceId}/sessions/{sessionId}/scope',
+      operationId: 'sessions.scope.set',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_STOP,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: "Re-scope a running session's secrets and connector bindings",
       ...auth,
@@ -331,6 +337,9 @@ export function registerSessionScopeRoutes(): void {
     createRoute({
       method: 'put',
       path: '/{workspaceId}/sessions/{sessionId}/model',
+      operationId: 'sessions.model.set',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_STOP,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: "Change a running session's model",
       ...auth,

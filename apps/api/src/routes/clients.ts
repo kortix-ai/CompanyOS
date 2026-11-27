@@ -9,6 +9,9 @@ export function registerClientRoutes(app: OpenAPIHono) {
     createRoute({
       method: 'get',
       path: '/v1/clients/mobile',
+      operationId: 'clients.mobile.get',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       tags: ['system'],
       summary: 'Mobile release policy: minimum supported app version and store links (public)',
       responses: { 200: json(MobileClientPolicySchema.openapi('MobileClientPolicy'), 'Mobile release policy') },

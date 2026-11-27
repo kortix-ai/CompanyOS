@@ -60,6 +60,9 @@ export function registerSessionTranscriptsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/sessions/{sessionId}/message-authors',
+      operationId: 'sessions.message_authors.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'Read who wrote each message of a session',
       description:
@@ -89,6 +92,9 @@ export function registerSessionTranscriptsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/sessions/{sessionId}/model-usage',
+      operationId: 'sessions.model_usage.get',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'Read which model a session\'s requests were served by and what they cost',
       description:
@@ -119,6 +125,9 @@ export function registerSessionTranscriptsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/sessions/{sessionId}/usage',
+      operationId: 'sessions.usage.get',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'Read what a session and the sessions it started cost',
       description:

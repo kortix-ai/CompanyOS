@@ -194,6 +194,9 @@ export function registerSessionLogRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/sessions/{sessionId}/log/blobs/{sha256}',
+      operationId: 'sessions.log.blobs.get',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       tags: ['projects'],
       summary: 'Find the stored object of a session-log attachment by its sha256',
       description: 'Session sandbox credential only. `{ ref }`: the `kortix-attachment://` ref of the object, or null when the session has none.',
@@ -214,6 +217,9 @@ export function registerSessionLogRoutes(): void {
     createRoute({
       method: 'put',
       path: '/{workspaceId}/sessions/{sessionId}/log/blobs/{sha256}',
+      operationId: 'sessions.log.blobs.set',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       tags: ['projects'],
       summary: 'Store the bytes of a session-log attachment',
       description:
@@ -254,6 +260,9 @@ export function registerSessionLogRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/sessions/{sessionId}/log/journal',
+      operationId: 'sessions.log.journal',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       tags: ['projects'],
       summary: 'Journal session-log records from the session daemon',
       description:
@@ -314,6 +323,9 @@ export function registerSessionLogRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/sessions/{sessionId}/log/manifest',
+      operationId: 'sessions.log.manifest.get',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       tags: ['projects'],
       summary: 'Read the session-log manifest for the daemon boot reconcile',
       ...auth,
@@ -337,6 +349,9 @@ export function registerSessionLogRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/sessions/{sessionId}/log/restore',
+      operationId: 'sessions.log.restore',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       tags: ['projects'],
       summary: 'Claim the session and read its whole session log, for a fresh box',
       description:
@@ -370,6 +385,9 @@ export function registerSessionLogRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/sessions/{sessionId}/log',
+      operationId: 'sessions.log.get',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'Read a page of the session log',
       description:
@@ -450,6 +468,9 @@ export function registerSessionLogRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/sessions/{sessionId}/log/switch-preflight',
+      operationId: 'sessions.log.switch_preflight',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'List what a session would lose on another harness',
       description:

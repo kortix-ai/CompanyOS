@@ -17,6 +17,9 @@ export function registerTopUpRequestRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/top-up-requests',
+      operationId: 'top_up_requests.create',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'human',
       tags: ['accounts'],
       summary: 'Ask the account owners to add credits',
       description:

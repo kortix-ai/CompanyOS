@@ -151,6 +151,9 @@ app.openapi(
   createRoute({
     method: 'get',
     path: '/v1/user-roles',
+    operationId: 'user_roles.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['system'],
     summary: 'The caller’s platform role (admin gate)',
     ...auth,

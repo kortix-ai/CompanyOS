@@ -94,6 +94,9 @@ export async function validateProviderSecretPool(input: {
 export function registerProviderSecretPoolsRoutes(): void {
   projectsApp.openapi(createRoute({
     method: 'get', path: '/{workspaceId}/sessions/{sessionId}/provider-secret-pools',
+    operationId: 'sessions.provider_secret_pools.list',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_READ,
+    'x-kortix-exposure': 'agent',
     tags: ['sessions'], summary: 'List configured session provider secret pools', ...auth,
     request: { params: Params.omit({ providerId: true }) },
     responses: { 200: json(z.object({
@@ -132,6 +135,9 @@ export function registerProviderSecretPoolsRoutes(): void {
 
   projectsApp.openapi(createRoute({
     method: 'get', path: '/{workspaceId}/sessions/{sessionId}/provider-secret-pools/{providerId}',
+    operationId: 'sessions.provider_secret_pools.get',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_READ,
+    'x-kortix-exposure': 'agent',
     tags: ['sessions'], summary: 'Read the selected provider secret pool', ...auth,
     request: { params: Params }, responses: { 200: json(Pool, 'Session pool'), ...errors(403, 404) },
   }), async (c: any) => {
@@ -149,6 +155,9 @@ export function registerProviderSecretPoolsRoutes(): void {
 
   projectsApp.openapi(createRoute({
     method: 'put', path: '/{workspaceId}/sessions/{sessionId}/provider-secret-pools/{providerId}',
+    operationId: 'sessions.provider_secret_pools.set',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_STOP,
+    'x-kortix-exposure': 'agent',
     tags: ['sessions'], summary: 'Replace one session provider secret pool', ...auth,
     request: { params: Params, body: { content: { 'application/json': { schema: Input } } } },
     responses: { 200: json(Pool, 'Session pool'), ...errors(400, 403, 404, 409) },

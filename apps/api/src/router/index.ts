@@ -9,6 +9,9 @@ router.openapi(
   createRoute({
     method: 'get',
     path: '/health',
+    operationId: 'router.health.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'internal',
     tags: ['router'],
     summary: 'Router service health check',
     responses: {

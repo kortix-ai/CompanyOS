@@ -176,6 +176,9 @@ export function registerConfigReleaseRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/sessions/{sessionId}/config-release',
+      operationId: 'sessions.config_release.get',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_READ,
+      'x-kortix-exposure': 'internal',
       tags: ['sessions'],
       summary: "A session's desired config release descriptor",
       ...auth,

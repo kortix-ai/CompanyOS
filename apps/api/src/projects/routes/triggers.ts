@@ -948,6 +948,9 @@ export function registerTriggersRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/trigger-runs',
+      operationId: 'trigger_runs.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_TRIGGER_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['triggers'],
       summary: "List a project's trigger runs",
       description: 'Newest first, across every trigger. `status` narrows to one run status, e.g. `failed`.',

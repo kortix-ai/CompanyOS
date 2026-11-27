@@ -32,6 +32,9 @@ export function registerSessionParticipantsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/sessions/{sessionId}/participants',
+      operationId: 'sessions.participants.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'List who can open a session',
       ...auth,

@@ -366,6 +366,9 @@ export function registerProjectMemoryRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/sessions/{sessionId}/memory-usage',
+      operationId: 'sessions.memory_usage.get',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'human',
       tags: ['memory'],
       summary: 'List the memory files a thread’s agent was listed',
       description:

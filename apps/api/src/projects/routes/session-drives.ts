@@ -93,6 +93,9 @@ export function registerSessionDrivesRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/sessions/{sessionId}/drives',
+      operationId: 'sessions.drives.list',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'List the folders a session mounts',
       description: 'The folders of the project’s Files the session’s sandbox mounts now, where, and with which access.',

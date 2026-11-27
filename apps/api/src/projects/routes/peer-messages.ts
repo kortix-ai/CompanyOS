@@ -87,6 +87,9 @@ function peerError(c: Context, err: unknown) {
 export function registerPeerMessagesRoutes(): void {
   projectsApp.openapi(createRoute({
     method: 'get', path: '/{workspaceId}/sessions/{sessionId}/reachable', tags: ['sessions'],
+    operationId: 'sessions.reachable.list',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_READ,
+    'x-kortix-exposure': 'agent',
     summary: 'List the agents a session can message',
     description:
       '`scope=mine` (default): its parent, children, lead and teammates. `scope=project`: every live session of the project the caller may see; ' +
@@ -121,6 +124,9 @@ export function registerPeerMessagesRoutes(): void {
 
   projectsApp.openapi(createRoute({
     method: 'post', path: '/{workspaceId}/sessions/{sessionId}/peer-messages', tags: ['sessions'],
+    operationId: 'sessions.peer_messages.send',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_START,
+    'x-kortix-exposure': 'agent',
     summary: 'Send a message from this session to another session',
     description:
       '`to` is a handle, a session id or 8+ character prefix, `parent`, `main`, or `@name`. The answer never waits for the receiver: ' +
@@ -154,6 +160,9 @@ export function registerPeerMessagesRoutes(): void {
 
   projectsApp.openapi(createRoute({
     method: 'get', path: '/{workspaceId}/sessions/{sessionId}/peer-messages', tags: ['sessions'],
+    operationId: 'sessions.peer_messages.list',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_READ,
+    'x-kortix-exposure': 'agent',
     summary: 'List the messages a session sent or received',
     description: '`direction=in`: received; `out`: sent; absent: both. Newest first, at most 100. A held message past its window reads `expired`.',
     ...auth,
@@ -169,6 +178,9 @@ export function registerPeerMessagesRoutes(): void {
   for (const decision of ['approve', 'deny'] as const) {
     projectsApp.openapi(createRoute({
       method: 'post', path: `/{workspaceId}/sessions/{sessionId}/peer-messages/{messageId}/${decision}`, tags: ['sessions'],
+      operationId: `sessions.peer_messages.${decision}`,
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_START,
+      'x-kortix-exposure': 'human',
       summary: decision === 'approve' ? 'Approve a held message to this session' : 'Deny a held message to this session',
       description: decision === 'approve'
         ? 'Delivers a message the session holds (inbound `hold`). A person who may prompt the session only. `409` when it expired or was decided.'
@@ -194,6 +206,9 @@ export function registerPeerMessagesRoutes(): void {
 
   projectsApp.openapi(createRoute({
     method: 'put', path: '/{workspaceId}/sessions/{sessionId}/inbound', tags: ['sessions'],
+    operationId: 'sessions.inbound.set',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_START,
+    'x-kortix-exposure': 'human',
     summary: 'Set who may send this session a message',
     description: '`accept` (default): messages arrive. `hold`: each waits for approval, 5 minutes. `refuse`: senders are told it was not sent. A person who may prompt the session only.',
     ...auth,

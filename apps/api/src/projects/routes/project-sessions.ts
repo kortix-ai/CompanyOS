@@ -164,6 +164,9 @@ export function registerSessionLookupRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{sessionId}',
+      operationId: 'sessions.lookup',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'Get a session by id, in any project',
       ...auth,
@@ -199,6 +202,9 @@ export function registerProjectSessionsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/sessions',
+      operationId: 'sessions.create',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_START,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'Create a session (start an agent task)',
       ...auth,
@@ -460,6 +466,9 @@ export function registerProjectSessionsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/sessions',
+      operationId: 'sessions.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'List sessions of a project',
       ...auth,
@@ -721,6 +730,9 @@ export function registerProjectSessionsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/sessions/{sessionId}',
+      operationId: 'sessions.get',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'Get a session',
       ...auth,
@@ -743,6 +755,9 @@ export function registerProjectSessionsRoutes(): void {
     createRoute({
       method: 'put',
       path: '/{workspaceId}/sessions/{sessionId}/sharing',
+      operationId: 'sessions.sharing.set',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'Set who can see a session',
       ...auth,
@@ -927,6 +942,9 @@ export function registerProjectSessionsRoutes(): void {
     createRoute({
       method: 'patch',
       path: '/{workspaceId}/sessions/{sessionId}',
+      operationId: 'sessions.update',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_START,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'Rename a session or merge metadata into it',
       ...auth,
@@ -1076,6 +1094,9 @@ export function registerProjectSessionsRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/sessions/{sessionId}',
+      operationId: 'sessions.delete',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_STOP,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'Delete a session (restorable until restore_until; then its content and branch are deleted)',
       ...auth,
@@ -1134,6 +1155,9 @@ export function registerProjectSessionsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/sessions/{sessionId}/restore',
+      operationId: 'sessions.restore',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_STOP,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'Restore a deleted session before its restore_until',
       ...auth,

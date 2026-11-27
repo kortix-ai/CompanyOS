@@ -29,6 +29,9 @@ const PresenceResponse = z.object({
 export function registerSessionPresenceRoutes(): void {
   projectsApp.openapi(createRoute({
     method: 'put', path: '/{workspaceId}/sessions/{sessionId}/presence', tags: ['sessions'],
+    operationId: 'sessions.presence.set',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_READ,
+    'x-kortix-exposure': 'human',
     summary: 'Renew a browser tab presence lease', ...auth,
     description: 'active=true holds a 90 s lease for this tab and marks the caller\'s notifications of this session read; active=false drops the lease. For a caller who may start the session, active=true also keeps its computer on by the idle grace, and the response says until when.',
     request: { params: z.object({ workspaceId: z.string().uuid(), sessionId: z.string() }), body: { required: true, content: { 'application/json': { schema: PresenceBody } } } },

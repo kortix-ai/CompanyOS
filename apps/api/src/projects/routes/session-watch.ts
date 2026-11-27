@@ -49,6 +49,9 @@ async function resolveWatcher(c: Context, projectId: string, sessionId: string) 
 export function registerSessionWatchRoutes(): void {
   projectsApp.openapi(createRoute({
     method: 'get', path: '/{workspaceId}/sessions/{sessionId}/watch', tags: ['sessions'],
+    operationId: 'sessions.watch.get',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_READ,
+    'x-kortix-exposure': 'human',
     summary: 'Check whether a session notifies you',
     description: 'True when you created the session or follow it, and have not muted it.',
     ...auth,
@@ -63,6 +66,9 @@ export function registerSessionWatchRoutes(): void {
 
   projectsApp.openapi(createRoute({
     method: 'put', path: '/{workspaceId}/sessions/{sessionId}/watch', tags: ['sessions'],
+    operationId: 'sessions.watch.set',
+    'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_READ,
+    'x-kortix-exposure': 'human',
     summary: "Follow or mute a session's notifications",
     description: 'watching=false mutes this session for you, the creator included; watching=true follows it.',
     ...auth,

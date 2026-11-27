@@ -41,6 +41,9 @@ export function registerSessionRuntimeRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/sessions/{sessionId}/start',
+      operationId: 'sessions.start',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_START,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'Start a session sandbox and its runtime',
       ...auth,
@@ -173,6 +176,9 @@ export function registerSessionRuntimeRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/sessions/{sessionId}/restart',
+      operationId: 'sessions.restart',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_START,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'Restart a session sandbox',
       ...auth,
@@ -231,6 +237,9 @@ export function registerSessionRuntimeRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/sessions/{sessionId}/recover',
+      operationId: 'sessions.recover',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_START,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'Continue a lost session on a new computer',
       description:
@@ -276,6 +285,9 @@ export function registerSessionRuntimeRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/sessions/{sessionId}/stop',
+      operationId: 'sessions.stop',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_STOP,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'Stop a session (interrupt the running turn)',
       ...auth,
@@ -360,6 +372,9 @@ export function registerSessionRuntimeRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/sessions/{sessionId}/turn',
+      operationId: 'sessions.turn.get',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'Get the current turn state of a session',
       ...auth,

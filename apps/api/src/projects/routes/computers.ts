@@ -26,6 +26,9 @@ export function registerComputersRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/computers',
+      operationId: 'computers.create',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_CONNECTIONS_MANAGE,
+      'x-kortix-exposure': 'human',
       tags: ['connectors'],
       summary: 'Add a paired computer to this project',
       description:

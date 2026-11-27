@@ -532,6 +532,9 @@ async function revokeKey(c: Context<AppEnv>) {
 const keysListRoute = createRoute({
   method: 'get',
   path: '/{workspaceId}/keys',
+  operationId: 'keys.list',
+  'x-kortix-action': ACCOUNT_ACTIONS.TOKEN_READ,
+  'x-kortix-exposure': 'agent',
   tags: ['accounts'],
   summary: 'List the API keys of a workspace: yours, and with token.create every agent and bot key',
   ...auth,
@@ -543,6 +546,9 @@ const keysListRoute = createRoute({
 const keysMintRoute = createRoute({
   method: 'post',
   path: '/{workspaceId}/keys',
+  operationId: 'keys.create',
+  'x-kortix-action': ACCOUNT_ACTIONS.TOKEN_CREATE,
+  'x-kortix-exposure': 'human',
   tags: ['accounts'],
   summary: 'Create an API key that acts as you, an agent, or a bot (secret returned once)',
   ...auth,
@@ -577,6 +583,9 @@ const keysMintRoute = createRoute({
 const keysRevokeRoute = createRoute({
   method: 'delete',
   path: '/{workspaceId}/keys/{keyId}',
+  operationId: 'keys.delete',
+  'x-kortix-action': ACCOUNT_ACTIONS.TOKEN_REVOKE,
+  'x-kortix-exposure': 'agent',
   tags: ['accounts'],
   summary: 'Revoke an API key of a workspace, or delete a revoked one (delete_revoked=true)',
   ...auth,

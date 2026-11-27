@@ -361,6 +361,9 @@ export function registerTurnQuestionsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/sessions/{sessionId}/question',
+      operationId: 'sessions.question.get',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'Get the pending agent question of a session',
       ...auth,
@@ -400,6 +403,9 @@ export function registerTurnQuestionsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/sessions/{sessionId}/question',
+      operationId: 'sessions.question.answer',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'human',
       tags: ['sessions'],
       summary: 'Answer the pending agent question of a session',
       ...auth,

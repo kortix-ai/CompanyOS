@@ -601,6 +601,9 @@ export function registerProjectSettingsRoutes(): void {
     createRoute({
       method: 'patch',
       path: '/{workspaceId}/sandbox-provider',
+      operationId: 'sandbox_provider.update',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SETTINGS_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['projects'],
       summary: 'Set or clear the per-project sandbox provider override',
       ...auth,
@@ -674,6 +677,9 @@ export function registerProjectSettingsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/sandbox-provider/transition',
+      operationId: 'sandbox_provider.transition.get',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['projects'],
       summary: 'Poll the per-project sandbox-provider migration transition',
       ...auth,

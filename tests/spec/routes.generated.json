@@ -1,7 +1,7 @@
 {
   "generatedAt": "static",
-  "count": 1840,
-  "aliases": 719,
+  "count": 1848,
+  "aliases": 723,
   "routes": [
     {
       "method": "GET",
@@ -3567,6 +3567,26 @@
     },
     {
       "method": "GET",
+      "path": "/v1/projects/:workspaceId/employee",
+      "aliasOf": "/v1/workspaces/:workspaceId/employee"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/employee",
+      "aliasOf": "/v1/workspaces/:workspaceId/employee"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/employee/events",
+      "aliasOf": "/v1/workspaces/:workspaceId/employee/events"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/employee/events",
+      "aliasOf": "/v1/workspaces/:workspaceId/employee/events"
+    },
+    {
+      "method": "GET",
       "path": "/v1/projects/:workspaceId/evals",
       "aliasOf": "/v1/workspaces/:workspaceId/evals"
     },
@@ -6485,6 +6505,22 @@
     {
       "method": "POST",
       "path": "/v1/workspaces/:workspaceId/dictation"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/employee"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/employee"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/employee/events"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/employee/events"
     },
     {
       "method": "GET",

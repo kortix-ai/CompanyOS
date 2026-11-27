@@ -15887,7 +15887,7 @@
         },
         "routed_session_id": {
           "name": "routed_session_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
@@ -16066,7 +16066,7 @@
         },
         "mind_session_id": {
           "name": "mind_session_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },

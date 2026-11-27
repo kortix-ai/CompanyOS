@@ -75,6 +75,7 @@ export type { PromptPartWire } from './session-lifecycle/prompt-payload';
 export { promptWireModel } from './lib/effort-default';
 export { continuationOverrides } from './session-lifecycle/queued-continue-delivery';
 export { sessionIsTombstoned } from './lib/session-visibility';
+export { enqueueSessionNotice } from './session-notice-batch';
 
 // The shutdown hand-back of lifecycle claims (consumed by bootstrap.ts).
 export { handBackClaims } from './session-lifecycle/claim-handover';

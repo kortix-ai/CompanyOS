@@ -9027,7 +9027,7 @@ export const employeeIdentities = kortixSchema.table(
     /** The `Employee` project drive. */
     driveId: uuid('drive_id'),
     /** The employee's own conversation: it receives every event nobody addressed to it. */
-    mindSessionId: uuid('mind_session_id'),
+    mindSessionId: text('mind_session_id'),
     /** `provisioning`, `ready` or `failed`. */
     status: text('status').default('provisioning').notNull(),
     lastError: text('last_error'),
@@ -9071,7 +9071,7 @@ export const employeeEvents = kortixSchema.table(
     payload: jsonb('payload').$type<Record<string, unknown>>().default({}).notNull(),
     /** `pending`, `routed`, `digested`, `recorded` (needs no delivery) or `dead`. */
     dispatchStatus: text('dispatch_status').default('pending').notNull(),
-    routedSessionId: uuid('routed_session_id'),
+    routedSessionId: text('routed_session_id'),
     routedAt: timestamp('routed_at', { withTimezone: true }),
     lastError: text('last_error'),
   },

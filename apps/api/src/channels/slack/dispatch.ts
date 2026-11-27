@@ -1,4 +1,7 @@
 import { eq } from 'drizzle-orm';
+import { recordIfEmployee } from '../../employee/events';
+import { registerEmployeeDelivery } from '../../employee/dispatch';
+import { slackEmployeeEvent } from './employee';
 import { db } from '../../shared/db';
 import {
   loadSlackBotIdForProject,
@@ -315,7 +318,7 @@ export function isOwnBotEvent(event: SlackEvent, botUserId: string | null, botId
 export async function dispatchSlackEvent(
   projectId: string,
   envelope: SlackEnvelope,
-  opts: { ownThreadsOnly?: boolean } = {},
+  opts: { ownThreadsOnly?: boolean; fromEmployeeLog?: boolean } = {},
 ): Promise<void> {
   const event = envelope.event;
   if (!event) return;
@@ -341,6 +344,14 @@ export async function dispatchSlackEvent(
 
   let eventClass = await classifyEvent(teamId, event, botUserId);
   if (eventClass === 'ignore' && (await isStarterReplyInOwnThread(projectId, teamId, event))) eventClass = 'mention';
+
+  // An employee workspace writes the message to its event log first. The
+  // employee dispatcher replays an addressed one through this function
+  // (`fromEmployeeLog`); an unaddressed one stays in the log for awareness.
+  if (!opts.fromEmployeeLog) {
+    const input = slackEmployeeEvent(projectId, teamId, envelope, eventClass !== 'ignore', opts);
+    if (input && (await recordIfEmployee(input))) return;
+  }
   if (eventClass === 'ignore') return;
 
   // Exactly-once gate. ONE user message can arrive as several events (Slack
@@ -738,3 +749,10 @@ async function deliverToExistingThread(
   // new session and orphaned a live one.
   return { handled: false as const, handle };
 }
+
+registerEmployeeDelivery('slack', async (row) => {
+  const payload = row.payload as { envelope?: SlackEnvelope; ownThreadsOnly?: boolean };
+  if (!payload.envelope) throw new Error('employee Slack event has no envelope');
+  await dispatchSlackEvent(row.projectId, payload.envelope, { ownThreadsOnly: payload.ownThreadsOnly, fromEmployeeLog: true });
+  return { sessionId: null };
+});

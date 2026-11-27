@@ -27,6 +27,8 @@ import {
 import { matchesEmailSenderRegex } from './sender-policy-regex';
 import type { InboundEmail, ResendInboxEmailReceivedEvent } from './types';
 import { projectsView } from '../../workspaces/rows';
+import { recordIfEmployee } from '../../employee/events';
+import { registerEmployeeDelivery } from '../../employee/dispatch';
 
 export function resetEmailChannelForTest() {
   threadEmailLoader = getResendThreadEmail;
@@ -104,6 +106,34 @@ export function emailMessageEvent(projectId: string, event: ResendInboxEmailRece
  * A throw retries the email (8 attempts over about 20 min).
  */
 export async function handleEmailEvent(event: IntegrationEvent, run: { finalAttempt: boolean }): Promise<void> {
+  // An employee workspace writes the email to its event log first; the
+  // employee dispatcher then routes it with `routeEmailEvent` below.
+  const { inbox_id: inboxId, thread_id: threadId, email_id: emailId, from, to, subject } =
+    event.data as unknown as EmailEventData;
+  const recorded = await recordIfEmployee({
+    projectId: event.projectId,
+    source: 'email',
+    type: 'email.message.received',
+    subject: `email:${inboxId}:${threadId}`,
+    externalId: emailId,
+    occurredAt: new Date(event.time),
+    actor: { kind: 'external', id: from, name: from },
+    summary: `Email from ${from}${subject ? `: ${subject}` : ''}`,
+    payload: { event: event as unknown as Record<string, unknown>, to },
+  });
+  if (recorded) return;
+  await routeEmailEvent(event, run);
+}
+
+registerEmployeeDelivery('email', async (row, run) => {
+  const event = (row.payload as { event?: IntegrationEvent }).event;
+  if (!event) throw new Error('employee email event has no inbox envelope');
+  await routeEmailEvent(event, run);
+  return { sessionId: null };
+});
+
+/** Route one received email to its thread's session (the channel's own path). */
+export async function routeEmailEvent(event: IntegrationEvent, run: { finalAttempt: boolean }): Promise<void> {
   const { inbox_id: inboxId, thread_id: threadId, email_id: emailId, from, to, subject } =
     event.data as unknown as EmailEventData;
   let { projectId } = event;

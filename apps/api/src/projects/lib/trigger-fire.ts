@@ -1,4 +1,6 @@
 import { checkBillingAdmission } from '../../billing/services/billing-gate';
+import { recordIfEmployee } from '../../employee/events';
+import { logger } from '../../lib/logger';
 import { agentPauseReason } from './agent-directory';
 import { toSessionModelRef } from '../../llm-gateway/resolution/effective';
 import type { PromptOverridesWire } from '../session-lifecycle/store';
@@ -375,6 +377,7 @@ export async function fireGitTrigger(
     });
   }
   if (result.status === 'fired' || result.status === 'queued') {
+    await recordTriggerFireForEmployee(input, result);
     captureAccountProductEvent({
       accountId: input.project.accountId,
       event: 'trigger_fired',
@@ -387,6 +390,37 @@ export async function fireGitTrigger(
     });
   }
   return result;
+}
+
+/**
+ * An employee workspace logs every trigger fire (its schedules, webhooks and
+ * connector events). The trigger already has its own target, so the event is
+ * kept for awareness, not dispatched again. Best effort: the fire happened.
+ */
+async function recordTriggerFireForEmployee(
+  input: Parameters<typeof fireGitTriggerOnce>[0],
+  result: { sessionId?: string | null },
+): Promise<void> {
+  const source = input.source === 'cron' || input.source === 'reminder' ? 'schedule'
+    : input.source === 'event' ? 'connector'
+    : input.source === 'webhook' ? 'webhook'
+    : null;
+  if (!source) return;
+  try {
+    await recordIfEmployee({
+      projectId: input.project.projectId,
+      source,
+      type: `${source}.trigger.fired`,
+      subject: `trigger:${input.spec.slug}`,
+      externalId: input.idempotencyKey ?? `${input.spec.slug}:${Date.now()}`,
+      actor: { kind: 'system', id: input.spec.slug, name: input.spec.slug },
+      summary: `Trigger ${input.spec.slug} fired (${input.source})${result.sessionId ? ` into session ${result.sessionId}` : ''}`,
+      payload: { trigger: input.spec.slug, fire_source: input.source, session_id: result.sessionId ?? null, data: input.payload },
+      dispatch: false,
+    });
+  } catch (err) {
+    logger.warn('[employee] trigger fire not logged', { projectId: input.project.projectId, slug: input.spec.slug, error: String(err) });
+  }
 }
 
 async function fireGitTriggerOnce(input: {

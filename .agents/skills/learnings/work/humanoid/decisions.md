@@ -126,3 +126,36 @@
   `humanoid_identities` and `humanoid_events`, the routes `/humanoid*`, the
   Humanoid drive. Entries above this one say "employee" and mean the same
   thing. The branch keeps its name, `digital-employee`. D1 is closed.
+
+## Decided: identity = connectors, built on core primitives (2026-11-27)
+
+- **2026-11-27 (Marko)** No Humanoid-only tools and no Humanoid-only API
+  routes. The Humanoid is a built-in agent plus a built-in YAML bundle, and its
+  identity is the set of accounts it owns. Connector profiles group them.
+  The `/humanoid*` routes, `kortix humanoid` and `humanoid_identities` on this
+  branch are to be removed when the bundle lands.
+- **2026-11-27** The identity building blocks are three Kortix-built MCP
+  connectors, served in-process by the API (`apps/api/src/connectors/kortix-agent/`),
+  like the Google servers. The gateway gives them approvals, rules, grants and
+  the call log for free. There is no migration.
+  - `kortix_agent_authenticator` (RFC 6238 TOTP): `add_account`,
+    `list_accounts`, `get_code`, `remove_account`. Secrets never leave the
+    account state.
+  - `kortix_browser` (Platinum Browsers): `connect` (short-lived CDP URL for
+    `agent-browser --cdp`), `status`, `save_login` (saved profile), `pause`,
+    `reset`. One browser per account, shared by every session.
+  - `kortix_phone` (Twilio): `get_number` (buys on first call),
+    `list_messages`, `wait_for_code`, `send_sms`, `release_number`. Incoming
+    texts are polled from the provider's message log, so no webhook route.
+    Offered only when `TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN` are set.
+- **2026-11-27** An account's credential IS its state, encrypted with the
+  workspace key (`kortix-agent/state.ts`). Kortix mints it at install and on
+  first use. A state write lands only on a live account: a revoke wins.
+- **Open** Twilio over Telnyx because polling needs no route. D3 still needs
+  the paying account. Some sites refuse VoIP numbers for codes; US sending
+  needs A2P 10DLC.
+- **Open** Agent-owned accounts are unreachable in the gateway
+  (`connectionIsReachable`); until then a Humanoid's accounts are project
+  accounts narrowed to its agent by grants.
+- **Open** Removing an account does not yet delete its Platinum browser,
+  saved profile or phone number.

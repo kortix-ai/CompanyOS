@@ -9,7 +9,7 @@ def plan():
     return [f for f in drive_files('~', 3) if str(f.get('name') or f.get('path', '')).endswith('old-plan.md')]
 import time
 # A delete through the Drive mount reaches the Drive API a few seconds later: read again before calling it kept.
-for _ in range(6):
+for _ in range(12):
     if not plan():
         break
     time.sleep(5)

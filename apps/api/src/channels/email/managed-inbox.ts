@@ -45,7 +45,7 @@ export function inboxUsername(name: string): string | null {
  * characters of the workspace id, then with four random ones. The managed
  * domain is one namespace for every customer, so a first name is often taken.
  */
-export function inboxCandidates(username: string, projectId: string, random = () => crypto.randomUUID()): string[] {
+export function inboxCandidates(username: string, projectId: string, random: () => string = () => crypto.randomUUID()): string[] {
   const ws = projectId.replace(/-/g, '').slice(0, 4);
   return [username, `${username}-${ws}`, `${username}-${random().replace(/-/g, '').slice(0, 4)}`];
 }

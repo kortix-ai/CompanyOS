@@ -1961,6 +1961,9 @@ three-part JWT, and `kortix apps unlink` empties `uses`. An unknown App
 answers 404. A `NONMEMBER` gets 403/404 and an `ANON` caller 401.
 
 `APP-10` Sign-in tokens and the bindings mount, black-box on a local App host.
+Browser and PAT `access-session` callers redeem their links into cookies; the
+viewer response and signature-verified JWT for a linked App agree on
+`session_kind` (`browser` versus `access_link`) and numeric `auth_time`.
 An `ANON` caller reads the project issuer: `openid-configuration` names
 `<API origin>/v1/projects/:projectId` and its `jwks.json`; an unknown project
 answers 404 and a malformed id 400. The owner mints a member token for a `web`

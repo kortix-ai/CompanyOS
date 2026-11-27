@@ -18,6 +18,7 @@ planned, in flight, or parked, so another person or agent can pick it up.
 
 | Topic | Status |
 |---|---|
+| [`automation-test-gate/`](automation-test-gate/README.md) | planned, not built: an agent's automation goes live only after its test on every path (API-side rule); kortixd half shipped in #13195, #13210 |
 | [`continual-learning/`](continual-learning/README.md) | planned, not built: learning built into My Kortix and the default harness (observe, learner agent, self-written eval gate, skill and eval maintenance); 4 decisions open |
 | [`agent-benchmark-expansion/`](agent-benchmark-expansion/README.md) | research done 2026-11-17: the agent-eval landscape and a ranked backlog of tasks and graders for `evals/my-kortix` |
 | [`opencode-history-recovery/`](opencode-history-recovery/README.md) | done and removed: OpenCode-era conversations copied off archived Platinum boxes on prod (6,267 written); Daytona written off; script deleted, restorable from `550757a87b` |

@@ -41,6 +41,8 @@ interface AppAccessTokenPayload {
    *  the second factor. A viewer token minted from this cookie records it, and
    *  the API honors it in the App's account only. Absent = no MFA level. */
   aal?: 'aal2';
+  sessionKind?: 'browser' | 'access_link';
+  authTime?: number;
   revision: number;
   exp: number;
 }
@@ -62,6 +64,8 @@ export function createAppAccessToken(input: {
   kind: AppAccessTokenKind;
   userId?: string;
   aal?: 'aal2';
+  sessionKind?: 'browser' | 'access_link';
+  authTime?: number;
   revision?: number;
   expiresAt: Date;
 }, secret = appAccessSecret()): string {
@@ -71,6 +75,8 @@ export function createAppAccessToken(input: {
     kind: input.kind,
     ...(input.userId ? { userId: input.userId } : {}),
     ...(input.aal === 'aal2' ? { aal: 'aal2' as const } : {}),
+    sessionKind: input.sessionKind,
+    authTime: input.authTime,
     revision: input.revision ?? 0,
     exp: Math.floor(input.expiresAt.getTime() / 1000),
   };
@@ -698,6 +704,7 @@ export function appAccessSessionUrl(
   userId: string,
   now = new Date(),
   aal?: 'aal2',
+  sessionKind: 'browser' | 'access_link' = 'access_link',
 ): { url: string; expiresAt: Date } {
   const expiresAt = new Date(now.getTime() + 5 * 60_000);
   const token = createAppAccessToken({
@@ -705,6 +712,8 @@ export function appAccessSessionUrl(
     kind: 'kortix',
     userId,
     aal,
+    sessionKind,
+    authTime: Math.floor(now.getTime() / 1000),
     revision: app.accessRevision,
     expiresAt,
   });

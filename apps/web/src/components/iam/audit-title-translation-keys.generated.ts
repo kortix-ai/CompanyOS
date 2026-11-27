@@ -857,7 +857,6 @@ export const AUDIT_TITLE_TRANSLATION_KEYS: Readonly<Record<string, string>> = {
   'Viewed session policy': 'text48b65bbc9863',
   'Viewed session provider secret pool': 'text7c649f4bf685',
   'Viewed session scope': 'text3fd349f95ce2',
-  'Viewed session transcript': 'text992854f5b35e',
   'Viewed session turn state': 'text7039b3d4be40',
   'Viewed setup wizard status': 'texte70edc6194ea',
   'Viewed setup wizard step': 'textd9391d4f76e8',

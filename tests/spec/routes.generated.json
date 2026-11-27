@@ -1,6 +1,6 @@
 {
   "generatedAt": "static",
-  "count": 1840,
+  "count": 1841,
   "aliases": 719,
   "routes": [
     {
@@ -1184,6 +1184,10 @@
     {
       "method": "PUT",
       "path": "/v1/admin/api/projects/:id/features"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/admin/api/projects/:id/restricted-models"
     },
     {
       "method": "GET",

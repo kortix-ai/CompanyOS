@@ -1474,6 +1474,7 @@ function SecretDialog({
     nextStrategy: strategy,
     nextConsumer,
     enforcedPolicyValid: enforcedPolicy !== null,
+    policyChanged: hosts !== storedHosts || legacyInject !== (currentPolicy?.inject ?? null),
     selectedConnectorCount: effectiveSelectedConnectorSlugs.length,
     audienceChanged:
       row !== null && nextSharedWith !== null && !sameSharedWith(row.sharedWith, nextSharedWith),

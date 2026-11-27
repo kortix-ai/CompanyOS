@@ -36,6 +36,7 @@ const APP_OWN = [
   'allow-forms',
   'allow-modals',
   'allow-popups',
+  'allow-popups-to-escape-sandbox',
   'allow-same-origin',
   'allow-scripts',
 ];
@@ -69,6 +70,15 @@ describe('framePolicy', () => {
       expect(tokens(policy.sandbox)).toEqual(expected);
     });
   }
+
+  test('opaque frames keep popups sandboxed', () => {
+    for (const [content, src] of FRAME_TABLE) {
+      const policy = framePolicy(content, src, PRIVILEGED);
+      if (policy.origin === 'opaque') {
+        expect(tokens(policy.sandbox)).not.toContain('allow-popups-to-escape-sandbox');
+      }
+    }
+  });
 
   test('an opaque frame never carries allow-same-origin', () => {
     for (const [content, src] of FRAME_TABLE) {

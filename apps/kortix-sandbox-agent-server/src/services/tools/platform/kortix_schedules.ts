@@ -789,7 +789,7 @@ function noteTest(context: PlatformToolContext, name: string, outcome: 'matched'
  * or after it failed. The run is the newest one since run_now (2 min of clock slack); null = it succeeded.
  */
 async function runNowOutcome(id: string, ranAt: number, context: PlatformToolContext): Promise<string | null> {
-  const read = await runJson<{ runs?: Array<{ status?: string; run_status?: string | null; error?: string | null; run_error?: string | null; started_at?: string }> }>(
+  const read = await runJson<{ runs?: Array<{ status?: string; run_status?: string | null; error?: string | null; run_error?: string | null; session_id?: string | null; started_at?: string }> }>(
     ['triggers', 'runs', id, '--limit=5', '--json'],
     context,
   )
@@ -797,6 +797,14 @@ async function runNowOutcome(id: string, ranAt: number, context: PlatformToolCon
   const run = (read.value.runs ?? []).find((r) => Date.parse(r.started_at ?? '') >= ranAt - 120_000)
   const retry = 'If the person said to skip the test, call resume with force: true.'
   if (!run) return `The test run has not shown up yet: read the runs of ${id}, then resume. ${retry}`
+  // The API settles a run's status from its turns minutes after the session ends (Agent Evals on dev:
+  // the worker had reported, the run still read running, and resume was refused): its session decides.
+  if (run.status === 'fired' && run.run_status === 'running' && run.session_id) {
+    const session = await runJson<{ board_state?: string | null }>(['sessions', 'show', run.session_id, '--json'], context)
+    const state = 'error' in session ? null : session.value.board_state
+    if (state === 'completed' || state === 'idle') return null
+    if (state === 'failed' || state === 'stopped') return `The test run ${state}: fix it and run_now again before it goes live. ${retry}`
+  }
   if (run.status === 'queued' || run.status === 'running' || run.run_status === 'running') return `The test run is still running: wait for it, read its result with runs, then resume. ${retry}`
   if (run.status === 'failed' || run.status === 'rejected' || run.run_status === 'failed') return `The test run failed (${run.error || run.run_error || 'no reason given'}): fix it and run_now again before it goes live. ${retry}`
   if (run.status === 'skipped') return `The test run was skipped (${run.error || 'no reason given'}): it has not shown the work yet. ${retry}`
@@ -856,6 +864,9 @@ async function untested(id: string, context: PlatformToolContext): Promise<strin
   // An App event automation starts live (its test is a real App event); one the CLI cannot read is not blocked here.
   if ('error' in shown || shown.value.type === 'app') return null
   const filtered = !!shown.value.filter && Object.keys(shown.value.filter).length > 0
+  // With no filter, a dry run always matches and shows nothing (Agent Evals on dev: a weekday automation
+  // went live after one, and the reply said it was tested): only a run_now that succeeded is its test.
+  if (!filtered && !seen.ranAt) return `A dry run shows nothing for an automation with no filter: run_now ${id}, read its runs, then resume once the run succeeded. If the person said to skip the test, call resume with force: true.`
   if (!seen.matched) return `Test it first: \`test\` ${id} with a sample that should run${filtered ? ', and one that should be skipped' : ''}, then resume. If the person said to skip the test, call resume with force: true.`
   if (filtered && !seen.skipped) return `Its filter is untested: \`test\` ${id} with a sample that should be skipped, then resume. If the person said to skip the test, call resume with force: true.`
   return null

@@ -206,3 +206,14 @@
   `event-ledger.md`.
 - **Open** Adopt the Vercel Board method (topics, tasks with claim and lease,
   dependencies) as the work layer above the ledger.
+
+## Proposed: the knowledge contract (2026-11-27)
+
+- **2026-11-27 (Marko)** Procedural memory is skills. Episodic memory is the
+  event ledger, read-only, written by the system and by agents, rebuilt as a
+  tree. Semantic memory is an ever-maintained markdown wiki. Design:
+  `memory.md`.
+- **Open** The wiki lives in Files (volume versions), not git. `kortix_memory`
+  becomes its `people/` part.
+- **Open** No up-front ontology: wiki pages, ledger links and connector
+  actions are the ontology, built as the Humanoid works.

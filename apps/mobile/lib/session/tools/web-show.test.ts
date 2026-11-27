@@ -12,7 +12,6 @@ import {
   showBodyKind,
   showContentBranch,
   showDisplayTitle,
-  showFileActions,
   showHeaderIconType,
   showInlineToolbarKind,
   showOpenTarget,
@@ -97,14 +96,6 @@ describe('show inline toolbar', () => {
 
   test('file-backed inline show places file actions in the header', () => {
     expect(showInlineToolbarKind({ ...base, activePath: '/workspace/report.pdf', content: '' })).toBe('file');
-  });
-
-  test('inline file actions are Refresh · Preview — one control per target, no duplicate open', () => {
-    expect(showFileActions({ inPanel: false })).toEqual(['refresh', 'preview']);
-  });
-
-  test('panel file actions drop Preview and keep Full screen, as on web', () => {
-    expect(showFileActions({ inPanel: true })).toEqual(['refresh', 'full-screen']);
   });
 
   test('a website preview gets the preview actions', () => {

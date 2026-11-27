@@ -18,6 +18,8 @@ export interface AgentToolContext<D> {
   update(mutate: (data: D) => D): Promise<D>;
   /** The clock, in ms. */
   now(): number;
+  /** The calling session (set by the gateway), or null for a call outside a session. */
+  sessionId: string | null;
 }
 
 export interface AgentTool<D = Record<string, unknown>> {

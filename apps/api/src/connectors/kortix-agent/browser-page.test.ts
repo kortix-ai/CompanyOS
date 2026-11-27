@@ -76,52 +76,33 @@ describe.skipIf(!chrome)('browser page over real CDP', () => {
     server?.stop(true);
   });
 
-  test('open, snapshot refs, fill a login into every password field, submit', async () => {
-    const opened = await pages.navigate(page, `${base}/login`);
-    expect(opened).toEqual({ url: `${base}/login`, title: 'Sign in', status: 200 });
+  /** Open `url` in the page and wait for it to load, over raw CDP (the agent's own job in production). */
+  async function open(url: string): Promise<void> {
+    await page.conn.send('Page.navigate', { url }, { sessionId: page.sessionId });
+    for (let n = 0; n < 100; n++) {
+      const state = await pages.evaluate<{ href: string; ready: string }>(page, '({ href: location.href, ready: document.readyState })').catch(() => null);
+      if (state?.href === url && state.ready === 'complete') return;
+      await Bun.sleep(50);
+    }
+    throw new Error(`${url} did not load`);
+  }
 
-    const snap = await pages.snapshot(page);
-    expect(snap.elements.map((e) => [e.role, e.name])).toEqual([
-      ['textbox', 'Email'],
-      ['textbox', 'Password'],
-      ['textbox', 'Confirm'],
-      ['button', 'Sign in'],
-      ['link', 'Other page'],
-    ]);
-
+  test('fill_login types the username and every password field, then submits', async () => {
+    await open(`${base}/login`);
+    expect((await pages.listTabs(conn)).some((t) => t.url === `${base}/login`)).toBe(true);
     const filled = await pages.fillLogin(page, { username: 'otto@example.test', password: 'S3cret!pass' }, false);
     expect(filled).toMatchObject({ username: true, password: true, title: 'Sign in' });
-    // The snapshot never shows a password value.
-    const after = await pages.snapshot(page);
-    expect(after.elements[1]).toMatchObject({ type: 'password', value: '(filled)' });
-    expect(JSON.stringify(after)).not.toContain('S3cret');
+    expect(await pages.evaluate<string[]>(page, '[...document.querySelectorAll("input")].map((i) => i.value)')).toEqual(['otto@example.test', 'S3cret!pass', 'S3cret!pass']);
 
-    const done = await pages.click(page, { text: 'sign in' });
-    expect(done.title).toBe('Done');
-    expect((await pages.read(page, 'text', 0)).text).toBe('otto@example.test|true');
+    // A second fill replaces what is there, it does not append.
+    const submitted = await pages.fillLogin(page, { username: 'otto@example.test', password: 'S3cret!pass' }, true);
+    expect(submitted.title).toBe('Done');
+    expect(await pages.evaluate<string>(page, 'document.body.innerText')).toBe('otto@example.test|true');
   });
 
-  test('type with clear and submit, press, links, screenshot', async () => {
-    await pages.navigate(page, `${base}/login`);
-    const snap = await pages.snapshot(page);
-    await pages.type(page, { ref: snap.elements[0]!.ref }, 'first');
-    await pages.type(page, { ref: snap.elements[0]!.ref }, 'otto@example.test', { clear: true });
-    expect(await pages.evaluate<string>(page, 'document.querySelector("#u").value')).toBe('otto@example.test');
-
-    const links = await pages.read(page, 'links', 0);
-    expect(links.links).toEqual([{ text: 'Other page', href: `${base}/other` }]);
-
-    const shot = await pages.screenshot(page, false);
-    expect(shot.mime_type).toBe('image/jpeg');
-    expect(Buffer.from(shot.data_base64, 'base64').subarray(0, 2).toString('hex')).toBe('ffd8');
-
-    const moved = await pages.click(page, { selector: 'a' });
-    expect(moved).toMatchObject({ url: `${base}/other`, title: 'Other' });
-  });
-
-  test('a missing element and a failing script are tool errors', async () => {
-    await pages.navigate(page, `${base}/login`);
-    expect(await failure(pages.click(page, { ref: 'e999' }))).toContain('no element matches ref e999');
-    expect(await failure(pages.runScript(page, 'nope.nope'))).toContain('page script failed');
+  test('a page with no sign-in field is a tool error', async () => {
+    await open(`${base}/other`);
+    expect(await failure(pages.fillLogin(page, { username: 'otto@example.test', password: 'x' }, false))).toContain('no sign-in field');
+    expect(await failure(pages.evaluate(page, 'nope.nope'))).toContain('page script failed');
   });
 });

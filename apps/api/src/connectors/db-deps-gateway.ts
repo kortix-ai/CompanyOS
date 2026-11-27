@@ -56,7 +56,7 @@ import {
 } from './credentials';
 import { recordFinishedComposioAuthorization } from './db-deps-connect';
 import { connectorEgressFetch } from './egress';
-import { kortixAgentServiceForUrl } from './kortix-agent/host';
+import { KORTIX_SESSION_HEADER, kortixAgentServiceForUrl } from './kortix-agent/host';
 import { CredentialNotSharedError } from './gateway';
 import type { ExecutionRecord, GatewayAction, GatewayConnector, GatewayDeps, HeldApprovalVerdict } from './gateway';
 import { HELD_RUN_CEILING_MS, sealHeldInput } from './held-call-store';
@@ -821,8 +821,16 @@ export function makeDbGatewayDeps(principal: ConnectorPrincipal): GatewayDeps {
     // shared tunnel RPC core (wire permission → relay → audit).
     executeComputerCall,
     // Every connector request resolves and checks its target, on each
-    // redirect hop too. See egress.ts.
-    fetchImpl: connectorEgressFetch,
+    // redirect hop too. See egress.ts. Kortix's own in-process servers also
+    // learn which session calls (a browser copy per session), set last so no
+    // configured header can name another session.
+    fetchImpl: (url, init) =>
+      connectorEgressFetch(
+        url,
+        kortixAgentServiceForUrl(url)
+          ? { ...init, headers: { ...init.headers, [KORTIX_SESSION_HEADER]: principal.sessionId ?? '' } }
+          : init,
+      ),
     markCredentialRejected: async (connectionId, rejected) => {
       await db
         .update(connectorConnections)

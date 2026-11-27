@@ -28,6 +28,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { workspaceAliasOf } from '@kortix/shared/workspace-routes';
 import { app } from '../src/index';
+import { RETIRED_ROUTES } from '../src/routes/retired';
 
 export const EXPOSURES = ['agent', 'human', 'internal', 'local'] as const;
 export type Exposure = (typeof EXPOSURES)[number];
@@ -49,6 +50,9 @@ const BASELINE = resolve(import.meta.dir, 'operation-catalog.baseline.json');
 /** Routes that are not operations (a raw passthrough, a protocol endpoint), each with the reason. */
 const EXCLUSIONS = resolve(import.meta.dir, 'operation-catalog.exclusions.json');
 const excluded: Record<string, string> = JSON.parse(readFileSync(EXCLUSIONS, 'utf8')) as Record<string, string>;
+// A retired route answers 410 with the route that replaced it: not an operation.
+const retired = new Set(RETIRED_ROUTES.map(([method, path]) => `${method.toUpperCase()} ${path}`));
+const isExcluded = (k: string) => k in excluded || retired.has(k);
 
 // A parameter starts a segment; a colon inside one is a literal custom verb (`/policies:bulk-delete`).
 const toOpenApiPath = (path: string) => path.replace(/(?<=\/):([A-Za-z0-9_]+)(\{[^}]*\})?/g, '{$1}');
@@ -98,7 +102,7 @@ export function buildCatalog(): CatalogEntry[] {
     .sort((a, b) => key(a.method, a.path).localeCompare(key(b.method, b.path)));
 }
 
-export const classified = (e: CatalogEntry) => Boolean(e.operation_id && e.action && e.exposure) || key(e.method, e.path) in excluded;
+export const classified = (e: CatalogEntry) => Boolean(e.operation_id && e.action && e.exposure) || isExcluded(key(e.method, e.path));
 
 /** The domain a route belongs to, for the coverage table: the first path segment after the workspace. */
 export function domainOf(path: string): string {
@@ -116,7 +120,9 @@ export function domainOf(path: string): string {
     const fresh = unclassified.filter((k) => !baseline.has(k));
     const stale = [...baseline].filter((k) => !unclassified.includes(k));
     const ids = new Map<string, string>();
-    const duplicate = catalog.filter((e) => e.operation_id && ids.has(e.operation_id) ? true : (e.operation_id && ids.set(e.operation_id, key(e.method, e.path)), false));
+    // One route object mounted twice is one operation: its excluded alias path is not a second id.
+    const named = catalog.filter((e) => e.operation_id && !isExcluded(key(e.method, e.path)));
+    const duplicate = named.filter((e) => (ids.has(e.operation_id!) ? true : (ids.set(e.operation_id!, key(e.method, e.path)), false)));
     const gone = Object.keys(excluded).filter((k) => !catalog.some((e) => key(e.method, e.path) === k));
     if (duplicate.length) console.error(`duplicate operationId: ${duplicate.map((e) => `${e.operation_id} (${key(e.method, e.path)})`).join(', ')}`);
     if (gone.length) console.error(`exclusions name routes that no longer exist: ${gone.join(', ')}`);

@@ -277,7 +277,7 @@ export async function listRuntimeAgentTriggers(projectId: string): Promise<Runti
   return db
     .select()
     .from(projectTriggerRuntime)
-    .where(and(eq(projectTriggerRuntime.projectId, projectId), or(like(projectTriggerRuntime.slug, `${RUNTIME_TRIGGER_ID_PREFIX}%`), like(projectTriggerRuntime.slug, `${LEGACY_RUNTIME_TRIGGER_ID_PREFIX}%`)), notSessionTarget))
+    .where(and(eq(projectTriggerRuntime.projectId, projectId), or(like(projectTriggerRuntime.slug, `${RUNTIME_TRIGGER_ID_PREFIX}%`), like(projectTriggerRuntime.slug, `${LEGACY_RUNTIME_TRIGGER_ID_PREFIX}%`)), sql`jsonb_typeof(${projectTriggerRuntime.scheduleSpec}) = 'object'`, notSessionTarget))
     .orderBy(asc(projectTriggerRuntime.slug))
     // ponytail: one page of 200, like the loop list; add a cursor when a project holds more.
     .limit(200);

@@ -93,8 +93,10 @@ export const PLAN_PRESETS = [
  * step first. Top-ups carry no bonus: the plan is the volume discount.
  */
 export const PLAN_BONUS_STEPS = [
-  { minUsd: 5_000, percent: 20 },
-  { minUsd: 1_000, percent: 15 },
+  { minUsd: 7_500, percent: 30 },
+  { minUsd: 3_000, percent: 25 },
+  { minUsd: 1_000, percent: 20 },
+  { minUsd: 500, percent: 15 },
   { minUsd: 200, percent: 10 },
   { minUsd: 100, percent: 5 },
 ] as const;

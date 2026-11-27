@@ -75,9 +75,11 @@ at the flat 100 credits per dollar, with no bonus.
 |---|---|---|
 | $50–$99 | 0% | $50 → 5,000 credits |
 | $100–$199 | +5% | $100 → 10,500 |
-| $200–$999 | +10% | $200 → 22,000 |
-| $1,000–$4,999 | +15% | $1,000 → 115,000 |
-| $5,000–$10,000 | +20% | $10,000 → 1,200,000 |
+| $200–$499 | +10% | $200 → 22,000 |
+| $500–$999 | +15% | $500 → 57,500 |
+| $1,000–$2,999 | +20% | $1,000 → 120,000 |
+| $3,000–$7,499 | +25% | $3,000 → 375,000 |
+| $7,500–$10,000 | +30% | $10,000 → 1,300,000 |
 
 - One rule: `planCreditsUsd(monthlyUsd)` in `billing/services/tiers.ts`
   (`PLAN_BONUS_STEPS`), mirrored by `monthlyCreditsForUsd` in
@@ -94,7 +96,7 @@ at the flat 100 credits per dollar, with no bonus.
 - Store (RevenueCat) products grant their listed amount, no bonus: the store
   keeps its own cut.
 - An amount above $10,000 bought before the cut keeps its subscription and
-  its bill; its bonus is the top step. `POST /billing/plan` refuses a new one.
+  its bill; its bonus is the top step (+30%). `POST /billing/plan` refuses a new one.
 - Top-ups carried a +1–5% bonus until 2026-11-27 (ledger kind `topup_bonus`,
   key `<payment>:bonus`). A refund or dispute of such a payment still takes
   back its share of the bonus row the payment actually got

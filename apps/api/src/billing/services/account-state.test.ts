@@ -451,9 +451,9 @@ describe('buildMinimalAccountState — plan changes', () => {
     expect(state.subscription.has_scheduled_change).toBe(true);
     expect(state.subscription.scheduled_change).toEqual({
       type: 'downgrade',
-      // Credits include each amount's volume bonus: +20% at $5,000, +15% at $3,000.
-      current_tier: { name: 'credits', display_name: 'Credits', monthly_credits: 600_000, monthly_usd: 5000 },
-      target_tier: { name: 'credits', display_name: 'Credits', monthly_credits: 345_000, monthly_usd: 3000 },
+      // Credits include each amount's volume bonus: +25% at both $5,000 and $3,000.
+      current_tier: { name: 'credits', display_name: 'Credits', monthly_credits: 625_000, monthly_usd: 5000 },
+      target_tier: { name: 'credits', display_name: 'Credits', monthly_credits: 375_000, monthly_usd: 3000 },
       effective_date: '2026-11-14T00:00:00.000Z',
     });
   });

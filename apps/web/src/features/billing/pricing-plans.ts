@@ -63,7 +63,7 @@ export const PRICING_PLANS: PricingPlan[] = [
       'Higher model rate limits',
       'Support via email',
       // PLAN_BONUS_STEPS' top percent (compute-pricing.ts); pricing-copy.test.ts checks it.
-      'Up to 20% bonus credits on bigger tiers',
+      'Up to 30% bonus credits on bigger tiers',
     ],
   },
   {

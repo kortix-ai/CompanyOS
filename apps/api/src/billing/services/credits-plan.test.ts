@@ -145,14 +145,15 @@ describe('planMonthlyUsd: stored amount, legacy fallback', () => {
 
 describe('planCreditsUsd: a larger plan buys more credits per dollar', () => {
   test('each bonus step grants the amount billed plus its percent', () => {
-    expect([50, 75, 99, 100, 199, 200, 999, 1_000, 4_999, 5_000, 10_000].map((usd) => [usd, planBonusPercent(usd)])).toEqual([
-      [50, 0], [75, 0], [99, 0], [100, 5], [199, 5], [200, 10], [999, 10], [1_000, 15], [4_999, 15], [5_000, 20], [10_000, 20],
+    expect([50, 99, 100, 199, 200, 499, 500, 999, 1_000, 2_999, 3_000, 7_499, 7_500, 10_000].map((usd) => [usd, planBonusPercent(usd)])).toEqual([
+      [50, 0], [99, 0], [100, 5], [199, 5], [200, 10], [499, 10], [500, 15], [999, 15], [1_000, 20], [2_999, 20], [3_000, 25], [7_499, 25], [7_500, 30], [10_000, 30],
     ]);
     expect(planCreditsUsd(50)).toBe(50);
     expect(planCreditsUsd(100)).toBe(105);
     expect(planCreditsUsd(200)).toBe(220);
-    expect(planCreditsUsd(1_000)).toBe(1_150);
-    expect(planCreditsUsd(10_000)).toBe(12_000);
+    expect(planCreditsUsd(500)).toBe(575);
+    expect(planCreditsUsd(1_000)).toBe(1_200);
+    expect(planCreditsUsd(10_000)).toBe(13_000);
   });
 
   test('no amount pays, and a $0 or negative amount grants nothing', () => {

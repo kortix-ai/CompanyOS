@@ -155,8 +155,8 @@ flow(
         .has("$.tiers[3].display_name", "22,000 credits")
         .has("$.tiers[3].monthly_credits", 220)
         .has("$.tiers[15].monthly_price", 10000)
-        .has("$.tiers[15].display_name", "1,200,000 credits")
-        .has("$.tiers[15].monthly_credits", 12000)
+        .has("$.tiers[15].display_name", "1,300,000 credits")
+        .has("$.tiers[15].monthly_credits", 13000)
         .has("$.tiers[16]", undefined)
         .has("$.min_monthly_usd", 50)
         .has("$.max_monthly_usd", 10000);

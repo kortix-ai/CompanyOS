@@ -576,7 +576,7 @@ describe('invoice.paid (renewal)', () => {
     expect(walletGrants.length).toBe(0);
   });
 
-  test('a $1,000 plan renews with its +15% bonus, rolls over at most one month of credits, and stores the billed $1,000', async () => {
+  test('a $1,000 plan renews with its +20% bonus, rolls over at most one month of credits, and stores the billed $1,000', async () => {
     const invoice = createMockStripeInvoice();
     const event = createMockStripeEvent('invoice.paid', invoice);
     mockRegistry.stripeClient.webhooks.constructEvent = () => event;
@@ -588,7 +588,7 @@ describe('invoice.paid (renewal)', () => {
     mockRegistry.getCreditAccount = async () =>
       createMockCreditAccount({ tier: 'credits', planMonthlyUsd: '1000', lastRenewalPeriodStart: null });
     const balance = fakeWallet.wallet.balance;
-    // More unused monthly credits than one month grants: the carry stops at 1,150.
+    // More unused monthly credits than one month grants: the carry stops at 1,200.
     fakeWallet.wallet.balance = async () => ({ balance: 2_000, expiring: 2_000, nonExpiring: 0, daily: 0 });
     try {
       await processStripeWebhook(JSON.stringify(event), 'sig');
@@ -596,8 +596,8 @@ describe('invoice.paid (renewal)', () => {
       fakeWallet.wallet.balance = balance;
     }
 
-    expect(walletResets.map((reset) => reset.amount)).toEqual([2_300]);
-    expect(walletResets[0].description).toBe('Monthly renewal: 115000 credits + 115000 rolled over');
+    expect(walletResets.map((reset) => reset.amount)).toEqual([2_400]);
+    expect(walletResets[0].description).toBe('Monthly renewal: 120000 credits + 120000 rolled over');
     const persisted = updateCreditAccountCalls.find((c: any) => c.data.planMonthlyUsd !== undefined);
     expect(persisted?.data.planMonthlyUsd).toBe('1000');
   });

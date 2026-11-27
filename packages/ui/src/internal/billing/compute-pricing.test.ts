@@ -45,17 +45,17 @@ describe('credit tier ladder', () => {
     expect([...new Set(groups)]).toEqual([...CREDIT_TIER_GROUPS]);
   });
 
-  test('a bigger tier buys more credits per dollar: +5% at $100 up to +20% from $5,000', () => {
+  test('a bigger tier buys more credits per dollar: +5% at $100 up to +30% from $7,500', () => {
     expect(CREDIT_TIERS.map((tier) => [tier.monthlyUsd, monthlyCreditsForUsd(tier.monthlyUsd)])).toEqual([
-      [50, 5_000], [75, 7_500], [100, 10_500], [200, 22_000], [300, 33_000], [400, 44_000], [500, 55_000],
-      [750, 82_500], [1_000, 115_000], [1_500, 172_500], [2_000, 230_000], [3_000, 345_000], [4_000, 460_000],
-      [5_000, 600_000], [7_500, 900_000], [10_000, 1_200_000],
+      [50, 5_000], [75, 7_500], [100, 10_500], [200, 22_000], [300, 33_000], [400, 44_000], [500, 57_500],
+      [750, 86_250], [1_000, 120_000], [1_500, 180_000], [2_000, 240_000], [3_000, 375_000], [4_000, 500_000],
+      [5_000, 625_000], [7_500, 975_000], [10_000, 1_300_000],
     ]);
     for (let i = 1; i < CREDIT_TIERS.length; i++) {
       const [prev, next] = [CREDIT_TIERS[i - 1].monthlyUsd, CREDIT_TIERS[i].monthlyUsd];
       expect(monthlyCreditsForUsd(next) / next).toBeGreaterThanOrEqual(monthlyCreditsForUsd(prev) / prev);
     }
-    expect(Math.max(...PLAN_BONUS_STEPS.map((step) => step.percent))).toBe(20);
+    expect(Math.max(...PLAN_BONUS_STEPS.map((step) => step.percent))).toBe(30);
     expect(planBonusPercent(99)).toBe(0);
   });
 

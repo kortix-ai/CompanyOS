@@ -31,12 +31,12 @@ describe('computeProrationGrant', () => {
   });
 
   test('a raise across bonus steps grants exactly the remaining share of the credits difference', () => {
-    // $500 (+10%, 55,000 credits) → $1,000 (+15%, 115,000 credits), half the
-    // period left: $250 paid, half of the 60,000-credit difference = 30,000.
+    // $500 (+15%, 57,500 credits) → $1,000 (+20%, 120,000 credits), half the
+    // period left: $250 paid, half of the 62,500-credit difference = 31,250.
     expect(computeProrationGrant([planLine(-25000, 500), planLine(50000, 1000)])).toEqual({
       kind: 'raise',
       netCents: 25000,
-      credits: 300,
+      credits: 312.5,
     });
   });
 

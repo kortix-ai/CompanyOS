@@ -20,7 +20,7 @@ The cloud Free plan is $0 and asks for no card. It includes 500 credits a month 
 
 ## Credits buy work, not headcount
 
-The paid plan is Credits. $50 buys 5,000 credits a month at 100 credits per dollar. A larger monthly amount buys more credits per dollar, from +5% at $100 a month to +20% from $5,000 ([plans and credits](https://kortix.com/pricing), checked November 2026). One wallet serves the whole account. Members are unlimited and adding one does not change the bill.
+The paid plan is Credits. $50 buys 5,000 credits a month at 100 credits per dollar. A larger monthly amount buys more credits per dollar, from +5% at $100 a month to +30% from $7,500 ([plans and credits](https://kortix.com/pricing), checked November 2026). One wallet serves the whole account. Members are unlimited and adding one does not change the bill.
 
 Unused plan credits roll over for one month. A quiet month is not a loss. The paid plan also lifts model rate limits and adds email support.
 

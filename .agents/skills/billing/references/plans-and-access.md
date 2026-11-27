@@ -65,8 +65,11 @@ resolve to `credits`). Stripe owns it. `tier='enterprise'` no longer exists.
 
 ### Plan volume bonus (2026-11-27)
 
-A bigger monthly amount buys more credits per dollar. Top-ups buy at the flat
-rate (100 credits per dollar): the plan is the volume discount.
+A bigger monthly amount buys more credits per dollar: the plan is the volume
+discount and the upgrade path. Self-serve Credits sells no one-off top-ups or
+auto top-up (`plan-catalog.ts`, `canPurchaseCredits: false` since 2026-11-09);
+Enterprise and an `entitlement_overrides.canPurchaseCredits` account buy them
+at the flat 100 credits per dollar, with no bonus.
 
 | Monthly amount | Bonus | Example |
 |---|---|---|

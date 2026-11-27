@@ -2878,7 +2878,7 @@
           "f2": "Modèles gérés : DeepSeek, GLM. Zéro conservation des données",
           "f3": "Membres illimités, un seul pool de crédits partagé",
           "f4": "Les crédits inutilisés sont reportés d'un mois",
-          "f5": "Rechargez à tout moment. Les recharges n'expirent jamais",
+          "f5": "Passez au palier supérieur à tout moment. Les nouveaux crédits arrivent aussitôt",
           "f6": "Des limites de débit plus élevées",
           "f7": "Support par e-mail",
           "f8": "Jusqu'à 20 % de crédits bonus sur les paliers élevés"
@@ -2922,7 +2922,7 @@
         },
         "topup": {
           "question": "Puis-je ajouter des crédits en cours de mois ?",
-          "answer": "Oui. Rechargez n'importe quel montant à tout moment, ou activez la recharge automatique pour que vos agents ne s'arrêtent jamais. Les recharges donnent 100 crédits par dollar et n'expirent jamais. Pour plus de crédits par dollar, choisissez un palier mensuel plus élevé."
+          "answer": "Oui : passez à un palier mensuel supérieur. Le changement s'applique aussitôt. Vous payez la différence pour le reste du mois, et les crédits du nouveau palier pour cette période arrivent tout de suite, au taux du palier supérieur. Les recharges ponctuelles sont incluses dans un contrat Enterprise."
         },
         "change": {
           "question": "Puis-je changer de palier ?",

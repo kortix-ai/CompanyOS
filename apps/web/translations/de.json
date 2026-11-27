@@ -2878,7 +2878,7 @@
           "f2": "Verwaltete Modelle: DeepSeek, GLM. Keine Datenspeicherung",
           "f3": "Unbegrenzt viele Mitglieder, ein gemeinsamer Credit-Pool",
           "f4": "Ungenutzte Credits werden einen Monat übertragen",
-          "f5": "Jederzeit aufladen. Aufladungen verfallen nie",
+          "f5": "Stufe jederzeit erhöhen. Die neuen Credits sind sofort da",
           "f6": "Höhere Modell-Ratenlimits",
           "f7": "Support per E-Mail",
           "f8": "Bis zu 20 % Bonus-Credits bei größeren Stufen"
@@ -2922,7 +2922,7 @@
         },
         "topup": {
           "question": "Kann ich mitten im Monat Credits hinzufügen?",
-          "answer": "Ja. Lade jederzeit einen beliebigen Betrag auf oder aktiviere die automatische Aufladung, damit deine Agenten nie stoppen. Aufladungen liefern 100 Credits pro Dollar und verfallen nie. Mehr Credits pro Dollar bringt eine größere Monatsstufe."
+          "answer": "Ja: Erhöhe deine Monatsstufe. Die Erhöhung gilt sofort. Du zahlst die Differenz für den Rest des Monats, und die Credits der neuen Stufe für diese Zeit sind sofort da, zum Satz der größeren Stufe. Einmalige Aufladungen gibt es mit einem Enterprise-Vertrag."
         },
         "change": {
           "question": "Kann ich meine Stufe ändern?",

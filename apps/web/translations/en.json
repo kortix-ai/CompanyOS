@@ -2878,7 +2878,7 @@
           "f2": "Managed models: DeepSeek, GLM. Zero data retention",
           "f3": "Unlimited members, one shared credit pool",
           "f4": "Unused credits roll over one month",
-          "f5": "Top up any time. Top-ups never expire",
+          "f5": "Raise your tier any time. The new credits land at once",
           "f6": "Higher model rate limits",
           "f7": "Support via email",
           "f8": "Up to 20% bonus credits on bigger tiers"
@@ -2922,7 +2922,7 @@
         },
         "topup": {
           "question": "Can I add credits mid-month?",
-          "answer": "Yes. Top up any amount at any time, or turn on auto top-up so your agents never stop. Top-ups buy 100 credits per dollar and never expire. For more credits per dollar, pick a bigger monthly tier."
+          "answer": "Yes: raise your monthly tier. The raise takes effect at once. You pay the difference for the rest of the month, and the new tier's credits for that time land right away, at the bigger tier's rate. One-off top-ups come with an Enterprise contract."
         },
         "change": {
           "question": "Can I change my tier?",

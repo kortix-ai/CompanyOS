@@ -153,10 +153,12 @@ describe('pricing copy', () => {
     expect(html).not.toContain('Kimi');
   });
 
-  test('the top-up FAQ states the flat rate and promises no top-up bonus, in every locale', () => {
-    expect(english.billing.pricing.faq.topup.answer).toContain('100 credits per dollar');
+  test('the mid-month FAQ sends people to a bigger tier: self-serve Credits sells no top-ups (plan-catalog.ts)', () => {
+    expect(english.billing.pricing.faq.topup.answer).toContain('raise your monthly tier');
+    expect(english.billing.pricing.faq.topup.answer).toContain('Enterprise');
     for (const locale of locales) {
       expect(catalog(locale).billing.pricing.faq.topup.answer).not.toMatch(/\{(smallest|largest)Bonus/);
     }
+    expect(JSON.stringify(PRICING_PLANS)).not.toMatch(/top up any time/i);
   });
 });

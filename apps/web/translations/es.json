@@ -2878,7 +2878,7 @@
           "f2": "Modelos gestionados: DeepSeek, GLM. Retención de datos cero",
           "f3": "Miembros ilimitados, un único fondo de créditos compartido",
           "f4": "Los créditos sin usar se trasladan un mes",
-          "f5": "Recarga cuando quieras. Las recargas nunca caducan",
+          "f5": "Sube de nivel cuando quieras. Los nuevos créditos llegan al momento",
           "f6": "Límites de uso de modelos más altos",
           "f7": "Soporte por correo electrónico",
           "f8": "Hasta un 20 % de créditos extra en niveles más altos"
@@ -2922,7 +2922,7 @@
         },
         "topup": {
           "question": "¿Puedo añadir créditos a mitad de mes?",
-          "answer": "Sí. Recarga cualquier importe en cualquier momento o activa la recarga automática para que tus agentes nunca se detengan. Las recargas dan 100 créditos por dólar y nunca caducan. Para más créditos por dólar, elige un nivel mensual más alto."
+          "answer": "Sí: sube tu nivel mensual. El cambio se aplica al momento. Pagas la diferencia por el resto del mes y los créditos del nuevo nivel para ese tiempo llegan enseguida, a la tarifa del nivel más alto. Las recargas puntuales vienen con un contrato Enterprise."
         },
         "change": {
           "question": "¿Puedo cambiar mi nivel?",

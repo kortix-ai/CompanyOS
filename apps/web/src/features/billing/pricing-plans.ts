@@ -59,7 +59,7 @@ export const PRICING_PLANS: PricingPlan[] = [
       'Managed models: DeepSeek, GLM. Zero data retention',
       'Unlimited members, one shared credit pool',
       'Unused credits roll over one month',
-      'Top up any time. Top-ups never expire',
+      'Raise your tier any time. The new credits land at once',
       'Higher model rate limits',
       'Support via email',
       // PLAN_BONUS_STEPS' top percent (compute-pricing.ts); pricing-copy.test.ts checks it.

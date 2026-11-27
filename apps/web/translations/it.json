@@ -2878,7 +2878,7 @@
           "f2": "Modelli gestiti: DeepSeek, GLM. Zero conservazione dei dati",
           "f3": "Membri illimitati, un unico pool di crediti condiviso",
           "f4": "I crediti non usati si trasferiscono di un mese",
-          "f5": "Ricarica quando vuoi. Le ricariche non scadono mai",
+          "f5": "Passa a un livello più alto quando vuoi. I nuovi crediti arrivano subito",
           "f6": "Limiti di frequenza dei modelli più alti",
           "f7": "Assistenza via email",
           "f8": "Fino al 20% di crediti bonus sui livelli più alti"
@@ -2922,7 +2922,7 @@
         },
         "topup": {
           "question": "Posso aggiungere crediti a metà mese?",
-          "answer": "Sì. Ricarica qualsiasi importo in qualsiasi momento, oppure attiva la ricarica automatica così i tuoi agenti non si fermano mai. Le ricariche danno 100 crediti per dollaro e non scadono mai. Per più crediti per dollaro, scegli un livello mensile più alto."
+          "answer": "Sì: passa a un livello mensile più alto. Il cambio vale subito. Paghi la differenza per il resto del mese e i crediti del nuovo livello per quel periodo arrivano subito, alla tariffa del livello più alto. Le ricariche una tantum sono incluse in un contratto Enterprise."
         },
         "change": {
           "question": "Posso cambiare il mio livello?",

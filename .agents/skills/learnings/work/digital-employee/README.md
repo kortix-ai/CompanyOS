@@ -40,6 +40,51 @@ employee.
 6. **The employee owns its state.** Its Drive holds everything about it. It
    writes outward only when someone needs to know.
 
+## The architecture in one page
+
+```
+ inputs                       the ledger                    takers                      state
+ ───────────────              ──────────────────            ──────────────────          ─────────────────
+ Slack, Teams, email,  ──►    employee_events      ──►      the conversation    ◄──►    git: self, skills,
+ SMS, calls, web chat         one row per event,            (one per person +           agents, triggers
+ connector events             with a state:                 its own)                    (procedural)
+ crons, schedules,            pending → routed |            working threads     ◄──►    volume: memory,
+ webhooks, goals              digested | recorded           (one per piece of           journal, files
+ finished threads             | dead                        work, in parallel)          (episodic, semantic)
+ its own actions (out)                                      sleep (nightly)     ◄──►    the ledger itself
+```
+
+1. **One ledger.** Every input is one row in `employee_events` with a state:
+   `pending` (waiting for the dispatcher), `routed` (a session took it),
+   `digested` (sent to a conversation as part of a digest), `recorded` (kept
+   for awareness or the employee's own action; nothing to deliver), `dead`
+   (every attempt failed; shown to people). Nothing acts on an input that has
+   no row. Crons, schedules, webhooks and
+   connector events that the employee set up are inputs like a message: in an
+   employee workspace a trigger fire writes an event, and the dispatcher hands
+   it to a taker. The employee's own actions (a message sent, a call made) are
+   rows too, so the ledger is the complete record of its life.
+2. **Takers, not a chat loop.** Three kinds of sessions take events:
+   - **The conversation.** One per person, plus the employee's own. It works
+     like a WhatsApp chat: the employee reads what arrives and sends a
+     message when it decides to. Silence is the default. Replying is an
+     action (an outbound event), not the end of a turn.
+   - **Working threads.** One per piece of work, in parallel, each in its own
+     sandbox. They report into the conversation that started them.
+   - **Sleep.** One nightly session (section 5).
+3. **Three stores, no state in compute.** The ledger (Postgres), the volume
+   (the Employee drive: memory, journal, files, browser backups) and git (self,
+   skills, agents, triggers). A sandbox holds nothing that is not in one of
+   them, so any number of sessions can run at once and any box can die.
+4. **Scale and copies.** More work is more working threads; the dispatcher's
+   per-subject order keeps one thread's events in sequence. A copy of an
+   employee is a new workspace from its git config and a snapshot of its
+   volume, with a new Base Identity. A proven employee becomes a starter
+   template the same way.
+5. **It compounds.** Every night, sleep turns the day's ledger and
+   transcripts into memory (volume) and into better skills, agents and
+   triggers (git, through change requests that pass the eval gate).
+
 ## 1. The Base Identity
 
 One record per employee, `kortix.employee_identities`, one row per project.

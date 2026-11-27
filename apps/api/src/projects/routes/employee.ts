@@ -15,6 +15,7 @@ import { createRoute, z } from '@hono/zod-openapi';
 import type { Context } from 'hono';
 import { recordEmployeeEvent, listEmployeeEvents } from '../../employee/events';
 import '../../employee/dispatch';
+import '../lib/employee-trigger-delivery';
 import { getEmployeeIdentity } from '../../employee/identity';
 import {
   createEmployee,

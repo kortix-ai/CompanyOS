@@ -208,3 +208,29 @@ test('a Slack message maps to one row per message; a DM is private; an unaddress
   expect((await rowOf(recorded.eventId)).dispatchStatus).toBe('recorded');
   expect(slackEmployeeEvent(EMPLOYEE, 'T1', { type: 'event_callback', event: { type: 'reaction_added' } }, false)).toBeNull();
 });
+
+test('a cron fire in an employee workspace is written to the log and taken up from there', async () => {
+  const { fireGitTrigger, employeeFireSource } = await import('../projects/lib/trigger-fire');
+  const [project] = await db.select().from(projects).where(eq(projects.projectId, EMPLOYEE));
+  const key = `cron:daily-plan:${crypto.randomUUID()}`;
+  const spec = { slug: 'daily-plan', name: 'Daily plan' } as unknown as Parameters<typeof fireGitTrigger>[0]['spec'];
+  const result = await fireGitTrigger({ spec, project: project as never, payload: { slot: '2026-11-27T08:00:00Z' }, renderedPrompt: 'Plan the day.', source: 'cron', idempotencyKey: key });
+  expect(result).toEqual({ status: 'queued', reason: 'prompt queued for delivery', deduped: false });
+
+  const [row] = await db.select().from(employeeEvents).where(and(eq(employeeEvents.projectId, EMPLOYEE), eq(employeeEvents.externalId, key)));
+  expect(row!.source).toBe('schedule');
+  expect(row!.type).toBe('schedule.trigger.fired');
+  expect(row!.subject).toBe('trigger:daily-plan');
+  expect(row!.dispatchStatus).toBe('pending');
+  const fire = (row!.payload as { fire: { renderedPrompt: string; idempotencyKey: string } }).fire;
+  expect(fire).toMatchObject({ renderedPrompt: 'Plan the day.', idempotencyKey: key });
+  expect((await jobsOf(row!.eventId)).length).toBe(1);
+
+  // The same slot fired twice is one event.
+  const again = await fireGitTrigger({ spec, project: project as never, payload: {}, renderedPrompt: 'Plan the day.', source: 'cron', idempotencyKey: key });
+  expect(again.deduped).toBe(true);
+
+  expect(employeeFireSource('event')).toBe('connector');
+  expect(employeeFireSource('monitor')).toBe('webhook');
+  expect(employeeFireSource('manual')).toBeNull();
+});

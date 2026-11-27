@@ -361,8 +361,13 @@ async function enqueueTriggerPrompt(input: {
  * queued a run, attributed to the account owner (a fire has no person).
  */
 export async function fireGitTrigger(
-  input: Parameters<typeof fireGitTriggerOnce>[0],
+  input: Parameters<typeof fireGitTriggerOnce>[0] & {
+    /** The employee dispatcher replays a fire it took from the event log. */
+    fromEmployeeLog?: boolean;
+  },
 ): ReturnType<typeof fireGitTriggerOnce> {
+  const logged = await logFireForEmployee(input);
+  if (logged) return logged;
   const result = await fireGitTriggerOnce(input);
   // No model or no credits: the account cannot run it, so the trigger pauses
   // and resumes when the cause is gone (trigger-setup-pause.ts) instead of
@@ -377,7 +382,7 @@ export async function fireGitTrigger(
     });
   }
   if (result.status === 'fired' || result.status === 'queued') {
-    await recordTriggerFireForEmployee(input, result);
+    await recordDirectFireForEmployee(input, result);
     captureAccountProductEvent({
       accountId: input.project.accountId,
       event: 'trigger_fired',
@@ -392,32 +397,58 @@ export async function fireGitTrigger(
   return result;
 }
 
+/** Fires an employee workspace takes up from its event log: the dispatcher replays them (`employee-trigger-delivery.ts`). */
+const LEDGER_FIRE_SOURCES = new Set<TriggerFireSource>(['cron', 'webhook', 'event', 'monitor']);
+
+/** The ledger source of a trigger fire. Pure. */
+export function employeeFireSource(source: TriggerFireSource): 'schedule' | 'webhook' | 'connector' | null {
+  if (source === 'cron' || source === 'reminder') return 'schedule';
+  if (source === 'event') return 'connector';
+  if (source === 'webhook' || source === 'monitor') return 'webhook';
+  return null;
+}
+
+type FireInput = Parameters<typeof fireGitTriggerOnce>[0];
+
+function employeeFireEvent(input: FireInput, opts: { dispatch: boolean; sessionId?: string | null }) {
+  const source = employeeFireSource(input.source)!;
+  return {
+    projectId: input.project.projectId,
+    source,
+    type: `${source}.trigger.fired`,
+    subject: `trigger:${input.spec.slug}`,
+    externalId: input.idempotencyKey ?? `${input.spec.slug}:${crypto.randomUUID()}`,
+    actor: { kind: 'system' as const, id: input.spec.slug, name: input.spec.slug },
+    summary: `Trigger ${input.spec.slug} fired (${input.source})${opts.sessionId ? ` into session ${opts.sessionId}` : ''}`,
+    payload: {
+      trigger: input.spec.slug,
+      fire_source: input.source,
+      session_id: opts.sessionId ?? null,
+      // What the dispatcher needs to replay the fire.
+      fire: { spec: input.spec, payload: input.payload, renderedPrompt: input.renderedPrompt, idempotencyKey: input.idempotencyKey ?? null },
+    },
+    dispatch: opts.dispatch,
+  };
+}
+
 /**
- * An employee workspace logs every trigger fire (its schedules, webhooks and
- * connector events). The trigger already has its own target, so the event is
- * kept for awareness, not dispatched again. Best effort: the fire happened.
+ * An employee workspace writes a cron, webhook, connector or monitor fire to
+ * its event log instead of firing it; the dispatcher takes it up from there.
+ * Returns the result to hand back, or null when the workspace is not an
+ * employee (or the source keeps its direct path).
  */
-async function recordTriggerFireForEmployee(
-  input: Parameters<typeof fireGitTriggerOnce>[0],
-  result: { sessionId?: string | null },
-): Promise<void> {
-  const source = input.source === 'cron' || input.source === 'reminder' ? 'schedule'
-    : input.source === 'event' ? 'connector'
-    : input.source === 'webhook' ? 'webhook'
-    : null;
-  if (!source) return;
+async function logFireForEmployee(input: FireInput & { fromEmployeeLog?: boolean }) {
+  if (input.fromEmployeeLog || !LEDGER_FIRE_SOURCES.has(input.source)) return null;
+  const recorded = await recordIfEmployee(employeeFireEvent(input, { dispatch: true }));
+  // The scheduler records this reason as a complete fire (trigger-scheduler.ts).
+  return recorded ? { status: 'queued' as const, reason: 'prompt queued for delivery', deduped: !recorded.inserted } : null;
+}
+
+/** Any other fire in an employee workspace (a reminder, a manual run) is kept for awareness. Best effort. */
+async function recordDirectFireForEmployee(input: FireInput & { fromEmployeeLog?: boolean }, result: { sessionId?: string | null }): Promise<void> {
+  if (input.fromEmployeeLog || LEDGER_FIRE_SOURCES.has(input.source) || !employeeFireSource(input.source)) return;
   try {
-    await recordIfEmployee({
-      projectId: input.project.projectId,
-      source,
-      type: `${source}.trigger.fired`,
-      subject: `trigger:${input.spec.slug}`,
-      externalId: input.idempotencyKey ?? `${input.spec.slug}:${Date.now()}`,
-      actor: { kind: 'system', id: input.spec.slug, name: input.spec.slug },
-      summary: `Trigger ${input.spec.slug} fired (${input.source})${result.sessionId ? ` into session ${result.sessionId}` : ''}`,
-      payload: { trigger: input.spec.slug, fire_source: input.source, session_id: result.sessionId ?? null, data: input.payload },
-      dispatch: false,
-    });
+    await recordIfEmployee(employeeFireEvent(input, { dispatch: false, sessionId: result.sessionId }));
   } catch (err) {
     logger.warn('[employee] trigger fire not logged', { projectId: input.project.projectId, slug: input.spec.slug, error: String(err) });
   }

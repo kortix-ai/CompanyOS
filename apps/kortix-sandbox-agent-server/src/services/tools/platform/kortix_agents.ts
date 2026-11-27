@@ -299,7 +299,8 @@ async function save(action: 'create' | 'update', name: string, args: Record<stri
     action,
     {
       title: action === 'create' ? `Created ${name}` : changes.length > 0 ? `Changed ${name}` : `${name} is unchanged`,
-      subtitle: 'Saved to the workspace settings.',
+      // Omitted tools mean every tool (`"*"`): say so, or the reply names only the grants that were set.
+      subtitle: action === 'create' && args.tools === undefined ? 'Saved to the workspace settings. Tools: every tool (none were listed).' : 'Saved to the workspace settings.',
       changes,
       links: [{ label: 'Open agent', href: agentHref(context.env, name) }],
     },
@@ -354,7 +355,7 @@ export default {
       secrets: { description: 'Secret names it receives, "all" or "none".', anyOf: [{ type: 'array', items: { type: 'string' } }, { type: 'string' }] },
       apps: { description: 'App slugs it may open, "all" or "none".', anyOf: [{ type: 'array', items: { type: 'string' } }, { type: 'string' }] },
       skills: { type: 'array', items: { type: 'string' }, description: 'Skill names it may load.' },
-      tools: { description: 'Tools it may use.', anyOf: [{ type: 'array', items: { type: 'string' } }, { type: 'string' }, { type: 'object' }] },
+      tools: { description: 'Tools it may use. Omitted means every tool: list only the ones the job needs (["read", "web_search"]).', anyOf: [{ type: 'array', items: { type: 'string' } }, { type: 'string' }, { type: 'object' }] },
       kortix_permissions: { description: 'Kortix actions it may take, or "all".', anyOf: [{ type: 'array', items: { type: 'string' } }, { type: 'string' }] },
       space: { type: 'string', description: 'The space it belongs to.' },
       enabled: { type: 'boolean', description: 'Turn the agent on or off.' },

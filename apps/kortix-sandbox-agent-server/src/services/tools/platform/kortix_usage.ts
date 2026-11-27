@@ -1,12 +1,13 @@
 /**
- * kortix_usage: how many credits this project's work used, and on which
- * sessions. Amounts are in credits, the unit people see in Kortix; never quote
- * a price. A My Kortix platform tool (`platform.ts`): `kortix billing costs`.
+ * kortix_usage: how many credits this project's work used, on which sessions,
+ * and how many are left. Amounts are in credits, the unit people see in Kortix;
+ * never quote a price. A My Kortix platform tool (`platform.ts`):
+ * `kortix billing costs` and `kortix billing status`.
  */
 import { capRows, cliJson, fail, ok, projectId, sessionHref, type PlatformToolContext } from './platform'
 
 const TOOL = 'kortix_usage' as const
-const ACTIONS = ['summary', 'top_sessions'] as const
+const ACTIONS = ['summary', 'top_sessions', 'balance'] as const
 
 /** One workspace's row of `kortix billing costs --by workspace --json`. */
 interface WorkspaceCost {
@@ -21,6 +22,14 @@ interface SessionCost {
   credits?: { total?: string; llm?: string; compute?: string }
   [field: string]: unknown
 }
+
+/** The credits part of `kortix billing status --json`. */
+interface BillingStatus {
+  plan?: { label?: string | null }
+  credits?: { total?: number; monthly?: number; extra?: number; expires_at?: string | null; can_run?: boolean }
+}
+
+const whole = (value: number) => Math.floor(value).toLocaleString('en-US')
 
 /** `--since` for the last `days` days, UTC. */
 function since(days: number): string {
@@ -93,10 +102,37 @@ async function topSessions(days: number, context: PlatformToolContext) {
   )
 }
 
+/**
+ * The credits left now and the plan. Usage shows only what was spent, so a promise to
+ * watch for a top-up or a low balance needs this (QualiLoop Core 9: two such promises
+ * built on `summary`).
+ */
+async function balance(context: PlatformToolContext) {
+  const read = await cliJson<BillingStatus>(['billing', 'status', '--json'], context)
+  if ('error' in read) return fail(TOOL, 'balance', 'Could not read the balance', read.error, context)
+  const c = read.value.credits ?? {}
+  const total = typeof c.total === 'number' ? c.total : null
+  const expires = c.expires_at ? new Date(c.expires_at).toISOString().slice(0, 10) : null
+  return ok(
+    TOOL,
+    'balance',
+    {
+      title: total === null ? 'Balance unknown' : `${whole(total)} credits left`,
+      ...(read.value.plan?.label ? { subtitle: `${read.value.plan.label} plan.` } : {}),
+      rows: [
+        ...(typeof c.monthly === 'number' ? [{ title: 'This month\'s credits', detail: `${whole(c.monthly)} credits${expires ? `, until ${expires}` : ''}` }] : []),
+        ...(typeof c.extra === 'number' ? [{ title: 'Extra credits', detail: `${whole(c.extra)} credits` }] : []),
+        ...(c.can_run === false ? [{ title: 'Work is paused', detail: 'No credits left to run agents.' }] : []),
+      ],
+    },
+    { credits: total, monthly: c.monthly ?? null, extra: c.extra ?? null, expires_at: c.expires_at ?? null, can_run: c.can_run ?? null, plan: read.value.plan?.label ?? null },
+  )
+}
+
 export default {
   description:
     "How many credits this project's work used. Actions: `summary` (days, default 30: the total, split into AI models and computers); " +
-    '`top_sessions` (days: the sessions that used the most). Speak in credits; never quote a price.',
+    '`top_sessions` (days: the sessions that used the most); `balance` (the credits left now and the plan: read it to check a top-up or a low balance, which usage cannot show). Speak in credits; never quote a price.',
   parameters: {
     type: 'object',
     properties: {
@@ -110,6 +146,7 @@ export default {
     const days = windowDays(args.days)
     if (action === 'summary') return summary(days, context)
     if (action === 'top_sessions') return topSessions(days, context)
+    if (action === 'balance') return balance(context)
     return fail(TOOL, action, 'Unknown action', { kind: 'invalid', message: `Use one of: ${ACTIONS.join(', ')}.` }, context)
   },
 }

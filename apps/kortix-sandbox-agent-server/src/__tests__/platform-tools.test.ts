@@ -80,6 +80,17 @@ describe('kortix_agents', () => {
     expect(result.card.changes).toContainEqual({ field: 'mode', before: null, after: 'subagent' })
   })
 
+  test('create: omitted tools mean every tool, and the card says so; listed tools do not', async () => {
+    fakeKortix(`'agents config digest --json') echo '{"kortix_error":{"kind":"failed","status":404,"message":"No agent digest"}}' >&2; exit 1 ;;
+  'agents config digest --file '*' --json') echo '{"ok":true,"agent":"digest","block":{"connectors":["notion"]}}' ;;
+  'agents config reader --json') echo '{"kortix_error":{"kind":"failed","status":404,"message":"No agent reader"}}' >&2; exit 1 ;;
+  'agents config reader --file '*' --json') echo '{"ok":true,"agent":"reader","block":{"tools":["read"]}}' ;;`)
+    const open = await run('kortix_agents', { action: 'create', name: 'digest', description: 'Ticket digest', connectors: ['notion'] })
+    expect(open.card.subtitle).toBe('Saved to the workspace settings. Tools: every tool (none were listed).')
+    const listed = await run('kortix_agents', { action: 'create', name: 'reader', description: 'Reads', tools: ['read'] })
+    expect(listed.card.subtitle).toBe('Saved to the workspace settings.')
+  })
+
   test.each(['subagent', 'primary', 'all'] as const)('create: explicit %s role controls picker visibility', async (mode) => {
     fakeKortix(`'agents config explicit-writer --json') echo '{"kortix_error":{"kind":"failed","status":404,"message":"No agent explicit-writer"}}' >&2; exit 1 ;;
   'agents config explicit-writer --file '*' --json') cp "$5" ${JSON.stringify(join(bin, 'explicit.json'))}; echo '{"ok":true,"agent":"explicit-writer","block":{}}' ;;`)
@@ -784,6 +795,26 @@ describe('kortix_usage', () => {
     expect(result.card.title).toBe('0 credits in the last 30 days')
     expect(result.card.subtitle).toBe('0 credits in the 30 days before.')
     expect(result.card.rows).toEqual([])
+  })
+
+  test('balance: the credits left now and the plan, whole credits, no price', async () => {
+    fakeKortix(`'billing status --json') echo '{"plan":{"label":"Credits","monthly_usd":0},"credits":{"total":8122.53,"monthly":4220.95,"extra":3901.57,"expires_at":"2026-12-25T13:36:17.820Z","can_run":true}}' ;;`)
+    const result = await run('kortix_usage', { action: 'balance' })
+    expect(result.card.title).toBe('8,122 credits left')
+    expect(result.card.subtitle).toBe('Credits plan.')
+    expect(result.card.rows).toEqual([
+      { title: "This month's credits", detail: '4,220 credits, until 2026-12-25' },
+      { title: 'Extra credits', detail: '3,901 credits' },
+    ])
+    expect(JSON.stringify(result)).not.toContain('monthly_usd')
+    expect(JSON.stringify(result.card)).not.toContain('$')
+  })
+
+  test('balance with no credits left says work is paused', async () => {
+    fakeKortix(`'billing status --json') echo '{"plan":{"label":"Free"},"credits":{"total":0,"can_run":false}}' ;;`)
+    const result = await run('kortix_usage', { action: 'balance' })
+    expect(result.card.title).toBe('0 credits left')
+    expect(result.card.rows).toContainEqual({ title: 'Work is paused', detail: 'No credits left to run agents.' })
   })
 })
 

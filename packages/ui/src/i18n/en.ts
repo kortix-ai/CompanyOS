@@ -875,7 +875,7 @@ const catalog = {
         },
         "platinum_cache": {
           "name": "Workspace cache",
-          "description": "New sessions start with /workspace restored from this project's saved workspace cache on Platinum: a prepared checkout with its node_modules and pnpm store, in about a second instead of minutes of setup. A project admin saves a prepared session as the cache. Off, every session starts with an empty /workspace."
+          "description": "New sessions start with /workspace restored from this workspace's saved cache on Platinum: a prepared checkout with its node_modules and pnpm store, in about a second instead of minutes of setup. A workspace admin saves a prepared session as the cache. Off, every session starts with an empty /workspace."
         },
         "sidebar_rail": {
           "name": "Sidebar rail",

@@ -236,3 +236,22 @@
   Autonomous Cognitive Entity. CompanyOS is the base it is built on and runs
   on; every idea that aggregates events, data and actions in one place is
   core to it.
+
+## Decided: browser first, and one voice on any call (2026-11-27)
+
+- **2026-11-27 (Marko)** Order: finish the building blocks (catalog,
+  connectors, identity), then the built-in identity defaults, then the core
+  flows.
+- **2026-11-27 (Marko)** The default harness of My Kortix and the Humanoid is
+  browser first, 100% human emulation: it never asks a person for an API key.
+  It asks for its identity to be added (an invite to its email), signs in to
+  the platform itself with its browser, email, phone and authenticator, and
+  then sets up anything programmatic (API keys, webhooks, connectors) itself.
+- **2026-11-27 (Marko)** One voice on any call: the agent can use a
+  microphone and hear the call wherever the call runs, in its browser or in
+  an app on its computer, and that audio is one live speech session of the
+  agent (packages/voice). Today `voice_join_call` already makes the voice the
+  page's microphone in a call browser of its own (getUserMedia answered with
+  the voice relay's speech, `packages/voice/src/meet/`). Open: the same bridge
+  for the identity browser (kortix_browser copies, over CDP) and for desktop
+  apps on a Kortix computer (virtual audio devices).

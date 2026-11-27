@@ -1316,7 +1316,7 @@ test('34 — real pi persisted reply survives invalidation during a held page re
       await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
       await expect.poll(() => freshReads).toBeGreaterThan(foregroundReads);
       await assertTranscript();
-      await page.locator(`a[href$="/workspaces/${project.id}/sessions"]`).first().click();
+      await page.goto(`/workspaces/${project.id}/sessions`, { waitUntil: 'commit' });
       await expect(page).toHaveURL(new RegExp(`/workspaces/${project.id}/sessions$`));
       await page.goBack({ waitUntil: 'commit' });
       await assertTranscript();

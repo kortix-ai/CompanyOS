@@ -547,6 +547,30 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
     expect(heldMessages().map((message) => message.message_id)).toEqual(records.map((message) => message.message_id));
   });
 
+  test('a disjoint live tail retries durable coverage on settlement without another host signal', async () => {
+    const template = page().messages.find((message) => message.role === 'assistant')!;
+    const records = Array.from({ length: 100 }, (_, index) => ({ ...structuredClone(template), message_id: `msg_settle${String(index).padStart(14, '0')}`, seq: index + 1 }));
+    let advanced = false;
+    let storedCount = 40;
+    const loader: LoadSessionLogPage = async (_project, _session, query) => {
+      const box = !!query.live && advanced;
+      const available = box ? records : records.slice(0, storedCount);
+      const eligible = available.filter((message) => query.before_seq === undefined || message.seq < query.before_seq);
+      const messages = eligible.slice(-(query.limit ?? 40));
+      return { ...page(), source: box ? 'box' : 'store', messages, has_more: eligible.length > messages.length };
+    };
+    mount({ loader });
+    await flush();
+    advanced = true;
+    act(() => { latestStream().onConnectionChange?.(false); latestStream().onConnectionChange?.(true); });
+    await flush();
+    expect(heldMessages()).toHaveLength(80);
+    storedCount = 100;
+    await runTimers();
+    expect(heldMessages().map((message) => message.message_id)).toEqual(records.map((message) => message.message_id));
+    expect(timers.filter((timer) => !timer.cancelled)).toHaveLength(0);
+  });
+
   test('a staggered second reader bridges shared history before the first reader leaves', async () => {
     const template = page().messages.find((message) => message.role === 'assistant')!;
     const records = Array.from({ length: 200 }, (_, index) => ({ ...structuredClone(template), message_id: `msg_shared${String(index).padStart(14, '0')}`, seq: index + 1 }));

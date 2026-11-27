@@ -110,7 +110,14 @@ export function startSessionLogSync({ projectId, sessionId, loader, store, copie
     // a turn end can fire together, and they would all read the same page.
     let liveRead: Promise<SessionLogRead> | null = null;
     let invalidated = false;
+    let cancelCoverageRetry: (() => void) | null = null;
+    let coverageRetries = 0;
     const reload = (fresh = false): Promise<SessionLogRead> => {
+      if (fresh) {
+        cancelCoverageRetry?.();
+        cancelCoverageRetry = null;
+        coverageRetries = 0;
+      }
       if (liveRead && fresh) invalidated = true;
       if (!liveRead) {
         liveRead = (async () => {
@@ -126,7 +133,16 @@ export function startSessionLogSync({ projectId, sessionId, loader, store, copie
               const first = read.answer.messages[0]?.seq;
               // A disjoint box tail is not a durable coverage boundary. Reconcile the
               // journal independently, and retain its boundary while it catches up.
-              if (first !== undefined && (boundary === undefined || first > boundary)) await load(false);
+              if (first !== undefined && (boundary === undefined || first > boundary)) {
+                await load(false);
+                const covered = coveredThrough.get(read.answer.thread_id);
+                if (!stopped && (covered === undefined || first > covered) && !cancelCoverageRetry && coverageRetries < SESSION_LOG_RETRY_DELAYS_MS.length) {
+                  cancelCoverageRetry = schedule(() => {
+                    cancelCoverageRetry = null;
+                    void reload();
+                  }, SESSION_LOG_RETRY_DELAYS_MS[coverageRetries++]!);
+                }
+              }
             }
           } while (invalidated && !stopped);
           return read;
@@ -298,6 +314,7 @@ export function startSessionLogSync({ projectId, sessionId, loader, store, copie
       stopped = true;
       cancelRetry?.();
       cancelSettlement?.();
+      cancelCoverageRetry?.();
       controller.abort();
       stream?.close();
       ownership.count -= 1;

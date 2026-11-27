@@ -1071,15 +1071,24 @@ test('kortix_agents create: a one-item ["all"] or ["none"] grant is written as t
 })
 
 describe('kortix_people invite', () => {
+  test('an open invitation for the address is reused: nothing is sent, and the card says so', async () => {
+    fakeKortix(`'access pending --json') echo '{"pending":[{"invite_id":"inv_1","email":"Sam@example.com","project_role":"member","invite_expired":false}]}' ;;`)
+    const result = await run('kortix_people', { action: 'invite', email: 'sam@example.com', role: 'member' })
+    expect(result.card.title).toBe('sam@example.com already has an open invitation')
+    expect(argvs()).toEqual(['access pending --json'])
+  })
+
   test('an invitation that sent its email reads as sent', async () => {
-    fakeKortix(`'access invite sam@example.com --role member --json') echo '{"status":"invited","email_sent":true}' ;;`)
+    fakeKortix(`'access pending --json') echo '{"pending":[]}' ;;
+  'access invite sam@example.com --role member --json') echo '{"status":"invited","email_sent":true}' ;;`)
     const result = await run('kortix_people', { action: 'invite', email: 'sam@example.com', role: 'member' })
     expect(result.card.title).toBe('Invited sam@example.com')
   })
 
   // The audit: with no email provider the API answers email_sent false and an invite_url; the card said "Invited" and the link was lost.
   test('an invitation with no email sent says so and carries the link the person shares', async () => {
-    fakeKortix(`'access invite sam@example.com --role member --json') echo '{"status":"invited","email_sent":false,"email_skip_reason":"no email provider","invite_url":"https://app.example.com/invite/tok_1"}' ;;`)
+    fakeKortix(`'access pending --json') echo '{"pending":[]}' ;;
+  'access invite sam@example.com --role member --json') echo '{"status":"invited","email_sent":false,"email_skip_reason":"no email provider","invite_url":"https://app.example.com/invite/tok_1"}' ;;`)
     const result = await run('kortix_people', { action: 'invite', email: 'sam@example.com', role: 'member' })
     expect(result.card.title).toBe('Invited sam@example.com, but no email was sent')
     expect(result.card.status).toBe('needs_you')

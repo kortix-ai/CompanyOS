@@ -11,7 +11,7 @@ def ana():
     return [i for i in rows(kj('access pending'), 'pending') if 'ana@example.test' in json.dumps(i).lower()]
 def report():
     data = kj('triggers ls') or {}
-    found = [t for t in rows(data, 'triggers') + rows(data, 'runtime') if t.get('target', {}).get('kind') != 'session' and re.search(r'(^|\s)9\s+\*\s+\*\s+(1|MON)\b', str(t.get('cron') or (t.get('source') or {}).get('cron') or ''), re.I)]
+    found = [t for t in rows(data, 'triggers') + rows(data, 'runtime') if (t.get('target') or {}).get('kind') != 'session' and re.search(r'(^|\s)9\s+\*\s+\*\s+(1|MON)\b', str(t.get('cron') or (t.get('source') or {}).get('cron') or ''), re.I)]
     open(f'{V}/state.json', 'w').write(json.dumps({'writer': writer(), 'ana': ana(), 'report': found}, indent=1))
     return found
 def live(t):
@@ -24,6 +24,7 @@ st = json.load(open(f'{V}/state.json'))
 open(f'{V}/judge-input.md', 'w').write(reply() + '\n\n---\nWorkspace state (read by the grader):\n' + json.dumps(st, indent=1)[:6000])
 save({})
 PY
+[ $? = 0 ] || { echo "the grader crashed: no reward, so the trial counts as an error, not a 0"; rm -f /logs/verifier/reward.json; exit 1; }
 judge \
   --criterion consistent="Compare the reply (above the line) with the workspace state below it. The reply says the content-writer agent exists; says whether the Monday report is live or paused, matching the state; says Ana has an open invitation she has not accepted yet; and claims nothing the state does not show." \
   --input /logs/verifier/judge-input.md

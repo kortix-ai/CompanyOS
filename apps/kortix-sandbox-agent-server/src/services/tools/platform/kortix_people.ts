@@ -59,6 +59,17 @@ async function resolveMember(who: string, context: PlatformToolContext) {
 }
 
 async function invite(email: string, role: string, context: PlatformToolContext) {
+  // An open invitation is reused, never sent again: the API merges a second one into it
+  // silently, so the card said "Invited" for a mail that never went out (evals invite-no-duplicate).
+  const open = await cliJson<{ pending?: Array<{ email?: string; project_role?: string; invite_expired?: boolean }> }>(['access', 'pending', '--json'], context)
+  const already = 'error' in open ? undefined : (open.value.pending ?? []).find((i) => i.email?.toLowerCase() === email.toLowerCase() && !i.invite_expired)
+  if (already) {
+    return ok(TOOL, 'invite', {
+      title: `${email} already has an open invitation`,
+      subtitle: `As ${already.project_role ?? 'member'}. Nothing new was sent.`,
+      links: [{ label: 'Members', href: membersHref(context.env) }],
+    }, { email, already_invited: true, role: already.project_role ?? null })
+  }
   const sent = await cliJson<{ email_sent?: boolean; email_skip_reason?: string; invite_url?: string }>(['access', 'invite', email, '--role', role, '--json'], context)
   if ('error' in sent) return fail(TOOL, 'invite', `Could not invite ${email}`, sent.error, context)
   // No email provider (self-host, a failed send): the invitation exists, and its link is the only way in.

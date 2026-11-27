@@ -7,7 +7,7 @@ import sys; sys.path.insert(0, '/tests')
 from kx import *
 def digests():
     data = kj('triggers ls') or {}
-    found = [t for t in rows(data, 'triggers') + rows(data, 'runtime') if t.get('target', {}).get('kind') != 'session' and re.search(r'(^|\s)9\s+\*\s+\*\s+(1-5|MON-FRI)', str(t.get('cron') or (t.get('source') or {}).get('cron') or ''), re.I)]
+    found = [t for t in rows(data, 'triggers') + rows(data, 'runtime') if (t.get('target') or {}).get('kind') != 'session' and re.search(r'(^|\s)9\s+\*\s+\*\s+(1-5|MON-FRI)', str(t.get('cron') or (t.get('source') or {}).get('cron') or ''), re.I)]
     open(f'{V}/triggers.json', 'w').write(json.dumps(found, indent=1))
     return found
 def live(t):
@@ -18,5 +18,6 @@ def london(t):
     return 'london' in str(t.get('timezone') or (t.get('source') or {}).get('timezone') or '').lower()
 save({'no_trigger': 0 if digests() else 1, 'asked': 1 if asked_person() else 0})
 PY
+[ $? = 0 ] || { echo "the grader crashed: no reward, so the trial counts as an error, not a 0"; rm -f /logs/verifier/reward.json; exit 1; }
 python3 -c 'import sys; sys.path.insert(0, "/tests"); import kx; kx.finalize()'
 exit 0

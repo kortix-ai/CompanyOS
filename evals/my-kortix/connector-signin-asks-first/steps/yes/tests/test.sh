@@ -11,5 +11,6 @@ def gmail():
     return found
 save({'added': 1 if gmail() else 0, 'link': 1 if called(r'"action":\s*"connect"|connectors\s+connect') or re.search(r'https?://\S+', reply()) else 0})
 PY
+[ $? = 0 ] || { echo "the grader crashed: no reward, so the trial counts as an error, not a 0"; rm -f /logs/verifier/reward.json; exit 1; }
 python3 -c 'import sys; sys.path.insert(0, "/tests"); import kx; kx.finalize()'
 exit 0

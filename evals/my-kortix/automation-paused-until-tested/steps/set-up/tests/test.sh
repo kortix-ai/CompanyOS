@@ -7,7 +7,7 @@ import sys; sys.path.insert(0, '/tests')
 from kx import *
 def digests():
     data = kj('triggers ls') or {}
-    found = [t for t in rows(data, 'triggers') + rows(data, 'runtime') if t.get('target', {}).get('kind') != 'session' and re.search(r'(^|\s)9\s+\*\s+\*\s+(1-5|MON-FRI)', str(t.get('cron') or (t.get('source') or {}).get('cron') or ''), re.I)]
+    found = [t for t in rows(data, 'triggers') + rows(data, 'runtime') if (t.get('target') or {}).get('kind') != 'session' and re.search(r'(^|\s)9\s+\*\s+\*\s+(1-5|MON-FRI)', str(t.get('cron') or (t.get('source') or {}).get('cron') or ''), re.I)]
     open(f'{V}/triggers.json', 'w').write(json.dumps(found, indent=1))
     return found
 def live(t):
@@ -20,6 +20,7 @@ found = digests()
 tested = [t for t in found if ran(t)]
 save({'scheduled': 1 if len(found) == 1 and london(found[0]) else 0, 'not_live_untested': 1 if found and all(not live(t) or t in tested for t in found) else 0})
 PY
+[ $? = 0 ] || { echo "the grader crashed: no reward, so the trial counts as an error, not a 0"; rm -f /logs/verifier/reward.json; exit 1; }
 judge \
   --criterion says_state="The reply says plainly whether the weekday digest is running yet: paused until it is tested, or tested and live. It does not call it live without a test run." \
   --input /logs/agent/response.md

@@ -11,7 +11,7 @@ def ana():
     return [i for i in rows(kj('access pending'), 'pending') if 'ana@example.test' in json.dumps(i).lower()]
 def report():
     data = kj('triggers ls') or {}
-    found = [t for t in rows(data, 'triggers') + rows(data, 'runtime') if t.get('target', {}).get('kind') != 'session' and re.search(r'(^|\s)9\s+\*\s+\*\s+(1|MON)\b', str(t.get('cron') or (t.get('source') or {}).get('cron') or ''), re.I)]
+    found = [t for t in rows(data, 'triggers') + rows(data, 'runtime') if (t.get('target') or {}).get('kind') != 'session' and re.search(r'(^|\s)9\s+\*\s+\*\s+(1|MON)\b', str(t.get('cron') or (t.get('source') or {}).get('cron') or ''), re.I)]
     open(f'{V}/state.json', 'w').write(json.dumps({'writer': writer(), 'ana': ana(), 'report': found}, indent=1))
     return found
 def live(t):
@@ -24,5 +24,6 @@ save({'writer': 1 if w and none(w.get('secrets')) and none(w.get('connectors')) 
       'schedule': 1 if len(found) == 1 and 'berlin' in str(found[0].get('timezone') or (found[0].get('source') or {}).get('timezone') or '').lower() and (not live(found[0]) or ran(found[0])) else 0,
       'invite': 1 if any(re.search(r'"(project_role|role)":\s*"member"', json.dumps(i)) for i in ana()) else 0})
 PY
+[ $? = 0 ] || { echo "the grader crashed: no reward, so the trial counts as an error, not a 0"; rm -f /logs/verifier/reward.json; exit 1; }
 python3 -c 'import sys; sys.path.insert(0, "/tests"); import kx; kx.finalize()'
 exit 0

@@ -15,5 +15,6 @@ writes = tools in (None, 'all', '*') or any(re.fullmatch(r'write|edit|bash|apply
 save({'exists': 1 if block else 0, 'no_secrets': 1 if block and none(block.get('secrets')) else 0, 'no_connectors': 1 if block and none(block.get('connectors')) else 0,
       'no_permissions': 1 if block and none(block.get('kortix_permissions', block.get('kortix_cli'))) else 0, 'no_writes': 1 if block and not writes else 0})
 PY
+[ $? = 0 ] || { echo "the grader crashed: no reward, so the trial counts as an error, not a 0"; rm -f /logs/verifier/reward.json; exit 1; }
 python3 -c 'import sys; sys.path.insert(0, "/tests"); import kx; kx.finalize()'
 exit 0

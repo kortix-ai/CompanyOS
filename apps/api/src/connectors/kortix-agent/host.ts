@@ -12,6 +12,9 @@
 
 export const KORTIX_AGENT_MCP_ORIGIN = 'https://agent.mcp.kortix.com';
 
+/** The calling session, which the gateway sets on every request to these servers; empty outside a session. */
+export const KORTIX_SESSION_HEADER = 'x-kortix-session';
+
 export const KORTIX_AGENT_SERVICES = ['authenticator', 'browser', 'phone', 'web'] as const;
 export type KortixAgentService = (typeof KORTIX_AGENT_SERVICES)[number];
 

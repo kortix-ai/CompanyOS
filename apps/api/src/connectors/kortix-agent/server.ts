@@ -15,7 +15,7 @@ import { AUTHENTICATOR_TOOLS } from './authenticator';
 import { BROWSER_TOOLS } from './browser';
 import { PHONE_TOOLS } from './phone';
 import { WEB_TOOLS } from './web';
-import { kortixAgentServiceForUrl, type KortixAgentService } from './host';
+import { KORTIX_SESSION_HEADER, kortixAgentServiceForUrl, type KortixAgentService } from './host';
 import { type AccountState, decodeAccountState, InvalidAccountToken, updateAccountState } from './state';
 import { type AgentTool, ToolInputError } from './tool';
 
@@ -70,7 +70,7 @@ export function setKortixAgentClockForTests(fn: (() => number) | null): void {
   clock = fn ?? (() => Date.now());
 }
 
-async function callTool(service: KortixAgentService, rpc: Rpc, state: AccountState): Promise<Answer> {
+async function callTool(service: KortixAgentService, rpc: Rpc, state: AccountState, sessionId: string | null): Promise<Answer> {
   const name = rpc.params.name;
   if (typeof name !== 'string') return rpcError(rpc.id, -32602, 'Invalid params: name must be a tool name');
   const tool = TOOLS[service].find((t) => t.name === name) as AgentTool<Record<string, unknown>> | undefined;
@@ -84,6 +84,7 @@ async function callTool(service: KortixAgentService, rpc: Rpc, state: AccountSta
       return current.data;
     },
     now: () => clock(),
+    sessionId,
   };
   try {
     const output = await tool.run(args, ctx);
@@ -147,7 +148,7 @@ async function answer(service: KortixAgentService, request: Request): Promise<An
     case 'tools/list':
       return { status: 200, body: { jsonrpc: '2.0', id: rpc.id, result: { tools: TOOLS[service].map(toolListing) } } };
     case 'tools/call':
-      return callTool(service, rpc, state);
+      return callTool(service, rpc, state, request.headers.get(KORTIX_SESSION_HEADER) || null);
     default:
       return rpcError(rpc.id, -32601, `Method not found: ${rpc.method}`);
   }

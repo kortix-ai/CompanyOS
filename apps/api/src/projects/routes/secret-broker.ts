@@ -28,6 +28,9 @@ export function registerSecretBrokerRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/secrets/{identifier}/broker',
+      operationId: 'secrets.broker',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'internal',
       tags: ['secrets'],
       summary: 'Send one policy-bound HTTPS request without exposing the secret',
       ...auth,

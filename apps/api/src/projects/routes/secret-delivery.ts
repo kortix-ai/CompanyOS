@@ -36,6 +36,9 @@ export function registerSecretDeliveryRoutes(): void {
     createRoute({
       method: 'put',
       path: '/{workspaceId}/secrets/{identifier}/strategy',
+      operationId: 'secrets.strategy.set',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SECRET_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['secrets'],
       summary: 'Set how a secret is delivered to sandboxes',
       ...auth,

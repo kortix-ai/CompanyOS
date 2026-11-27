@@ -118,6 +118,9 @@ export function registerSecretsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/secrets',
+      operationId: 'secrets.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SECRET_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['secrets'],
       summary: 'List project secrets (names only, no values)',
       ...auth,
@@ -294,6 +297,9 @@ export function registerSecretsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/secrets',
+      operationId: 'secrets.set',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SECRET_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['secrets'],
       summary: 'Set a project secret',
       description:
@@ -619,6 +625,9 @@ export function registerSecretsRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/secrets/{name}',
+      operationId: 'secrets.delete',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SECRET_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['secrets'],
       summary: 'Delete a project secret',
       ...auth,

@@ -273,6 +273,9 @@ export function registerAgentScopeRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/secrets/{identifier}/grant',
+      operationId: 'secrets.grant',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_AGENT_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['secrets'],
       summary: 'Grant a secret to an agent',
       ...auth,

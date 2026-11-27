@@ -34,6 +34,9 @@ export function registerSecretPersonalRoutes(): void {
     createRoute({
       method: 'put',
       path: '/{workspaceId}/secrets/{name}/personal',
+      operationId: 'secrets.personal.set',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'human',
       tags: ['secrets'],
       summary: 'Set your personal override of a project secret',
       ...auth,
@@ -153,6 +156,9 @@ export function registerSecretPersonalRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/secrets/{name}/personal',
+      operationId: 'secrets.personal.delete',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'human',
       tags: ['secrets'],
       summary: 'Delete your personal override of a project secret',
       ...auth,

@@ -26,6 +26,9 @@ export function registerSecretSyncRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/secrets/sync',
+      operationId: 'secrets.sync',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SECRET_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['secrets'],
       summary: 'Re-push project secrets to active sandboxes',
       ...auth,

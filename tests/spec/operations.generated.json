@@ -1243,9 +1243,9 @@
     "method": "DELETE",
     "path": "/v1/workspaces/:workspaceId/secrets/:name",
     "typed": true,
-    "operation_id": null,
-    "action": null,
-    "exposure": null,
+    "operation_id": "secrets.delete",
+    "action": "project.secret.write",
+    "exposure": "agent",
     "summary": "Delete a workspace secret",
     "tags": [
       "workspaces"
@@ -1255,9 +1255,9 @@
     "method": "DELETE",
     "path": "/v1/workspaces/:workspaceId/secrets/:name/personal",
     "typed": true,
-    "operation_id": null,
-    "action": null,
-    "exposure": null,
+    "operation_id": "secrets.personal.delete",
+    "action": "project.read",
+    "exposure": "human",
     "summary": "Delete your personal override of a workspace secret",
     "tags": [
       "workspaces"
@@ -5943,9 +5943,9 @@
     "method": "GET",
     "path": "/v1/workspaces/:workspaceId/secrets",
     "typed": true,
-    "operation_id": null,
-    "action": null,
-    "exposure": null,
+    "operation_id": "secrets.list",
+    "action": "project.secret.read",
+    "exposure": "agent",
     "summary": "List workspace secrets (names only, no values)",
     "tags": [
       "workspaces"
@@ -11385,9 +11385,9 @@
     "method": "POST",
     "path": "/v1/workspaces/:workspaceId/secrets",
     "typed": true,
-    "operation_id": null,
-    "action": null,
-    "exposure": null,
+    "operation_id": "secrets.set",
+    "action": "project.secret.write",
+    "exposure": "agent",
     "summary": "Set a workspace secret",
     "tags": [
       "workspaces"
@@ -11397,9 +11397,9 @@
     "method": "POST",
     "path": "/v1/workspaces/:workspaceId/secrets/:identifier/broker",
     "typed": true,
-    "operation_id": null,
-    "action": null,
-    "exposure": null,
+    "operation_id": "secrets.broker",
+    "action": "project.read",
+    "exposure": "internal",
     "summary": "Send one policy-bound HTTPS request without exposing the secret",
     "tags": [
       "workspaces"
@@ -11409,9 +11409,9 @@
     "method": "POST",
     "path": "/v1/workspaces/:workspaceId/secrets/:identifier/grant",
     "typed": true,
-    "operation_id": null,
-    "action": null,
-    "exposure": null,
+    "operation_id": "secrets.grant",
+    "action": "project.agent.write",
+    "exposure": "agent",
     "summary": "Grant a secret to an agent",
     "tags": [
       "workspaces"
@@ -11421,9 +11421,9 @@
     "method": "POST",
     "path": "/v1/workspaces/:workspaceId/secrets/:identifier/relay",
     "typed": true,
-    "operation_id": null,
-    "action": null,
-    "exposure": null,
+    "operation_id": "secrets.relay",
+    "action": "project.read",
+    "exposure": "internal",
     "summary": "Stream one policy-bound HTTPS request without exposing the secret",
     "tags": [
       "workspaces"
@@ -11433,9 +11433,9 @@
     "method": "POST",
     "path": "/v1/workspaces/:workspaceId/secrets/sync",
     "typed": true,
-    "operation_id": null,
-    "action": null,
-    "exposure": null,
+    "operation_id": "secrets.sync",
+    "action": "project.secret.write",
+    "exposure": "agent",
     "summary": "Re-push workspace secrets to active sandboxes",
     "tags": [
       "workspaces"
@@ -12927,9 +12927,9 @@
     "method": "PUT",
     "path": "/v1/workspaces/:workspaceId/secrets/:identifier/strategy",
     "typed": true,
-    "operation_id": null,
-    "action": null,
-    "exposure": null,
+    "operation_id": "secrets.strategy.set",
+    "action": "project.secret.write",
+    "exposure": "agent",
     "summary": "Set how a secret is delivered to sandboxes",
     "tags": [
       "workspaces"
@@ -12939,9 +12939,9 @@
     "method": "PUT",
     "path": "/v1/workspaces/:workspaceId/secrets/:name/personal",
     "typed": true,
-    "operation_id": null,
-    "action": null,
-    "exposure": null,
+    "operation_id": "secrets.personal.set",
+    "action": "project.read",
+    "exposure": "human",
     "summary": "Set your personal override of a workspace secret",
     "tags": [
       "workspaces"

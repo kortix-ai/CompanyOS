@@ -54,6 +54,9 @@ export function registerSecretRelayRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/secrets/{identifier}/relay',
+      operationId: 'secrets.relay',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'internal',
       tags: ['secrets'],
       summary: 'Stream one policy-bound HTTPS request without exposing the secret',
       description:

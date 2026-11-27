@@ -2560,7 +2560,7 @@
       "minimum": "La ricarica minima è {amount}.",
       "contactSales": "Per importi superiori a {amount}, contatta le vendite.",
       "creditHint": "{credits} crediti · aggiunti subito dopo il pagamento.",
-      "noExpiry": "I crediti non scadono mai. 1 $ = 100 crediti, più un bonus da 50 $.",
+      "noExpiry": "I crediti non scadono mai. 1 $ = 100 crediti.",
       "processing": "Elaborazione",
       "addAmount": "Aggiungi {amount}",
       "addCredits": "Aggiungi crediti",
@@ -2569,7 +2569,6 @@
       "amountGroup": "Importo della ricarica",
       "customAmount": "Importo personalizzato in dollari",
       "custom": "Personalizzato",
-      "creditHintBonus": "{credits} crediti + {bonus} di bonus · aggiunti non appena paghi.",
       "autoTopupOff": "Ricarica automatica: disattivata",
       "autoTopupOn": "Ricarica automatica: aggiunge {amount} quando il saldo scende sotto {threshold} crediti",
       "ledgerBonus": "Bonus di ricarica"
@@ -2613,8 +2612,7 @@
       "paymentNeeded": "Aggiungi un metodo di pagamento per eseguire la ricarica automatica.",
       "turnedOffAfterFailure": "La ricarica automatica è stata disattivata il {date}: l'ultimo addebito non è riuscito ({reason}). Aggiorna il metodo di pagamento, poi riattiva la ricarica automatica.",
       "lastChargeFailed": "L'ultimo addebito della ricarica automatica non è riuscito il {date} ({reason}). Kortix riprova; dopo 3 addebiti non riusciti di fila, la ricarica automatica si disattiva.",
-      "bonusHint": "Ogni ricarica aggiunge {credits} crediti + {bonus} di bonus.",
-      "bonusFrom": "Le ricariche da {min} in su aggiungono crediti bonus."
+      "creditsHint": "Ogni ricarica aggiunge {credits} crediti."
     },
     "title": "Fatturazione & Abbonamento",
     "subscription": "Abbonamento",
@@ -2689,6 +2687,7 @@
         "creditsPerMonth": "{credits} crediti / mese",
         "credits": "{credits} crediti",
         "price": "{amount} / mese",
+        "bonus": "+{percent}% bonus",
         "current": "Attuale",
         "choose": "Scegli un livello",
         "chooseHint": "I livelli partono da {min} al mese.",
@@ -2697,8 +2696,7 @@
         "groups": {
           "small": "Piccoli team",
           "growing": "Team in crescita",
-          "scale": "Scale",
-          "large": "Grandi organizzazioni"
+          "scale": "Scale"
         },
         "once": "una tantum",
         "onceLabel": "Importo una tantum di crediti"
@@ -2880,9 +2878,10 @@
           "f2": "Modelli gestiti: DeepSeek, GLM. Zero conservazione dei dati",
           "f3": "Membri illimitati, un unico pool di crediti condiviso",
           "f4": "I crediti non usati si trasferiscono di un mese",
-          "f5": "Ricarica quando vuoi. Le ricariche non scadono mai",
+          "f5": "Passa a un livello più alto quando vuoi. I nuovi crediti arrivano subito",
           "f6": "Limiti di frequenza dei modelli più alti",
-          "f7": "Assistenza via email"
+          "f7": "Assistenza via email",
+          "f8": "Fino al 30% di crediti bonus sui livelli più alti"
         },
         "enterprise": {
           "name": "Enterprise",
@@ -2907,7 +2906,7 @@
         },
         "amounts": {
           "question": "Quanto pago ogni mese?",
-          "answer": "Scegli un livello da 50 $ al mese (5.000 crediti) a 50.000 $ al mese (5.000.000 di crediti). Ogni livello offre crediti alla stessa tariffa: 100 crediti per dollaro. Per più di 50.000 $ al mese contatta il reparto vendite."
+          "answer": "Scegli un livello da {minUsd} al mese ({minCredits} crediti) a {maxUsd} al mese ({maxCredits} crediti). I livelli più alti danno più crediti per dollaro: +{firstBonus}% da {firstBonusUsd} al mese, fino a +{topBonus}% da {topBonusUsd}. Sotto {firstBonusUsd}, 100 crediti per dollaro. Per più di {maxUsd} al mese contatta il reparto vendite."
         },
         "members": {
           "question": "Pago per i membri?",
@@ -2923,7 +2922,7 @@
         },
         "topup": {
           "question": "Posso aggiungere crediti a metà mese?",
-          "answer": "Sì. Ricarica qualsiasi importo in qualsiasi momento, oppure attiva la ricarica automatica così i tuoi agenti non si fermano mai. Le ricariche da {smallestBonusUsd} in su aggiungono crediti bonus: +{smallestBonus}% a {smallestBonusUsd}, fino a +{largestBonus}% da {largestBonusUsd}. I crediti delle ricariche non scadono mai."
+          "answer": "Sì: passa a un livello mensile più alto. Il cambio vale subito. Paghi la differenza per il resto del mese e i crediti del nuovo livello per quel periodo arrivano subito, alla tariffa del livello più alto. Le ricariche una tantum sono incluse in un contratto Enterprise."
         },
         "change": {
           "question": "Posso cambiare il mio livello?",

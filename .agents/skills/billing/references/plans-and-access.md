@@ -45,8 +45,8 @@ it is not a fleet-wide quota and does not retry failed money operations.
 
 | | Free | Credits |
 |---|---|---|
-| Price | $0 | $50–$50,000 a month (25 ladder tiers; sales above it) |
-| Usage | 500 credits a month | Monthly credits, 1-month rollover, top-ups |
+| Price | $0 | $50–$10,000 a month (16 ladder tiers; sales above it) |
+| Usage | 500 credits a month | Monthly credits with the volume bonus, 1-month rollover, top-ups |
 | Features | Every self-serve feature except managed models; credit purchases | Same as Free, plus Kortix-managed models |
 | Limits | free model rate budget | paid model rate budget |
 
@@ -62,6 +62,45 @@ and project budgets as model usage. Its ledger rows read "Dictation".
 
 `credit_accounts.tier` is the billing plan: `free` or `credits` (legacy keys
 resolve to `credits`). Stripe owns it. `tier='enterprise'` no longer exists.
+
+### Plan volume bonus (2026-11-27)
+
+A bigger monthly amount buys more credits per dollar: the plan is the volume
+discount and the upgrade path. Self-serve Credits sells no one-off top-ups or
+auto top-up (`plan-catalog.ts`, `canPurchaseCredits: false` since 2026-11-09);
+Enterprise and an `entitlement_overrides.canPurchaseCredits` account buy them
+at the flat 100 credits per dollar, with no bonus.
+
+| Monthly amount | Bonus | Example |
+|---|---|---|
+| $50–$99 | 0% | $50 → 5,000 credits |
+| $100–$199 | +5% | $100 → 10,500 |
+| $200–$499 | +10% | $200 → 22,000 |
+| $500–$999 | +15% | $500 → 57,500 |
+| $1,000–$2,999 | +20% | $1,000 → 120,000 |
+| $3,000–$7,499 | +25% | $3,000 → 375,000 |
+| $7,500–$10,000 | +30% | $10,000 → 1,300,000 |
+
+- One rule: `planCreditsUsd(monthlyUsd)` in `billing/services/tiers.ts`
+  (`PLAN_BONUS_STEPS`), mirrored by `monthlyCreditsForUsd` in
+  `packages/ui/src/internal/billing/compute-pricing.ts`.
+- `credit_accounts.plan_monthly_usd` and the Stripe quantity stay the amount
+  BILLED. The bonus is applied only where credits are granted or shown:
+  activation, renewal, subscription recovery, the yearly rotation, a split-off
+  comp, `tier.monthly_credits`, `scheduled_change.*.monthly_credits` and
+  `GET /billing/tier-configurations`.
+- A raise is granted per proration line at that line's own rate, so the grant
+  is exactly the remaining share of (new credits − old credits)
+  (`proration-grants.ts`).
+- The rollover cap is last month's credits, bonus included.
+- Store (RevenueCat) products grant their listed amount, no bonus: the store
+  keeps its own cut.
+- An amount above $10,000 bought before the cut keeps its subscription and
+  its bill; its bonus is the top step (+30%). `POST /billing/plan` refuses a new one.
+- Top-ups carried a +1–5% bonus until 2026-11-27 (ledger kind `topup_bonus`,
+  key `<payment>:bonus`). A refund or dispute of such a payment still takes
+  back its share of the bonus row the payment actually got
+  (`refund-clawback.ts`, `ledgerEventAmount`).
 
 ### Free credits: once per person
 

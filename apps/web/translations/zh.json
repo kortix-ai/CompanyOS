@@ -2560,7 +2560,7 @@
       "minimum": "最低充值金额为 {amount}。",
       "contactSales": "如需充值超过 {amount}，请联系销售团队。",
       "creditHint": "{credits} 个积分 · 付款后立即到账。",
-      "noExpiry": "积分永不过期。1 美元 = 100 个积分，50 美元起另有赠送。",
+      "noExpiry": "积分永不过期。1 美元 = 100 个积分。",
       "processing": "处理中",
       "addAmount": "添加 {amount}",
       "addCredits": "添加积分",
@@ -2569,7 +2569,6 @@
       "amountGroup": "充值金额",
       "customAmount": "自定义美元金额",
       "custom": "自定义",
-      "creditHintBonus": "{credits} 个积分 + {bonus} 赠送 · 付款后立即到账。",
       "autoTopupOff": "自动充值：关闭",
       "autoTopupOn": "自动充值：余额低于 {threshold} 积分时充入 {amount}",
       "ledgerBonus": "充值赠送"
@@ -2613,8 +2612,7 @@
       "paymentNeeded": "请添加付款方式，以便执行自动充值。",
       "turnedOffAfterFailure": "自动充值已于 {date} 关闭：上一次扣款失败（{reason}）。请更新付款方式，然后重新开启自动充值。",
       "lastChargeFailed": "上一次自动充值扣款于 {date} 失败（{reason}）。Kortix 会重试；连续 3 次扣款失败后，自动充值将关闭。",
-      "bonusHint": "每次充值增加 {credits} 积分 + {bonus} 奖励。",
-      "bonusFrom": "充值 {min} 及以上可获得奖励积分。"
+      "creditsHint": "每次充值增加 {credits} 个积分。"
     },
     "title": "计费与订阅",
     "subscription": "订阅",
@@ -2689,6 +2687,7 @@
         "creditsPerMonth": "每月 {credits} 个积分",
         "credits": "{credits} 个积分",
         "price": "{amount} / 月",
+        "bonus": "多送 {percent}%",
         "current": "当前",
         "choose": "选择档位",
         "chooseHint": "档位起价为每月 {min}。",
@@ -2697,8 +2696,7 @@
         "groups": {
           "small": "小型团队",
           "growing": "成长型团队",
-          "scale": "规模版",
-          "large": "大型组织"
+          "scale": "规模版"
         },
         "once": "一次性",
         "onceLabel": "一次性积分金额"
@@ -2880,9 +2878,10 @@
           "f2": "托管模型：DeepSeek、GLM。零数据保留",
           "f3": "成员不限数量，共用一个积分池",
           "f4": "未用完的积分可顺延一个月",
-          "f5": "随时充值，充值的积分永不过期",
+          "f5": "随时升级档位，新积分立即到账",
           "f6": "更高的模型速率限制",
-          "f7": "邮件支持"
+          "f7": "邮件支持",
+          "f8": "更高档位最多多送 30% 积分"
         },
         "enterprise": {
           "name": "企业版",
@@ -2907,7 +2906,7 @@
         },
         "amounts": {
           "question": "我每月需要支付多少？",
-          "answer": "可选择每月 50 美元（5,000 个积分）到每月 50,000 美元（5,000,000 个积分）的档位。所有档位的积分费率相同：每美元 100 个积分。每月超过 50,000 美元请联系销售。"
+          "answer": "可选择每月 {minUsd}（{minCredits} 个积分）到每月 {maxUsd}（{maxCredits} 个积分）的档位。档位越高，每美元的积分越多：每月 {firstBonusUsd} 起多送 {firstBonus}%，{topBonusUsd} 起最高多送 {topBonus}%。低于 {firstBonusUsd} 为每美元 100 个积分。每月超过 {maxUsd} 请联系销售。"
         },
         "members": {
           "question": "成员需要付费吗？",
@@ -2923,7 +2922,7 @@
         },
         "topup": {
           "question": "月中可以追加积分吗？",
-          "answer": "可以。随时充值任意金额，或开启自动充值，让智能体永不中断。充值 {smallestBonusUsd} 及以上可获赠额外积分：{smallestBonusUsd} 赠 {smallestBonus}%，{largestBonusUsd} 起最高赠 {largestBonus}%。充值的积分永不过期。"
+          "answer": "可以：升级月度档位。升级立即生效。你支付本月剩余时间的差价，新档位在这段时间的积分会立即到账，并按更高档位的费率计算。一次性充值随 Enterprise 合同提供。"
         },
         "change": {
           "question": "可以更改档位吗？",

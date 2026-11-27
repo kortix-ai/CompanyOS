@@ -2560,7 +2560,7 @@
       "minimum": "Le rechargement minimum est de {amount}.",
       "contactSales": "Pour un montant supérieur à {amount}, contactez l'équipe commerciale.",
       "creditHint": "{credits} crédits · ajoutés dès le paiement.",
-      "noExpiry": "Les crédits n'expirent jamais. 1 $ = 100 crédits, plus un bonus dès 50 $.",
+      "noExpiry": "Les crédits n'expirent jamais. 1 $ = 100 crédits.",
       "processing": "Traitement",
       "addAmount": "Ajouter {amount}",
       "addCredits": "Ajouter des crédits",
@@ -2569,7 +2569,6 @@
       "amountGroup": "Montant du rechargement",
       "customAmount": "Montant personnalisé en dollars",
       "custom": "Personnalisé",
-      "creditHintBonus": "{credits} crédits + {bonus} de bonus · ajoutés dès votre paiement.",
       "autoTopupOff": "Recharge automatique : désactivée",
       "autoTopupOn": "Recharge automatique : ajoute {amount} quand le solde passe sous {threshold} crédits",
       "ledgerBonus": "Bonus de recharge"
@@ -2613,8 +2612,7 @@
       "paymentNeeded": "Ajoutez un moyen de paiement pour exécuter le rechargement automatique.",
       "turnedOffAfterFailure": "Le rechargement automatique a été désactivé le {date} : le dernier prélèvement a échoué ({reason}). Mettez à jour le moyen de paiement, puis réactivez le rechargement automatique.",
       "lastChargeFailed": "Le dernier prélèvement du rechargement automatique a échoué le {date} ({reason}). Kortix réessaie ; après 3 prélèvements échoués d’affilée, le rechargement automatique se désactive.",
-      "bonusHint": "Chaque recharge ajoute {credits} crédits + {bonus} de bonus.",
-      "bonusFrom": "Les recharges de {min} ou plus ajoutent des crédits bonus."
+      "creditsHint": "Chaque recharge ajoute {credits} crédits."
     },
     "title": "Facturation & Abonnement",
     "subscription": "Abonnement",
@@ -2689,6 +2687,7 @@
         "creditsPerMonth": "{credits} crédits / mois",
         "credits": "{credits} crédits",
         "price": "{amount} / mois",
+        "bonus": "+{percent} % de bonus",
         "current": "Actuel",
         "choose": "Choisissez un palier",
         "chooseHint": "Les paliers commencent à {min} par mois.",
@@ -2697,8 +2696,7 @@
         "groups": {
           "small": "Petites équipes",
           "growing": "Équipes en croissance",
-          "scale": "Scale",
-          "large": "Grandes organisations"
+          "scale": "Scale"
         },
         "once": "une fois",
         "onceLabel": "Montant unique de crédits"
@@ -2880,9 +2878,10 @@
           "f2": "Modèles gérés : DeepSeek, GLM. Zéro conservation des données",
           "f3": "Membres illimités, un seul pool de crédits partagé",
           "f4": "Les crédits inutilisés sont reportés d'un mois",
-          "f5": "Rechargez à tout moment. Les recharges n'expirent jamais",
+          "f5": "Passez au palier supérieur à tout moment. Les nouveaux crédits arrivent aussitôt",
           "f6": "Des limites de débit plus élevées",
-          "f7": "Support par e-mail"
+          "f7": "Support par e-mail",
+          "f8": "Jusqu'à 30 % de crédits bonus sur les paliers élevés"
         },
         "enterprise": {
           "name": "Enterprise",
@@ -2907,7 +2906,7 @@
         },
         "amounts": {
           "question": "Combien dois-je payer chaque mois ?",
-          "answer": "Choisissez un palier de 50 $ par mois (5 000 crédits) à 50 000 $ par mois (5 000 000 de crédits). Chaque palier donne des crédits au même taux : 100 crédits par dollar. Au-delà de 50 000 $ par mois, contactez les ventes."
+          "answer": "Choisissez un palier de {minUsd} par mois ({minCredits} crédits) à {maxUsd} par mois ({maxCredits} crédits). Les paliers plus élevés donnent plus de crédits par dollar : +{firstBonus} % dès {firstBonusUsd} par mois, jusqu'à +{topBonus} % dès {topBonusUsd}. En dessous de {firstBonusUsd}, 100 crédits par dollar. Au-delà de {maxUsd} par mois, contactez les ventes."
         },
         "members": {
           "question": "Dois-je payer pour les membres ?",
@@ -2923,7 +2922,7 @@
         },
         "topup": {
           "question": "Puis-je ajouter des crédits en cours de mois ?",
-          "answer": "Oui. Rechargez n'importe quel montant à tout moment, ou activez la recharge automatique pour que vos agents ne s'arrêtent jamais. Les recharges à partir de {smallestBonusUsd} ajoutent des crédits bonus : +{smallestBonus} % à {smallestBonusUsd}, jusqu'à +{largestBonus} % dès {largestBonusUsd}. Les crédits de recharge n'expirent jamais."
+          "answer": "Oui : passez à un palier mensuel supérieur. Le changement s'applique aussitôt. Vous payez la différence pour le reste du mois, et les crédits du nouveau palier pour cette période arrivent tout de suite, au taux du palier supérieur. Les recharges ponctuelles sont incluses dans un contrat Enterprise."
         },
         "change": {
           "question": "Puis-je changer de palier ?",

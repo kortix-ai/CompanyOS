@@ -2560,7 +2560,7 @@
       "minimum": "Minimum top-up is {amount}.",
       "contactSales": "For more than {amount}, contact sales.",
       "creditHint": "{credits} credits · added as soon as you pay.",
-      "noExpiry": "Credits never expire. $1 = 100 credits, plus a bonus from $50.",
+      "noExpiry": "Credits never expire. $1 = 100 credits.",
       "processing": "Processing",
       "addAmount": "Add {amount}",
       "addCredits": "Add credits",
@@ -2569,7 +2569,6 @@
       "amountGroup": "Top-up amount",
       "customAmount": "Custom amount in dollars",
       "custom": "Custom",
-      "creditHintBonus": "{credits} credits + {bonus} bonus · added as soon as you pay.",
       "autoTopupOff": "Auto top-up: off",
       "autoTopupOn": "Auto top-up: adds {amount} when the balance drops below {threshold} credits",
       "ledgerBonus": "Top-up bonus"
@@ -2613,8 +2612,7 @@
       "paymentNeeded": "Add a payment method for auto top-up to run.",
       "turnedOffAfterFailure": "Auto top-up turned off on {date}: the last charge failed ({reason}). Update the payment method, then turn auto top-up back on.",
       "lastChargeFailed": "The last auto top-up charge failed on {date} ({reason}). Kortix tries again; after 3 failed charges in a row, auto top-up turns off.",
-      "bonusHint": "Each top-up adds {credits} credits + {bonus} bonus.",
-      "bonusFrom": "Top-ups of {min} or more add bonus credits."
+      "creditsHint": "Each top-up adds {credits} credits."
     },
     "title": "Billing & Subscription",
     "subscription": "Subscription",
@@ -2689,6 +2687,7 @@
         "creditsPerMonth": "{credits} credits / month",
         "credits": "{credits} credits",
         "price": "{amount} / mo",
+        "bonus": "+{percent}% bonus",
         "current": "Current",
         "choose": "Choose a tier",
         "chooseHint": "Tiers start at {min} a month.",
@@ -2697,8 +2696,7 @@
         "groups": {
           "small": "Small teams",
           "growing": "Growing teams",
-          "scale": "Scale",
-          "large": "Large organizations"
+          "scale": "Scale"
         },
         "once": "once",
         "onceLabel": "One-time credit amount"
@@ -2880,9 +2878,10 @@
           "f2": "Managed models: DeepSeek, GLM. Zero data retention",
           "f3": "Unlimited members, one shared credit pool",
           "f4": "Unused credits roll over one month",
-          "f5": "Top up any time. Top-ups never expire",
+          "f5": "Raise your tier any time. The new credits land at once",
           "f6": "Higher model rate limits",
-          "f7": "Support via email"
+          "f7": "Support via email",
+          "f8": "Up to 30% bonus credits on bigger tiers"
         },
         "enterprise": {
           "name": "Enterprise",
@@ -2907,7 +2906,7 @@
         },
         "amounts": {
           "question": "How much do I pay each month?",
-          "answer": "Pick a tier from $50 a month (5,000 credits) to $50,000 a month (5,000,000 credits). Every tier buys credits at the same rate: 100 credits per dollar. For more than $50,000 a month, talk to sales."
+          "answer": "Pick a tier from {minUsd} a month ({minCredits} credits) to {maxUsd} a month ({maxCredits} credits). Bigger tiers buy more credits per dollar: +{firstBonus}% from {firstBonusUsd} a month, rising to +{topBonus}% from {topBonusUsd}. Below {firstBonusUsd}, it is 100 credits per dollar. For more than {maxUsd} a month, talk to sales."
         },
         "members": {
           "question": "Do I pay for members?",
@@ -2923,7 +2922,7 @@
         },
         "topup": {
           "question": "Can I add credits mid-month?",
-          "answer": "Yes. Top up any amount at any time, or turn on auto top-up so your agents never stop. Top-ups of {smallestBonusUsd} or more add bonus credits: +{smallestBonus}% at {smallestBonusUsd}, rising to +{largestBonus}% from {largestBonusUsd}. Top-up credits never expire."
+          "answer": "Yes: raise your monthly tier. The raise takes effect at once. You pay the difference for the rest of the month, and the new tier's credits for that time land right away, at the bigger tier's rate. One-off top-ups come with an Enterprise contract."
         },
         "change": {
           "question": "Can I change my tier?",

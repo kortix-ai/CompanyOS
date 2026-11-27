@@ -6,7 +6,7 @@ import { BillingError, SubscriptionError } from '../../errors';
 import {
   PLAN_MAX_MONTHLY_USD,
   PLAN_MIN_MONTHLY_USD,
-  monthlyCreditsForSubscription,
+  monthlyUsdForSubscription,
   planForSubscription,
   resolveCreditsPriceId,
 } from './tiers';
@@ -97,7 +97,7 @@ async function planChangeContext(accountId: string, priceId: string) {
   const livePaid = live && !isDeadSubscriptionStatus(live.status) && planForSubscription(live) === 'credits'
     ? live
     : null;
-  const billedUsd = livePaid ? monthlyCreditsForSubscription(livePaid) : 0;
+  const billedUsd = livePaid ? monthlyUsdForSubscription(livePaid) : 0;
   const onCreditsPrice = livePaid?.items.data.length === 1 && livePaid.items.data[0].price?.id === priceId;
   const inEffectUsd = onCreditsPrice ? inEffectMonthlyUsd(account, billedUsd) : billedUsd;
   return { account, stripe, live, livePaid, billedUsd, onCreditsPrice, inEffectUsd };
@@ -244,7 +244,7 @@ export async function setPlan(params: {
     change: 'raised' as const,
     monthly_usd: monthlyUsd,
     charged_usd: (invoice.amount_paid ?? 0) / 100,
-    credits_added: grant.kind === 'raise' ? grant.netCents : 0,
+    credits_added: grant.kind === 'raise' ? Math.round(grant.credits * 100) : 0,
   };
 }
 

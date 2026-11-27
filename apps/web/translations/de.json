@@ -2560,7 +2560,7 @@
       "minimum": "Der Mindestbetrag beträgt {amount}.",
       "contactSales": "Kontaktiere für mehr als {amount} den Vertrieb.",
       "creditHint": "{credits} Credits · werden direkt nach der Zahlung hinzugefügt.",
-      "noExpiry": "Credits verfallen nie. 1 $ = 100 Credits, plus Bonus ab 50 $.",
+      "noExpiry": "Credits verfallen nie. 1 $ = 100 Credits.",
       "processing": "Verarbeitung",
       "addAmount": "{amount} hinzufügen",
       "addCredits": "Credits hinzufügen",
@@ -2569,7 +2569,6 @@
       "amountGroup": "Aufladebetrag",
       "customAmount": "Benutzerdefinierter Betrag in Dollar",
       "custom": "Benutzerdefiniert",
-      "creditHintBonus": "{credits} Credits + {bonus} Bonus · werden direkt nach der Zahlung hinzugefügt.",
       "autoTopupOff": "Automatische Aufladung: aus",
       "autoTopupOn": "Automatische Aufladung: fügt {amount} hinzu, wenn das Guthaben unter {threshold} Credits fällt",
       "ledgerBonus": "Aufladebonus"
@@ -2613,8 +2612,7 @@
       "paymentNeeded": "Füge eine Zahlungsmethode hinzu, damit die automatische Aufladung ausgeführt werden kann.",
       "turnedOffAfterFailure": "Die automatische Aufladung wurde am {date} ausgeschaltet: Die letzte Abbuchung ist fehlgeschlagen ({reason}). Aktualisiere die Zahlungsmethode und schalte die automatische Aufladung dann wieder ein.",
       "lastChargeFailed": "Die letzte automatische Aufladung ist am {date} fehlgeschlagen ({reason}). Kortix versucht es erneut; nach 3 fehlgeschlagenen Abbuchungen in Folge wird die automatische Aufladung ausgeschaltet.",
-      "bonusHint": "Jede Aufladung bringt {credits} Credits + {bonus} Bonus.",
-      "bonusFrom": "Aufladungen ab {min} bringen Bonus-Credits."
+      "creditsHint": "Jede Aufladung fügt {credits} Credits hinzu."
     },
     "title": "Abrechnung & Abonnement",
     "subscription": "Abonnement",
@@ -2689,6 +2687,7 @@
         "creditsPerMonth": "{credits} Credits / Monat",
         "credits": "{credits} Credits",
         "price": "{amount} / Mo.",
+        "bonus": "+{percent} % Bonus",
         "current": "Aktuell",
         "choose": "Wähle eine Stufe",
         "chooseHint": "Die Stufen beginnen bei {min} pro Monat.",
@@ -2697,8 +2696,7 @@
         "groups": {
           "small": "Kleine Teams",
           "growing": "Wachsende Teams",
-          "scale": "Scale",
-          "large": "Große Organisationen"
+          "scale": "Scale"
         },
         "once": "einmalig",
         "onceLabel": "Einmaliger Credit-Betrag"
@@ -2880,9 +2878,10 @@
           "f2": "Verwaltete Modelle: DeepSeek, GLM. Keine Datenspeicherung",
           "f3": "Unbegrenzt viele Mitglieder, ein gemeinsamer Credit-Pool",
           "f4": "Ungenutzte Credits werden einen Monat übertragen",
-          "f5": "Jederzeit aufladen. Aufladungen verfallen nie",
+          "f5": "Stufe jederzeit erhöhen. Die neuen Credits sind sofort da",
           "f6": "Höhere Modell-Ratenlimits",
-          "f7": "Support per E-Mail"
+          "f7": "Support per E-Mail",
+          "f8": "Bis zu 30 % Bonus-Credits bei größeren Stufen"
         },
         "enterprise": {
           "name": "Enterprise",
@@ -2907,7 +2906,7 @@
         },
         "amounts": {
           "question": "Wie viel zahle ich pro Monat?",
-          "answer": "Wähle eine Stufe von 50 $ pro Monat (5.000 Credits) bis 50.000 $ pro Monat (5.000.000 Credits). Jede Stufe liefert Credits zum selben Satz: 100 Credits pro Dollar. Für mehr als 50.000 $ pro Monat sprich mit dem Vertrieb."
+          "answer": "Wähle eine Stufe von {minUsd} pro Monat ({minCredits} Credits) bis {maxUsd} pro Monat ({maxCredits} Credits). Größere Stufen liefern mehr Credits pro Dollar: +{firstBonus} % ab {firstBonusUsd} pro Monat, bis +{topBonus} % ab {topBonusUsd}. Unter {firstBonusUsd} gilt: 100 Credits pro Dollar. Für mehr als {maxUsd} pro Monat sprich mit dem Vertrieb."
         },
         "members": {
           "question": "Zahle ich für Mitglieder?",
@@ -2923,7 +2922,7 @@
         },
         "topup": {
           "question": "Kann ich mitten im Monat Credits hinzufügen?",
-          "answer": "Ja. Lade jederzeit einen beliebigen Betrag auf oder aktiviere die automatische Aufladung, damit deine Agenten nie stoppen. Aufladungen ab {smallestBonusUsd} bringen Bonus-Credits: +{smallestBonus} % bei {smallestBonusUsd}, bis +{largestBonus} % ab {largestBonusUsd}. Credits aus Aufladungen verfallen nie."
+          "answer": "Ja: Erhöhe deine Monatsstufe. Die Erhöhung gilt sofort. Du zahlst die Differenz für den Rest des Monats, und die Credits der neuen Stufe für diese Zeit sind sofort da, zum Satz der größeren Stufe. Einmalige Aufladungen gibt es mit einem Enterprise-Vertrag."
         },
         "change": {
           "question": "Kann ich meine Stufe ändern?",

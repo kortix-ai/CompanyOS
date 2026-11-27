@@ -2560,7 +2560,7 @@
       "minimum": "La recarga mínima es de {amount}.",
       "contactSales": "Para importes superiores a {amount}, contacta con ventas.",
       "creditHint": "{credits} créditos · se añaden en cuanto pagues.",
-      "noExpiry": "Los créditos nunca caducan. 1 $ = 100 créditos, más una bonificación desde 50 $.",
+      "noExpiry": "Los créditos nunca caducan. 1 $ = 100 créditos.",
       "processing": "Procesando",
       "addAmount": "Añadir {amount}",
       "addCredits": "Añadir créditos",
@@ -2569,7 +2569,6 @@
       "amountGroup": "Importe de recarga",
       "customAmount": "Importe personalizado en dólares",
       "custom": "Personalizado",
-      "creditHintBonus": "{credits} créditos + {bonus} de bonificación · se añaden en cuanto pagas.",
       "autoTopupOff": "Recarga automática: desactivada",
       "autoTopupOn": "Recarga automática: añade {amount} cuando el saldo baja de {threshold} créditos",
       "ledgerBonus": "Bonificación de recarga"
@@ -2613,8 +2612,7 @@
       "paymentNeeded": "Añade un método de pago para ejecutar la recarga automática.",
       "turnedOffAfterFailure": "La recarga automática se desactivó el {date}: el último cargo falló ({reason}). Actualiza el método de pago y vuelve a activar la recarga automática.",
       "lastChargeFailed": "El último cargo de recarga automática falló el {date} ({reason}). Kortix lo intenta de nuevo; tras 3 cargos fallidos seguidos, la recarga automática se desactiva.",
-      "bonusHint": "Cada recarga añade {credits} créditos + {bonus} de bonificación.",
-      "bonusFrom": "Las recargas de {min} o más añaden créditos de bonificación."
+      "creditsHint": "Cada recarga añade {credits} créditos."
     },
     "title": "Facturación & Suscripción",
     "subscription": "Suscripción",
@@ -2689,6 +2687,7 @@
         "creditsPerMonth": "{credits} créditos / mes",
         "credits": "{credits} créditos",
         "price": "{amount} / mes",
+        "bonus": "+{percent} % extra",
         "current": "Actual",
         "choose": "Elige un nivel",
         "chooseHint": "Los niveles empiezan en {min} al mes.",
@@ -2697,8 +2696,7 @@
         "groups": {
           "small": "Equipos pequeños",
           "growing": "Equipos en crecimiento",
-          "scale": "Scale",
-          "large": "Grandes organizaciones"
+          "scale": "Scale"
         },
         "once": "una vez",
         "onceLabel": "Importe único de créditos"
@@ -2880,9 +2878,10 @@
           "f2": "Modelos gestionados: DeepSeek, GLM. Retención de datos cero",
           "f3": "Miembros ilimitados, un único fondo de créditos compartido",
           "f4": "Los créditos sin usar se trasladan un mes",
-          "f5": "Recarga cuando quieras. Las recargas nunca caducan",
+          "f5": "Sube de nivel cuando quieras. Los nuevos créditos llegan al momento",
           "f6": "Límites de uso de modelos más altos",
-          "f7": "Soporte por correo electrónico"
+          "f7": "Soporte por correo electrónico",
+          "f8": "Hasta un 30 % de créditos extra en niveles más altos"
         },
         "enterprise": {
           "name": "Enterprise",
@@ -2907,7 +2906,7 @@
         },
         "amounts": {
           "question": "¿Cuánto pago cada mes?",
-          "answer": "Elige un nivel desde 50 $ al mes (5.000 créditos) hasta 50.000 $ al mes (5.000.000 de créditos). Todos los niveles dan créditos a la misma tarifa: 100 créditos por dólar. Para más de 50.000 $ al mes, habla con ventas."
+          "answer": "Elige un nivel desde {minUsd} al mes ({minCredits} créditos) hasta {maxUsd} al mes ({maxCredits} créditos). Los niveles más altos dan más créditos por dólar: +{firstBonus} % desde {firstBonusUsd} al mes, hasta +{topBonus} % desde {topBonusUsd}. Por debajo de {firstBonusUsd}, 100 créditos por dólar. Para más de {maxUsd} al mes, habla con ventas."
         },
         "members": {
           "question": "¿Pago por los miembros?",
@@ -2923,7 +2922,7 @@
         },
         "topup": {
           "question": "¿Puedo añadir créditos a mitad de mes?",
-          "answer": "Sí. Recarga cualquier importe en cualquier momento o activa la recarga automática para que tus agentes nunca se detengan. Las recargas desde {smallestBonusUsd} añaden créditos extra: +{smallestBonus} % con {smallestBonusUsd}, hasta +{largestBonus} % desde {largestBonusUsd}. Los créditos de recarga nunca caducan."
+          "answer": "Sí: sube tu nivel mensual. El cambio se aplica al momento. Pagas la diferencia por el resto del mes y los créditos del nuevo nivel para ese tiempo llegan enseguida, a la tarifa del nivel más alto. Las recargas puntuales vienen con un contrato Enterprise."
         },
         "change": {
           "question": "¿Puedo cambiar mi nivel?",

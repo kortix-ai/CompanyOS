@@ -11,6 +11,7 @@ import type { ConnectorRouterDeps } from '../router';
 import { OpaqueSchema, ProjectParam, featureNotSupportedResponse } from './shared';
 import { rethrowDatabaseError } from '../../shared/database-errors';
 import { workspaceIdParam } from '../../shared/route-params';
+import { kortixAgentServiceForUrl } from '../kortix-agent/host';
 
 const OneClickParam = z.enum(['1', 'true', '0', 'false']).optional();
 const oneClickQuery = (c: { req: { query(name: string): string | undefined } }) =>
@@ -346,8 +347,10 @@ function registerDiscoverToolsAndInstallRoutes(app: OpenAPIHono, deps: Connector
           if (discovery?.recommended) draft.auth = discovery.recommended;
         }
         const authType = (draft.auth as { type?: string } | undefined)?.type;
+        // Kortix mints the account of its own agent-identity servers at install: nothing to sign in to.
+        const minted = way.kind === 'mcp' && kortixAgentServiceForUrl(String(draft.url ?? '')) !== null;
         const next =
-          way.kind === 'composio' ? 'connect' : !authType || authType === 'none' ? 'ready' : signIn ? 'connect' : 'credential';
+          way.kind === 'composio' ? 'connect' : minted || !authType || authType === 'none' ? 'ready' : signIn ? 'connect' : 'credential';
         const result = await deps.createConnector(projectId, admin.accountId, draft, admin.userId);
         if (!result.ok) return c.json(result.body ?? { error: result.error }, result.status as 400 | 403 | 409 | 502);
         // A way that still needs a sign-in or a credential cannot list its tools

@@ -37,6 +37,9 @@ authRouter.openapi(
   createRoute({
     method: 'post',
     path: '/logout',
+    operationId: 'auth.logout',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['auth'],
     summary: 'Server-side logout for the calling session',
     ...auth,
@@ -115,6 +118,9 @@ authRouter.openapi(
   createRoute({
     method: 'get',
     path: '/user',
+    operationId: 'auth.user.get',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['auth'],
     summary: 'The Supabase user behind the bearer (headless)',
     ...auth,
@@ -171,6 +177,9 @@ authRouter.openapi(
   createRoute({
     method: 'post',
     path: '/mfa/factors',
+    operationId: 'auth.mfa.factors.create',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['auth'],
     summary: 'Enrol a new MFA factor (headless)',
     ...auth,
@@ -184,6 +193,9 @@ authRouter.openapi(
   createRoute({
     method: 'post',
     path: '/mfa/factors/{factorId}/challenge',
+    operationId: 'auth.mfa.factors.challenge',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['auth'],
     summary: 'Start a challenge for an MFA factor (headless)',
     ...auth,
@@ -203,6 +215,9 @@ authRouter.openapi(
   createRoute({
     method: 'post',
     path: '/mfa/factors/{factorId}/verify',
+    operationId: 'auth.mfa.factors.verify',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['auth'],
     summary: 'Verify an MFA challenge (headless)',
     ...auth,
@@ -219,6 +234,9 @@ authRouter.openapi(
   createRoute({
     method: 'delete',
     path: '/mfa/factors/{factorId}',
+    operationId: 'auth.mfa.factors.delete',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['auth'],
     summary: 'Remove an MFA factor (headless)',
     ...auth,
@@ -232,6 +250,9 @@ authRouter.openapi(
   createRoute({
     method: 'patch',
     path: '/user',
+    operationId: 'auth.user.update',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['auth'],
     summary: "Update the signed-in user's profile metadata (headless)",
     description:
@@ -272,6 +293,9 @@ authRouter.openapi(
   createRoute({
     method: 'post',
     path: '/password/update',
+    operationId: 'auth.password.update',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['auth'],
     summary: 'Set a new password for the signed-in user (headless)',
     ...auth,
@@ -297,6 +321,9 @@ authRouter.openapi(
   createRoute({
     method: 'post',
     path: '/sign-out',
+    operationId: 'auth.sign_out',
+    'x-kortix-action': 'none',
+    'x-kortix-exposure': 'human',
     tags: ['auth'],
     summary: 'Sign out at Supabase and revoke the Kortix session (headless)',
     ...auth,

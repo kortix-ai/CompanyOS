@@ -582,7 +582,7 @@ export function registerProjectSettingsRoutes(): void {
       createRoute({
         method: 'patch',
         path,
-        operationId: path === '/{workspaceId}/features' ? 'features.update' : 'experimental.update',
+        operationId: path === '/{workspaceId}/features' ? 'features.set' : 'experimental.set',
         'x-kortix-action': PROJECT_ACTIONS.PROJECT_SETTINGS_WRITE,
         'x-kortix-exposure': 'agent',
         tags: ['projects'],

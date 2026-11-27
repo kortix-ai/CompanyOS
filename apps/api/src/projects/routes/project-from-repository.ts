@@ -51,6 +51,9 @@ export function registerProjectFromRepositoryRoutes(): void {
     createRoute({
       method: 'post',
       path: '/link-repository',
+      operationId: 'workspaces.repository.link',
+      'x-kortix-action': 'project.create',
+      'x-kortix-exposure': 'agent',
       tags: ['github'],
       summary: 'Link an existing repository as a project',
       ...auth,
@@ -252,6 +255,9 @@ export function registerProjectFromRepositoryRoutes(): void {
     createRoute({
       method: 'post',
       path: '/create-repo',
+      operationId: 'workspaces.repository.create',
+      'x-kortix-action': 'project.create',
+      'x-kortix-exposure': 'agent',
       tags: ['github'],
       summary: 'Create a project with a new Git repository',
       description:

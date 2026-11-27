@@ -31,6 +31,9 @@ export function registerProjectAccessRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/access',
+      operationId: 'access.members.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_MEMBERS_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['access'],
       summary: 'List project members and their roles',
       ...auth,
@@ -60,6 +63,9 @@ export function registerProjectAccessRoutes(): void {
     createRoute({
       method: 'put',
       path: '/{workspaceId}/access/{userId}',
+      operationId: 'access.members.set',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_MEMBERS_MANAGE,
+      'x-kortix-exposure': 'agent',
       tags: ['access'],
       summary: 'Set a member\'s role on a project',
       ...auth,
@@ -139,6 +145,9 @@ export function registerProjectAccessRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/access/{userId}',
+      operationId: 'access.members.delete',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_MEMBERS_MANAGE,
+      'x-kortix-exposure': 'agent',
       tags: ['access'],
       summary: 'Remove a member from a project',
       ...auth,

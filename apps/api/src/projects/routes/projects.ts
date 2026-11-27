@@ -347,6 +347,9 @@ export function registerProjectsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/managed-git/status',
+      operationId: 'workspaces.managed_git.status.get',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'agent',
       tags: ['projects'],
       summary: 'Get managed Git availability',
       ...auth,

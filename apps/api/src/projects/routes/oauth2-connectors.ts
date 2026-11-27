@@ -90,6 +90,9 @@ export function registerOauth2ConnectorsRoutes(): void {
       ...auth,
       method: 'post',
       path: '/{workspaceId}/connectors/{slug}/oauth2/connection',
+      operationId: 'connectors.oauth2_connection.create',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_CONNECTIONS_MANAGE,
+      'x-kortix-exposure': 'agent',
       summary: "Get or create a connector's shared OAuth2 connection",
       request: { params: z.object({ workspaceId: z.string(), slug: z.string() }) },
       responses: {

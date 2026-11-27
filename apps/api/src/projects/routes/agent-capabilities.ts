@@ -112,6 +112,9 @@ export function registerAgentCapabilitiesRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/agents/{agentName}/capabilities',
+      operationId: 'agents.capabilities.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_AGENT_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['projects'],
       summary: "List an agent's tools, skills and extensions",
       ...auth,

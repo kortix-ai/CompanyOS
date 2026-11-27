@@ -139,6 +139,9 @@ export function registerGithubInstallationsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/github/installation',
+      operationId: 'workspaces.github.installation.get',
+      'x-kortix-action': ACCOUNT_ACTIONS.PROJECT_CREATE,
+      'x-kortix-exposure': 'agent',
       tags: ['github'],
       summary: 'Get the GitHub App installation of the account',
       ...auth,
@@ -157,6 +160,9 @@ export function registerGithubInstallationsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/github/installations',
+      operationId: 'workspaces.github.installations.list',
+      'x-kortix-action': ACCOUNT_ACTIONS.PROJECT_CREATE,
+      'x-kortix-exposure': 'agent',
       tags: ['github'],
       summary: 'List GitHub App installations',
       ...auth,
@@ -177,6 +183,9 @@ export function registerGithubInstallationsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/github/installations/linkable',
+      operationId: 'workspaces.github.installations.list_linkable',
+      'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_WRITE,
+      'x-kortix-exposure': 'human',
       tags: ['github'],
       summary: 'List GitHub installations that can be linked',
       ...auth,
@@ -249,6 +258,9 @@ export function registerGithubInstallationsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/github/installations/link',
+      operationId: 'workspaces.github.installations.link',
+      'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_WRITE,
+      'x-kortix-exposure': 'human',
       tags: ['github'],
       summary: 'Link a GitHub installation to the account',
       ...auth,
@@ -328,6 +340,9 @@ export function registerGithubInstallationsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/github/installation',
+      operationId: 'workspaces.github.installation.create',
+      'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_WRITE,
+      'x-kortix-exposure': 'human',
       tags: ['github'],
       summary: 'Save a GitHub App installation',
       ...auth,
@@ -417,6 +432,9 @@ export function registerGithubInstallationsRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/github/installation',
+      operationId: 'workspaces.github.installation.delete',
+      'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['github'],
       summary: 'Remove the GitHub App installation',
       ...auth,
@@ -457,6 +475,9 @@ export function registerGithubInstallationsRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/github/installations/{installationId}',
+      operationId: 'workspaces.github.installations.delete',
+      'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_WRITE,
+      'x-kortix-exposure': 'agent',
       tags: ['github'],
       summary: 'Remove a GitHub installation',
       ...auth,
@@ -499,6 +520,9 @@ export function registerGithubInstallationsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/github/user-token',
+      operationId: 'workspaces.github.user_token.set',
+      'x-kortix-action': ACCOUNT_ACTIONS.ACCOUNT_WRITE,
+      'x-kortix-exposure': 'human',
       tags: ['github'],
       summary: 'Store a GitHub user token',
       ...auth,

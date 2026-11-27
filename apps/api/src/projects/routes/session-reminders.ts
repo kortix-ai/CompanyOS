@@ -224,6 +224,9 @@ export function registerSessionRemindersRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/reminders',
+      operationId: 'reminders.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_SESSION_READ,
+      'x-kortix-exposure': 'agent',
       tags: ['sessions'],
       summary: 'List the loops of a project',
       ...auth,

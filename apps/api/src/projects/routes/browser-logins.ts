@@ -58,6 +58,9 @@ export function registerBrowserLoginsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/browser-logins',
+      operationId: 'browser_logins.list',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['secrets'],
       summary: 'List website logins',
       description:
@@ -84,6 +87,9 @@ export function registerBrowserLoginsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/browser-logins/resolve',
+      operationId: 'browser_logins.resolve',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'internal',
       tags: ['secrets'],
       summary: 'Hand a website login to the sandbox browser',
       description:

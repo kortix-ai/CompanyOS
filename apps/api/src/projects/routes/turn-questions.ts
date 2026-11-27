@@ -49,6 +49,9 @@ export function registerTurnQuestionsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/turn-question',
+      operationId: 'turn_questions.ask',
+      'x-kortix-action': 'project.session.start',
+      'x-kortix-exposure': 'internal',
       tags: ['projects'],
       summary: 'Ask the user a question from a turn',
       ...auth,

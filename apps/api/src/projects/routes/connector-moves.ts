@@ -63,6 +63,9 @@ export function registerConnectorMoveRoutes(): void {
       ...auth,
       method: 'post',
       path: '/{workspaceId}/connectors/{slug}/move',
+      operationId: 'connectors.move',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE,
+      'x-kortix-exposure': 'agent',
       summary: 'Move a Pipedream or Composio connector to its Kortix app',
       description:
         'Starts a move: marks an account and returns it with `status: sign_in`. Sign in on that account with the OAuth2 routes; the connector switches to `provider: mcp` when the sign-in completes, and keeps its slug. Calling again after the sign-in finishes a move whose switch failed.',

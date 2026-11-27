@@ -26,6 +26,9 @@ export function registerDeviceRoutes(): void {
     createRoute({
       method: 'get',
       path: '/me/devices',
+      operationId: 'me.devices.list',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'human',
       tags: ['accounts'],
       summary: "List the caller's signed-in devices",
       ...auth,
@@ -46,6 +49,9 @@ export function registerDeviceRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/me/devices/{sessionId}',
+      operationId: 'me.devices.delete',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'human',
       tags: ['accounts'],
       summary: 'Sign one other device out',
       ...auth,

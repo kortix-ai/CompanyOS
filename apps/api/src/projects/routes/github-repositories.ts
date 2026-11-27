@@ -45,6 +45,9 @@ export function registerGithubRepositoriesRoutes(): void {
     createRoute({
       method: 'get',
       path: '/github/repositories',
+      operationId: 'workspaces.github.repositories.list',
+      'x-kortix-action': ACCOUNT_ACTIONS.PROJECT_CREATE,
+      'x-kortix-exposure': 'agent',
       tags: ['github'],
       summary: 'List repositories available to a GitHub App installation',
       ...auth,
@@ -119,6 +122,9 @@ export function registerGithubRepositoriesRoutes(): void {
     createRoute({
       method: 'get',
       path: '/github/repository-branches',
+      operationId: 'workspaces.github.repository_branches.list',
+      'x-kortix-action': ACCOUNT_ACTIONS.PROJECT_CREATE,
+      'x-kortix-exposure': 'agent',
       tags: ['github'],
       summary: 'List existing branches for a GitHub repository',
       ...auth,

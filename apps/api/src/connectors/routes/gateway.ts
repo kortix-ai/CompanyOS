@@ -449,6 +449,9 @@ export function registerGatewayCatalogRoutes(app: OpenAPIHono, deps: ConnectorRo
     createRoute({
       method: 'get',
       path: '/catalog',
+      operationId: 'connectors.session.catalog.list',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       tags: ['connector'],
       summary: 'List the connectors the connector principal can use',
       ...auth,
@@ -471,6 +474,9 @@ export function registerGatewayCatalogRoutes(app: OpenAPIHono, deps: ConnectorRo
     createRoute({
       method: 'get',
       path: '/connectors',
+      operationId: 'connectors.session.connectors.list',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       tags: ['connector'],
       summary: 'List usable connectors through the legacy route',
       deprecated: true,
@@ -492,6 +498,9 @@ export function registerGatewayCatalogRoutes(app: OpenAPIHono, deps: ConnectorRo
     createRoute({
       method: 'post',
       path: '/attachments',
+      operationId: 'connectors.session.attachments.create',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       tags: ['connector'],
       summary: 'Stage a private attachment from raw bytes',
       description:
@@ -520,6 +529,9 @@ export function registerProjectAttachmentRoutes(app: OpenAPIHono, deps: Connecto
     createRoute({
       method: 'post',
       path: '/projects/{workspaceId}/attachments',
+      operationId: 'connectors.attachments.create',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: 'Stage a private attachment in a project from raw bytes',
       description:
@@ -551,6 +563,9 @@ export function registerGatewayCallRoutes(app: OpenAPIHono, deps: ConnectorRoute
     createRoute({
       method: 'post',
       path: '/call',
+      operationId: 'connectors.session.call',
+      'x-kortix-action': 'none',
+      'x-kortix-exposure': 'internal',
       tags: ['connector'],
       summary: 'Run a connector action (generic connector gateway)',
       ...auth,
@@ -622,6 +637,9 @@ export function registerGatewayCallRoutes(app: OpenAPIHono, deps: ConnectorRoute
     createRoute({
       method: 'get',
       path: '/projects/{workspaceId}/catalog',
+      operationId: 'connectors.catalog.list',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: 'List the connectors usable in a project (any valid principal)',
       ...auth,
@@ -644,6 +662,9 @@ export function registerGatewayCallRoutes(app: OpenAPIHono, deps: ConnectorRoute
     createRoute({
       method: 'post',
       path: '/projects/{workspaceId}/call',
+      operationId: 'connectors.call',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: 'Run a connector action in a project (any valid principal)',
       ...auth,
@@ -704,6 +725,9 @@ export function registerGatewayCallRoutes(app: OpenAPIHono, deps: ConnectorRoute
     createRoute({
       method: 'get',
       path: '/projects/{workspaceId}/connectors/{slug}/accounts',
+      operationId: 'connectors.accounts.list',
+      'x-kortix-action': 'project.read',
+      'x-kortix-exposure': 'agent',
       tags: ['connector'],
       summary: 'Accounts this principal may run a connector as',
       ...auth,

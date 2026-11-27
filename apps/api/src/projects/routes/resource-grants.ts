@@ -61,6 +61,9 @@ export function registerResourceGrantsRoutes(): void {
     createRoute({
       method: 'get',
       path: '/{workspaceId}/resource-grants',
+      operationId: 'resource_grants.list',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_MEMBERS_MANAGE,
+      'x-kortix-exposure': 'agent',
       tags: ['access'],
       summary: 'List resource grants of a project',
       ...auth,
@@ -210,6 +213,9 @@ export function registerResourceGrantsRoutes(): void {
     createRoute({
       method: 'post',
       path: '/{workspaceId}/resource-grants',
+      operationId: 'resource_grants.create',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_MEMBERS_MANAGE,
+      'x-kortix-exposure': 'agent',
       tags: ['access'],
       summary: 'Grant a member or group access to a project resource',
       ...auth,
@@ -333,6 +339,9 @@ export function registerResourceGrantsRoutes(): void {
     createRoute({
       method: 'delete',
       path: '/{workspaceId}/resource-grants/{grantId}',
+      operationId: 'resource_grants.delete',
+      'x-kortix-action': PROJECT_ACTIONS.PROJECT_MEMBERS_MANAGE,
+      'x-kortix-exposure': 'agent',
       tags: ['access'],
       summary: 'Remove a resource grant',
       ...auth,

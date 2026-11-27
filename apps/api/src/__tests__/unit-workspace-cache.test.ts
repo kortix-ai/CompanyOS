@@ -170,6 +170,7 @@ describe('save', () => {
       volume: `kws-${sessionId}`,
       max_entries: 2,
       ttl_seconds: 604_800,
+      max_bytes: 34_359_738_368,
       ref: 'vc_1',
     });
     expect(saved).toEqual({

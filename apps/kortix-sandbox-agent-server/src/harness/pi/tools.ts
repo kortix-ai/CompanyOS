@@ -190,6 +190,7 @@ export function createQuestionTool(
     label: 'question',
     description:
       'Ask the user one or more questions. Use it when a decision needs the user, not to narrate progress. Each question has a short header, the full question, and 2-5 options. ' +
+      'An option picks a detail; it never approves an action that needs the person\'s yes (a sign-in, an invitation, an automation, sending): no option may say it starts one ("Gmail: I\'ll start the sign-in"). After the answer, say the whole action and ask for the yes. ' +
       'The answer comes back here when the person answers within a few minutes. Otherwise the question waits in their Review inbox, you continue, and the answer arrives later as a new message.',
     parameters: questionSchema,
     async execute(toolCallId, params) {

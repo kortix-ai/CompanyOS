@@ -163,10 +163,17 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { formatDistanceToNowStrict } from 'date-fns';
 import { UiLink, useUiPathname, useUiRouter, useUiSearchParams, useUiViewerId } from '../../providers/ui-provider';
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { useSessionListActions } from '../../session/actions/use-session-list-actions';
 import { CaretRightSolidIcon } from '../../icons/caret-right-solid';
 
 interface ProjectSessionListProps {
+  /** The spaces are drawn elsewhere (the icon rail, `sidebar_rail`): no Spaces block here. */
+  hideSpaces?: boolean;
+  /** The rail's Spaces view: the spaces and their sessions only, no Pinned and no Sessions list. */
+  spacesOnly?: boolean;
+  /** Set (the rail's panel title row, `sidebar_rail`): the view options button draws there, not on the Sessions row. */
+  filterSlot?: HTMLElement | null;
   projectId: string;
   /**
    * The list below Channels and Direct messages (`chat` on): closed until the
@@ -221,7 +228,7 @@ function ProjectSessionListSkeleton() {
   );
 }
 
-export function ProjectSessionList({ projectId, secondary = false }: ProjectSessionListProps) {
+export function ProjectSessionList({ projectId, secondary = false, hideSpaces = false, spacesOnly = false, filterSlot }: ProjectSessionListProps) {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const t = useTranslations('sidebar');
   const tPinArchive = useTranslations('sidebar.pinArchive');
@@ -259,7 +266,7 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
   // Groups render once their list loaded. Until then the lists below wait; if
   // the list cannot load, they list every session (as with the flag off), so
   // a grouped session never disappears behind a failed read.
-  const groupsEnabled = sessionGroupsFlag.enabled && groupsQuery.isSuccess;
+  const groupsEnabled = sessionGroupsFlag.enabled && groupsQuery.isSuccess && !hideSpaces;
   const listsReady = !sessionGroupsFlag.isLoading && !(sessionGroupsFlag.enabled && groupsQuery.isPending);
   const groupFilter = groupsEnabled ? 'none' : undefined;
   const groups = useMemo(
@@ -373,6 +380,14 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
     if (activeParentId) setExpanded(projectId, activeParentId, true);
     if (activeSection) setExpanded(projectId, `section:${activeSection}`, true);
   }, [projectId, activeParentId, activeSection, setExpanded]);
+
+  // Reveal a runtime child on navigation, not on every render: the viewer
+  // can then fold the tree without leaving the child they are reading.
+  useEffect(() => {
+    if (activeSessionId && activeRuntimeSessionId) {
+      setExpanded(projectId, activeSessionId, true);
+    }
+  }, [projectId, activeSessionId, activeRuntimeSessionId, setExpanded]);
 
   // The session you are in opens when it spawns a session, so the new row is
   // in view. Only a rise while you watch opens it: a row you closed stays
@@ -529,12 +544,9 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
     const isSwitchTarget = switchingToSessionId === session.session_id;
     const children = directSubsessions(session);
     const spawnedCount = nested ? 0 : (session.child_count ?? 0);
-    // Sub-agents and spawned sessions open together, under one toggle. A row
-    // whose sub-agent is the open page stays open, so that row stays visible.
+    // Sub-agents and spawned sessions share the viewer's one saved toggle.
     const childRunsOpen =
-      children.length + spawnedCount > 0 &&
-      (expandedIdSet.has(session.session_id) ||
-        (!!isActive && children.some((child) => child.id === activeRuntimeSessionId)));
+      children.length + spawnedCount > 0 && expandedIdSet.has(session.session_id);
     return (
       <div key={session.session_id} className="space-y-px">
         <ProjectSessionRow
@@ -795,10 +807,13 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
       {/* The spaces, then Pinned, sit above Sessions, outside it: they stay in
           view while the list is closed. Capped at half the column so they
           never push Sessions out of view; past that they scroll. */}
-      {listsReady && (pinnedQuery.sessions.length > 0 || pinnedQuery.hasNextPage || groupsEnabled || groups.length > 0 || groupCreate) && (
-        <div className="max-h-[50%] min-h-0 shrink-0 space-y-px overflow-y-auto">
-          {groupsEnabled && <SpacesHeading projectId={projectId} onNew={() => setGroupCreate({ fileSessionId: null })} />}
-          {groups.length > 0 && (
+      {listsReady && (spacesOnly || pinnedQuery.sessions.length > 0 || pinnedQuery.hasNextPage || groupsEnabled || (!hideSpaces && groups.length > 0) || groupCreate) && (
+        <div className={cn('min-h-0 space-y-px overflow-y-auto', spacesOnly ? 'flex-1' : 'max-h-[50%] shrink-0')}>
+          {/* Spaces only: the panel's title row carries Spaces, All spaces and New space. */}
+          {groupsEnabled && !spacesOnly && (
+            <SpacesHeading projectId={projectId} onNew={() => setGroupCreate({ fileSessionId: null })} />
+          )}
+          {!hideSpaces && groups.length > 0 && (
             <SessionGroupSections
               projectId={projectId}
               groups={groups}
@@ -833,6 +848,7 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
               }}
             />
           )}
+          {spacesOnly ? null : (
           <StarterSection
             title={tPinArchive('section')}
             query={pinnedQuery}
@@ -842,11 +858,13 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
             renderNode={(session) => renderSessionNode(session, false)}
             caretOnHover
           />
+          )}
         </div>
       )}
       {/* The header collapses the sessions in no group: the time or status
           sections, Shared, Automated. Open by default (closed when
           `secondary`); the choice persists. */}
+      {spacesOnly ? null : (
       <Disclosure
         open={listOpen}
         onOpenChange={toggleListOpen}
@@ -860,11 +878,13 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
           onMenuOpenChange={holdPeek}
           onNewGroup={groupsEnabled ? () => setGroupCreate({ fileSessionId: null }) : undefined}
           secondary={secondary}
+          filterSlot={filterSlot}
         />
         <DisclosureContent className="flex min-h-0 flex-1 flex-col" contentClassName="flex min-h-0 flex-1 flex-col overflow-hidden">
           {renderBody()}
         </DisclosureContent>
       </Disclosure>
+      )}
 
       <ShareSessionModal
         projectId={projectId}
@@ -929,8 +949,10 @@ function SessionListHeader({
   onMenuOpenChange,
   onNewGroup,
   secondary,
+  filterSlot,
 }: {
   projectId: string;
+  filterSlot?: HTMLElement | null;
   sessions: ProjectSession[];
   reviewCountBySession: Record<string, number>;
   onMenuOpenChange: (open: boolean) => void;
@@ -947,6 +969,29 @@ function SessionListHeader({
     SESSION_MENU_TRIGGER_CLASS,
     secondary &&
       'opacity-0 group-focus-within/sessions-header:opacity-100 group-hover/sessions-header:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100',
+  );
+  const filterMenu = (
+    <DropdownMenu onOpenChange={onMenuOpenChange}>
+      <SessionFilterMenu
+        projectId={projectId}
+        sessions={sessions}
+        reviewCountBySession={reviewCountBySession}
+        // In the panel's title row the button sits at the right edge: the menu opens below it.
+        side={filterSlot ? 'bottom' : undefined}
+        align={filterSlot ? 'end' : 'start'}
+      />
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          type="button"
+          aria-label={t('sessionViewOptions')}
+          className={filterSlot ? SESSION_MENU_TRIGGER_CLASS : controlClass}
+        >
+          <FunnelSimpleIcon className="size-4" />
+        </Button>
+      </DropdownMenuTrigger>
+    </DropdownMenu>
   );
   return (
     <div
@@ -1003,27 +1048,9 @@ function SessionListHeader({
           </Button>
         </Hint>
       )}
-      {sessions.length > 0 && (
-        <DropdownMenu onOpenChange={onMenuOpenChange}>
-          <SessionFilterMenu
-            projectId={projectId}
-            sessions={sessions}
-            reviewCountBySession={reviewCountBySession}
-            align="start"
-          />
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              type="button"
-              aria-label={t('sessionViewOptions')}
-              className={controlClass}
-            >
-              <FunnelSimpleIcon className="size-4" />
-            </Button>
-          </DropdownMenuTrigger>
-        </DropdownMenu>
-      )}
+      {sessions.length > 0 && !filterSlot && filterMenu}
+      {/* The rail's panel title row holds the button: always shown there, at the row's right edge. */}
+      {sessions.length > 0 && filterSlot ? createPortal(filterMenu, filterSlot) : null}
     </div>
   );
 }

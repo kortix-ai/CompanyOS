@@ -3,12 +3,15 @@
 import {
   agentHoursForCredits,
   CREDIT_TIERS,
+  creditsForUsd,
   formatWholeUsd,
   monthlyCreditsForUsd,
+  planBonusPercent,
 } from '@kortix/ui/internal/billing/compute-pricing';
 import { useLocale, useTranslations } from '@/i18n/use-translations';
 import { formatCredits } from '@kortix/shared';
 import { cn } from '@kortix/ui';
+import { Badge } from '@kortix/ui/badge';
 import { useRef, type KeyboardEvent, type PointerEvent } from 'react';
 
 import { RollingNumber } from './rolling-number';
@@ -37,6 +40,7 @@ export function CreditLadder({
   steps = MONTHLY_STEPS,
   suffix,
   label,
+  oneTime = false,
 }: {
   value: number;
   onChange: (monthlyUsd: number) => void;
@@ -54,6 +58,8 @@ export function CreditLadder({
   suffix?: string;
   /** The slider's accessible name. Defaults to "Monthly credits tier". */
   label?: string;
+  /** One-off amounts (a top-up): the flat rate, no plan volume bonus. */
+  oneTime?: boolean;
 }) {
   const t = useTranslations('billing.credits.tiers');
   const locale = useLocale();
@@ -62,7 +68,9 @@ export function CreditLadder({
   const LAST = steps.length - 1;
   const index = Math.max(0, steps.indexOf(value));
   const usd = steps[index];
-  const credits = monthlyCreditsForUsd(usd);
+  const creditsFor = oneTime ? creditsForUsd : monthlyCreditsForUsd;
+  const credits = creditsFor(usd);
+  const bonus = oneTime ? 0 : planBonusPercent(usd);
   const select = (next: number) => {
     if (disabled) return;
     const clamped = Math.min(LAST, Math.max(0, next));
@@ -113,7 +121,7 @@ export function CreditLadder({
   const allCounts = [
     ...new Set(
       steps.map((item) =>
-        new Intl.NumberFormat(locale, { notation: 'compact' }).format(monthlyCreditsForUsd(item)),
+        new Intl.NumberFormat(locale, { notation: 'compact' }).format(creditsFor(item)),
       ),
     ),
   ];
@@ -166,6 +174,12 @@ export function CreditLadder({
           )}
         >
           <p className="flex items-baseline gap-1">
+            {/* The plan volume bonus, beside the price it is earned on. */}
+            {bonus > 0 ? (
+              <Badge variant="muted" className="mr-1 self-center tabular-nums">
+                {t('bonus', { percent: bonus })}
+              </Badge>
+            ) : null}
             <RollingNumber value={price} className="text-foreground text-lg" />
             <span className="text-muted-foreground text-sm">{suffix ?? t('perMonth')}</span>
           </p>

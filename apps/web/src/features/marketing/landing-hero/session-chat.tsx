@@ -491,7 +491,7 @@ function SharePanel() {
   const tMarketing = useTranslations('hardcodedUi.i18nComplete');
 
   return (
-    <div className="bg-popover absolute top-13 right-5 z-10 flex w-80 flex-col gap-3 rounded-xl border p-4 shadow-lg">
+    <div className="bg-popover absolute top-13 right-5 z-10 flex w-80 flex-col gap-3 rounded-xl border p-4 shadow-md">
       <div className="flex flex-col gap-0.5">
         <p className="text-sm font-medium">{tMarketing('textbc9424d3f527')}</p>
         <p className="text-muted-foreground text-xs">{tMarketing('text5afaa091082e')}</p>

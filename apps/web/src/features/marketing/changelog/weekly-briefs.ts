@@ -1,5 +1,7 @@
 import 'server-only';
 
+import { parseAnnouncements, type Announcement } from './announcements';
+
 import { parseWeeklyMedia, type WeeklyMedia } from './weekly-media';
 
 /**
@@ -14,11 +16,11 @@ const REPO = 'kortix-ai/CompanyOS';
 const REF = 'kortix/changelog-weekly';
 
 /** Week id (`2026-W42`) → highlights and optional reviewed cover media. */
-export type WeeklyBriefs = Record<string, { highlights: string[]; media?: WeeklyMedia }>;
+export type WeeklyBriefs = Record<string, { highlights: string[]; media?: WeeklyMedia; announcements?: Announcement[] }>;
 
 interface BriefsFile {
   version: number;
-  weeks: Record<string, { highlights?: { text?: unknown }[]; media?: unknown }>;
+  weeks: Record<string, { highlights?: { text?: unknown }[]; media?: unknown; announcements?: unknown }>;
 }
 
 /**
@@ -52,8 +54,13 @@ export async function readWeeklyBriefs(fetchImpl: typeof fetch = fetch): Promise
       const lines = (Array.isArray(brief?.highlights) ? brief.highlights : [])
         .map((h) => (typeof h?.text === 'string' ? h.text.trim() : ''))
         .filter(Boolean);
-      if (lines.length > 0)
-        briefs[week] = { highlights: lines, media: parseWeeklyMedia(brief.media) };
+      const announcements = parseAnnouncements(brief?.announcements);
+      if (lines.length > 0 || announcements.length > 0)
+        briefs[week] = {
+          highlights: lines,
+          media: parseWeeklyMedia(brief.media),
+          ...(announcements.length ? { announcements } : {}),
+        };
     }
     return briefs;
   } catch {

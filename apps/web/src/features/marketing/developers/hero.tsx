@@ -92,7 +92,7 @@ function FileWindow() {
   const tab = hero.fileTabs[active];
 
   return (
-    <div className="border-border bg-card w-full max-w-3xl overflow-hidden rounded-lg border text-left shadow-xl">
+    <div className="border-border bg-card w-full max-w-3xl overflow-hidden rounded-lg border text-left shadow-md">
       <div className="border-border flex overflow-x-auto border-b">
         <div className="border-border flex shrink-0 items-center gap-1 border-r px-4" aria-hidden>
           {[0, 1, 2].map((i) => (

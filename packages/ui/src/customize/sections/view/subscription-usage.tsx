@@ -64,9 +64,11 @@ export function isSubscriptionLogin(secret: Pick<AccountSecretResource, 'provide
   return Boolean(secret.provider_id && SUBSCRIPTION_PROVIDERS.has(secret.provider_id));
 }
 
-/** A login the gateway can route to: active, readable, signed in. */
-export function usable(secret: Pick<SubscriptionConnection, 'active' | 'needs_reauth_at' | 'status'>): boolean {
-  return secret.active && !secret.needs_reauth_at && secret.status !== 'undecryptable';
+type RoutableFields = Pick<SubscriptionConnection, 'active' | 'needs_reauth_at' | 'status'> & Partial<Pick<SubscriptionConnection, 'verification'>>;
+
+/** A login the gateway can route to: active, readable, signed in, not forbidden by the provider. */
+export function usable(secret: RoutableFields): boolean {
+  return secret.active && !secret.needs_reauth_at && secret.status !== 'undecryptable' && secret.verification?.status !== 'invalid';
 }
 
 export interface SubscriptionSummary {
@@ -86,7 +88,7 @@ export interface SubscriptionSummary {
  * One provider's logins in one line: how many can work now, when the next
  * one is back, and the fullest window of the ones that can.
  */
-export function summarizeSubscriptions(logins: Array<{ secret: Pick<SubscriptionConnection, 'active' | 'needs_reauth_at' | 'status'>; usage: SubscriptionUsage | null }>, now: number): SubscriptionSummary {
+export function summarizeSubscriptions(logins: Array<{ secret: RoutableFields; usage: SubscriptionUsage | null }>, now: number): SubscriptionSummary {
   let available = 0;
   let unknown = 0;
   let limited = 0;

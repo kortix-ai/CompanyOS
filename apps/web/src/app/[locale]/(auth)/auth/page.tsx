@@ -62,7 +62,7 @@ import {
 } from '@/lib/auth/pkce-resume';
 import { resolveNewAccountReturnUrl, sanitizeAuthReturnUrl } from '@/lib/auth/return-url';
 import { takeSignOutNotice } from '@/lib/auth/sign-out-notice';
-import { isSessionExpired } from '@/lib/auth/session-expiry';
+import { isSessionExpired, SESSION_ENDED_REASON } from '@/lib/auth/session-expiry';
 import {
   AUTH_EMAIL_COOLDOWN_SECONDS,
   type CredentialsMode,
@@ -240,8 +240,11 @@ function AuthCardForm({
   mobileCallbackState,
   mobileSsoEmail,
   callbackError,
+  sessionEnded,
 }: {
   callbackError: boolean;
+  /** A bounce of an ended session, and this page found no live one to resume. */
+  sessionEnded: boolean;
   returnUrl: string;
   mobileCallbackState: string | null;
   /** Address the mobile app sent with `sso=1`: SSO starts for it on mount. */
@@ -1113,7 +1116,7 @@ function AuthCardForm({
       </m.div>
 
       <m.div {...rise(0.06)}>
-        {info && <InfoStrip message={info} />}
+        {(info || sessionEnded) && <InfoStrip message={info ?? t('sessionEnded')} />}
 
         {/* The pre-hydration submit guard targets this attribute. It ships
             from the root layout <head> (lib/auth/entry-hydration-guard.ts):
@@ -1213,7 +1216,7 @@ function AuthContent() {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { supabase, user, session, isLoading } = useAuth();
+  const { supabase, user, session, isLoading, bootstrapError } = useAuth();
   const returnUrl = sanitizeAuthReturnUrl(
     searchParams.get('returnUrl') || searchParams.get('redirect'),
   );
@@ -1394,6 +1397,11 @@ function AuthContent() {
       <AuthCardForm
         callbackError={searchParams.get('expired') === 'true' || searchParams.has('error') || searchParams.has('error_code')}
         returnUrl={returnUrl}
+        // Only once the session check settled with a verdict: until then the
+        // session may still refresh and carry the user back without a word.
+        sessionEnded={
+          !isLoading && !bootstrapError && searchParams.get('reason') === SESSION_ENDED_REASON
+        }
         mobileCallbackState={mobileCallbackState}
         // Wait for the session check: an existing session goes to the app
         // through the handoff effect above, not through a fresh SSO round trip.

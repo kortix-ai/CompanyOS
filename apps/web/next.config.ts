@@ -9,6 +9,7 @@ import path from 'path';
 import { buildBlumeDocs, getBlumeDocsOutputPaths } from './scripts/blume-docs.mjs';
 import { BLOG_ORIGIN } from './src/config/blog-origin';
 import { resolveTurbopackFileSystemCacheForBuild } from './src/config/turbopack-build-cache';
+import { relativizeTurbopackLoaders } from './src/config/turbopack-portable-loaders';
 import { locales } from './src/i18n/catalog.mjs';
 import { DESKTOP_SHELL_HEADER, workspaceRedirects } from './src/lib/workspace-redirects';
 import { SHIPPED_ICON_WEIGHTS } from '@kortix/ui/lib/icon-config';
@@ -1320,7 +1321,8 @@ const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
 export default function config(phase: string) {
   ensureBlumeDocsBuilt(phase);
 
-  return withSentryConfig(withBetterStack(withMDX(withNextIntl(nextConfig()))), {
+  // Relative loader paths keep the Turbopack dev cache valid in another worktree (see turbopack-portable-loaders.ts).
+  return withSentryConfig(withBetterStack(relativizeTurbopackLoaders(withMDX(withNextIntl(nextConfig())), __dirname)), {
     // Suppresses source map uploading logs during build
     silent: true,
 

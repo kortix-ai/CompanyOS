@@ -79,8 +79,10 @@ import { MOTION, THEME, withAlpha } from '@/lib/utils/theme';
 import { ComposerBottomFade, composerSafeAreaPadding } from '@/components/session/composer-bottom-fade';
 import { GlassButtons, LIQUID_GLASS_AVAILABLE } from '@/components/kortix/liquid-glass';
 
+import { forgetSeededPrompt, seedEchoed, seededPromptOf } from '@/lib/session/first-prompt-seed';
 import {
   addOptimisticMessage,
+  isOptimisticMessage,
   markOptimisticAccepted,
   removeOptimisticMessage,
   removeSessionMessage,
@@ -533,6 +535,26 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
   const storeThread = useSessionLogThread(threadSource, isSubThread ? sessionId : undefined, {
     throttleMs: TRANSCRIPT_RENDER_INTERVAL_MS,
   });
+  // The first prompt's seed (`firstPromptSeed`) leaves once the log holds its
+  // echo. The log names the prompt by the server's id and the v2 stream sends
+  // no v1 echo, so the SDK's optimistic swap never fires for it: without this
+  // the thread shows the prompt twice, the seed under the reply. The thread
+  // hides the seed from the first snapshot that holds the echo; the effect
+  // then removes it from the store.
+  const echoedSeedId = useMemo(() => {
+    const seed = seededPromptOf(sessionId);
+    if (!seed) return null;
+    const optimistic = (id: string) => isOptimisticMessage(sessionId, id);
+    return seedEchoed(storeThread?.messages, seed, optimistic) ? seed.id : null;
+  }, [sessionId, storeThread]);
+  useEffect(() => {
+    const seedId = seededPromptOf(sessionId)?.id;
+    if (!seedId) return;
+    if (!isOptimisticMessage(sessionId, seedId)) return void forgetSeededPrompt(sessionId);
+    if (seedId !== echoedSeedId) return;
+    removeOptimisticMessage(sessionId, seedId);
+    forgetSeededPrompt(sessionId);
+  }, [sessionId, echoedSeedId]);
   const sessionStatus = useSessionStatus(sessionId);
   const pendingQuestions = usePendingQuestions(sessionId);
   const pendingPermissions = usePendingPermissions(sessionId);
@@ -639,9 +661,13 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
     }
   }, [sessionId, storedFailedSends, failedSends]);
   const thread = useMemo(() => {
-    if (Object.keys(failedSends).length === 0) return storeThread;
-    return threadWithFailedSends(storeThread ?? emptyThread(sessionId), failedSends);
-  }, [sessionId, storeThread, failedSends]);
+    const shown =
+      echoedSeedId && storeThread
+        ? { ...storeThread, messages: storeThread.messages.filter((m) => m.message_id !== echoedSeedId) }
+        : storeThread;
+    if (Object.keys(failedSends).length === 0) return shown;
+    return threadWithFailedSends(shown ?? emptyThread(sessionId), failedSends);
+  }, [sessionId, storeThread, echoedSeedId, failedSends]);
   // Handlers read the thread at call time (an edit's rewind).
   const threadRef = useRef(thread);
   threadRef.current = thread;

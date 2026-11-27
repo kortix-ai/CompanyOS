@@ -196,7 +196,7 @@ export function ProjectSettingsPage({ projectId }: { projectId: string }) {
         {isMobile ? (
           <nav
             aria-label={tI18nComplete.raw('textfccd73a69e8b')}
-            className="border-border/60 bg-background flex h-auto shrink-0 items-center border-b"
+            className="border-border bg-background flex h-auto shrink-0 items-center border-b"
           >
             <FadedScrollArea
               orientation="horizontal"

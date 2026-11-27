@@ -383,6 +383,14 @@ export function platinumRateLimitWaitMs(err: unknown, { fallbackMs = 1_000, maxM
   return seconds === undefined ? fallbackMs : Math.min(Number(seconds) * 1_000, maxMs);
 }
 
+/** Exec output can exceed the provider response limit after the command ran. */
+export class PlatinumExecOutputTooLargeError extends PlatinumHttpError {
+  constructor() {
+    super('The sandbox provider could not return the command output because it exceeded the response limit. The command may have run; inspect its effects before running it again. Redirect large output to a file.', 413);
+    this.name = 'PlatinumExecOutputTooLargeError';
+  }
+}
+
 /** A timed-out exec may already have run. Never replay it automatically. */
 export class PlatinumExecOutcomeUnknownError extends PlatinumHttpError {
   constructor() {
@@ -455,8 +463,9 @@ export async function platinumJsonResponse<T>(
         text,
       );
     }
-    if (res.status === 504 && method === 'POST' && /^\/v1\/sandboxes\/[^/]+\/exec$/.test(path)) {
-      throw new PlatinumExecOutcomeUnknownError();
+    if (method === 'POST' && /^\/v1\/sandboxes\/[^/]+\/exec$/.test(path)) {
+      if (res.status === 504) throw new PlatinumExecOutcomeUnknownError();
+      if (res.status === 413) throw new PlatinumExecOutputTooLargeError();
     }
     // Surface Retry-After (seconds) on a 429 so poll-error classification can
     // honor it (PHASE 2 rate-limit handling). Harmless suffix for other callers.

@@ -107,7 +107,7 @@ export function StepSourceOfTruth(): ReactNode {
                 exit={{ opacity: 0, transition: { duration: 0.2, ease: EASE_OUT } }}
                 transition={{ ...MOVE, delay: ticked || reduced ? 0 : slot * 0.06 }}
                 className={`bg-background flex w-full items-center gap-3 rounded-xl border px-4 py-3 ${WIDTH[slot]} ${
-                  slot === 0 ? 'border-border shadow-sm' : 'border-border/60'
+                  slot === 0 ? 'border-border shadow-sm' : 'border-border'
                 }`}
               >
                 <span className="bg-card text-foreground flex size-8 shrink-0 items-center justify-center rounded-lg">

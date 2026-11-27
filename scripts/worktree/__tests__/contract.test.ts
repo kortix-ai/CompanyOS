@@ -22,6 +22,40 @@ test('the API launcher passes database mode to preserve branch worker defaults',
   expect(cli).toMatch(/apiLaunchEnv\(e\.ports,\s*creds,\s*\{[^}]*\bdbMode\b/);
 });
 
+test('create installs from the committed lockfile first and resolves only when that fails', () => {
+  const cli = readFileSync(join(REPO, 'scripts/worktree/cli.ts'), 'utf8');
+  const frozen = cli.indexOf("run(['pnpm', 'install', '--frozen-lockfile'], { cwd: wtPath })");
+  const resolving = cli.indexOf("run(['pnpm', 'install'], { cwd: wtPath })");
+  expect(frozen).toBeGreaterThan(-1);
+  expect(resolving).toBeGreaterThan(frozen);
+  expect(cli.slice(frozen, resolving)).toMatch(/!== 0\) \{/);
+});
+
+test('start brings the tunnel up and checks the runtime artifacts while the database comes up; the API waits for the URL', () => {
+  const cli = readFileSync(join(REPO, 'scripts/worktree/cli.ts'), 'utf8');
+  const at = (needle: string) => { const i = cli.indexOf(needle); expect(i).toBeGreaterThan(-1); return i; };
+  const tunnel = at("const tunnelStart = a.flags['no-tunnel'] ? null : startTunnel(e.ports.api);");
+  const artifacts = at("if (await ensureRuntimeArtifacts(e.path) !== 0) die('runtime artifact build failed');");
+  const db = at("if (dbMode === 'isolated') {\n    renderSupabaseProject");
+  const awaited = at('tunnel = await tunnelStart;');
+  const api = at('let api = spawnApi(tunnel?.url);');
+  expect(tunnel).toBeLessThan(artifacts);
+  expect(artifacts).toBeLessThan(db);
+  expect(awaited).toBeGreaterThan(db);
+  expect(awaited).toBeLessThan(api);
+  expect(cli.match(/ensureRuntimeArtifacts\(e\.path\)/g)?.length).toBe(1);
+});
+
+test('a shared-db start initializes an empty primary database from the primary checkout, and only an empty one', () => {
+  const cli = readFileSync(join(REPO, 'scripts/worktree/cli.ts'), 'utf8');
+  const shared = cli.slice(cli.indexOf("step('Using shared primary Supabase')"), cli.indexOf('warnOnSharedDbCrosstalk(name, reg)'));
+  expect(shared.length).toBeGreaterThan(0);
+  // Migrate only inside the no-schema branch, and from the primary checkout (never the worktree's branch).
+  expect(shared).toMatch(/if \(!hasKortixSchema\(creds\.dbUrl\)\) \{[\s\S]*?runMigrate\(repoRoot\(\), creds\.dbUrl\)/);
+  expect(shared.match(/runMigrate\(/g)?.length).toBe(1);
+  expect(shared).not.toMatch(/runMigrate\(e\.path/);
+});
+
 describe('migrate contract — the worktree migrate must reference real things', () => {
   test('every `pnpm --filter @kortix/db <script>` the worktree runs exists in @kortix/db', () => {
     const calls = [...libSrc.matchAll(/'@kortix\/db',\s*'([a-z0-9:-]+)'/g)].map((m) => m[1]);

@@ -159,7 +159,7 @@ flow(
   },
 );
 
-type Claims = { iss: string; aud: string; sub: string; exp: number; iat: number; project_id: string; via_app_id?: string };
+type Claims = { iss: string; aud: string; sub: string; exp: number; iat: number; project_id: string; via_app_id?: string; session_kind?: string; auth_time?: number };
 
 /** The claims of an ES256 JWT, after checking its signature against a published key set. */
 function verifiedClaims(token: string, jwks: { keys: Array<Record<string, unknown>> }): Claims {
@@ -206,6 +206,7 @@ flow(
     let appHost = "";
     let cookie = "";
     let jwks: { keys: Array<Record<string, unknown>> } = { keys: [] };
+    let provenanceTokenId = "";
 
     // The gate, at App A's own hostname. Local Apps answer under
     // `<route-key>.apps.localhost`: the Host names the App (an unsigned
@@ -297,6 +298,29 @@ flow(
         }
       });
 
+      await ctx.step("browser and PAT access-session callers keep distinct provenance through viewer and linked JWTs", async () => {
+        const mintedPat = (await owner.post("/v1/accounts/tokens", { name: ctx.fixtures.name("app-link") }))
+          .status(201).json<{ secret_key: string; token_id: string }>();
+        provenanceTokenId = mintedPat.token_id;
+        const pat = ctx.client.as({ ...ctx.P.OWNER, auth: { mode: "bearer", token: mintedPat.secret_key } });
+        for (const [caller, kind] of [[owner, "browser"], [pat, "access_link"]] as const) {
+          cookie = "";
+          const session = (await caller.post("/v1/workspaces/:projectId/apps/:appId/access-session", {},
+            { params: { projectId: project.id, appId: ids.a } })).status(200).json<{ url: string }>();
+          const link = new URL(session.url);
+          const redeemed = await gate(`${link.pathname}${link.search}`);
+          cookie = redeemed.headers.get("set-cookie")?.split(";")[0] ?? "";
+          if (redeemed.status !== 303 || !cookie) throw new Error("access link did not redeem");
+          const viewer = await expectGate("/_kortix/viewer", 200);
+          const signed = await expectGate(`/_kortix/token?audience=${names.c}`, 200);
+          const claims = verifiedClaims(signed.body.token, jwks);
+          if (claims.session_kind !== kind || typeof claims.auth_time !== "number" ||
+              viewer.body.session_kind !== kind || viewer.body.auth_time !== claims.auth_time) {
+            throw new Error(`session provenance mismatch for ${kind}`);
+          }
+        }
+      });
+
       await ctx.step("/_kortix/token: 403 app_not_linked for B (same project, not used) and for D (another project)", async () => {
         await expectGate(`/_kortix/token?audience=${names.b}`, 403, "app_not_linked");
         await expectGate(`/_kortix/token?audience=${ids.b}`, 403, "app_not_linked");
@@ -310,6 +334,7 @@ flow(
         await expectGate(`/_kortix/apps/${names.c}/api/version`, 503, "app_binding_unavailable");
       });
     } finally {
+      if (provenanceTokenId) await owner.del(`/v1/accounts/tokens/${provenanceTokenId}`).catch(() => {});
       for (const [projectId, appId] of [[project.id, ids.a], [project.id, ids.b], [project.id, ids.c], [otherProject.id, ids.d]]) {
         if (appId) await owner.del("/v1/workspaces/:projectId/apps/:appId", { params: { projectId, appId } }).catch(() => {});
       }

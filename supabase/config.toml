@@ -58,6 +58,12 @@ verify_enabled = true
 enable_signup = true
 enable_confirmations = false
 
+# Native targets retain GoTrue's confirmation URL. Web links use the public
+# site URL's /auth/confirm adapter, which preserves callback query parameters.
+[auth.email.template.confirmation]
+subject = "Confirm your email address"
+content_path = "./supabase/templates/confirmation.html"
+
 # GitHub OAuth — "Sign in with GitHub" on /auth, and NOTHING else.
 #
 # It deliberately does NOT back linking a GitHub App installation to an

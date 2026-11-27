@@ -232,6 +232,7 @@ import { useModelPricingLookup } from '../../internal/lib/model-pricing';
 import { isAbortError, latestPromptModel, SESSION_NOTICE, turnEndNotice } from '@kortix/sdk';
 import {
   failureShownByTurn,
+  failurePredatesModelChange,
   failureSupersededByTurn,
   persistedFailureText,
 } from './persisted-turn-failure';
@@ -583,7 +584,7 @@ export function SessionChat({
     canAct: boolean;
   }>({ label: null, canAct: true });
   const handleQuestionActionChange = useCallback((action: QuestionAction, canAct: boolean) => {
-    const label = action === 'next' ? 'Next' : action === 'submit' ? 'Submit' : null;
+    const label = action === 'next' ? 'Next question' : action === 'submit' ? 'Submit answers' : null;
     setQuestionAction({ label, canAct });
   }, []);
 
@@ -961,7 +962,14 @@ export function SessionChat({
   // The composer opens on the model the session already runs (its pin, or its
   // last prompt's model), so a session set from the CLI, the SDK or Slack does
   // not switch model on its first web message.
+  const [commandError, setCommandError] = useState<KortixSendError | null>(null);
+  const [modelErrorReset, setModelErrorReset] = useState<{ sessionId: string; atMs: number } | null>(null);
+  const clearCommandError = useCallback((pickedAtMs: number) => {
+    setCommandError((current) => current === commandError ? null : current);
+    setModelErrorReset({ sessionId, atMs: pickedAtMs });
+  }, [sessionId, commandError]);
   const local = useSessionModelSelection({
+    onModelChanged: clearCommandError,
     agents,
     providers,
     config,
@@ -1046,7 +1054,6 @@ export function SessionChat({
 
   const pendingPromptHandled = useRef(false);
 
-  const [commandError, setCommandError] = useState<KortixSendError | null>(null);
   // The last prompt handed to the runtime, verbatim. Only read by the
   // connector-refusal card, to re-send exactly what was refused.
   const lastSubmittedRef = useRef<{ parts: unknown[]; options: Record<string, unknown> } | null>(
@@ -2150,13 +2157,14 @@ export function SessionChat({
         id === freshSend.messageId || optimisticOriginOf(sessionId, id) === freshSend.messageId,
     );
   }, [working.turnId, freshSend, sessionId, projectedTurns, optimisticOriginOf]);
-  const turns: SessionLogTurn[] = useMemo(
-    () =>
-      freshSendTurnId && turnThread
-        ? sessionLogTurns(turnThread, turnOptions(freshSendTurnId))
-        : projectedTurns,
-    [freshSendTurnId, turnThread, turnOptions, projectedTurns],
-  );
+  const turns: SessionLogTurn[] = useMemo(() => {
+    const grouped = freshSendTurnId && turnThread
+      ? sessionLogTurns(turnThread, turnOptions(freshSendTurnId))
+      : projectedTurns;
+    return grouped.map((turn) => turn.error && modelErrorReset?.sessionId === sessionId &&
+      turn.assistant.every((reply) => failurePredatesModelChange(reply.completed_at, modelErrorReset.atMs))
+      ? { ...turn, error: null } : turn);
+  }, [freshSendTurnId, turnThread, turnOptions, projectedTurns, modelErrorReset, sessionId]);
   // P5.6: a switch `harness.history` records, drawn before the turn it lands on.
   const harnessSwitches = useMemo(
     () => sessionLogHarnessSwitches(sessionRecord?.harness?.history, turns),
@@ -2615,28 +2623,27 @@ export function SessionChat({
         sessionState?.questions.find((question) => question.id === requestId) ??
         useRuntimePendingStore.getState().questions[requestId];
 
-      // Hide the card at once; the question leaves the store only once the
-      // answer lands. A failed reply then needs no restore (which could bring
-      // back a question the runtime did answer): releasing the hide is enough.
-      suppressQuestionFor(requestId);
-      const parkedAskId = liveQuestions.some((q) => q.id === requestId) ? undefined : parkedAskIdByRequest.get(requestId);
+      // Keep the question and its draft until the server accepts the answer.
+      const parkedAskId = liveQuestions.some((q) => q.id === requestId)
+        ? undefined
+        : parkedAskIdByRequest.get(requestId);
       if (parkedAskId) {
-        // Parked: the answer reaches the agent as a message that quotes the question.
-        // Awaited per request: a second decision must not replace this one's outcome.
-        try {
-          await answerParkedAsk.mutateAsync({ askId: parkedAskId, answer: { answers } });
-          removeQuestion(requestId);
-        } catch {
-          releaseQuestion(requestId);
-        }
-        return;
+        await answerParkedAsk.mutateAsync({
+          askId: parkedAskId,
+          answer: { answers },
+        });
+      } else if (sessionState) {
+        await sessionState.answerQuestion(requestId, answers);
+      } else {
+        await replyToQuestion(requestId, answers);
       }
+      suppressQuestionFor(requestId);
+      removeQuestion(requestId);
 
       // Save the answers in the optimistic cache keyed by the question call's
       // block id. This cache survives updates that may overwrite the call
       // before the server includes its answers; the transcript's answered
       // questions read from it as a fallback.
-      let cachedBlockId: string | null = null;
       if (questionReq?.tool?.messageID) {
         const { messageID, callID } = questionReq.tool;
         const message = threadRef.current?.messages.find((m) => m.message_id === messageID);
@@ -2644,7 +2651,6 @@ export function SessionChat({
           (b) => b.type === 'tool_call' && isQuestionTool(b.name) && b.call_id === callID,
         );
         if (match?.type === 'tool_call') {
-          cachedBlockId = match.id;
           optimisticAnswersCache.set(match.id, {
             answers,
             input:
@@ -2654,19 +2660,15 @@ export function SessionChat({
           });
         }
       }
-
-      try {
-        if (sessionState) await sessionState.answerQuestion(requestId, answers);
-        else await replyToQuestion(requestId, answers);
-        removeQuestion(requestId);
-      } catch {
-        // The answer did not land: the card comes back, fresh, if the question
-        // is still open. The cached answer goes: the transcript must not show it.
-        if (cachedBlockId) optimisticAnswersCache.delete(cachedBlockId);
-        releaseQuestion(requestId);
-      }
     },
-    [sessionState, removeQuestion, suppressQuestionFor, releaseQuestion, liveQuestions, parkedAskIdByRequest, answerParkedAsk],
+    [
+      sessionState,
+      removeQuestion,
+      suppressQuestionFor,
+      liveQuestions,
+      parkedAskIdByRequest,
+      answerParkedAsk,
+    ],
   );
 
   const handleQuestionReject = useCallback(
@@ -4253,6 +4255,7 @@ export function SessionChat({
               ref={questionPromptRef}
               request={renderedQuestion}
               onReply={handleQuestionReply}
+              onDiscuss={(text) => handleSend(text, undefined, undefined, undefined, { delivery: 'steer' })}
               onReject={handleQuestionReject}
               onActionChange={handleQuestionActionChange}
             />
@@ -4271,6 +4274,7 @@ export function SessionChat({
       questionRetries,
       questionPromptVisible,
       handleQuestionReply,
+      handleSend,
       handleQuestionReject,
       handleQuestionActionChange,
     ],
@@ -4610,7 +4614,7 @@ export function SessionChat({
           <div
             data-print-hide
             role="status"
-            className="bg-popover text-muted-foreground fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-lg border px-4 py-2 text-xs shadow-lg"
+            className="bg-popover text-muted-foreground fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-lg border px-4 py-2 text-xs shadow-md"
           >
             <Loading className="size-3.5 shrink-0" />
             {tHardcodedUi.raw('i18nComplete.text7dac2ca010fe')}
@@ -5004,7 +5008,11 @@ export function SessionChat({
                               }
                               stoppedBy={stoppedByName(messageAuthors, turn.id, viewerId)}
                               servedModel={servedModelOfTurn(modelUsage, turn.id, turns[turnIndex - 1]?.id)}
-                              turnOutcome={turnOutcome}
+                              turnOutcome={modelErrorReset?.sessionId === sessionId ? {
+                                ...turnOutcome,
+                                recent_failures: turnOutcome.recent_failures?.filter((failure) => !failurePredatesModelChange(failure.ended_at, modelErrorReset.atMs)),
+                                last_ended: failurePredatesModelChange(turnOutcome.last_ended?.ended_at, modelErrorReset.atMs) ? undefined : turnOutcome.last_ended,
+                              } : turnOutcome}
                               isLast={turn.id === lastUserMessageId}
                               ownsPlan={turn.id === planAnchorId}
                               sessionId={sessionId}
@@ -5135,6 +5143,7 @@ export function SessionChat({
                         ? [turnOutcome.last_ended]
                         : []),
                     ].filter((failure) =>
+                      !(modelErrorReset?.sessionId === sessionId && failurePredatesModelChange(failure.ended_at, modelErrorReset.atMs)) &&
                       !isAbortError(failure.error) &&
                       !failureShownByTurn(failure, turns) &&
                       !failureSupersededByTurn(failure, turns) &&

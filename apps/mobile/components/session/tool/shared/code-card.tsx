@@ -13,7 +13,7 @@ import { useTone } from '@/lib/utils/tone';
  * - `ToolMarkdownCard` — the same chrome as `ToolCodeCard` around rendered
  *   markdown, with YAML frontmatter shown as a key/value card above the body;
  * - `ToolMarkdown` — markdown inside a tool card (web
- *   `<div className={cn('text-sm', MD_FLUSH_CLASSES)}><UnifiedMarkdown/>`).
+ *   `<div className={'text-sm'}><UnifiedMarkdown/>`).
  */
 
 import React, { memo, type ReactNode } from 'react';
@@ -28,14 +28,6 @@ import { webSpace } from '@/lib/session/user-message';
 import { parseFrontmatter, type FrontmatterValue } from '@/lib/session/tool-part-accessors';
 import { TURN_SPACE, TURN_TYPE, monoFont, useTurnPalette } from './styles';
 import { ToolCopyButton, useToolCardFrame, useToolCardPad, useToolIndent, ToolScroll } from './surface';
-
-/**
- * Web `MD_FLUSH_CLASSES` flattens nested `<pre>` chrome inside tool markdown.
- * React Native has no descendant selectors: `ToolMarkdown` is the flush
- * markdown body, and this constant stays an empty class string so a ported
- * `cn('text-sm', MD_FLUSH_CLASSES)` compiles to a no-op.
- */
-export const MD_FLUSH_CLASSES = '';
 
 /**
  * Shiki-highlighted source as nested text. Raw React Native `Text` for the
@@ -132,7 +124,7 @@ export function ToolCode({ code, language }: { code: string; language: string })
 }
 
 /**
- * Markdown in a tool body (web `text-sm` + `MD_FLUSH_CLASSES` + `UnifiedMarkdown`).
+ * Markdown in a tool body (web `text-sm` + `UnifiedMarkdown`).
  * `surface`: the card fill behind it, for its tables.
  */
 export function ToolMarkdown({ content, isStreaming = false, surface }: { content: string; isStreaming?: boolean; surface?: string }) {

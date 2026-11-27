@@ -1,6 +1,6 @@
 ---
 name: kortix-connectors
-description: Use Kortix connectors to reach external systems from a session, an App, a Convex backend, or an external program. Use the `kortix connectors` CLI for agent work, `@kortix/sdk` for durable TypeScript workflows and for App, backend, and script code, and the hosted Kortix MCP server (`<api>/v1/mcp`) for an MCP client outside Kortix. Load this skill to inspect, add, connect, or call external tools without exposing third-party credentials to the sandbox, an App, or a backend.
+description: Use Kortix connectors to reach external systems from a session, an App, a Convex backend, or an external program. Use the `kortix connectors` CLI for agent work, `@kortix/sdk` for durable TypeScript workflows and for App, backend, and script code, and the hosted Kortix MCP server (`<api>/v1/mcp`) for an MCP client outside Kortix. Load this skill to inspect, add, connect, or call external tools without exposing third-party credentials to the sandbox, an App, or a backend; to run paid data and generation tools with no account through Kortix Toolbox; and to use the workspace's own signed-in browser, 2FA authenticator and phone number.
 ---
 
 <skill name="kortix-connectors">
@@ -71,6 +71,17 @@ Other reads: `kortix connectors discover "<intent>"` searches actions;
 `kortix connectors policy <slug> effective` shows what each tool does for you
 and which layer decided.
 </fast-path>
+
+<kortix-built>
+Kortix serves its own connectors with no sign-in: **Kortix Toolbox** (paid
+data and generation tools billed to credits: search, scraping, people and
+company data, SEO, social, market data, image and video generation), **Kortix
+Browser** (the workspace's signed-in browser, a copy per session), **Kortix
+Agent Authenticator** (2FA codes) and **Kortix Phone** (a number for text
+codes). A paid tool the workspace has no account for: Toolbox first, before
+asking a person for an API key. Actions, steps and the sign-in flow:
+`references/kortix-built.md`.
+</kortix-built>
 
 <accounts>
 Never assume one profile means one account. Never infer accounts from a

@@ -856,6 +856,9 @@ async function untested(id: string, context: PlatformToolContext): Promise<strin
   // An App event automation starts live (its test is a real App event); one the CLI cannot read is not blocked here.
   if ('error' in shown || shown.value.type === 'app') return null
   const filtered = !!shown.value.filter && Object.keys(shown.value.filter).length > 0
+  // With no filter, a dry run always matches and shows nothing (Agent Evals on dev: a weekday automation
+  // went live after one, and the reply said it was tested): only a run_now that succeeded is its test.
+  if (!filtered && !seen.ranAt) return `A dry run shows nothing for an automation with no filter: run_now ${id}, read its runs, then resume once the run succeeded. If the person said to skip the test, call resume with force: true.`
   if (!seen.matched) return `Test it first: \`test\` ${id} with a sample that should run${filtered ? ', and one that should be skipped' : ''}, then resume. If the person said to skip the test, call resume with force: true.`
   if (filtered && !seen.skipped) return `Its filter is untested: \`test\` ${id} with a sample that should be skipped, then resume. If the person said to skip the test, call resume with force: true.`
   return null

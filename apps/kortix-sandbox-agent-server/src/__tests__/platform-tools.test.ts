@@ -1183,6 +1183,22 @@ test('kortix_schedules resume: a filtered automation goes live only after a samp
   expect(argvs().filter((a) => a.startsWith('triggers resume'))).toEqual(['triggers resume mail-triage --apply'])
 })
 
+// Agent Evals on dev: a weekday automation with no filter went live after a dry run, which always matches.
+test('kortix_schedules resume: an automation with no filter goes live only after a run_now run succeeded, not after a dry run', async () => {
+  setSystemTime(new Date('2026-11-27T13:00:00.000Z'))
+  fakeKortix(`'triggers show cr-daily --json') echo '{"type":"cron","filter":null}' ;;
+  'triggers fire cr-daily --dry-run --payload={} --json') echo '{"filter_matches":true,"rendered_prompt":"Go"}' ;;
+  'triggers run cr-daily --wait=0') echo 'Fired' ;;
+  'triggers runs cr-daily --limit=5 --json') echo '{"runs":[{"status":"fired","run_status":"succeeded","started_at":"2026-11-27T13:00:03.000Z"}]}' ;;
+  'triggers resume cr-daily --apply') echo 'Enabled' ;;`)
+  await run('kortix_schedules', { action: 'test', name: 'cr-daily', payload: {} })
+  const refused = await run('kortix_schedules', { action: 'resume', id: 'cr-daily' })
+  expect(refused.error?.message).toContain('A dry run shows nothing')
+  await run('kortix_schedules', { action: 'run_now', id: 'cr-daily' })
+  expect((await run('kortix_schedules', { action: 'resume', id: 'cr-daily' })).ok).toBe(true)
+  setSystemTime()
+})
+
 describe('kortix_schedules resume after run_now', () => {
   beforeEach(() => setSystemTime(new Date('2026-11-27T13:00:00.000Z')))
   afterEach(() => setSystemTime())

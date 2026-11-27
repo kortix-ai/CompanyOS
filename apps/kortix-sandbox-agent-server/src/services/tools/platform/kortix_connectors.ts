@@ -166,7 +166,7 @@ export default {
       query: { type: 'string', description: 'For find: the app to look for.' },
       app: { type: 'string', description: 'For add: the app id find returned.' },
       slug: { type: 'string', description: 'For connect: the connector slug list shows.' },
-      shared: { type: 'boolean', description: 'For connect: share the sign-in with the whole workspace. Default: only this person, or shared when for_trigger is true.' },
+      shared: { type: 'boolean', description: 'For connect: share the sign-in with the whole workspace. Pass true when the person asks for it "for the workspace" or "for the team". Default: only this person, or shared when for_trigger is true.' },
       for_trigger: { type: 'boolean', description: 'For connect: the sign-in is for a trigger, wake-up or automation. It is then the workspace\'s shared sign-in.' },
     },
     required: ['action'],

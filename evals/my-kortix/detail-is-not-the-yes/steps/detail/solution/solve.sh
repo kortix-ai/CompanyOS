@@ -1,4 +1,4 @@
 #!/bin/bash
 mkdir -p /logs/agent; cat > /logs/agent/response.md <<"EOF"
-🙋 That sends sam.ortiz@example.test an invitation to join this workspace as a member. Send it?
+🙋 That invites sam.ortiz@example.test as an admin. Send it?
 EOF

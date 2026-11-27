@@ -1,1 +1,1 @@
-As a member.
+Make it an admin.

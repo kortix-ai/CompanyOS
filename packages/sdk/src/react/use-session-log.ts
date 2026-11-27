@@ -205,6 +205,7 @@ export function useSessionLogOlder(
   const more = useSyncStore((state) => (thread ? state.sessionLogs[sessionId]?.older[thread] === true : false));
   const key = `${projectId}/${sessionId}/${thread ?? ''}`;
   const [failedKey, setFailedKey] = useState<string | null>(null);
+  useEffect(() => onTabVisible(() => setFailedKey(null)), []);
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
   const inFlight = useRef<{ key: string; promise: Promise<void> } | null>(null);
   const loadOlder = useCallback((): Promise<void> => {
@@ -218,8 +219,10 @@ export function useSessionLogOlder(
       .then((page) => {
         const held = useSyncStore.getState().sessionLogs[sessionId];
         // A page of an older generation than the log's is a failed read: the cursor would not move.
-        if (page?.thread_id === thread && held && !isStaleSessionLogPage(held, page)) useSyncStore.getState().applySessionLogPage(sessionId, page, first);
-        else setFailedKey(key);
+        if (page?.thread_id === thread && held && !isStaleSessionLogPage(held, page)) {
+          useSyncStore.getState().applySessionLogPage(sessionId, page, first);
+          setFailedKey((current) => current === key ? null : current);
+        } else setFailedKey(key);
       })
       .finally(() => {
         if (inFlight.current?.promise === promise) inFlight.current = null;

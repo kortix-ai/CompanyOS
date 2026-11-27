@@ -1282,6 +1282,46 @@ test('34 — real pi persisted reply survives invalidation during a held page re
     await expect.poll(() => freshReads, { timeout: 15_000, message: 'a fresh GET follows the stale response' }).toBeGreaterThan(0);
     await expect(page.getByText(SAVED_REPLY, { exact: true })).toBeVisible({ timeout: 15_000 });
     expect(navigations, 'recovery does not navigate or reload').toBe(navigationCount);
+    const persistedResponse = await fetch(`${env.apiUrl}/projects/${project.id}/sessions/${sessionId}/log?limit=40`, {
+      headers: { authorization: `Bearer ${auth.access_token}` },
+    });
+    expect(persistedResponse.status).toBe(200);
+    const persisted = await persistedResponse.json();
+    expect(persisted.source).toBe('store');
+    const texts = persisted.messages.filter((message: { role: string }) => message.role === 'user' || message.role === 'assistant').map((message: { message_id: string; role: string; blocks: { type: string; text?: string }[] }) => ({
+      id: message.message_id, role: message.role,
+      text: message.blocks.filter((block) => block.type === 'text').map((block) => block.text ?? '').join(''),
+    }));
+    expect(texts.map((message: { role: string; text: string }) => [message.role, message.text])).toEqual([
+      ['user', SAVED_PROMPT], ['assistant', SAVED_REPLY],
+    ]);
+    expect(new Set(texts.map((message: { id: string }) => message.id)).size).toBe(2);
+    const assertTranscript = async () => {
+      const turn = page.locator('[data-turn-id]').filter({ has: page.getByText(SAVED_PROMPT, { exact: true }) });
+      await expect(turn).toHaveCount(1);
+      await expect(turn).toHaveAttribute('data-turn-id', texts[0].id);
+      for (const message of texts) {
+        await expect(turn.getByText(message.text, { exact: true })).toHaveCount(1);
+        await expect(turn.getByText(message.text, { exact: true })).toBeVisible();
+      }
+      await expect(page.locator('[data-turn-id="optimistic"]')).toHaveCount(0);
+    };
+    await assertTranscript();
+    for (let repetition = 0; repetition < 3; repetition += 1) {
+      const reads = freshReads;
+      await reconnect();
+      await expect.poll(() => freshReads).toBeGreaterThan(reads);
+      await assertTranscript();
+      const foregroundReads = freshReads;
+      await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+      await expect.poll(() => freshReads).toBeGreaterThan(foregroundReads);
+      await assertTranscript();
+      await page.locator(`a[href$="/workspaces/${project.id}/sessions"]`).first().click();
+      await expect(page).toHaveURL(new RegExp(`/workspaces/${project.id}/sessions$`));
+      await page.goBack({ waitUntil: 'commit' });
+      await assertTranscript();
+    }
+    console.log('transcript oracle: 2 persisted records, exact turn identity/content, 3 reconnect + 3 foreground-signal + 3 navigation/back cycles');
     await page.screenshot({ path: testInfo.outputPath('held-read-finished-reply.png') });
 
   } finally {

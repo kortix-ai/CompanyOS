@@ -457,6 +457,201 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
     }
   });
 
+  test('disposing one of two readers preserves the remaining reader transcript', async () => {
+    let removeFirst = () => {};
+    function Reader() {
+      useSessionLogSync(PROJECT, SESSION, { enabled: true, loader, joinStream, schedule });
+      return null;
+    }
+    const loader: LoadSessionLogPage = async () => page();
+    render(() => {
+      const [first, setFirst] = useState(true);
+      removeFirst = () => setFirst(false);
+      return createElement('div', null, first ? createElement(Reader, { key: 'first' }) : null, createElement(Reader, { key: 'second' }));
+    });
+    await flush();
+    const expected = page().messages.map((message) => [message.message_id, message.blocks]);
+    expect(heldMessages().map((message) => [message.message_id, message.blocks])).toEqual(expected);
+    act(() => removeFirst());
+    await flush();
+    expect(heldMessages().map((message) => [message.message_id, message.blocks])).toEqual(expected);
+  });
+
+  test('reconnect fills a missed interval larger than the newest page', async () => {
+    const template = page().messages.find((message) => message.role === 'assistant')!;
+    const records = Array.from({ length: 100 }, (_, index) => ({ ...structuredClone(template), message_id: `msg_recovery${String(index).padStart(12, '0')}`, seq: index + 1 }));
+    let reconnected = false;
+    const loader: LoadSessionLogPage = async (_project, _session, query) => {
+      const available = reconnected ? records : records.slice(0, 40);
+      const eligible = available.filter((message) => query.before_seq === undefined || message.seq < query.before_seq);
+      const messages = eligible.slice(-(query.limit ?? 40));
+      return { ...page(), messages, has_more: eligible.length > messages.length };
+    };
+    mount({ loader });
+    await flush();
+    expect(heldMessages().map((message) => message.message_id)).toEqual(records.slice(0, 40).map((message) => message.message_id));
+    reconnected = true;
+    act(() => latestStream().onConnectionChange?.(false));
+    act(() => latestStream().onConnectionChange?.(true));
+    await flush();
+    expect(heldMessages().map((message) => message.message_id)).toEqual(records.map((message) => message.message_id));
+  });
+
+  test('a disjoint box tail does not claim that a lagging journal covered its missing interval', async () => {
+    const template = page().messages.find((message) => message.role === 'assistant')!;
+    const records = Array.from({ length: 200 }, (_, index) => ({ ...structuredClone(template), message_id: `msg_lag${String(index).padStart(17, '0')}`, seq: index + 1 }));
+    let storedCount = 40;
+    let live = false;
+    const loader: LoadSessionLogPage = async (_project, _session, query) => {
+      const box = !!query.live && live;
+      const available = box ? records : records.slice(0, storedCount);
+      const eligible = available.filter((message) => query.before_seq === undefined || message.seq < query.before_seq);
+      const messages = eligible.slice(-(query.limit ?? 40));
+      return { ...page(), source: box ? 'box' : 'store', messages, has_more: eligible.length > messages.length };
+    };
+    mount({ loader });
+    await flush();
+    live = true;
+    storedCount = 100;
+    const reconnect = () => { latestStream().onConnectionChange?.(false); latestStream().onConnectionChange?.(true); };
+    act(reconnect);
+    await flush();
+    expect(heldMessages().map((message) => message.seq)).toEqual([...records.slice(0, 100), ...records.slice(160)].map((message) => message.seq));
+    storedCount = 200;
+    act(reconnect);
+    await flush();
+    expect(heldMessages().map((message) => message.message_id)).toEqual(records.map((message) => message.message_id));
+  });
+
+  test('box-only initialization still reconciles a journal that appears after a disconnect', async () => {
+    const template = page().messages.find((message) => message.role === 'assistant')!;
+    const records = Array.from({ length: 100 }, (_, index) => ({ ...structuredClone(template), message_id: `msg_initialbox${String(index).padStart(10, '0')}`, seq: index + 1 }));
+    let advanced = false;
+    let journal = false;
+    const loader: LoadSessionLogPage = async (_project, _session, query) => {
+      if (!query.live && !journal) throw new Error('journal not available');
+      const available = advanced ? records : records.slice(0, 40);
+      const eligible = available.filter((message) => query.before_seq === undefined || message.seq < query.before_seq);
+      const messages = eligible.slice(-(query.limit ?? 40));
+      return { ...page(), source: query.live ? 'box' : 'store', messages, has_more: eligible.length > messages.length };
+    };
+    mount({ loader, boxReady: true });
+    await flush();
+    advanced = true;
+    const reconnect = () => { latestStream().onConnectionChange?.(false); latestStream().onConnectionChange?.(true); };
+    act(reconnect);
+    await flush();
+    journal = true;
+    act(reconnect);
+    await flush();
+    expect(heldMessages().map((message) => message.message_id)).toEqual(records.map((message) => message.message_id));
+  });
+
+  test('a staggered second reader bridges shared history before the first reader leaves', async () => {
+    const template = page().messages.find((message) => message.role === 'assistant')!;
+    const records = Array.from({ length: 200 }, (_, index) => ({ ...structuredClone(template), message_id: `msg_shared${String(index).padStart(14, '0')}`, seq: index + 1 }));
+    let advanced = false;
+    let addSecond = () => {};
+    let removeFirst = () => {};
+    const loader: LoadSessionLogPage = async (_project, _session, query) => {
+      const available = advanced ? records : records.slice(0, 40);
+      const eligible = available.filter((message) => query.before_seq === undefined || message.seq < query.before_seq);
+      const messages = eligible.slice(-(query.limit ?? 40));
+      return { ...page(), messages, has_more: eligible.length > messages.length };
+    };
+    function Reader() { useSessionLogSync(PROJECT, SESSION, { enabled: true, loader, joinStream, schedule }); return null; }
+    render(() => {
+      const [first, setFirst] = useState(true);
+      const [second, setSecond] = useState(false);
+      addSecond = () => setSecond(true);
+      removeFirst = () => setFirst(false);
+      return createElement('div', null, first ? createElement(Reader, { key: 'a' }) : null, second ? createElement(Reader, { key: 'b' }) : null);
+    });
+    await flush();
+    advanced = true;
+    act(addSecond);
+    await flush();
+    act(removeFirst);
+    await flush();
+    expect(heldMessages().map((message) => message.message_id)).toEqual(records.map((message) => message.message_id));
+  });
+
+  test('a delayed box page from one reader cannot erase another reader newer stored recovery', async () => {
+    const template = page().messages.find((message) => message.role === 'assistant')!;
+    const records = Array.from({ length: 200 }, (_, index) => ({ ...structuredClone(template), message_id: `msg_order${String(index).padStart(15, '0')}`, seq: index + 1 }));
+    const pending = deferredPage();
+    let advanced = false;
+    let addSecond = () => {};
+    const loader: LoadSessionLogPage = async (_project, _session, query) => {
+      if (query.live && !advanced) return pending.promise;
+      const available = advanced ? records : records.slice(0, 40);
+      const eligible = available.filter((message) => query.before_seq === undefined || message.seq < query.before_seq);
+      const messages = eligible.slice(-(query.limit ?? 40));
+      return { ...page(), source: 'store', messages, has_more: eligible.length > messages.length };
+    };
+    function Reader({ boxReady = false }: { boxReady?: boolean }) {
+      useSessionLogSync(PROJECT, SESSION, { enabled: true, loader, boxReady, joinStream, schedule });
+      return null;
+    }
+    render(() => {
+      const [second, setSecond] = useState(false);
+      addSecond = () => setSecond(true);
+      return createElement('div', null, createElement(Reader, { key: 'a', boxReady: true }), second ? createElement(Reader, { key: 'b' }) : null);
+    });
+    await flush();
+    advanced = true;
+    act(addSecond);
+    await flush();
+    expect(heldMessages().map((message) => message.message_id)).toEqual(records.map((message) => message.message_id));
+    await act(async () => pending.resolve({ ...page(), source: 'box', messages: records.slice(0, 40), has_more: false }));
+    await flush();
+    expect(heldMessages().map((message) => message.message_id)).toEqual(records.map((message) => message.message_id));
+  });
+
+  test('a runtime tail put cannot suppress recovery of the missed stored interval', async () => {
+    const template = page().messages.find((message) => message.role === 'assistant')!;
+    const records = Array.from({ length: 100 }, (_, index) => ({ ...structuredClone(template), message_id: `msg_tail${String(index).padStart(16, '0')}`, seq: index + 1 }));
+    let reconnected = false;
+    const loader: LoadSessionLogPage = async (_project, _session, query) => {
+      const available = reconnected ? records : records.slice(0, 40);
+      const eligible = available.filter((message) => query.before_seq === undefined || message.seq < query.before_seq);
+      const messages = eligible.slice(-(query.limit ?? 40));
+      return { ...page(), messages, has_more: eligible.length > messages.length };
+    };
+    mount({ loader });
+    await flush();
+    act(() => useSyncStore.getState().applySessionLogEvent(SESSION, { type: 'log.message', properties: { rev: 999, message: records[99]! } }));
+    reconnected = true;
+    act(() => { latestStream().onConnectionChange?.(false); latestStream().onConnectionChange?.(true); });
+    await flush();
+    expect(heldMessages().map((message) => message.message_id)).toEqual(records.map((message) => message.message_id));
+  });
+
+  test('a failed bridge retains the old window and a later reconnect retries the gap', async () => {
+    const template = page().messages.find((message) => message.role === 'assistant')!;
+    const records = Array.from({ length: 100 }, (_, index) => ({ ...structuredClone(template), message_id: `msg_bridge${String(index).padStart(14, '0')}`, seq: index * 2 + 1 }));
+    let reconnected = false;
+    let bridgeAvailable = false;
+    const loader: LoadSessionLogPage = async (_project, _session, query) => {
+      if (query.before_seq !== undefined && !bridgeAvailable) throw new Error('bridge offline');
+      const available = reconnected ? records : records.slice(0, 40);
+      const eligible = available.filter((message) => query.before_seq === undefined || message.seq < query.before_seq);
+      const messages = eligible.slice(-(query.limit ?? 40));
+      return { ...page(), messages, has_more: eligible.length > messages.length };
+    };
+    mount({ loader });
+    await flush();
+    reconnected = true;
+    const reconnect = () => { latestStream().onConnectionChange?.(false); latestStream().onConnectionChange?.(true); };
+    act(reconnect);
+    await flush();
+    expect(heldMessages().map((message) => message.message_id)).toEqual(records.slice(0, 40).map((message) => message.message_id));
+    bridgeAvailable = true;
+    act(reconnect);
+    await flush();
+    expect(heldMessages().map((message) => message.message_id)).toEqual(records.map((message) => message.message_id));
+  });
+
   test('KRTX-5046: disposal cancels pending retries', async () => {
     let reads = 0;
     mount({ loader: async () => { reads++; throw new Error('offline'); } });
@@ -628,6 +823,18 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
     act(() => latestStream().onControl(ended('already-ended')));
     committed = true;
     await runTimers();
+    expect(heldMessages()).toEqual(page().messages);
+  });
+
+  test('foreground retries initial history after its timed failures exhaust', async () => {
+    let available = false;
+    mount({ loader: async () => { if (!available) throw new Error('offline'); return page(); } });
+    await flush();
+    for (let retry = 0; retry < 3; retry += 1) await runTimers();
+    expect(heldMessages()).toEqual([]);
+    available = true;
+    act(() => notifyHostSignal('visible'));
+    await flush();
     expect(heldMessages()).toEqual(page().messages);
   });
 
@@ -1607,6 +1814,22 @@ describe('useSessionLogOlder: older pages of a thread from GET …/log?before_se
     await act(async () => { await state.value.loadOlder(); });
     expect(state.value.hasOlder).toBe(false);
     expect(ids()).toEqual(all().slice(4).map((m) => m.message_id));
+  });
+
+  test('foreground reopens older history after a transient pagination failure', async () => {
+    act(() => useSyncStore.getState().applySessionLogPage(SESSION, newest()));
+    let available = false;
+    const state = mountOlder(async () => {
+      if (!available) throw new Error('temporary outage');
+      return { ...page(), messages: all().slice(0, 4), has_more: false };
+    });
+    await act(async () => { await state.value.loadOlder(); });
+    expect(state.value.hasOlder).toBe(false);
+    available = true;
+    act(() => notifyHostSignal('visible'));
+    expect(state.value.hasOlder).toBe(true);
+    await act(async () => { await state.value.loadOlder(); });
+    expect(ids()).toEqual(all().map((message) => message.message_id));
   });
 
   test('a child thread pages by its own thread id', async () => {

@@ -1,6 +1,6 @@
 import type { SessionControlStreamOptions } from '../session/control-stream';
 import type { SavedCopyStore } from '../session-sync/saved-copy-store';
-import { readSessionLog, SESSION_LOG_FIRST_PAGE_LIMIT, type LoadSessionLogPage, type SessionLogRead, type SessionLogPage } from './source';
+import { readSessionLog, SESSION_LOG_FIRST_PAGE_LIMIT, SESSION_LOG_OLDER_PAGE_LIMIT, type LoadSessionLogPage, type SessionLogRead, type SessionLogPage } from './source';
 import { isStaleSessionLogPage, type SessionLogState, type SessionLogEventInput } from './store';
 
 interface LogSyncStore {
@@ -9,6 +9,9 @@ interface LogSyncStore {
   applySessionLogEvent(sessionId: string, event: SessionLogEventInput): void;
   dropSessionLog(sessionId: string): void;
 }
+
+// Readers share a store entry; only its last reader may discard the transcript.
+const readers = new WeakMap<() => LogSyncStore, Map<string, { count: number; coveredThrough: Map<string, number>; pageRevision: number; appliedPageRevision: number }>>();
 
 /** Owns one session log's reads and stream until its host disposes it. */
 export function startSessionLogSync({ projectId, sessionId, loader, store, copies, joinStream, schedule, onTabVisible, boxReady, onRead, setMissing, reloadRef }: {
@@ -22,6 +25,17 @@ export function startSessionLogSync({ projectId, sessionId, loader, store, copie
   setMissing: (missing: boolean) => void;
   reloadRef?: { current: (() => void) | null };
 }) {
+    let owners = readers.get(store);
+    if (!owners) {
+      owners = new Map();
+      readers.set(store, owners);
+    }
+    let ownership = owners.get(sessionId);
+    if (!ownership) {
+      ownership = { count: 0, coveredThrough: new Map(), pageRevision: 0, appliedPageRevision: 0 };
+      owners.set(sessionId, ownership);
+    }
+    ownership.count += 1;
     const controller = new AbortController();
     let stream: { close: () => void } | null = null;
     let stopped = false;
@@ -41,26 +55,53 @@ export function startSessionLogSync({ projectId, sessionId, loader, store, copie
       stream?.close();
       stream = joinStream({ projectId, sessionId, ...options });
     };
-    let pageRevision = 0;
-    let appliedPageRevision = 0;
+    // Only stored pages establish durable coverage; stream puts and box tails may be ahead.
+    const coveredThrough = ownership.coveredThrough;
     // Order successful pages by request start, stored and live alike. A newer failed request
     // cannot invalidate a useful answer. Stream record revisions and tombstones are reconciled
     // by the reducer, not this ordering.
     const load = async (live: boolean): Promise<SessionLogRead> => {
       if (stopped) return { answer: null, retryAfterMs: null };
-      const revision = ++pageRevision;
+      const revision = ++ownership.pageRevision;
       const query = live ? { limit: SESSION_LOG_FIRST_PAGE_LIMIT, live: true } : { limit: SESSION_LOG_FIRST_PAGE_LIMIT };
       const read = await readSessionLog(loader, projectId, sessionId, query, controller.signal);
       if (stopped) return { answer: null, retryAfterMs: null };
       const { answer } = read;
       const held = store().sessionLogs[sessionId];
       // A page of an older generation than the log's holds nothing newer: not applied, not saved.
-      if (answer && answer !== 'missing' && revision > appliedPageRevision && !(held && isStaleSessionLogPage(held, answer))) {
-        appliedPageRevision = revision;
+      if (answer && answer !== 'missing' && revision > ownership.appliedPageRevision && !(held && isStaleSessionLogPage(held, answer))) {
         // Only the box's page answers for the tail. A page with no `source` (an API from before
         // `live`) is the stored log.
         const box = answer.source === 'box';
+        const bridge: { page: SessionLogPage; before: number }[] = [];
+        // Bridge disjoint windows before the old cache can hide the missed interval from
+        // pagination (which starts before its oldest record). Sequence numbers need not be contiguous.
+        const previousLast = answer.thread_id
+          ? coveredThrough.get(answer.thread_id) ?? held?.messages[answer.thread_id]?.[0]?.seq
+          : undefined;
+        let oldest = answer.messages[0]?.seq;
+        let more = answer.has_more;
+        while (!box && !stopped && answer.thread_id && previousLast !== undefined && oldest !== undefined && oldest > previousLast && more) {
+          const before = oldest;
+          const older = await readSessionLog(loader, projectId, sessionId, {
+            thread: answer.thread_id, before_seq: before, limit: SESSION_LOG_OLDER_PAGE_LIMIT,
+          }, controller.signal);
+          if (stopped || revision < ownership.appliedPageRevision) return { answer: null, retryAfterMs: null };
+          const page = older.answer;
+          if (!page || page === 'missing' || page.thread_id !== answer.thread_id || page.generation !== answer.generation) return { answer: null, retryAfterMs: older.retryAfterMs };
+          const current = store().sessionLogs[sessionId];
+          if (!current || isStaleSessionLogPage(current, page)) return { answer: null, retryAfterMs: null };
+          oldest = page.messages[0]?.seq;
+          more = page.has_more;
+          if (oldest === undefined || oldest >= before) return { answer: null, retryAfterMs: null };
+          bridge.push({ page, before });
+        }
+        ownership.appliedPageRevision = revision;
         store().applySessionLogPage(sessionId, answer, undefined, box ? { box } : undefined);
+        for (const entry of bridge) store().applySessionLogPage(sessionId, entry.page, entry.before);
+        if (!box && answer.thread_id && answer.messages.length) {
+          coveredThrough.set(answer.thread_id, answer.messages.at(-1)!.seq);
+        }
         if (!box) void copies?.write(projectId, sessionId, answer);
       }
       return read;
@@ -80,6 +121,13 @@ export function startSessionLogSync({ projectId, sessionId, loader, store, copie
             // A failed box read falls back to the stored log. An invalidation during
             // either read still needs a snapshot taken after that signal.
             if (read.answer === null && !stopped) read = await load(false);
+            else if (read.answer && read.answer !== 'missing' && read.answer.source === 'box' && read.answer.thread_id && !stopped) {
+              const boundary = coveredThrough.get(read.answer.thread_id);
+              const first = read.answer.messages[0]?.seq;
+              // A disjoint box tail is not a durable coverage boundary. Reconcile the
+              // journal independently, and retain its boundary while it catches up.
+              if (first !== undefined && (boundary === undefined || first > boundary)) await load(false);
+            }
           } while (invalidated && !stopped);
           return read;
         })().finally(() => {
@@ -238,12 +286,13 @@ export function startSessionLogSync({ projectId, sessionId, loader, store, copie
     })();
     // A tab that comes back is the least sure it has every frame (a background tab can lose
     // its stream silently): read the newest page again, as the v1 transcript reads its tail.
-    // A refused session waits for its next turn end or reconnect instead.
+    // Foreground is also an explicit retry after initial network failures exhaust.
     const stopVisible = onTabVisible(() => {
-      if (onV2) void reload(true);
+      void (onV2 ? reload(true) : attempt());
     });
     if (reloadRef) reloadRef.current = () => void (onV2 ? reload(true) : attempt());
     const dispose = () => {
+      if (stopped) return;
       if (reloadRef) reloadRef.current = null;
       stopVisible();
       stopped = true;
@@ -251,7 +300,11 @@ export function startSessionLogSync({ projectId, sessionId, loader, store, copie
       cancelSettlement?.();
       controller.abort();
       stream?.close();
-      store().dropSessionLog(sessionId);
+      ownership.count -= 1;
+      if (ownership.count === 0) {
+        owners.delete(sessionId);
+        store().dropSessionLog(sessionId);
+      }
     };
     return { readLive, dispose };
 }

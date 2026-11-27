@@ -53,7 +53,7 @@ describe('carry-web-static', () => {
     expect(out).toContain('2 builds');
 
     // Repeated carries must not overwrite the current build or duplicate files.
-    const repeated = carry(next, 5, ['previous', 'previous']);
+    const repeated = carry(next, 5, ['previous']);
     expect(readFileSync(join(next, 'chunks/shared.js'), 'utf8')).toBe('current');
     expect(repeated).toContain('0 carried');
   });

@@ -225,6 +225,40 @@ export function setCatalogBillingForTests(next: CatalogBilling | null): void {
 
 /** One catalog call may cost at most this much (USD), before the markup: treg refuses anything above it unbilled. */
 export const CATALOG_CALL_MAX_USD = 0.5;
+/** The ceiling for a generation call (an image, a video clip, speech, music). */
+export const GENERATION_CALL_MAX_USD = 15;
+/** At most this many background tasks are remembered per account. */
+const TASKS_KEPT = 100;
+
+/** A generation tool: its id or platform names image, video, voice or music generation. Pure. */
+export function isGeneration(e: TregEndpoint): boolean {
+  return /\.(image|video|voice|music)-gen\./.test(e.id) || /(image|video|voice|music)-gen/.test(String(e.platform ?? ''));
+}
+
+const callCeiling = (e: TregEndpoint) => (isGeneration(e) ? GENERATION_CALL_MAX_USD : CATALOG_CALL_MAX_USD);
+
+/** A background task this account started: what it costs and how to read its result. */
+interface TaskRecord {
+  tool: string;
+  /** What the workspace was charged (USD, markup included); refunded once if the task fails. */
+  charged: number;
+  state: string;
+  refunded?: boolean;
+  resultPath?: string;
+  success?: string[];
+  failure?: string[];
+  startedAt: string;
+}
+
+interface ToolboxData {
+  tasks?: Record<string, TaskRecord>;
+}
+
+/** The value at a dotted path (`output`, `data.video.url`). Pure. */
+function at(value: unknown, path: string | undefined): unknown {
+  if (!path) return value;
+  return path.split('.').reduce<unknown>((v, key) => (v && typeof v === 'object' ? (v as Record<string, unknown>)[key] : undefined), value);
+}
 
 /** USD → credits (1 credit = $0.01), rounded to 3 places. Pure. */
 const credits = (usd: number) => Math.round(usd * 100 * 1000) / 1000;
@@ -309,7 +343,8 @@ const CATALOG_TOOLS: readonly AgentTool[] = [
       const query = args.query && typeof args.query === 'object' ? Object.fromEntries(Object.entries(args.query as Record<string, unknown>).map(([k, v]) => [k, String(v)])) : undefined;
       const body = args.body && typeof args.body === 'object' ? args.body : undefined;
       const rate = markup();
-      const estimate = Math.min(Math.max(e.cost?.usd ?? 0, 0), CATALOG_CALL_MAX_USD);
+      const ceiling = callCeiling(e);
+      const estimate = Math.min(Math.max(e.cost?.usd ?? 0, 0), ceiling);
       const description = `Toolbox ${e.id}`;
       let hold;
       try {
@@ -319,16 +354,92 @@ const CATALOG_TOOLS: readonly AgentTool[] = [
       }
       let result;
       try {
-        result = await treg().call({ id: e.id, method: e.method ?? 'GET', query, body, meta: tregMeta({ workspaceId: ctx.state.projectId, sessionId: ctx.sessionId }), maxCostUsd: CATALOG_CALL_MAX_USD });
+        result = await treg().call({ id: e.id, method: e.method ?? 'GET', query, body, meta: tregMeta({ workspaceId: ctx.state.projectId, sessionId: ctx.sessionId }), maxCostUsd: ceiling });
       } catch (error) {
         await billing.settle(hold, 0, description);
         throw error;
       }
       const actual = (result.costMicro / 1_000_000) * rate;
       await billing.settle(hold, actual, description);
+      if (result.async && result.callId && result.status < 400) {
+        // A background task: treg holds its cost now and refunds it if the task fails; check_task follows it.
+        const task: TaskRecord = {
+          tool: e.id,
+          charged: actual,
+          state: 'processing',
+          resultPath: result.async.result?.path,
+          success: result.async.status?.success,
+          failure: result.async.status?.failure,
+          startedAt: new Date(ctx.now()).toISOString(),
+        };
+        const callId = result.callId;
+        await ctx.update((d) => {
+          const tasks = { ...((d as ToolboxData).tasks ?? {}), [callId]: task };
+          const kept = Object.entries(tasks).slice(-TASKS_KEPT);
+          return { ...d, tasks: Object.fromEntries(kept) };
+        });
+        return { id: e.id, task: callId, state: 'processing', credits: credits(actual), next: 'check_task with this task id until done (images take seconds, videos 1-5 minutes)' };
+      }
       return { id: e.id, status: result.status, ok: result.status < 400, credits: credits(actual), result: result.body };
     },
   },
 ];
 
-export const TOOLBOX_TOOLS: readonly AgentTool[] = [...NATIVE_TOOLS, ...CATALOG_TOOLS];
+const TASK_TOOLS: readonly AgentTool[] = [
+  {
+    name: 'check_task',
+    title: 'Check a background task',
+    description:
+      'The state of a task call_tool started (image or video generation): processing, succeeded with its result (usually file links, valid for about a day: download them now), or failed, which refunds its credits. Call again while it is processing; wait_seconds waits up to 60 seconds for it to finish.',
+    inputSchema: schema({ task: s('The task id from call_tool.'), wait_seconds: i('Wait up to this long for it to finish, 0 to 60. Default 0.') }, ['task']),
+    annotations: READ,
+    async run(args, ctx) {
+      const id = reqStr(args, 'task');
+      const record = ((ctx.state.data as ToolboxData).tasks ?? {})[id];
+      if (!record) throw new ToolInputError(`no task ${id} in this account; call_tool starts one`);
+      const deadline = ctx.now() + Math.min(Math.max(optInt(args, 'wait_seconds', 0) ?? 0, 0), 60) * 1000;
+      for (;;) {
+        const task = await treg().task(id);
+        if (!task) throw new ToolInputError(`treg has no task ${id}`);
+        const status = String(at(task.body, 'status') ?? task.state);
+        const failed = task.state === 'failed' || (record.failure ?? []).includes(status);
+        const succeeded = task.state === 'succeeded' || (record.success ?? []).includes(status);
+        if (failed) {
+          let refunded = false;
+          await ctx.update((d) => {
+            const tasks = { ...((d as ToolboxData).tasks ?? {}) };
+            const current = tasks[id];
+            if (current && !current.refunded) {
+              refunded = true;
+              tasks[id] = { ...current, state: 'failed', refunded: true };
+            }
+            return { ...d, tasks };
+          });
+          if (refunded && record.charged > 0) {
+            const accountId = await billing.accountOf(ctx.state.projectId);
+            if (accountId) await billing.settle({ accountId, billingToolName: 'toolbox_catalog', cost: record.charged }, 0, `Toolbox ${record.tool} task failed`);
+          }
+          return { task: id, tool: record.tool, state: 'failed', refunded_credits: credits(record.charged), error: at(task.body, 'error') ?? null };
+        }
+        if (succeeded) {
+          await ctx.update((d) => {
+            const tasks = { ...((d as ToolboxData).tasks ?? {}) };
+            if (tasks[id]) tasks[id] = { ...tasks[id]!, state: 'succeeded' };
+            return { ...d, tasks };
+          });
+          return { task: id, tool: record.tool, state: 'succeeded', result: at(task.body, record.resultPath) ?? task.body, credits: credits(record.charged) };
+        }
+        if (ctx.now() >= deadline) return { task: id, tool: record.tool, state: 'processing', status };
+        await sleepFor(2_000);
+      }
+    },
+  },
+];
+
+let sleepFor = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+/** Tests make waits instant; never called in production. */
+export function setToolboxSleepForTests(fn: ((ms: number) => Promise<void>) | null): void {
+  sleepFor = fn ?? ((ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+}
+
+export const TOOLBOX_TOOLS: readonly AgentTool[] = [...NATIVE_TOOLS, ...CATALOG_TOOLS, ...TASK_TOOLS];

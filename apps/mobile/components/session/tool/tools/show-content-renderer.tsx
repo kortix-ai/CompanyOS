@@ -35,7 +35,7 @@ import { Image, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 import type { ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTypes';
 import { useColorScheme } from 'nativewind';
-import { buildStaticFileLocalUrl, wsFavicon } from '@kortix/sdk';
+import { buildStaticFileLocalUrl, wsFavicon, type ShowLoadStatus } from '@kortix/sdk';
 import { safeHttpUrl } from '@kortix/shared';
 import { MermaidBlock } from '@/components/markdown/mermaid/MermaidBlock';
 import { KortixLoader } from '@/components/kortix/kortix-loader';
@@ -82,7 +82,7 @@ const TEXT_END_SPACE = 20;
 /** Pressed feedback on a tappable image or link (same value as the image-search grid). */
 const PRESSED_OPACITY = 0.8;
 
-export type ShowLoadStatus = 'loading' | 'ready' | 'error';
+export type { ShowLoadStatus } from '@kortix/sdk';
 
 export interface ShowContentProps {
   type: string;

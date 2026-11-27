@@ -35,9 +35,9 @@
  *   ToolOutputFallback / JsonFailureOutputCard / RawOutputBlock / ToolEmptyState /
  *   StatusIcon / DiffStat
  *                               here — ported
- *   ToolCodeCard / ToolCode / ToolMarkdownCard / MD_FLUSH_CLASSES
- *                               `./code-card` — ported (Shiki); `MD_FLUSH_CLASSES`
- *                               is '' — use `ToolMarkdown` for markdown bodies
+ *   ToolCodeCard / ToolCode / ToolMarkdownCard
+ *                               `./code-card` — ported (Shiki)
+ *                               Use `ToolMarkdown` for markdown bodies
  *   InlineDiffView              `./inline-diff-view` — ported (frameless, wrap in
  *                               `ToolResultCard` as web does)
  *   StructuredOutput            `./structured-output` — ported
@@ -154,7 +154,6 @@ export {
 } from './navigation';
 export {
   HighlightedCode,
-  MD_FLUSH_CLASSES,
   MarkdownFrontmatterCard,
   ToolCode,
   ToolCodeCard,

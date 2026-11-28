@@ -916,3 +916,77 @@ describe('UnifiedMarkdown line breaks', () => {
     ]);
   });
 });
+
+describe('Slack-style labelled links', () => {
+  test('renders the report label as one clickable link', () => {
+    const html = renderToStaticMarkup(withIntl(<UnifiedMarkdown trust="agent" content="See <https://kortix.com/report|Engineering’s report and evidence>." />));
+    expect(html).toContain('href="https://kortix.com/report"');
+    expect(html).toContain('Engineering’s report and evidence</a>');
+    expect(html).not.toContain('|Engineering');
+  });
+});
+
+test('Slack labels stay literal and destination parentheses remain in the href', () => {
+  const html = renderToStaticMarkup(withIntl(<UnifiedMarkdown trust="agent" content={'<https://example.com/a(b)|[report] *now* &copy;>'} />));
+  expect(html).toContain('href="https://example.com/a%28b%29"');
+  expect(html).toContain('[report] *now* &amp;copy;</a>');
+  expect(html).not.toContain('<em>');
+});
+
+test('complete Slack links render while streaming and incomplete prefixes retain their label', () => {
+  const prefix = '<https://example.com/report|Engineering report';
+  for (const content of [prefix, `${prefix}>`]) {
+    const html = renderToStaticMarkup(withIntl(<UnifiedMarkdown trust="agent" content={content} isStreaming />));
+    if (content.endsWith('>')) {
+      expect(html).toContain('href="https://example.com/report"');
+      expect(html).toContain('Engineering');
+      expect(html).not.toContain('|Engineering');
+    } else {
+      expect(html).toContain('|Engineering');
+    }
+  }
+});
+
+test('Slack single-word labels are not protected as CommonMark autolinks', () => {
+  const html = renderToStaticMarkup(withIntl(<UnifiedMarkdown trust="agent" content="<https://example.com/path|Report>" />));
+  expect(html).toContain('href="https://example.com/path"');
+  expect(html).toContain('>Report</a>');
+  expect(html).not.toContain('%7CReport');
+});
+
+test('Slack destinations preserve literal ampersand entities', () => {
+  const html = renderToStaticMarkup(withIntl(<UnifiedMarkdown trust="agent" content={'<https://example.com/?x=&copy;|Report now>'} />));
+  expect(html).toContain('href="https://example.com/?x=&amp;copy;"');
+  expect(html).not.toContain('%C2%A9');
+  expect(html).toContain('>Report now</a>');
+});
+
+test('PR and long demo labels render inside prose without leaking Slack delimiters', () => {
+  const pr = 'https://github.com/example/project/pull/13265';
+  const demo = 'https://github.com/user-attachments/assets/00000000-0000-4000-8000-000000000000';
+  const content = `Ready: <${pr}|PR #13265> with a <${demo}|demo video>. Normal prose stays readable.`;
+  for (const isStreaming of [false, true]) {
+    const html = renderToStaticMarkup(withIntl(<UnifiedMarkdown trust="agent" content={content} isStreaming={isStreaming} />));
+    expect(html).toContain(`href="${pr}"`);
+    const prAnchor = html.match(/<a\b[^>]*href="https:\/\/github\.com\/example\/project\/pull\/13265"[^>]*>([\s\S]*?)<\/a>/)?.[1] ?? '';
+    expect(prAnchor.replace(/<svg[\s\S]*?<\/svg>/g, '').replace(/<[^>]*>/g, '')).toBe('GitHub: PR #13265');
+    expect(html).toContain(`href="${demo}"`);
+    const demoAnchor = html.match(/<a\b[^>]*href="https:\/\/github\.com\/user-attachments[^"]*"[^>]*>([\s\S]*?)<\/a>/)?.[1] ?? '';
+    expect(demoAnchor.replace(/<[^>]*>/g, '')).toBe('demo video');
+    expect(html.replace(/<[^>]*>/g, '')).toContain('Normal prose stays readable.');
+    expect(html).not.toContain('|PR');
+    expect(html).not.toContain('|demo');
+    expect(html).not.toContain('&lt;https:');
+  }
+});
+
+test('internal Kortix session Slack labels preserve curly apostrophe and all label words', () => {
+  const href = 'https://kortix.com/workspaces/00000000-0000-4000-8000-000000000000/sessions/11111111-1111-4111-8111-111111111111';
+  for (const isStreaming of [false, true]) {
+    const html = renderToStaticMarkup(withIntl(<UnifiedMarkdown trust="agent" content={`<${href}|Engineering’s report and evidence>`} isStreaming={isStreaming} />));
+    expect(html).toContain(`href="${href}"`);
+    expect(html.replace(/<[^>]*>/g, '')).toContain('Engineering’s report and evidence');
+    expect(html).not.toContain('|Engineering');
+    expect(html).not.toContain('&lt;https:');
+  }
+});

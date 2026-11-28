@@ -27748,7 +27748,16 @@
       "memoryEmpty": "还没有页面。智能体会在工作时添加。",
       "unsaved": "未保存的更改",
       "deleteHint": "其中的会话会保留，并移出此空间。",
-      "descriptionPlaceholder": "此空间的用途"
+      "descriptionPlaceholder": "此空间的用途",
+      "memoryAuto": "自动更新",
+      "memoryUpdatedAgo": "{time}更新",
+      "memoryNeverUpdated": "尚未更新",
+      "memoryUpdateNow": "立即更新",
+      "memoryUpdateHint": "保存此空间最近会话中的决定和收获",
+      "memoryUpdated": "{count, plural, other {记忆已更新：# 个页面}}",
+      "memoryUpToDate": "记忆已是最新",
+      "memoryUpdateFailed": "无法更新记忆",
+      "memoryAutoFailed": "无法更改自动更新"
     }
   },
   "sessionShare": {

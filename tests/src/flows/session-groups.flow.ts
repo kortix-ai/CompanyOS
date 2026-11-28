@@ -31,6 +31,7 @@ const ROUTES = {
   assign: 'PUT /v1/projects/:projectId/sessions/:sessionId/group',
   sharing: 'PUT /v1/projects/:projectId/session-groups/:groupId/sharing',
   tabs: 'PUT /v1/projects/:projectId/session-groups/:groupId/tabs',
+  memoryUpdate: 'POST /v1/projects/:projectId/session-groups/:groupId/memory/update',
 };
 const MEMORY_ROUTES = {
   layer: 'GET /v1/projects/:projectId/memory/layers/:layerKey',
@@ -51,6 +52,7 @@ const GROUP = '/v1/workspaces/:projectId/session-groups/:groupId';
 const ORDER = '/v1/workspaces/:projectId/session-groups/order';
 const SHARING = '/v1/workspaces/:projectId/session-groups/:groupId/sharing';
 const TABS = '/v1/workspaces/:projectId/session-groups/:groupId/tabs';
+const MEMORY_UPDATE = '/v1/workspaces/:projectId/session-groups/:groupId/memory/update';
 const ASSIGN = '/v1/workspaces/:projectId/sessions/:sessionId/group';
 const SESSIONS = '/v1/workspaces/:projectId/sessions';
 const SESSION = '/v1/workspaces/:projectId/sessions/:sessionId';
@@ -503,7 +505,7 @@ flow('SGRP-4', createMeta([ROUTES.create, SESSION_ROUTES.create, SESSION_ROUTES.
   }
 });
 
-flow('SGRP-8', flowMeta('session-groups', [ROUTES.create, ROUTES.update, ROUTES.list, ROUTES.sharing, ...Object.values(MEMORY_ROUTES)], { timeoutMs: 120_000 }), async (ctx) => {
+flow('SGRP-8', flowMeta('session-groups', [ROUTES.create, ROUTES.update, ROUTES.list, ROUTES.sharing, ROUTES.memoryUpdate, ...Object.values(MEMORY_ROUTES)], { timeoutMs: 120_000 }), async (ctx) => {
   const { team, project, world } = await openWorld(ctx);
   const params = { projectId: project.id };
   const ana = await team.addMember('member');
@@ -553,12 +555,63 @@ flow('SGRP-8', flowMeta('session-groups', [ROUTES.create, ROUTES.update, ROUTES.
       await world.setFeature('session_groups', true);
     });
 
+    const spaceParams = { params: { ...params, groupId: space } };
+    await ctx.step('automatic memory: on by default with no update yet; its creator turns it off (PATCH alone, read back in the list and stored) and on again', async () => {
+      (await world.owner.get(GROUPS, { params })).status(200).body().schema(SessionGroupListSchema);
+      const before = (await world.owner.get(GROUPS, { params })).json<{ groups: Array<Group & { memory_auto_update: boolean; memory_updated_at: string | null }> }>().groups.find((g) => g.group_id === space);
+      if (before?.memory_auto_update !== true || before.memory_updated_at !== null) fail('a new space is not on with no update', before);
+      (await world.owner.patch(GROUP, { memory_auto_update: false }, spaceParams)).status(200).body().schema(SessionGroupSchema).has('$.memory_auto_update', false).has('$.name', 'Board memory');
+      const listed = (await world.owner.get(GROUPS, { params })).json<{ groups: Array<Group & { memory_auto_update: boolean }> }>().groups.find((g) => g.group_id === space);
+      if (listed?.memory_auto_update !== false) fail('the list does not read memory_auto_update back', listed);
+      const { rows } = await world.db.query('SELECT memory_auto_update FROM kortix.project_session_groups WHERE group_id = $1', [space]);
+      if (rows[0]?.memory_auto_update !== false) fail('memory_auto_update is not stored', rows);
+      (await world.owner.patch(GROUP, { memory_auto_update: 'no' }, spaceParams)).status(400);
+      (await world.owner.patch(GROUP, { memory_auto_update: true }, spaceParams)).status(200).body().has('$.memory_auto_update', true);
+    });
+
+    await ctx.step('a member it is shared with cannot turn automatic memory off → 403 group_manage_forbidden, nothing changes; a member it is not shared with → 404', async () => {
+      (await asAna.patch(GROUP, { memory_auto_update: false }, spaceParams)).status(403).body().has('$.code', 'group_manage_forbidden');
+      (await asBob.patch(GROUP, { memory_auto_update: false }, spaceParams)).status(404).body().has('$.code', 'group_not_found');
+      const { rows } = await world.db.query('SELECT memory_auto_update FROM kortix.project_session_groups WHERE group_id = $1', [space]);
+      if (rows[0]?.memory_auto_update !== true) fail('a refused PATCH changed memory_auto_update', rows);
+    });
+
+    await ctx.step('POST memory/update: a member it is not shared with → 404 group_not_found; with session_groups off → 403 feature_disabled', async () => {
+      (await asBob.post(MEMORY_UPDATE, {}, spaceParams)).status(404).body().has('$.code', 'group_not_found');
+      await world.setFeature('session_groups', false);
+      (await world.owner.post(MEMORY_UPDATE, {}, spaceParams)).status(403).body().has('$.code', 'feature_disabled');
+      await world.setFeature('session_groups', true);
+    });
+
     if (!(await hasStorage(world))) {
       await ctx.step('no drive storage on this target: creating a space memory page → 503 drive_storage_unavailable', async () => {
         (await asAna.post(LAYER_PAGES, { type: 'decisions', title: 'Board deck format' }, layer)).status(503).body().has('$.code', 'drive_storage_unavailable');
       });
-      return;
     }
+
+    // With no session in the space nothing is read and the Drive is never touched, with or without storage.
+    await ctx.step('POST memory/update with no session in the space: 200, nothing read or written, memory_updated_at is the run time (stored, read back in the list); a member it is shared with may run it; no lease is left behind', async () => {
+      for (const client of [world.owner, asAna]) {
+        const r = await client.post(MEMORY_UPDATE, {}, spaceParams);
+        r.status(200).body().has('$.updated_pages', 0).has('$.sessions', 0);
+        const done = r.json<{ memory_updated_at: string | null }>();
+        if (!done.memory_updated_at || Number.isNaN(Date.parse(done.memory_updated_at))) fail('memory_updated_at is not the run time', done);
+      }
+      const { rows } = await world.db.query('SELECT memory_updated_at, memory_update_lease_until FROM kortix.project_session_groups WHERE group_id = $1', [space]);
+      if (rows[0]?.memory_updated_at === null) fail('memory_updated_at is not stored', rows);
+      if (rows[0]?.memory_update_lease_until !== null) fail('the update left its lease behind', rows);
+      const listed = (await world.owner.get(GROUPS, { params })).json<{ groups: Array<Group & { memory_updated_at: string | null }> }>().groups.find((g) => g.group_id === space);
+      if (!listed?.memory_updated_at) fail('the list does not read memory_updated_at back', listed);
+    });
+
+    await ctx.step('POST memory/update while another update holds the space lease → 409 memory_update_running; once the lease expires it runs again', async () => {
+      await world.db.query("UPDATE kortix.project_session_groups SET memory_update_lease_until = now() + interval '5 minutes' WHERE group_id = $1", [space]);
+      (await world.owner.post(MEMORY_UPDATE, {}, spaceParams)).status(409).body().has('$.code', 'memory_update_running');
+      await world.db.query("UPDATE kortix.project_session_groups SET memory_update_lease_until = now() - interval '1 second' WHERE group_id = $1", [space]);
+      (await world.owner.post(MEMORY_UPDATE, {}, spaceParams)).status(200);
+    });
+
+    if (!(await hasStorage(world))) return;
 
     await ctx.step('a member it is shared with creates a page (201, the Memory folder is made), the creator lists it and reads it back; a non-member → 404', async () => {
       const created = await asAna.post(LAYER_PAGES, { type: 'decisions', title: 'Board deck format', body: 'Ten slides at most.' }, layer);

@@ -27748,7 +27748,16 @@
       "memoryEmpty": "Još nema stranica. Agenti ih dodaju dok rade.",
       "unsaved": "Nesačuvane izmene",
       "deleteHint": "Njegove sesije ostaju i izlaze iz prostora.",
-      "descriptionPlaceholder": "Čemu ovaj prostor služi"
+      "descriptionPlaceholder": "Čemu ovaj prostor služi",
+      "memoryAuto": "Ažuriraj automatski",
+      "memoryUpdatedAgo": "Ažurirano {time}",
+      "memoryNeverUpdated": "Još nije ažurirano",
+      "memoryUpdateNow": "Ažuriraj sada",
+      "memoryUpdateHint": "Čuva ono što su nedavne sesije u ovom prostoru odlučile i naučile",
+      "memoryUpdated": "{count, plural, one {Memorija ažurirana: # stranica} few {Memorija ažurirana: # stranice} other {Memorija ažurirana: # stranica}}",
+      "memoryUpToDate": "Memorija je ažurna",
+      "memoryUpdateFailed": "Ažuriranje memorije nije uspelo",
+      "memoryAutoFailed": "Automatsko ažuriranje nije moglo da se promeni"
     }
   },
   "sessionShare": {

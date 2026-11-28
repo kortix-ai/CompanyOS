@@ -61,6 +61,14 @@ export interface ProjectSessionGroup {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  /**
+   * Kortix files durable facts (decisions, people, workstreams, playbooks)
+   * from the group's idle sessions into its memory on its own. On by default;
+   * only whoever manages the group changes it. Absent on older APIs.
+   */
+  memory_auto_update?: boolean;
+  /** When an update last wrote a page into the group's memory; null before the first. Absent on older APIs. */
+  memory_updated_at?: string | null;
   /** In a list: the group's top-level sessions the caller can open. Absent on older APIs and on single-group responses. */
   session_count?: number;
   /** In a list: when the newest of those sessions last changed; null with none. Absent on older APIs and on single-group responses. */
@@ -157,8 +165,41 @@ export interface UpdateWorkspaceSessionGroupInput {
   description?: string | null;
   /** At most 8000 characters after trimming; `null` or empty clears them. */
   instructions?: string | null;
+  /**
+   * Turn automatic memory updates on or off. Whoever manages the group only:
+   * anyone else rejects with 403 `group_manage_forbidden`.
+   */
+  memory_auto_update?: boolean;
   /** The new icon; `null` takes it off. A bad value rejects with 400 `invalid_icon`. */
   icon?: { emoji: string } | { glyph: { name: string; color: string } } | null;
+}
+
+/** What one {@link updateWorkspaceSessionGroupMemory} did. */
+export interface WorkspaceSessionGroupMemoryUpdate {
+  /** The memory pages it created or changed. */
+  updated_pages: number;
+  /** The sessions whose new messages it read. */
+  sessions: number;
+  /** When an update last wrote a page; null before the first. */
+  memory_updated_at: string | null;
+}
+
+/**
+ * Update a group's memory now: the new messages of its 10 most recently
+ * active sessions (changed in the last 3 days, since the last update) become
+ * at most 6 pages of the group's memory (layer key = `group_id`). Anyone who
+ * sees the group. Rejects with an `ApiError`: 503 `memory_unavailable`
+ * (no Files storage), 503 `memory_model_unavailable` (no model, or the model
+ * call failed), 409 `memory_update_running`, 404 `group_not_found`.
+ */
+export async function updateWorkspaceSessionGroupMemory(projectId: string, groupId: string): Promise<WorkspaceSessionGroupMemoryUpdate> {
+  return unwrap(
+    await backendApi.post<WorkspaceSessionGroupMemoryUpdate>(
+      `/workspaces/${projectId}/session-groups/${groupId}/memory/update`,
+      undefined,
+      { showErrors: false },
+    ),
+  );
 }
 
 /**

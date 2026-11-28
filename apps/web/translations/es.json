@@ -27748,7 +27748,16 @@
       "memoryEmpty": "Aún no hay páginas. Los agentes las añaden mientras trabajan.",
       "unsaved": "Cambios sin guardar",
       "deleteHint": "Sus sesiones se conservan y salen del espacio.",
-      "descriptionPlaceholder": "Para qué sirve este espacio"
+      "descriptionPlaceholder": "Para qué sirve este espacio",
+      "memoryAuto": "Actualizar automáticamente",
+      "memoryUpdatedAgo": "Actualizado {time}",
+      "memoryNeverUpdated": "Aún sin actualizar",
+      "memoryUpdateNow": "Actualizar ahora",
+      "memoryUpdateHint": "Guarda lo que las sesiones recientes de este espacio decidieron y aprendieron",
+      "memoryUpdated": "{count, plural, one {Memoria actualizada: # página} other {Memoria actualizada: # páginas}}",
+      "memoryUpToDate": "La memoria está al día",
+      "memoryUpdateFailed": "No se pudo actualizar la memoria",
+      "memoryAutoFailed": "No se pudo cambiar la actualización automática"
     }
   },
   "sessionShare": {

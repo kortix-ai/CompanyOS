@@ -256,7 +256,7 @@ export function SpaceSettingsModal({
                 forceMount={memoryOpened ? true : undefined}
                 className="flex min-h-0 flex-1 flex-col overflow-y-auto data-[state=inactive]:hidden"
               >
-                {memoryOpened ? <SpaceMemoryPane projectId={projectId} groupId={space.group_id} place={space.name} onDraftChange={setMemoryDraft} /> : null}
+                {memoryOpened ? <SpaceMemoryPane projectId={projectId} space={space} onDraftChange={setMemoryDraft} /> : null}
               </TabsContent>
 
               {/* Save shows only while there is something to save, over whichever pane is open. */}

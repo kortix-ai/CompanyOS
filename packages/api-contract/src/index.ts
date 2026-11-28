@@ -1796,6 +1796,14 @@ export const SessionGroupSchema = z
      * system and safety instructions.
      */
     instructions: z.string().nullable(),
+    /**
+     * Kortix files durable facts (decisions, people, workstreams, playbooks)
+     * from the group's idle sessions into its memory on its own. On by
+     * default; only whoever manages the group turns it off.
+     */
+    memory_auto_update: z.boolean(),
+    /** When an update last wrote a page into the group's memory; null before the first. */
+    memory_updated_at: z.string().nullable(),
     /** The group's icon. Null on a group created before icons: clients draw `suggestSpaceIcon(name)`. */
     icon: SessionGroupIconSchema.nullable(),
     /**
@@ -1853,14 +1861,35 @@ export const SessionGroupUpdateInputSchema = z
     name: SessionGroupNameSchema.optional(),
     description: SessionGroupDescriptionSchema.optional(),
     instructions: SessionGroupInstructionsSchema.optional(),
+    /** Turn automatic memory updates on or off. Whoever manages the group only. */
+    memory_auto_update: z.boolean().optional(),
     icon: SessionGroupIconSchema.nullable().optional(),
   })
   .strict()
   .refine(
-    (input) => input.name !== undefined || input.description !== undefined || input.instructions !== undefined || input.icon !== undefined,
-    'Give name, description, instructions, icon, or any of them',
+    (input) =>
+      input.name !== undefined ||
+      input.description !== undefined ||
+      input.instructions !== undefined ||
+      input.memory_auto_update !== undefined ||
+      input.icon !== undefined,
+    'Give name, description, instructions, memory_auto_update, icon, or any of them',
   );
 export type SessionGroupUpdateInput = z.infer<typeof SessionGroupUpdateInputSchema>;
+
+/**
+ * `POST …/session-groups/:id/memory/update`: what one memory update did.
+ * `sessions` = the sessions whose new messages it read (their sync mark moved);
+ * `updated_pages` = the pages it created or changed.
+ */
+export const SessionGroupMemoryUpdateResultSchema = z
+  .object({
+    updated_pages: z.number().int().nonnegative(),
+    sessions: z.number().int().nonnegative(),
+    memory_updated_at: z.string().nullable(),
+  })
+  .strict();
+export type SessionGroupMemoryUpdateResult = z.infer<typeof SessionGroupMemoryUpdateResultSchema>;
 
 /** The project's groups in their new order: every group id, each once. */
 export const SessionGroupOrderInputSchema = z

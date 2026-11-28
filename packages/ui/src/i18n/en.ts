@@ -11014,7 +11014,16 @@ const catalog = {
       "memoryEmpty": "No pages yet. Agents add them as they work.",
       "unsaved": "Unsaved changes",
       "deleteHint": "Its sessions stay and leave the space.",
-      "descriptionPlaceholder": "What this space is for"
+      "descriptionPlaceholder": "What this space is for",
+      "memoryAuto": "Update automatically",
+      "memoryUpdatedAgo": "Updated {time}",
+      "memoryNeverUpdated": "Not updated yet",
+      "memoryUpdateNow": "Update now",
+      "memoryUpdateHint": "Save what recent sessions in this space decided and learned",
+      "memoryUpdated": "{count, plural, one {Memory updated: # page} other {Memory updated: # pages}}",
+      "memoryUpToDate": "Memory is up to date",
+      "memoryUpdateFailed": "Could not update memory",
+      "memoryAutoFailed": "Could not change automatic updates"
     }
   },
   "sessionShare": {

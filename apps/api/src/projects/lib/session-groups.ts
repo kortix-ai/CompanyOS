@@ -122,7 +122,7 @@ export async function createSessionGroup(input: {
 export async function updateSessionGroup(
   projectId: string,
   groupId: string,
-  input: { name?: string; description?: string | null; instructions?: string | null; icon?: SessionGroupIcon | null },
+  input: { name?: string; description?: string | null; instructions?: string | null; memory_auto_update?: boolean; icon?: SessionGroupIcon | null },
 ): Promise<{ ok: true; group: SessionGroupRow } | { ok: false; code: 'group_name_taken' | 'group_not_found' }> {
   try {
     const [group] = await db
@@ -131,6 +131,7 @@ export async function updateSessionGroup(
         ...(input.name !== undefined ? { name: input.name } : {}),
         ...(input.description !== undefined ? { description: input.description || null } : {}),
         ...(input.instructions !== undefined ? { instructions: input.instructions || null } : {}),
+        ...(input.memory_auto_update !== undefined ? { memoryAutoUpdate: input.memory_auto_update } : {}),
         ...(input.icon !== undefined ? { icon: input.icon } : {}),
         updatedAt: new Date(),
       })

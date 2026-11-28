@@ -27748,7 +27748,16 @@
       "memoryEmpty": "まだページはありません。エージェントが作業しながら追加します。",
       "unsaved": "未保存の変更",
       "deleteHint": "セッションは残り、スペースから外れます。",
-      "descriptionPlaceholder": "このスペースの目的"
+      "descriptionPlaceholder": "このスペースの目的",
+      "memoryAuto": "自動で更新",
+      "memoryUpdatedAgo": "{time}に更新",
+      "memoryNeverUpdated": "まだ更新されていません",
+      "memoryUpdateNow": "今すぐ更新",
+      "memoryUpdateHint": "このスペースの最近のセッションで決まったことや学んだことを保存します",
+      "memoryUpdated": "{count, plural, other {メモリーを更新しました：#ページ}}",
+      "memoryUpToDate": "メモリーは最新です",
+      "memoryUpdateFailed": "メモリーを更新できませんでした",
+      "memoryAutoFailed": "自動更新を変更できませんでした"
     }
   },
   "sessionShare": {

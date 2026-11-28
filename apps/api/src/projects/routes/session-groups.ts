@@ -17,6 +17,7 @@ import {
   SessionGroupAssignmentSchema,
   SessionGroupCreateInputSchema,
   SessionGroupListSchema,
+  SessionGroupMemoryUpdateResultSchema,
   SessionGroupOrderInputSchema,
   SessionGroupSchema,
   SessionGroupSharingInputSchema,
@@ -50,6 +51,7 @@ import {
   type SessionGroupRow,
 } from '../lib/session-groups';
 import { serializeTabs } from '../lib/project-spaces';
+import { updateSpaceMemory } from '../lib/space-memory-update/service';
 import { canManageGroup, canSeeGroup, groupMemberAddedAt, groupMemberIds, type GroupViewer } from '../../shared/session-group-access';
 import { groupViewerFor } from '../lib/session-group-viewer';
 import { resolveUserIdentities, type UserIdentity } from '../lib/user-identity';
@@ -106,6 +108,8 @@ function serializeGroup(row: SessionGroupRow, memberIds: readonly string[], view
     name: row.name,
     description: row.description,
     instructions: row.instructions,
+    memory_auto_update: row.memoryAutoUpdate,
+    memory_updated_at: row.memoryUpdatedAt?.toISOString() ?? null,
     icon: normalizeSessionGroupIcon(row.icon),
     visibility: row.visibility === 'project' ? 'project' : 'private',
     member_ids: [...memberIds],
@@ -154,6 +158,25 @@ const FORBIDDEN_INSTRUCTIONS = {
  * person writes them: an agent that read an injected page must not turn it
  * into a standing instruction for every other member's session.
  */
+/** Automatic memory writes what every member's sessions read, so whoever manages the space turns it on or off, like its instructions. */
+const FORBIDDEN_MEMORY_AUTO = {
+  error: 'Only the space\'s creator or a workspace admin can turn automatic memory on or off.',
+  code: 'group_manage_forbidden',
+} as const;
+const SESSION_BOUND_MEMORY = {
+  error: 'A person changes a space\'s memory settings or runs its memory update. A session cannot.',
+  code: 'session_bound_caller',
+} as const;
+const MEMORY_UNAVAILABLE = {
+  error: 'Space memory needs Files storage, and this workspace has none right now.',
+  code: 'memory_unavailable',
+} as const;
+const MEMORY_MODEL_UNAVAILABLE = {
+  error: 'No model can update this space\'s memory right now. Connect a model or try again later.',
+  code: 'memory_model_unavailable',
+} as const;
+const MEMORY_UPDATE_FAILED = { error: 'The memory update failed. Try again.', code: 'memory_update_failed' } as const;
+const MEMORY_UPDATE_RUNNING = { error: 'This space\'s memory is being updated. Try again in a minute.', code: 'memory_update_running' } as const;
 const SESSION_BOUND_INSTRUCTIONS = {
   error: 'A person sets a space\'s instructions, in its settings. A session cannot.',
   code: 'session_bound_caller',
@@ -304,7 +327,7 @@ export function registerSessionGroupsRoutes(): void {
       path: '/{workspaceId}/session-groups/{groupId}',
       tags: ['sessions'],
       summary: 'Rename a session group, or change its description, instructions or icon',
-      description: 'Any member who sees the group may change its name, description and icon. Only whoever manages it (its creator, or an owner or admin under session oversight) may set `instructions`: 403 `group_manage_forbidden` for anyone else, and 403 `session_bound_caller` for a session-bound credential. Instructions are at most 8,000 characters; empty or null clears them. They reach every session of the group at turn start, below the system and safety instructions.',
+      description: 'Any member who sees the group may change its name, description and icon. Only whoever manages it (its creator, or an owner or admin under session oversight) may set `instructions` and `memory_auto_update`: 403 `group_manage_forbidden` for anyone else, and 403 `session_bound_caller` for a session-bound credential. Instructions are at most 8,000 characters; empty or null clears them. They reach every session of the group at turn start, below the system and safety instructions.',
       ...auth,
       request: {
         params: groupParams,
@@ -320,11 +343,46 @@ export function registerSessionGroupsRoutes(): void {
       const body = c.req.valid('json');
       if (body.instructions !== undefined && callerKortixSessionId(c) !== null) return c.json(SESSION_BOUND_INSTRUCTIONS, 403);
       if (body.instructions !== undefined && !canManageGroup(found.group, found.viewer)) return c.json(FORBIDDEN_INSTRUCTIONS, 403);
+      if (body.memory_auto_update !== undefined && callerKortixSessionId(c) !== null) return c.json(SESSION_BOUND_MEMORY, 403);
+      if (body.memory_auto_update !== undefined && !canManageGroup(found.group, found.viewer)) return c.json(FORBIDDEN_MEMORY_AUTO, 403);
       const icon = body.icon == null ? body.icon : normalizeSessionGroupIcon(body.icon);
       if (body.icon != null && icon === null) return c.json(INVALID_ICON, 400);
       const result = await updateSessionGroup(loaded.row.projectId, found.group.groupId, { ...body, icon });
       if (!result.ok) return result.code === 'group_not_found' ? c.json(GROUP_NOT_FOUND, 404) : c.json(NAME_TAKEN, 409);
       return c.json(serializeGroup(result.group, found.memberIds, found.viewer, await profilesOf([[result.group, found.memberIds]])), 200);
+    },
+  );
+
+  projectsApp.openapi(
+    createRoute({
+      method: 'post',
+      path: '/{workspaceId}/session-groups/{groupId}/memory/update',
+      tags: ['sessions'],
+      summary: 'Update a session group\'s memory now',
+      description:
+        'Reads the new messages of the group\'s sessions (the 10 with the newest activity in the last 3 days that changed since the last update, no idle wait), asks one model which durable facts belong in the group memory (`/Spaces/<group_id>/Memory`, layer key `group_id`) and writes at most 6 pages. Each read session\'s sync mark moves, so nothing is read twice. A session whose owner no longer sees the group is never read. Anyone who sees the group may run it, whatever `memory_auto_update` says; 403 `session_bound_caller` for a session-bound credential. 503 `memory_unavailable` without Files storage, 503 `memory_model_unavailable` when no model serves, the model call failed or its reply was not the JSON shape (no mark moves then), 409 `memory_update_running` while another update of the group runs on any server (a shared lease), 500 `memory_update_failed` on an unexpected failure.',
+      ...auth,
+      request: { params: groupParams },
+      responses: { 200: json(SessionGroupMemoryUpdateResultSchema, 'What the update did'), ...errors(403, 404, 409, 500, 503) },
+    }),
+    async (c) => {
+      const loaded = await loadGroupsProject(c, 'session');
+      if (loaded instanceof Response) return loaded;
+      if (callerKortixSessionId(c) !== null) return c.json(SESSION_BOUND_MEMORY, 403);
+      const found = await loadGroup(c, loaded, 'see');
+      if (found instanceof Response) return found;
+      const outcome = await updateSpaceMemory({ projectId: loaded.row.projectId, groupId: found.group.groupId, manual: true, actorUserId: loaded.userId });
+      if (!outcome.ok) {
+        if (outcome.reason === 'not_found') return c.json(GROUP_NOT_FOUND, 404);
+        if (outcome.reason === 'busy' || outcome.reason === 'lease_lost') return c.json(MEMORY_UPDATE_RUNNING, 409);
+        if (outcome.reason === 'drive_unavailable') return c.json(MEMORY_UNAVAILABLE, 503);
+        if (outcome.reason === 'error') return c.json(MEMORY_UPDATE_FAILED, 500);
+        return c.json(MEMORY_MODEL_UNAVAILABLE, 503);
+      }
+      return c.json(
+        { updated_pages: outcome.updatedPages, sessions: outcome.sessions, memory_updated_at: outcome.memoryUpdatedAt?.toISOString() ?? null },
+        200,
+      );
     },
   );
 

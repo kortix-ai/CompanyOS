@@ -2017,6 +2017,14 @@ export const projectSessionGroups = kortixSchema.table(
     instructions: text('instructions'),
     /** `private` | `project` (check below). */
     visibility: text('visibility').default('private').notNull(),
+    /** The leader job (`worker/jobs/space-memory.ts`) files durable facts from the space's idle sessions into its memory. On by default; a manager turns it off. */
+    memoryAutoUpdate: boolean('memory_auto_update').default(true).notNull(),
+    /** When an update (the job or `POST …/memory/update`) last wrote a page into the space memory; null before the first. */
+    memoryUpdatedAt: timestamp('memory_updated_at', { withTimezone: true }),
+    /** A memory update of the space runs until this time (one at a time across every API process); null or past: none runs. */
+    memoryUpdateLeaseUntil: timestamp('memory_update_lease_until', { withTimezone: true }),
+    /** After a failed automatic update the job leaves the space alone until this time; a person's update ignores it. */
+    memoryUpdateRetryAt: timestamp('memory_update_retry_at', { withTimezone: true }),
     /** The tabs after Sessions, in order (at most 20): a channel's tab shape (`ProjectSpaceTabRecord`, kinds file|folder|artifact|app|link). */
     tabs: jsonb('tabs').$type<ProjectSpaceTabRecord[]>().default(sql`'[]'::jsonb`).notNull(),
     /** `{ emoji }` or `{ glyph: { name, color } }` (the API checks it); null: clients draw the icon `suggestSpaceIcon` gives the name. */

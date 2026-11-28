@@ -8,7 +8,7 @@ import { and, eq } from 'drizzle-orm';
 import { projectFeatureFlagEnabled } from '../../feature-flags/for-project';
 import { hasAccountSessionOversight } from '../../iam/session-oversight';
 import { db } from '../../shared/db';
-import { type GroupViewer, sessionSharedThroughGroup, sharedGroupIdsFor } from '../../shared/session-group-access';
+import { canSeeGroup, type GroupViewer, sessionSharedThroughGroup, sharedGroupIdsFor } from '../../shared/session-group-access';
 
 export async function groupViewerFor(userId: string, accountId: string): Promise<GroupViewer> {
   return { userId, oversight: await hasAccountSessionOversight(userId, accountId).catch(() => false) };
@@ -29,4 +29,24 @@ export async function sessionSharedThroughSpace(projectId: string, userId: strin
     .where(and(eq(projectSessions.sessionId, sessionId), eq(projectSessions.projectId, projectId)))
     .limit(1);
   return row ? sessionSharedThroughGroup(projectId, userId, row) : false;
+}
+
+/**
+ * The owner of a session filed in a Space still sees the Space (`canSeeGroup`).
+ * A session no person started (`ownerId` null: a trigger, a backend caller)
+ * has nobody to remove, so it keeps its Space. Account session oversight is
+ * read only when membership does not already decide it.
+ */
+export async function sessionOwnerSeesGroup(
+  group: { visibility: string; createdBy: string | null },
+  ownerId: string | null,
+  ownerIsMember: boolean,
+  accountId: string | null,
+  oversight: (userId: string, accountId: string) => Promise<boolean> = (userId, account) =>
+    hasAccountSessionOversight(userId, account).catch(() => false),
+): Promise<boolean> {
+  if (!ownerId) return true;
+  const members = ownerIsMember ? [ownerId] : [];
+  if (canSeeGroup(group, members, { userId: ownerId, oversight: false })) return true;
+  return !!accountId && canSeeGroup(group, members, { userId: ownerId, oversight: await oversight(ownerId, accountId) });
 }

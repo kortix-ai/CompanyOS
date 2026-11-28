@@ -10,6 +10,7 @@ import { isMyKortixAgentName, sessionGroupDriveFolder } from '@kortix/shared';
 import { sql } from 'drizzle-orm';
 import { MEMORY_DIR_NAME } from '../../drives/folders';
 import { projectFeatureFlagEnabled } from '../../feature-flags/for-project';
+import { sessionOwnerSeesGroup } from './session-group-viewer';
 import { logger } from '../../lib/logger';
 import { db } from '../../shared/db';
 import { memberDisplayName } from './project-space-members';
@@ -41,6 +42,13 @@ export interface SessionWhereRow {
   group_instructions?: string | null;
   /** The session sandbox's `metadata.driveMounts` (drives/service.ts records it): the folders its box mounts. */
   drive_mounts?: unknown;
+  /** The person the session belongs to (`project_sessions.created_by`); null for a session no person started. */
+  owner_id?: string | null;
+  account_id?: string | null;
+  group_visibility?: string | null;
+  group_created_by?: string | null;
+  /** The owner is in the space's `project_session_group_members`. */
+  owner_is_member?: boolean | null;
 }
 
 /**
@@ -147,7 +155,7 @@ export function sessionWhereText(row: SessionWhereRow): string {
  */
 export async function readSessionWhere(projectId: string, sessionId: string): Promise<SessionWhereRow | null> {
   const rows = (await db.execute(sql`
-    SELECT s.space_id,
+    SELECT s.space_id, s.created_by AS owner_id, s.account_id,
            sp.kind::text AS space_kind, sp.slug AS space_slug, sp.name AS space_name, sp.dm_agent_name AS space_dm_agent,
            s.metadata->>'source' AS source,
            s.metadata->>'trigger_slug' AS trigger_slug,
@@ -156,6 +164,10 @@ export async function readSessionWhere(projectId: string, sessionId: string): Pr
            u.email AS person_email,
            p.session_id AS parent_session_id,
            g.group_id, g.name AS group_name, g.description AS group_description, g.instructions AS group_instructions,
+           g.visibility AS group_visibility, g.created_by AS group_created_by,
+           (g.group_id IS NOT NULL AND s.created_by IS NOT NULL AND EXISTS (
+              SELECT 1 FROM kortix.project_session_group_members m WHERE m.group_id = g.group_id AND m.user_id = s.created_by
+           )) AS owner_is_member,
            sb.metadata->'driveMounts' AS drive_mounts,
            coalesce(nullif(p.metadata->>'custom_name', ''), nullif(p.metadata->>'name', ''), nullif(p.metadata->>'chat_root_text', '')) AS parent_title
       FROM kortix.project_sessions s
@@ -345,8 +357,18 @@ export async function sessionWhereTurn(
 ): Promise<{ system: string; space: { kind: 'channel' | 'dm'; dmAgent: string | null } | null; spaceBrief: string | null } | null> {
   const found = await readSessionWhere(projectId, sessionId);
   if (!found) return null;
-  // A space shows only while `session_groups` is on; the flag is read only for a session in one.
-  const grouped = !!found.group_id && (await projectFeatureFlagEnabled(projectId, 'session_groups'));
+  // A space shows only while `session_groups` is on (the flag is read only for a session in one),
+  // and only while the session's owner still sees it: a person removed from a private space keeps
+  // their sessions, but no longer its instructions or its memory.
+  const grouped =
+    !!found.group_id &&
+    (await projectFeatureFlagEnabled(projectId, 'session_groups')) &&
+    (await sessionOwnerSeesGroup(
+      { visibility: found.group_visibility ?? 'private', createdBy: found.group_created_by ?? null },
+      found.owner_id ?? null,
+      !!found.owner_is_member,
+      found.account_id ?? null,
+    ));
   const row = grouped ? found : { ...found, group_id: null, group_name: null, group_description: null, group_instructions: null };
   // The memory folder is listed only when the box mounts the space's folder: the agent can open nothing else.
   const memoryFiles = row.group_id && spaceMountPath(row) ? await spaceMemoryFilesForTurn(projectId, row.group_id) : null;

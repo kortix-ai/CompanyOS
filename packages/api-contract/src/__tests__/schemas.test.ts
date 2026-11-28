@@ -40,6 +40,7 @@ import {
   SessionGroupSchema,
   SessionGroupSharingInputSchema,
   SessionGroupUpdateInputSchema,
+  SessionGroupMemoryUpdateResultSchema,
   SESSION_GROUP_DESCRIPTION_MAX,
   SESSION_GROUP_NAME_MAX,
   SessionScopeInputSchema,
@@ -472,6 +473,8 @@ describe('session group contracts', () => {
     name: 'Store A',
     description: null,
     instructions: null,
+    memory_auto_update: true,
+    memory_updated_at: null,
     icon: { glyph: { name: 'Storefront', color: 'blue' } },
     visibility: 'private' as const,
     member_ids: [],
@@ -510,6 +513,15 @@ describe('session group contracts', () => {
     expect(SessionGroupCreateInputSchema.safeParse({ name: 'A', description: 'x'.repeat(SESSION_GROUP_DESCRIPTION_MAX + 1) }).success).toBe(false);
     expect(SessionGroupUpdateInputSchema.parse({ description: null })).toEqual({ description: null });
     expect(SessionGroupUpdateInputSchema.safeParse({}).success).toBe(false);
+  });
+
+  test('memory_auto_update is a group field and alone is a valid update; the update result has its three fields', () => {
+    expect(SessionGroupUpdateInputSchema.parse({ memory_auto_update: false })).toEqual({ memory_auto_update: false });
+    expect(SessionGroupUpdateInputSchema.safeParse({ memory_auto_update: 'no' }).success).toBe(false);
+    expect(SessionGroupSchema.safeParse({ ...GROUP, memory_auto_update: undefined }).success).toBe(false);
+    expect(SessionGroupSchema.parse({ ...GROUP, memory_updated_at: '2026-11-28T12:00:00.000Z' }).memory_updated_at).toBe('2026-11-28T12:00:00.000Z');
+    expect(SessionGroupMemoryUpdateResultSchema.parse({ updated_pages: 2, sessions: 1, memory_updated_at: null })).toEqual({ updated_pages: 2, sessions: 1, memory_updated_at: null });
+    expect(SessionGroupMemoryUpdateResultSchema.safeParse({ updated_pages: -1, sessions: 1, memory_updated_at: null }).success).toBe(false);
   });
 
   test('instructions are trimmed, at most SESSION_GROUP_INSTRUCTIONS_MAX characters, null clears them, and alone are a valid update', () => {

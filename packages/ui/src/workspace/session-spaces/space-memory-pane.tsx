@@ -1,7 +1,14 @@
 'use client';
 
-import { ApiError } from '@kortix/sdk';
-import { useAddWorkspaceMemoryNote, useWorkspaceMemoryPages } from '@kortix/sdk/react';
+import { ApiError, type ProjectSessionGroup } from '@kortix/sdk';
+import {
+  useAddWorkspaceMemoryNote,
+  useUpdateWorkspaceSessionGroup,
+  useUpdateWorkspaceSessionGroupMemory,
+  useWorkspaceMemoryPages,
+} from '@kortix/sdk/react';
+import { ArrowsClockwiseIcon } from '@phosphor-icons/react';
+import { formatDistanceToNow } from 'date-fns';
 import { useEffect, useId, useState } from 'react';
 
 import { useTranslations } from '../../i18n';
@@ -9,8 +16,10 @@ import { Button } from '../../primitives/button';
 import { ErrorState } from '../../primitives/error-state';
 import Loading from '../../primitives/loading';
 import { Skeleton } from '../../primitives/skeleton';
+import Hint from '../../primitives/hint';
+import { Switch } from '../../primitives/switch';
 import { Textarea } from '../../primitives/textarea';
-import { successToast } from '../../primitives/toast';
+import { errorToast, successToast } from '../../primitives/toast';
 import { MemoryView } from '../memory/memory-view';
 
 /** The API's cap on a note (`MEMORY_LIMITS.note_chars`). */
@@ -27,19 +36,19 @@ const FAILURE_BY_CODE: Record<string, Failure> = { secret_detected: 'secret', la
  */
 export function SpaceMemoryPane({
   projectId,
-  groupId,
-  place,
+  space,
   onDraftChange,
 }: {
   projectId: string;
-  groupId: string;
-  place: string;
+  space: ProjectSessionGroup;
   /** Whether the composer holds an unsaved note, so closing the dialog can ask first. */
   onDraftChange?: (hasDraft: boolean) => void;
 }) {
   const t = useTranslations('sessionSpaces.settings');
   const tMemory = useTranslations('spaces.memory');
+  const groupId = space.group_id;
   const pages = useWorkspaceMemoryPages(projectId, groupId);
+  const controls = <AutoUpdateBar projectId={projectId} space={space} />;
 
   if (pages.isError && !pages.data) {
     return (
@@ -59,7 +68,8 @@ export function SpaceMemoryPane({
   if (pages.data && pages.data.length > 0) {
     return (
       <div className="flex min-h-0 flex-1 flex-col">
-        <MemoryView projectId={projectId} layerKey={groupId} place={place} />
+        <div className="border-b px-6 py-3">{controls}</div>
+        <MemoryView projectId={projectId} layerKey={groupId} place={space.name} />
       </div>
     );
   }
@@ -76,8 +86,65 @@ export function SpaceMemoryPane({
   return (
     <div className="space-y-6 px-6 py-6">
       <p className="text-muted-foreground text-sm text-pretty">{t('memoryDescription')}</p>
+      {controls}
       <NoteComposer projectId={projectId} groupId={groupId} onDraftChange={onDraftChange} />
       <p className="text-muted-foreground border-t pt-4 text-sm">{t('memoryEmpty')}</p>
+    </div>
+  );
+}
+
+/**
+ * How the space's memory keeps itself current: "Update automatically" (the
+ * worker saves what finished sessions decided, learned and agreed; only whoever
+ * manages the space turns it off), when it last ran, and "Update now".
+ */
+function AutoUpdateBar({ projectId, space }: { projectId: string; space: ProjectSessionGroup }) {
+  const t = useTranslations('sessionSpaces.settings');
+  const switchId = useId();
+  const update = useUpdateWorkspaceSessionGroup(projectId);
+  const refresh = useUpdateWorkspaceSessionGroupMemory(projectId);
+  const canManage = space.can_manage === true;
+  const pendingToggle = update.isPending && update.variables?.groupId === space.group_id;
+  const auto = pendingToggle && update.variables?.input.memory_auto_update !== undefined
+    ? update.variables.input.memory_auto_update
+    : space.memory_auto_update !== false;
+  const updatedAt = space.memory_updated_at ? new Date(space.memory_updated_at) : null;
+
+  const toggle = (next: boolean) => {
+    update.mutate(
+      { groupId: space.group_id, input: { memory_auto_update: next } },
+      { onError: () => errorToast(t('memoryAutoFailed')) },
+    );
+  };
+  const runNow = () => {
+    refresh.mutateAsync(space.group_id).then(
+      (result) =>
+        result.updated_pages > 0
+          ? successToast(t('memoryUpdated', { count: result.updated_pages }))
+          : successToast(t('memoryUpToDate')),
+      () => errorToast(t('memoryUpdateFailed')),
+    );
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+      <div className="flex items-center gap-2.5">
+        <Switch id={switchId} checked={auto} disabled={!canManage || pendingToggle} onCheckedChange={toggle} />
+        <label htmlFor={switchId} className="text-foreground text-sm">
+          {t('memoryAuto')}
+        </label>
+      </div>
+      <span className="text-muted-foreground text-xs">
+        {updatedAt ? t('memoryUpdatedAgo', { time: formatDistanceToNow(updatedAt, { addSuffix: true }) }) : t('memoryNeverUpdated')}
+      </span>
+      <Hint label={t('memoryUpdateHint')}>
+        <Button variant="outline" size="sm" className="ml-auto gap-1.5" disabled={refresh.isPending} onClick={runNow}>
+          <span className="flex size-3.5 shrink-0 items-center justify-center">
+            {refresh.isPending ? <Loading className="size-3.5" /> : <ArrowsClockwiseIcon className="size-3.5" />}
+          </span>
+          {t('memoryUpdateNow')}
+        </Button>
+      </Hint>
     </div>
   );
 }

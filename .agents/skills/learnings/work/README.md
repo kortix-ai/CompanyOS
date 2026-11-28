@@ -18,8 +18,9 @@ planned, in flight, or parked, so another person or agent can pick it up.
 
 | Topic | Status |
 |---|---|
-| [`kortix-surface/`](kortix-surface/README.md) | building (branch `kortix-surface`): one operation catalog under the SDK, the `kortix` connector, a 4-verb MCP and a generated CLI; agent scopes become `kortix` connector rules enforced by the API |
+| [`kortix-surface/`](kortix-surface/README.md) | built on branch `kortix-surface` (phases 1–7, not merged): one operation catalog, agent rules enforced by the API (allow, ask, block, untrusted sessions, HUMAN_ONLY always asks), the `kortix` connector, SDK `callOperation`, MCP operation verbs, generated CLI commands |
 | [`browser-identity/`](browser-identity/README.md) | parked 2026-11-27: the whole browser profile on a Platinum volume, a copy per session on a fork, a merge that repairs divergence, loadable named profiles; with a Platinum Browsers refactor |
+| [`change-request-auto-merge/`](change-request-auto-merge/README.md) | parked, not built: change requests merge by themselves by default, gated by a Kortix permission (Marko, 2026-11-28) |
 | [`automation-test-gate/`](automation-test-gate/README.md) | planned, not built: an agent's automation goes live only after its test on every path (API-side rule); kortixd half shipped in #13195, #13210 |
 | [`continual-learning/`](continual-learning/README.md) | planned, not built: learning built into My Kortix and the default harness (observe, learner agent, self-written eval gate, skill and eval maintenance); 4 decisions open |
 | [`agent-benchmark-expansion/`](agent-benchmark-expansion/README.md) | research done 2026-11-17: the agent-eval landscape and a ranked backlog of tasks and graders for `evals/my-kortix` |

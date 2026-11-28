@@ -257,6 +257,9 @@ function blockFrom(args: Record<string, any>, base: Record<string, unknown>): Re
   if (typeof args.model === 'string') behavior.model = args.model
   if (typeof args.description === 'string') behavior.description = args.description
   if (args.mode === 'primary' || args.mode === 'subagent' || args.mode === 'all') behavior.mode = args.mode
+  // A helper My Kortix created is hidden from the pickers; one the person makes startable is not (Agent Evals
+  // on dev: promoted to primary, it kept `hidden: true` and never showed in the picker).
+  if (args.mode === 'primary' || args.mode === 'all') delete behavior.hidden
   if (Object.keys(behavior).length > 0) block.behavior = behavior
   for (const key of ['connectors', 'secrets', 'apps', 'skills', 'tools', 'kortix_permissions'] as const) {
     if (args[key] === undefined) continue

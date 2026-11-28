@@ -14,17 +14,6 @@ const ROUTE = { id: 'project-fixture', sessionId: 'project-session-fixture' };
 import { TurnErrorDisplay } from '../status/session-error-banner';
 import type { SessionChatInputProps } from '../composer/composer';
 
-const realAutoScroll = await import('../../internal/hooks/use-auto-scroll');
-const useRealAutoScroll = realAutoScroll.useAutoScroll;
-let scrollRoom: boolean | undefined;
-mock.module('../../internal/hooks/use-auto-scroll', () => ({
-  ...realAutoScroll,
-  useAutoScroll: (options: Parameters<typeof realAutoScroll.useAutoScroll>[0]) => {
-    scrollRoom = options?.room;
-    return useRealAutoScroll(options);
-  },
-}));
-
 const realSdk = await import('@kortix/sdk/react');
 const { KortixWorkspaceProvider } = realSdk;
 const { configureKortix } = await import('@kortix/sdk');
@@ -343,22 +332,6 @@ describe('SessionChat transcript rows', () => {
     }
   });
 
-  test('only an active turn reserves room to pin the newest prompt at the top', () => {
-    try {
-      busy = false;
-      renderChat();
-      expect(scrollRoom).toBe(false);
-      busy = true;
-      renderChat();
-      expect(scrollRoom).toBe(true);
-      busy = false;
-      renderChat();
-      expect(scrollRoom).toBe(false);
-    } finally {
-      busy = false;
-    }
-  });
-
   test.each(['queued', 'failed', 'missing', 'delivered'] as const)('a lost queue ACK waits for the inbox verdict: %s', async (state) => {
     const { runComposerSend, captureAttachmentSubmission } = await import('../composer/attachment-submission');
     let releaseLookup!: (result: { prompts: SessionPrompt[]; sent?: SessionSentPrompt[] }) => void;
@@ -666,20 +639,23 @@ describe('SessionChat moved turn sections', () => {
     },
   ];
 
-  test('a settled turn shows the Worked row, the hoisted show card and the final text', () => {
+  test('a settled turn shows the Worked row, then the agent\'s words, the hoisted show card and the final text (KRTX-5238)', () => {
     fixtureMessages = foldTurn('user-fold');
     try {
       const markup = renderChat();
       expect(markup).toContain('Worked for 2m 14s');
       expect(markup).toContain('Synthetic Deliverable');
       expect(markup).toContain('Here is the synthetic final answer.');
-      expect(markup).not.toContain('Let me check the synthetic config.');
+      // The agent's words never fold: only its steps do.
+      expect(markup).toContain('Let me check the synthetic config.');
       expect(markup).not.toContain('group/burst');
-      // Order: row → deliverable → final text.
+      // Order: row → words → deliverable → final text, as they were said.
       const row = markup.indexOf('Worked for 2m 14s');
+      const words = markup.indexOf('Let me check the synthetic config.');
       const card = markup.indexOf('Synthetic Deliverable');
       const final = markup.indexOf('Here is the synthetic final answer.');
-      expect(row).toBeLessThan(card);
+      expect(row).toBeLessThan(words);
+      expect(words).toBeLessThan(card);
       expect(card).toBeLessThan(final);
     } finally {
       fixtureMessages = baseFixtureMessages;

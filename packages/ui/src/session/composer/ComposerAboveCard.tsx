@@ -10,6 +10,7 @@ import type { ReactNode } from 'react';
 import { COMPOSER_INPUT_SLOT_CLASS, type SessionChatInputProps } from './composer';
 import type { ComposerQuote } from './composer-logic';
 import { QuoteList } from './quote-list';
+import { SmoothHeight } from './smooth-height';
 
 /**
  * A full-width bar between a docked question and the card (the notice). The
@@ -57,7 +58,7 @@ export function ComposerAboveCard({
   const showQueueStrip = Boolean(inputSlot);
 
   return (
-    <>
+    <SmoothHeight>
     {/*
       The "still waking" notice. Above the card, in flow, so it pushes the
       composer down rather than covering anything — the same reasoning as the
@@ -177,6 +178,6 @@ export function ComposerAboveCard({
 
       </div>
     )}
-    </>
+    </SmoothHeight>
   );
 }

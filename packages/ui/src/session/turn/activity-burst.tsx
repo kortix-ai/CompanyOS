@@ -30,13 +30,13 @@ import {
   sessionLogBurstWorkLabel,
   type SessionLogBlock,
 } from '@kortix/sdk';
-import { memo, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useContext, useMemo, useState } from 'react';
 import { StepBody } from './burst-step-body';
 import { burstSummaryLabel } from '@kortix/sdk';
 import { BurstSummaryTrigger } from './burst-summary-trigger';
 import { samePartsList } from './same-parts';
 import { ThoughtChainStep } from './thought-chain-step';
-import { WorkFoldContext, WorkTouchContext } from './turn-work-accordion';
+import { WorkFoldContext } from './turn-work-accordion';
 export { ActivityGroupStep, sameActivityGroupStepProps } from './activity-group-step';
 
 /**
@@ -83,6 +83,7 @@ function ActivityBurstImpl({
   isTrailing = false,
   disableNavigation,
   density = 'normal',
+  defaultOpen = false,
 }: {
   /** The burst segment's blocks (`sessionLogTurnSegments`). The rows are
    *  `sessionLogBurstSteps`; whether the burst is still in progress is
@@ -99,28 +100,16 @@ function ActivityBurstImpl({
    * passed in by the chat surface rather than read here so this component
    * stays pure and testable under `renderToStaticMarkup`.
    *
-   * 'normal' — the burst opens itself while it runs: steps and streaming
-   * thinking appear live. 'minimal' — the live view is the one-line summary
-   * ("Working · N steps"); nothing auto-expands, including the thought rows
-   * a bare burst pins open. A history turn renders identically in both
-   * modes on initial load; a live burst stays open, and a click always wins.
+   * Neither density opens or closes a burst by itself (KRTX-5238): the reader's click is the
+   * only thing that does. 'minimal' also keeps the thought rows a bare burst pins open closed.
    */
   density?: ConversationDensity;
+  /** The burst's state when it mounts. Read once: nothing re-applies it later. */
+  defaultOpen?: boolean;
 }) {
   const running = sessionLogBurstRunning(blocks, { working, trailing: isTrailing });
   const autoExpand = density !== 'minimal';
-  const [open, setOpen] = useState(autoExpand && running);
-  const userToggled = useRef(false);
-
-  // Open while the burst runs, close when the next text closes it: a long
-  // turn streams as a list of one-line bursts, not a wall of open chains. A
-  // burst the reader touched (its own line, or any row inside it) keeps the
-  // reader's state. Minimal density never auto-opens.
-  useEffect(() => {
-    if (userToggled.current) return;
-    setOpen(autoExpand && running);
-  }, [running, autoExpand]);
-  const markTouched = useContext(WorkTouchContext);
+  const [open, setOpen] = useState(defaultOpen);
 
   const steps = useMemo(() => sessionLogBurstSteps(blocks), [blocks]);
   const summary = useMemo(() => sessionLogBurstSummary(blocks), [blocks]);
@@ -142,11 +131,7 @@ function ActivityBurstImpl({
     <Disclosure
       // Bare is permanently open — there is no trigger to close it with.
       open={bare || open}
-      onOpenChange={(next) => {
-        userToggled.current = true;
-        markTouched?.();
-        setOpen(next);
-      }}
+      onOpenChange={setOpen}
       className="group/burst flex-row"
     >
       <BurstSummaryTrigger bare={bare} running={running} title={title} />
@@ -164,14 +149,8 @@ function ActivityBurstImpl({
 				*/}
         <ToolActivateContext.Provider value={null}>
           {/* `mt-3` is the gap under the summary line. Bare has no summary
-					    line, so it has no gap to open. A click on a row inside counts
-					    as the reader's choice: the burst then stays as they left it. */}
-          <div
-            className={bare ? undefined : 'mt-3'}
-            onClickCapture={(event) => {
-              if ((event.target as Element | null)?.closest?.('[aria-expanded]')) userToggled.current = true;
-            }}
-          >
+					    line, so it has no gap to open. */}
+          <div className={bare ? undefined : 'mt-3'}>
             <ChainOfThought>
               {/* A thought row IS a `ChainOfThoughtStep` — it owns the step's
 							    open state so it can open itself while the model thinks. */}

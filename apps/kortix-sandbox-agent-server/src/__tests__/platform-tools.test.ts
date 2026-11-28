@@ -101,6 +101,14 @@ describe('kortix_agents', () => {
     })
   })
 
+  // Agent Evals on dev: promoted to primary, a helper kept `hidden: true` and never showed in the picker.
+  test('update: making a hidden helper primary clears hidden and keeps its instructions', async () => {
+    fakeKortix(`'agents config support-replies --json') echo '{"block":{"behavior":{"prompt":"Never send anything.","mode":"subagent","hidden":true}}}' ;;
+  'agents config support-replies --file '*' --json') cp "$5" ${JSON.stringify(join('$BIN', 'promote.json'))}; echo '{"ok":true,"agent":"support-replies","block":{}}' ;;`.replaceAll('$BIN', bin))
+    expect((await run('kortix_agents', { action: 'update', name: 'support-replies', mode: 'primary', model: 'kortix/glm-5.3-flash' })).ok).toBe(true)
+    expect(JSON.parse(readFileSync(join(bin, 'promote.json'), 'utf8'))).toEqual({ behavior: { prompt: 'Never send anything.', mode: 'primary', model: 'kortix/glm-5.3-flash' } })
+  })
+
   test('create: the person asked for a primary agent — no subagent default, nothing hidden', async () => {
     fakeKortix(`'agents config primary-writer --json') echo '{"kortix_error":{"kind":"failed","status":404,"message":"No agent primary-writer"}}' >&2; exit 1 ;;
   'agents config primary-writer --file '*' --json') cp "$5" ${JSON.stringify(join('$BIN', 'primary.json'))}; echo '{"ok":true,"agent":"primary-writer","block":{}}' ;;`.replaceAll('$BIN', bin))
@@ -576,6 +584,21 @@ describe('kortix_people and kortix_access', () => {
     const result = await run('kortix_people', { action: 'set_role', who: 'ADA@example.com', role: 'member' })
     expect(result.card.title).toBe('ada@example.com is now member')
     expect(result.card.changes).toEqual([{ field: 'role', before: 'owner', after: 'member' }])
+  })
+
+  // Agent Evals on dev: set_role said "not a member" and invite said "already invited", so an invited
+  // person's role could not change through the tool.
+  test('set_role on someone only invited replaces the invitation; remove cancels it', async () => {
+    fakeKortix(`${ROSTER}
+  'access pending --json') echo '{"pending":[{"invite_id":"inv_9","email":"sam.reyes@example.test","project_role":"member","invite_expired":false}]}' ;;
+  'access cancel inv_9') echo 'Cancelled' ;;
+  'access invite sam.reyes@example.test --role manager --json') echo '{"email_sent":true}' ;;`)
+    const changed = await run('kortix_people', { action: 'set_role', who: 'sam.reyes@example.test', role: 'manager' })
+    expect(changed.card.title).toBe("sam.reyes@example.test's invitation is now as manager")
+    expect(changed.card.changes).toEqual([{ field: 'role', before: 'member', after: 'manager' }])
+    expect(argvs().filter((a) => a.startsWith('access cancel') || a.startsWith('access invite'))).toEqual(['access cancel inv_9', 'access invite sam.reyes@example.test --role manager --json'])
+    const removed = await run('kortix_people', { action: 'remove', who: 'sam.reyes@example.test' })
+    expect(removed.card.title).toBe("Cancelled sam.reyes@example.test's invitation")
   })
 
   test('who_can_grant lists the managers', async () => {

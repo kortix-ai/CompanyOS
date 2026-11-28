@@ -25,11 +25,6 @@ import { cn } from '../../lib/utils';
  */
 export const WorkFoldContext = createContext(false);
 
-/**
- * Called when the reader opens or closes a disclosure in a live turn. A turn
- * the reader touched while it worked settles with its row open.
- */
-export const WorkTouchContext = createContext<(() => void) | null>(null);
 
 export function TurnWorkAccordion({
   label,

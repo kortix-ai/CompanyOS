@@ -1,6 +1,6 @@
 import type { SessionControlStreamOptions } from '../session/control-stream';
 import type { SavedCopyStore } from '../session-sync/saved-copy-store';
-import { readSessionLog, SESSION_LOG_FIRST_PAGE_LIMIT, type LoadSessionLogPage, type SessionLogRead, type SessionLogPage } from './source';
+import { readSessionLog, SESSION_LOG_FIRST_PAGE_LIMIT, type LoadSessionLogPage, type ScheduleSessionLogRead, type SessionLogRead, type SessionLogPage } from './source';
 import { isStaleSessionLogPage, type SessionLogState, type SessionLogEventInput } from './store';
 
 interface LogSyncStore {
@@ -11,11 +11,13 @@ interface LogSyncStore {
 }
 
 /** Owns one session log's reads and stream until its host disposes it. */
-export function startSessionLogSync({ projectId, sessionId, loader, store, copies, joinStream, schedule, onTabVisible, boxReady, onRead, setMissing, reloadRef }: {
+export function startSessionLogSync({ projectId, sessionId, loader, store, copies, joinStream, schedule, readSchedule, onTabVisible, boxReady, onRead, setMissing, reloadRef }: {
   projectId: string; sessionId: string; loader: LoadSessionLogPage;
   store: () => LogSyncStore; copies: SavedCopyStore | null;
   joinStream: (options: SessionControlStreamOptions) => { close: () => void };
   schedule: (run: () => void, ms: number) => () => void;
+  /** Runs each read's deadline (`SESSION_LOG_READ_DEADLINE_MS`); a real timer by default. */
+  readSchedule?: ScheduleSessionLogRead;
   onTabVisible: (run: () => void) => () => void;
   boxReady: () => boolean;
   onRead: (outcome: 'page' | 'missing' | 'failed') => void;
@@ -50,7 +52,8 @@ export function startSessionLogSync({ projectId, sessionId, loader, store, copie
       if (stopped) return { answer: null, retryAfterMs: null };
       const revision = ++pageRevision;
       const query = live ? { limit: SESSION_LOG_FIRST_PAGE_LIMIT, live: true } : { limit: SESSION_LOG_FIRST_PAGE_LIMIT };
-      const read = await readSessionLog(loader, projectId, sessionId, query, controller.signal);
+      // Each read has a deadline: one that never answers would hold every later re-read.
+      const read = await readSessionLog(loader, projectId, sessionId, query, controller.signal, readSchedule);
       if (stopped) return { answer: null, retryAfterMs: null };
       const { answer } = read;
       const held = store().sessionLogs[sessionId];

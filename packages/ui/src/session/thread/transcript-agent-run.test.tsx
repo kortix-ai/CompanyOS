@@ -9,13 +9,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { sessionLogAgentRuns, sessionLogOfV1Rows, sessionLogTurns } from '@kortix/sdk';
 
 import { TranscriptTurnRow } from '../index';
+import { hostAgentRuns } from './agent-run-props';
 
 /**
- * KRTX-4732, the run fold: a person's agents report back as one unit. The
- * turns of a run fold into the turn that answers it ("Worked for 5m · 3
- * agents"), the absorbed turns draw nothing, the agent's relays between
- * colleagues (`send_message`) are not shown, and once every agent reported,
- * the turn that started them folds its agent rows. Synthetic values only.
+ * KRTX-4732, the run fold: a person's agents report back as one unit. KRTX-5238: the run's row
+ * stands on the person's turn that started the work ("Worked for 5m · 3 agents") and never moves;
+ * every report turn folds its steps into that row, the agent's words to the person stay in view
+ * in order, the absorbed turns draw nothing, and the agent's relays between colleagues
+ * (`send_message`) are not shown. Synthetic values only.
  */
 
 type V1MessageRow = Parameters<typeof sessionLogOfV1Rows>[2][number];
@@ -86,6 +87,10 @@ const byId = new Map(turns.map((turn) => [turn.id, turn]));
 const anchor = byId.get('r3')!;
 const run = layout.runs.get('r3')!;
 const runTurns = run.turns.slice(0, -1).map((id) => byId.get(id)!);
+const hosted = hostAgentRuns(turns, layout);
+const launch = byId.get('launch')!;
+const hostedRun = hosted.runs.get('launch')!;
+const hostedTurns = hostedRun?.turns.map((id) => byId.get(id)!) ?? [];
 
 type RowProps = ComponentProps<typeof TranscriptTurnRow>;
 const base = (turn: RowProps['turn']): RowProps => ({
@@ -113,33 +118,57 @@ describe('agent run fold (KRTX-4732)', () => {
     expect([...layout.settledLaunches].sort()).toEqual(['launch', 'r1']);
   });
 
-  test('the anchor reads as one row over the final answer; intermediate replies stay folded', () => {
-    const out = html({ ...base(anchor), agentRun: run, runTurns });
-    expect(out).toContain('Worked for 5m · 3 agents');
-    expect(out).not.toContain('Got the numbers, waiting on the review.');
-    expect(out.indexOf('The launch post is ready.')).toBeGreaterThan(out.indexOf('Worked for 5m · 3 agents'));
-    expect(out).not.toContain('data-testid="agent-run-answer"');
-    // Folded and not yet opened: no report is mounted.
-    expect(out).not.toContain('data-testid="agent-run-member"');
-    expect(out).not.toContain('metrics-checker');
-    expect(out).not.toContain('Worked for 6s');
+  test('the run moves to the person\'s turn that started it: one row, every report absorbed (KRTX-5238)', () => {
+    expect([...hosted.runs.keys()]).toEqual(['launch']);
+    expect(hostedRun.turns).toEqual(['r1', 'r2', 'r3']);
+    expect([...hosted.absorbed].sort()).toEqual(['r1', 'r2', 'r3']);
+    expect(hosted.anchorOf.get('r3')).toBe('launch');
+    expect(hostedRun.agents).toBe(3);
   });
 
-  test('peer progress keeps intermediate answers inside expanded activity (KRTX-4982)', async () => {
-    const out = html({ ...base(anchor), agentRun: run, runTurns });
-    expect(out).toContain('The launch post is ready.');
-    expect(out).not.toContain('Got the numbers, waiting on the review.');
+  test('a report turn that asks the person joins the run it follows, never a row of its own (KRTX-5238)', () => {
+    // The SDK ends a run at a turn that asks the person; the next report starts a new run.
+    const turn = (id: string, internal: boolean) =>
+      ({ id, internal, live: false, user: { ...turns[0]!.user, message_id: id }, assistant: [] }) as unknown as (typeof turns)[number];
+    const list = [turn('p', false), turn('r1', true), turn('ask', true), turn('r3', true)];
+    const run = (id: string) => ({ anchor: id, turns: [id], agents: 1, started: 2, reported: 1, durationMs: 1000, live: false, stopped: false });
+    const out = hostAgentRuns(list, { runs: new Map([['r1', run('r1')], ['r3', run('r3')]]), absorbed: new Set(), anchorOf: new Map(), settledLaunches: new Set() });
+    expect([...out.runs.keys()]).toEqual(['p']);
+    expect(out.runs.get('p')!.turns).toEqual(['r1', 'ask', 'r3']);
+    expect([...out.absorbed].sort()).toEqual(['ask', 'r1', 'r3']);
+  });
+
+  test('one row over the work; every reply the agent wrote stays in view, in order (KRTX-5238)', () => {
+    const out = html({ ...base(launch), agentRun: hostedRun, runTurns: hostedTurns });
+    const row = out.indexOf('Worked for');
+    expect(row).toBeGreaterThan(-1);
+    expect(out.match(/Worked for/g)).toHaveLength(1);
+    const replies = ['Three colleagues are on it.', 'Got the numbers, waiting on the review.', 'The launch post is ready.'].map((text) => out.indexOf(text));
+    expect(replies.every((at) => at > row)).toBe(true);
+    expect(replies).toEqual([...replies].sort((a, b) => a - b));
+    // Folded and not yet opened: no report and no agent row is mounted.
+    expect(out).not.toContain('metrics-checker');
+    expect(out).not.toContain('Draft the launch post');
+  });
+
+  test('opening the row reveals the reports in place; the replies around them do not move (KRTX-5238)', async () => {
     await act(async () => {
       mounted = create(
         <QueryClientProvider client={new QueryClient()}>
-          <TranscriptTurnRow {...base(anchor)} agentRun={run} runTurns={runTurns} />
+          <TranscriptTurnRow {...base(launch)} agentRun={hostedRun} runTurns={hostedTurns} />
         </QueryClientProvider>,
       );
     });
     const toggle = mounted!.root.findAll((node) => node.type === 'button' && node.props['aria-expanded'] === false)[0]!;
     await act(async () => toggle.props.onClick());
-    const fold = mounted!.root.find((node) => node.props['data-testid'] === 'agent-run-fold');
-    expect(fold.findAll((node) => typeof node.props.content === 'string' && node.props.content.includes('Got the numbers, waiting on the review.')).length).toBeGreaterThan(0);
+    const folds = mounted!.root.findAll((node) => node.props['data-testid'] === 'agent-run-fold');
+    expect(folds.length).toBe(3);
+    expect(folds.every((fold) => fold.props.hidden === false)).toBe(true);
+    // The replies are never inside a fold.
+    for (const fold of folds) {
+      expect(fold.findAll((node) => typeof node.props.content === 'string' && node.props.content.includes('Got the numbers')).length).toBe(0);
+    }
+    expect(JSON.stringify(mounted!.toJSON())).toContain('metrics-checker');
   });
 
   test('an absorbed turn draws nothing', () => {
@@ -186,14 +215,12 @@ describe('agent run fold (KRTX-4732)', () => {
     expect(wrapper?.props.hidden).toBe(true);
   });
 
-  test('every agent reported: the launch turn folds its agent rows behind its own row', () => {
-    const launch = byId.get('launch')!;
-    const open = html(base(launch));
-    const folded = html({ ...base(launch), foldStartedWork: true });
-    // Before every agent reported, the agent rows stay in view, even with no other work.
-    expect(open).toContain('Draft the launch post');
-    expect(open).not.toContain('Worked for');
-    expect(folded).toContain('Worked for 6s');
-    expect(folded).toContain('Three colleagues are on it.');
+  test('the launch turn folds its agent rows from the start, live or settled (KRTX-5238)', () => {
+    for (const props of [base(launch), { ...base(launch), foldStartedWork: true }]) {
+      const out = html(props);
+      expect(out).toContain('Worked for 6s');
+      expect(out).toContain('Three colleagues are on it.');
+      expect(out).not.toContain('Draft the launch post');
+    }
   });
 });

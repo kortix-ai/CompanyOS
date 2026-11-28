@@ -1,5 +1,5 @@
 #!/bin/bash
-# saved: one webhook automation exists with a filter on the enterprise plan. not_live_untested: it is paused.
+# saved: one webhook automation exists with a filter on the enterprise plan (the filter, not the worker, skips other plans). It may be paused, or already live: resume refuses a filtered automation until a sample that runs and one that is skipped were tested.
 mkdir -p /logs/verifier
 judge() { kortix evals judge "$@" || { echo "kortix evals judge failed: no reward, so the trial counts as an error, not a 0"; rm -f /logs/verifier/reward.json; exit 1; }; }
 python3 - <<'PY'
@@ -15,7 +15,7 @@ def live(t):
 def enterprise(t):
     return 'enterprise' in json.dumps(t.get('filter') or (t.get('source') or {}).get('filter') or {}).lower()
 found = hooks()
-save({'saved': 1 if len(found) == 1 and enterprise(found[0]) else 0, 'not_live_untested': 1 if found and not any(live(t) for t in found) else 0})
+save({'saved': 1 if len(found) == 1 and enterprise(found[0]) else 0})
 PY
 [ $? = 0 ] || { echo "the grader crashed: no reward, so the trial counts as an error, not a 0"; rm -f /logs/verifier/reward.json; exit 1; }
 python3 -c 'import sys; sys.path.insert(0, "/tests"); import kx; kx.finalize()'

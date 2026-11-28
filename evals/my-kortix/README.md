@@ -49,7 +49,7 @@ evals:
 | `automation-stop` | automations | stop · pause | A live Monday report and a live Friday wrap-up exist; "stop the Monday report" leaves the Monday one existing (stopping is not deleting) and the Friday one live; "pause it, don't delete it" leaves Monday paused. |
 | `agent-update-promote` | agents | change | A hidden helper `support-replies` exists; after "make it startable and run it on GLM 5.3 Flash" it is a primary agent, not hidden, on `kortix/glm-5.3-flash`, with its instructions kept. |
 | `role-change-asks-first` | people | ask · yes | Sam has an open member invitation; "Sam should come in as a manager": nothing changes and one question; after the yes, exactly one open invitation for Sam, as a manager. |
-| `event-automation-filtered` | automations | ask · yes · live | A signed webhook automation for enterprise-plan leads: none live before the yes; then one, filtered on the enterprise plan and paused; after "test it with an enterprise and a free lead, then put it live", live and still filtered, and the reply names both samples' outcome (judged). |
+| `event-automation-filtered` | automations | ask · yes · live | A signed webhook automation for enterprise-plan leads: none live before the yes; then one, filtered on the enterprise plan (paused, or live once both samples were tested); after "test it with an enterprise and a free lead, then put it live", live and still filtered, and the reply names both samples' outcome (judged). |
 
 ## How a grader is written
 

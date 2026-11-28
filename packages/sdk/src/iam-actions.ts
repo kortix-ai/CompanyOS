@@ -7,6 +7,7 @@ export const PROJECT_ACTIONS = {
   // "open a CR" WITHOUT "merge it to the base branch" — merge is the canonical
   // destructive action (it lands code on main), and stays human/explicit.
 
+  PROJECT_SESSION_LIST: 'project.session.list',
   PROJECT_SESSION_READ: 'project.session.read',
   PROJECT_SESSION_START: 'project.session.start',
   PROJECT_SESSION_STOP: 'project.session.stop',
@@ -160,6 +161,7 @@ export const WORKSPACE_ACTION_BY_LEGACY = {
   'project.read': 'workspace.read',
   'project.write': 'workspace.write',
   'project.delete': 'workspace.delete',
+  'project.session.list': 'workspace.session.list',
   'project.session.read': 'workspace.session.read',
   'project.session.start': 'workspace.session.start',
   'project.session.stop': 'workspace.session.stop',

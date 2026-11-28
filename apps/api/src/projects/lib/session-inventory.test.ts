@@ -667,3 +667,16 @@ describe('selectSessionRowsForViewer — agent principal (spec §2)', () => {
     expect(selected.items.map((item) => item.row.sessionId)).toEqual(['agent-own', 'launcher-private']);
   });
 });
+
+
+test('session.list enumerates unrelated live rows without granting content access', () => {
+  const selected = selectSessionRowsForViewer({
+    rows: [row('own'), row('unrelated', { createdBy: OTHER_ID }), row('deleted', { createdBy: OTHER_ID, metadata: { deletedAt: '2026-11-26T10:00:00Z' } })],
+    scope: 'visible', canManageProject: false, subject,
+    callerSessionId: 'own', boundCredentialSessionId: 'own', agentPrincipal: true,
+    grantsBySession: new Map(), runtimeStatusBySession: new Map(), hiddenSpaceIds: new Set(),
+    canListSessions: true,
+  });
+  expect(selected.items.map(({ row }) => row.sessionId)).toEqual(['own', 'unrelated']);
+  expect(selected.items.find(({ row }) => row.sessionId === 'unrelated')?.canAccess).toBe(false);
+});

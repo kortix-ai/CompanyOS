@@ -133,3 +133,12 @@ describe('kortix_permissions — workspace names (Workspaces, one scope)', () =>
     expect(validateSchema(parseYaml(doc('    kortix_permissions: [workspace.not_an_action]\n')))).toBe(false);
   });
 });
+
+
+test('session.list is a grantable inventory-only permission', () => {
+  const validateSchema = new Ajv2020({ strict: false }).compile(KORTIX_JSON_SCHEMA as Record<string, unknown>);
+  for (const permission of ['session.list', 'project.session.list', 'workspace.session.list']) {
+    expect(summarize(doc(`    kortix_permissions: [${permission}]\n`)).valid).toBe(true);
+    expect(validateSchema(parseYaml(doc(`    kortix_permissions: [${permission}]\n`)))).toBe(true);
+  }
+});

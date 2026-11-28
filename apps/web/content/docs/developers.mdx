@@ -9497,6 +9497,21 @@ The new verbs default to `KORTIX_SESSION_ID`. The existing `sessions model <sess
 Never send a peer message to yourself to continue a model switch.
 
 
+### Session inventory permission
+
+Grant `session.list` in an agent's `kortix_permissions` to enumerate live sessions in its own workspace:
+
+```yaml
+agents:
+  observer:
+    prompt: Inspect session inventory.
+    kortix_permissions: [session.list]
+```
+
+`project.session.list` and `workspace.session.list` name the same permission. The agent's IAM ceiling must also allow it when a custom role is bound. The permission does not cross the credential's project/workspace or account boundary.
+
+Use `kortix sessions ls` or `GET /v1/projects/<workspace_id>/sessions`. Follow the response's `X-Next-Cursor` header as `cursor` to read subsequent pages. Existing filters still apply. Unrelated sessions are inventory entries only: `can_access` is false and conversation names, prompts, labels and metadata stay redacted. This grant does not permit transcript reads, session prompts, lifecycle changes, sharing changes, deleted-session recovery, or access to another workspace. Those operations retain their existing permissions and session visibility checks. Agents without this grant retain their existing enumeration behavior.
+
 ### Permission group wildcards
 
 Use terminal `.*` entries in `kortix_permissions` to grant a registered group:

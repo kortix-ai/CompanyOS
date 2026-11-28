@@ -188,6 +188,7 @@ function kortixPermissionsEnum(): readonly string[] {
   // The retired actions are in it for the same reason: `kortix validate` only warns on them.
   // The workspace names are accepted everywhere the legacy names are.
   return [
+    'session.list',
     ...GRANTABLE_KORTIX_PERMISSIONS,
     ...GRANTABLE_KORTIX_WORKSPACE_PERMISSIONS,
     ...KORTIX_PERMISSION_GROUPS,

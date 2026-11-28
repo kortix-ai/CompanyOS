@@ -61,6 +61,7 @@ export function isLegacyAction(action: string): action is LegacyIamAction {
  * caller's own "unknown action" handling still sees the string it was sent.
  */
 export function toLegacyAction(action: string): string {
+  if (action === 'session.list') return 'project.session.list';
   return isWorkspaceAction(action) ? LEGACY_ACTION_BY_WORKSPACE[action] : action;
 }
 

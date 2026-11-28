@@ -1,8 +1,8 @@
 'use client';
 
 import { useFeatureFlag } from '@kortix/sdk/react';
-import { DotsThreeIcon, MagnifyingGlassIcon, PushPinSlashIcon, StackIcon } from '@phosphor-icons/react';
-import { useState, type MouseEvent, type PointerEvent, type ReactNode } from 'react';
+import { CirclesThreePlusIcon, DotsThreeIcon, MagnifyingGlassIcon, PushPinSlashIcon } from '@phosphor-icons/react';
+import { useState, type MouseEvent, type ReactNode } from 'react';
 
 import { useTranslations } from '../../i18n';
 import { SidebarGlyph as PanelLeft } from '../../icons/sidebar-toggle';
@@ -18,8 +18,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '../../primitives/popove
 import { SidebarMenu, useSidebar } from '../../primitives/sidebar';
 import { UiLink as Link, useUiPathname } from '../../providers/ui-provider';
 import { ProjectNavItems } from './project-nav-items';
-import { isRailCardPage, RailHoverCard } from './rail-hover-card';
-import { PinnedRailItem, useRailPins } from './rail-pins';
+import { isRailPanelPage, type RailPanelPage } from './rail-page-panel';
+import { PinnedRailItem, useRailPins, type PinnablePage } from './rail-pins';
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
 const modSymbol = isMac ? '⌘' : 'Ctrl';
@@ -42,8 +42,8 @@ const RAIL_CONTROL = 'shrink-0 rounded-md [&_svg]:size-4.5!';
  * toggle hides the panel, never the rail.
  *
  * With the panel collapsed, hovering Home shows the panel on the sessions,
- * hovering Spaces on the spaces, and hovering Customize on the workspace
- * settings list, wherever the page is (the sidebar's peek, the same hover
+ * hovering Spaces on the spaces, Apps, Artifacts or Goals on that page's
+ * items, and Customize on the workspace settings list, wherever the page is (the sidebar's peek, the same hover
  * intent as the edge strip it replaces).
  */
 export function ProjectRail({
@@ -55,7 +55,7 @@ export function ProjectRail({
 }: {
   projectId: string;
   /** With the panel collapsed, a hover on Home, Spaces or Customize shows the panel on that list. */
-  onPeek: (section: 'home' | 'spaces' | 'customize') => void;
+  onPeek: (section: 'home' | 'spaces' | 'customize' | RailPanelPage) => void;
   onOpenSearch?: () => void;
   /** The help menu's own icon trigger (apps/web passes `HelpMenu`). */
   help?: ReactNode;
@@ -84,6 +84,47 @@ export function ProjectRail({
         ? adminPath(projectId, 'agents')
         : adminPath(projectId)
       : null;
+
+  /** One pinned page: right-click or double-click for Hide tab; Apps, Artifacts and Goals peek the panel on hover. */
+  const renderPin = (id: PinnablePage) => (
+        <PinnedRailItem
+          key={id}
+          projectId={projectId}
+          id={id}
+          render={(page, current) => (
+            <ContextMenu>
+              <ContextMenuTrigger
+                asChild
+                onDoubleClick={(event) => {
+                  // A double-click opens the same menu, at the pointer.
+                  event.currentTarget.dispatchEvent(
+                    new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: event.clientX, clientY: event.clientY }),
+                  );
+                }}
+              >
+                <span className="flex">
+                  {/* Apps, Artifacts, Goals: with the panel collapsed, a hover shows the panel on the page's list, as Home and Spaces do. */}
+                  <RailButton
+                    label={page.label}
+                    href={page.href}
+                    current={current}
+                    onPointerEnter={collapsed && isRailPanelPage(id) ? () => { onPeek(id); peekEnter(); } : undefined}
+                    onPointerLeave={collapsed && isRailPanelPage(id) ? peekLeave : undefined}
+                  >
+                    {page.icon}
+                  </RailButton>
+                </span>
+              </ContextMenuTrigger>
+              <ContextMenuContent>
+                <ContextMenuItem onClick={() => railPins.toggle(id)}>
+                  <PushPinSlashIcon />
+                  {tRail('unpinTab')}
+                </ContextMenuItem>
+              </ContextMenuContent>
+            </ContextMenu>
+          )}
+        />
+  );
 
   return (
     <nav aria-label={tRail('navigation')} className="flex h-full w-full flex-col items-center gap-1 py-2">
@@ -115,6 +156,8 @@ export function ProjectRail({
           <MagnifyingGlassIcon />
         </RailButton>
       ) : null}
+      {/* Review sits right after Search, ahead of Spaces, when it is pinned. */}
+      {railPins.pins.filter((id) => id === 'review').map(renderPin)}
       {spacesHref ? (
         <RailButton
           label={tGroups('heading')}
@@ -123,54 +166,12 @@ export function ProjectRail({
           onPointerEnter={collapsed ? () => { onPeek('spaces'); peekEnter(); } : undefined}
           onPointerLeave={collapsed ? peekLeave : undefined}
         >
-          <StackIcon />
+          <CirclesThreePlusIcon />
         </RailButton>
       ) : null}
       {/* The pages pinned from More, above it, in pin order. Right-click or
           double-click one for Hide tab. A page this workspace stops offering drops out. */}
-      {railPins.pins.map((id) => (
-        <PinnedRailItem
-          key={id}
-          projectId={projectId}
-          id={id}
-          render={(page, current) => (
-            <ContextMenu>
-              <ContextMenuTrigger
-                asChild
-                onDoubleClick={(event) => {
-                  // A double-click opens the same menu, at the pointer.
-                  event.currentTarget.dispatchEvent(
-                    new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: event.clientX, clientY: event.clientY }),
-                  );
-                }}
-              >
-                <span className="flex">
-                  {isRailCardPage(id) ? (
-                    // Apps and Artifacts: the hover card names the page and lists what is in it.
-                    <RailHoverCard projectId={projectId} page={id} label={page.label} href={page.href}>
-                      {(rowProps) => (
-                        <RailButton label={page.label} href={page.href} current={current} hint={false} triggerProps={rowProps}>
-                          {page.icon}
-                        </RailButton>
-                      )}
-                    </RailHoverCard>
-                  ) : (
-                    <RailButton label={page.label} href={page.href} current={current}>
-                      {page.icon}
-                    </RailButton>
-                  )}
-                </span>
-              </ContextMenuTrigger>
-              <ContextMenuContent>
-                <ContextMenuItem onClick={() => railPins.toggle(id)}>
-                  <PushPinSlashIcon />
-                  {tRail('unpinTab')}
-                </ContextMenuItem>
-              </ContextMenuContent>
-            </ContextMenu>
-          )}
-        />
-      ))}
+      {railPins.pins.filter((id) => id !== 'review').map(renderPin)}
       <Popover open={moreOpen} onOpenChange={setMoreOpen}>
         <Hint side="right" alignOffset={0} label={tRail('more')}>
           <PopoverTrigger asChild>
@@ -240,8 +241,6 @@ function RailButton({
   onClick,
   onPointerEnter,
   onPointerLeave,
-  hint = true,
-  triggerProps,
   children,
 }: {
   label: ReactNode;
@@ -252,52 +251,40 @@ function RailButton({
   onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
   onPointerEnter?: () => void;
   onPointerLeave?: () => void;
-  /** False: a hover card names the control instead (`RailHoverCard`). */
-  hint?: boolean;
-  /** The hover card's pointer handlers, put on the link. */
-  triggerProps?: {
-    onPointerEnter: (event: PointerEvent<HTMLElement>) => void;
-    onPointerLeave: (event: PointerEvent<HTMLElement>) => void;
-    onClick: () => void;
-  };
   children: ReactNode;
 }) {
   const name = ariaLabel ?? (typeof label === 'string' ? label : undefined);
   const className = cn(RAIL_CONTROL, 'text-muted-foreground hover:text-foreground', current && 'bg-sidebar-accent text-foreground');
-  const control = href ? (
-    <Button asChild variant="ghost" size="icon-base" className={className}>
-      <Link
-        href={href}
-        prefetch
-        aria-label={name}
-        aria-current={current ? 'page' : undefined}
-        onPointerEnter={triggerProps?.onPointerEnter ?? onPointerEnter}
-        onPointerLeave={triggerProps?.onPointerLeave ?? onPointerLeave}
-        onClick={triggerProps?.onClick}
-      >
-        {children}
-      </Link>
-    </Button>
-  ) : (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon-base"
-      aria-label={name}
-      aria-current={current ? 'page' : undefined}
-      onClick={onClick}
-      onPointerEnter={onPointerEnter}
-      onPointerLeave={onPointerLeave}
-      className={className}
-    >
-      {children}
-    </Button>
-  );
-  return hint ? (
+  return (
     <Hint side="right" alignOffset={0} label={label}>
-      {control}
+      {href ? (
+        <Button asChild variant="ghost" size="icon-base" className={className}>
+          <Link
+            href={href}
+            prefetch
+            aria-label={name}
+            aria-current={current ? 'page' : undefined}
+            onPointerEnter={onPointerEnter}
+            onPointerLeave={onPointerLeave}
+          >
+            {children}
+          </Link>
+        </Button>
+      ) : (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-base"
+          aria-label={name}
+          aria-current={current ? 'page' : undefined}
+          onClick={onClick}
+          onPointerEnter={onPointerEnter}
+          onPointerLeave={onPointerLeave}
+          className={className}
+        >
+          {children}
+        </Button>
+      )}
     </Hint>
-  ) : (
-    control
   );
 }

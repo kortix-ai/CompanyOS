@@ -127,7 +127,7 @@ export function ProjectAppsNavItem({ projectId }: { projectId: string }) {
 }
 
 /** One App: its name and the status dot the Apps page draws under its card. */
-export function AppRow({ app, href, onOpen }: { app: App; href: string; onOpen: () => void }) {
+function AppRow({ app, href, onOpen }: { app: App; href: string; onOpen: () => void }) {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const status = appStatus(app, tI18nComplete);
   return (

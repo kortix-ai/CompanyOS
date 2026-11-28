@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { sessionOwnerSeesGroup, turnSeesGroup } from './session-group-viewer';
+import { spaceFolderMountable } from '../../shared/session-group-access';
+import { privateSpaceCreateSharing, sessionOwnerSeesGroup, turnSeesGroup } from './session-group-viewer';
 
 const OWNER = '00000000-0000-4000-8000-0000000000a1';
 const CREATOR = '00000000-0000-4000-8000-0000000000c1';
@@ -58,5 +59,40 @@ describe('turnSeesGroup: the person prompting the turn must see the Space too', 
 
   test('a project-wide Space shows to any prompter', async () => {
     expect(await turnSeesGroup({ visibility: 'project', createdBy: CREATOR }, who({ prompterId: PROMPTER }), never)).toBe(true);
+  });
+});
+
+describe('spaceFolderMountable: a private Space\'s folder mounts only in a session that reaches no one beyond its owner', () => {
+  const mount = (groupVisibility: string, sessionVisibility: string | null, parentVisibility: string | null = null) =>
+    spaceFolderMountable({ groupVisibility, sessionVisibility, parentVisibility });
+
+  test('a private Space: a private session mounts it; a project-visible or restricted one does not', () => {
+    expect(mount('private', 'private')).toBe(true);
+    expect(mount('private', 'project')).toBe(false);
+    expect(mount('private', 'restricted')).toBe(false);
+  });
+
+  test('a child of a private Space mounts it only while its parent is private too', () => {
+    expect(mount('private', 'private', 'private')).toBe(true);
+    expect(mount('private', 'private', 'project')).toBe(false);
+  });
+
+  test('a project-visible Space keeps today\'s behavior: every session of it mounts it', () => {
+    expect(mount('project', 'project')).toBe(true);
+    expect(mount('project', 'restricted', 'project')).toBe(true);
+  });
+});
+
+describe('privateSpaceCreateSharing: a new session in a private Space (or a child of one) is private', () => {
+  test('explicit or channel-implied project or restricted sharing is refused', () => {
+    expect(privateSpaceCreateSharing(true, 'project')).toBe('refuse');
+    expect(privateSpaceCreateSharing(true, 'restricted')).toBe('refuse');
+  });
+  test('no sharing asked, or private: made private', () => {
+    expect(privateSpaceCreateSharing(true, null)).toBe('private');
+    expect(privateSpaceCreateSharing(true, 'private')).toBe('private');
+  });
+  test('outside a private Space the rule says nothing', () => {
+    expect(privateSpaceCreateSharing(false, 'project')).toBeNull();
   });
 });

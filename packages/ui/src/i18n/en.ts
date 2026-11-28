@@ -1156,9 +1156,11 @@ const catalog = {
       "more": "More",
       "pinTab": "Show tab",
       "unpinTab": "Hide tab",
-      "viewAll": "View all",
       "appsEmpty": "No apps yet",
-      "artifactsEmpty": "No artifacts yet"
+      "artifactsEmpty": "No artifacts yet",
+      "goalsEmpty": "No goals yet",
+      "searchGoals": "Search goals",
+      "noMatches": "No matches"
     },
     "customize": "Customize",
     "sessions": "Sessions",
@@ -8151,6 +8153,7 @@ const catalog = {
     "sessions": "Sessions",
     "you": "You",
     "anotherMember": "A teammate",
+    "newGoal": "New goal",
     "paused": "Paused",
     "criteriaMet": "{met} of {total} done criteria met",
     "state": {
@@ -11039,6 +11042,36 @@ const catalog = {
     "remove": "Remove",
     "share": "Share",
     "notMember": "Share a session only with members of this workspace."
+  },
+  "appsList": {
+    "search": "Search Apps",
+    "noMatch": "No App matches",
+    "create": "Create app",
+    "viewLabel": "View",
+    "viewGrid": "Grid",
+    "viewList": "List",
+    "columnName": "Name",
+    "columnStatus": "Status",
+    "columnUpdated": "Updated",
+    "tabsLabel": "Kinds",
+    "tabs": {
+      "all": "All",
+      "app": "Apps",
+      "slides": "Slides",
+      "sheet": "Sheets",
+      "doc": "Docs",
+      "pdf": "PDFs",
+      "page": "Pages"
+    },
+    "kind": {
+      "app": "App",
+      "slides": "Slides",
+      "sheet": "Sheet",
+      "doc": "Doc",
+      "pdf": "PDF",
+      "page": "Page"
+    },
+    "columnKind": "Kind"
   },
   "questionPrompt": {
     "submitFailed": "Could not submit answers. Your answers are saved here. Try again.",

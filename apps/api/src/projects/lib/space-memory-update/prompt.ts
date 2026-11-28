@@ -44,15 +44,34 @@ export const SPACE_MEMORY_PAGE_BODY_CHARS = 12_000;
 
 type LogMessage = SessionLogPage['messages'][number];
 
-/** A session's sync mark, read from its metadata; 0 / null when it was never read. */
-export function syncMarkOf(metadata: unknown): { seq: number; at: string | null } {
+/** The only shape the server writes a mark time in (`toISOString()`). */
+const ISO_MARK = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
+const roundTrips = (at: string) => {
+  const date = new Date(at);
+  return !Number.isNaN(date.getTime()) && date.toISOString() === at;
+};
+
+/** A mark this far after now still counts: room for the API and database clocks to differ. */
+export const SPACE_MEMORY_MARK_SKEW_MS = 5 * 60_000;
+
+/**
+ * A session's sync mark, read from its metadata; 0 / null when it was never
+ * read. A mark whose time is after `now` (past `SPACE_MEMORY_MARK_SKEW_MS`), or not a time, reads as unset (seq
+ * and time both): only the server writes the mark
+ * (`SERVER_MANAGED_SESSION_METADATA_KEYS`), and a future one could only be a
+ * forgery that keeps the session out of the Space memory.
+ */
+export function syncMarkOf(metadata: unknown, now: Date = new Date()): { seq: number; at: string | null } {
   const meta = (metadata ?? {}) as Record<string, unknown>;
   const seq = meta[SPACE_MEMORY_SYNCED_SEQ_KEY];
   const at = meta[SPACE_MEMORY_SYNCED_AT_KEY];
-  return {
-    seq: typeof seq === 'number' && Number.isInteger(seq) && seq >= 0 ? seq : 0,
-    at: typeof at === 'string' && !Number.isNaN(Date.parse(at)) ? at : null,
-  };
+  // The strict shape the server writes (`toISOString()`), and a real date: `Date.parse` is NaN for month 99.
+  // The exact shape the server writes, round-tripped: `Date` rolls Feb 30 over to Mar 2 and
+  // gives NaN for month 99, so only a real calendar time survives `toISOString()` unchanged.
+  const time = typeof at === 'string' && ISO_MARK.test(at) && roundTrips(at) ? Date.parse(at) : Number.NaN;
+  if (Number.isNaN(time) || time > now.getTime() + SPACE_MEMORY_MARK_SKEW_MS) return { seq: 0, at: null };
+  return { seq: typeof seq === 'number' && Number.isInteger(seq) && seq >= 0 ? seq : 0, at: at as string };
 }
 
 /**
@@ -61,7 +80,7 @@ export function syncMarkOf(metadata: unknown): { seq: number; at: string | null 
  * `SPACE_MEMORY_IDLE_MS`. The candidate query applies the same rule in SQL.
  */
 export function sessionDue(input: { updatedAt: Date; metadata: unknown; now: Date; manual: boolean }): boolean {
-  const { at } = syncMarkOf(input.metadata);
+  const { at } = syncMarkOf(input.metadata, input.now);
   const updated = input.updatedAt.getTime();
   const now = input.now.getTime();
   if (at !== null && updated <= Date.parse(at)) return false;

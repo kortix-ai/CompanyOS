@@ -11,6 +11,7 @@ import { sql } from 'drizzle-orm';
 import { MEMORY_DIR_NAME } from '../../drives/folders';
 import { projectFeatureFlagEnabled } from '../../feature-flags/for-project';
 import { turnSeesGroup } from './session-group-viewer';
+import { spaceFolderMountable } from '../../shared/session-group-access';
 import { isUuid } from '../../shared/validate';
 import { logger } from '../../lib/logger';
 import { db } from '../../shared/db';
@@ -50,6 +51,9 @@ export interface SessionWhereRow {
   group_created_by?: string | null;
   /** The owner is in the space's `project_session_group_members`. */
   owner_is_member?: boolean | null;
+  /** The session's own sharing and, for a child, its parent's (`spaceFolderMountable`). */
+  session_visibility?: string | null;
+  parent_visibility?: string | null;
   /** The person prompting this turn is in the space's `project_session_group_members` (false without one). */
   prompter_is_member?: boolean | null;
 }
@@ -168,6 +172,7 @@ export async function readSessionWhere(projectId: string, sessionId: string, pro
            p.session_id AS parent_session_id,
            g.group_id, g.name AS group_name, g.description AS group_description, g.instructions AS group_instructions,
            g.visibility AS group_visibility, g.created_by AS group_created_by,
+           s.visibility::text AS session_visibility, p.visibility::text AS parent_visibility,
            (g.group_id IS NOT NULL AND s.created_by IS NOT NULL AND EXISTS (
               SELECT 1 FROM kortix.project_session_group_members m WHERE m.group_id = g.group_id AND m.user_id = s.created_by
            )) AS owner_is_member,
@@ -356,6 +361,26 @@ async function spaceMemoryFilesForTurn(projectId: string, groupId: string): Prom
   }
 }
 
+/**
+ * The row a turn is briefed from: the Space's fields only when the turn may
+ * read the Space (`seen`: the flag, the owner and the prompter, `turnSeesGroup`)
+ * and the session reaches no one the Space does not (`spaceFolderMountable`:
+ * a shared session of a private Space, e.g. one that turned private later).
+ * Otherwise the session reads as in no Space: no name, description,
+ * instructions, mount or memory list.
+ */
+export function withSpaceIfAllowed(found: SessionWhereRow, seen: boolean): SessionWhereRow {
+  const allowed =
+    seen &&
+    !!found.group_id &&
+    spaceFolderMountable({
+      groupVisibility: found.group_visibility ?? 'private',
+      sessionVisibility: found.session_visibility ?? null,
+      parentVisibility: found.parent_visibility ?? null,
+    });
+  return allowed ? found : { ...found, group_id: null, group_name: null, group_description: null, group_instructions: null };
+}
+
 /** The block for a session's turn, with the space it is filed in (for the memory choice) and its space brief. Null when the session is not found. */
 export async function sessionWhereTurn(
   projectId: string,
@@ -381,7 +406,7 @@ export async function sessionWhereTurn(
       prompterIsMember: !!found.prompter_is_member,
       accountId: found.account_id ?? null,
     }));
-  const row = grouped ? found : { ...found, group_id: null, group_name: null, group_description: null, group_instructions: null };
+  const row = withSpaceIfAllowed(found, grouped);
   // The memory folder is listed only when the box mounts the space's folder: the agent can open nothing else.
   const memoryFiles = row.group_id && spaceMountPath(row) ? await spaceMemoryFilesForTurn(projectId, row.group_id) : null;
   return {

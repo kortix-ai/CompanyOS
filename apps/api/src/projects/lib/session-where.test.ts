@@ -12,6 +12,7 @@ import {
   sessionSourceText,
   sessionSpaceBrief,
   sessionWhereText,
+  withSpaceIfAllowed,
 } from './session-where';
 
 const SPACE = '11111111-1111-4111-8111-111111111111';
@@ -236,5 +237,27 @@ describe('a space (session group)', () => {
     expect(brief.length).toBeLessThanOrEqual(SESSION_SPACE_BRIEF_TOTAL_MAX_CHARS);
     expect(SESSION_SPACE_BRIEF_TOTAL_MAX_CHARS + SESSION_WHERE_MAX_CHARS).toBeLessThan(MEMORY_TURN_SYSTEM_MAX_CHARS);
     expect(brief.endsWith('to read one.')).toBe(true);
+  });
+});
+
+describe('withSpaceIfAllowed: a shared session of a private Space reads as in no Space', () => {
+  const inSpace = (over: Partial<SessionWhereRow>) =>
+    row({ group_id: GROUP, group_name: 'Launch', group_description: 'Q1', group_instructions: 'Answer in German.', group_visibility: 'private', session_visibility: 'private', ...over });
+
+  test('a private session of a private Space keeps the whole Space brief', () => {
+    expect(withSpaceIfAllowed(inSpace({}), true).group_instructions).toBe('Answer in German.');
+  });
+
+  test('a project or restricted session of a private Space (or a child of one): no name, description, instructions', () => {
+    for (const over of [{ session_visibility: 'project' }, { session_visibility: 'restricted' }, { parent_visibility: 'project' }]) {
+      const out = withSpaceIfAllowed(inSpace(over), true);
+      expect([out.group_id, out.group_name, out.group_description, out.group_instructions]).toEqual([null, null, null, null]);
+      expect(sessionSpaceBrief(out)).toBeNull();
+    }
+  });
+
+  test('a project-visible Space keeps its brief for a shared session; a turn that may not see the Space gets none', () => {
+    expect(withSpaceIfAllowed(inSpace({ group_visibility: 'project', session_visibility: 'project' }), true).group_name).toBe('Launch');
+    expect(withSpaceIfAllowed(inSpace({}), false).group_name).toBeNull();
   });
 });

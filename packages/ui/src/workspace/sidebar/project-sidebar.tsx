@@ -27,6 +27,7 @@ import { NewAgentModalProvider } from './new-agent-modal-provider';
 import { ProjectNavItems } from './project-nav-items';
 import { ProjectSessionList } from './project-session-list';
 import { ProjectSpacesNav } from './project-spaces-nav';
+import { isRailPanelPage, RailPageActions, RailPagePanel, railPanelPageOf, type RailPanelPage } from './rail-page-panel';
 import { SidebarMoreGroup } from './sidebar-more-group';
 import { useIsCreatingProjectSession } from '../../internal/hooks/projects/new-session-guard';
 import { useNewProjectSession } from '../../internal/hooks/projects/use-new-project-session';
@@ -121,7 +122,7 @@ export function ProjectSidebar({
   // With the rail, the panel shows the sessions, or workspace settings by the route.
   const settingsOpen = isProjectAdminPath(pathname);
   // Collapsed and hovered on the rail: the hovered item picks the list, not the route.
-  const [peekSection, setPeekSection] = useState<'home' | 'spaces' | 'customize'>('home');
+  const [peekSection, setPeekSection] = useState<'home' | 'spaces' | 'customize' | RailPanelPage>('home');
   const peeking = railed && !isExpanded && peek;
   const peekOverride = peeking ? peekSection === 'customize' : undefined;
   const showingSettings = peekOverride ?? settingsOpen;
@@ -130,6 +131,15 @@ export function ProjectSidebar({
   const spacesHref = groupsOn ? (uiRoutes().sessionSpaces?.(projectId) ?? null) : null;
   const spacesOpen = !!spacesHref && !!pathname && (pathname === spacesHref || pathname.startsWith(`${spacesHref}/`));
   const showingSpaces = railed && !showingSettings && (peeking ? peekSection === 'spaces' : spacesOpen);
+  // Apps, Artifacts, Goals (rail only): the panel lists the page's items on that page, or while its rail icon is hovered.
+  const showingPage: RailPanelPage | null =
+    railed && !showingSettings && !showingSpaces
+      ? peeking
+        ? isRailPanelPage(peekSection) ? peekSection : null
+        : railPanelPageOf(projectId, pathname)
+      : null;
+  const pageLabel =
+    showingPage === 'apps' ? tI18nComplete.raw('text89dd748442c1') : showingPage === 'artifacts' ? t('artifacts') : showingPage === 'goals' ? t('goals') : '';
   // New space, from the Spaces title row (rail only).
   const [newSpaceOpen, setNewSpaceOpen] = useState(false);
   // Chat on, rail: the panel shows the chats or the sessions.
@@ -297,7 +307,7 @@ export function ProjectSidebar({
               !peek && 'kx-titlebar-row kx-titlebar-band-height kx-project-sidebar-titlebar',
             )}
           >
-            {chat && !showingSettings && !showingSpaces ? (
+            {chat && !showingSettings && !showingSpaces && !showingPage ? (
               // Chat on: two views of the panel, the chats and the sessions.
               <Tabs value={chatTab} onValueChange={(value) => setChatTab(value as 'chat' | 'sessions')} className="min-w-0 flex-1">
                 {/* `-ml-2.5` cancels the first trigger's `px-2.5`: its label starts on the list's label edge. */}
@@ -312,10 +322,13 @@ export function ProjectSidebar({
               </Tabs>
             ) : (
               <span className="text-foreground min-w-0 flex-1 truncate text-sm font-medium">
-                {showingSettings ? t('customize') : showingSpaces ? tGroups('heading') : t('sessions')}
+                {showingSettings ? t('customize') : showingSpaces ? tGroups('heading') : showingPage ? pageLabel : t('sessions')}
               </span>
             )}
-            {showingSettings ? null : showingSpaces ? (
+            {showingSettings ? null : showingPage ? (
+              // The page itself, then create one, at the row's right edge.
+              <RailPageActions projectId={projectId} page={showingPage} label={pageLabel} />
+            ) : showingSpaces ? (
               // Spaces: the Spaces page, then New space, at the row's right edge.
               // `-mr-1.75` cancels the `icon-base` button's inset (29px box, 16px glyph):
               // the last glyph ends on the row's edge, as the title starts on it.
@@ -478,7 +491,7 @@ export function ProjectSidebar({
         >
           <SidebarGroup className="py-0">
             <SidebarMenu>
-              {chat || showingSpaces ? null : (
+              {chat || showingSpaces || showingPage ? null : (
                 <SidebarMenuItem>
                   {creatingSession ? (
                     <SidebarMenuButton
@@ -510,7 +523,9 @@ export function ProjectSidebar({
           </SidebarGroup>
 
           <SidebarGroup className="min-h-0 flex-1 flex-col py-0" ref={sessionsGroupRef}>
-            {chat ? (
+            {showingPage ? (
+              <RailPagePanel projectId={projectId} page={showingPage} />
+            ) : chat ? (
               <>
                 {/* Channels and Direct messages are the core surface. The
                     session list sits below them, closed by default: every

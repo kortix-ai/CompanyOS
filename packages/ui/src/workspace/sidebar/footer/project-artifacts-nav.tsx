@@ -129,11 +129,11 @@ export function ProjectArtifactsNavItem({ projectId }: { projectId: string }) {
 
 /** One artifact: its type glyph and its title. */
 /** The desktop tab strip is mounted (apps/web/src/features/desktop-tabs/desktop-tabs-gate.tsx). */
-function desktopTabsMounted(): boolean {
+export function desktopTabsMounted(): boolean {
   return typeof document !== 'undefined' && document.documentElement.hasAttribute('data-kx-desktop-tabs-mounted');
 }
 
-export function ArtifactRow({ artifact, href, onOpen }: { artifact: Artifact; href: string; onOpen: () => void }) {
+function ArtifactRow({ artifact, href, onOpen }: { artifact: Artifact; href: string; onOpen: () => void }) {
   const Glyph = TYPE_ICON[artifact.type];
   return (
     <HoverPrefetchLink

@@ -1686,9 +1686,11 @@
       "more": "更多",
       "pinTab": "显示标签页",
       "unpinTab": "隐藏标签页",
-      "viewAll": "查看全部",
       "appsEmpty": "还没有应用",
-      "artifactsEmpty": "还没有制品"
+      "artifactsEmpty": "还没有制品",
+      "goalsEmpty": "还没有目标",
+      "searchGoals": "搜索目标",
+      "noMatches": "没有匹配项"
     },
     "customize": "自定义",
     "sessions": "会话",

@@ -1686,9 +1686,11 @@
       "more": "その他",
       "pinTab": "タブを表示",
       "unpinTab": "タブを非表示",
-      "viewAll": "すべて表示",
       "appsEmpty": "まだアプリはありません",
-      "artifactsEmpty": "まだアーティファクトはありません"
+      "artifactsEmpty": "まだアーティファクトはありません",
+      "goalsEmpty": "まだ目標はありません",
+      "searchGoals": "目標を検索",
+      "noMatches": "一致するものはありません"
     },
     "customize": "カスタマイズ",
     "sessions": "セッション",

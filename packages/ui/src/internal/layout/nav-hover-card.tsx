@@ -32,15 +32,9 @@ const HOVER_CLOSE_DELAY_MS = 150;
 export function useNavHoverCard({
   enabled,
   holdRef,
-  anywhere = false,
-  openDelayMs = HOVER_OPEN_DELAY_MS,
 }: {
   enabled: boolean;
   holdRef?: RefObject<HTMLElement | null>;
-  /** The icon rail (`sidebar_rail`): its icons are on screen whether the panel is open or not, so the card is too. */
-  anywhere?: boolean;
-  /** How long the pointer rests before the card opens. The rail's card also names the icon, so it opens sooner. */
-  openDelayMs?: number;
 }) {
   const canHover = useMediaQuery('(min-width: 768px) and (hover: hover) and (pointer: fine)');
   const { state } = useSidebar();
@@ -48,7 +42,7 @@ export function useNavHoverCard({
   const anchorRef = useRef<HTMLElement | null>(null);
   const openTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const closeTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const active = enabled && canHover && (anywhere || state === 'expanded');
+  const active = enabled && canHover && state === 'expanded';
 
   const cancelTimers = () => {
     clearTimeout(openTimer.current);
@@ -62,7 +56,7 @@ export function useNavHoverCard({
     if (event.pointerType !== 'mouse' || !active) return;
     cancelTimers();
     if (open) return;
-    openTimer.current = setTimeout(() => setOpen(true), openDelayMs);
+    openTimer.current = setTimeout(() => setOpen(true), HOVER_OPEN_DELAY_MS);
   };
   const hoverClose = (event: PointerEvent<HTMLElement>) => {
     if (event.pointerType !== 'mouse') return;

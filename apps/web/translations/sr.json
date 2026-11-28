@@ -1686,9 +1686,11 @@
       "more": "Још",
       "pinTab": "Прикажи картицу",
       "unpinTab": "Сакриј картицу",
-      "viewAll": "Prikaži sve",
       "appsEmpty": "Još nema aplikacija",
-      "artifactsEmpty": "Još nema artefakata"
+      "artifactsEmpty": "Još nema artefakata",
+      "goalsEmpty": "Još nema ciljeva",
+      "searchGoals": "Pretraži ciljeve",
+      "noMatches": "Nema rezultata"
     },
     "customize": "Прилагоди",
     "sessions": "Сесије",

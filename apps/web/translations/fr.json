@@ -1686,9 +1686,11 @@
       "more": "Plus",
       "pinTab": "Afficher l'onglet",
       "unpinTab": "Masquer l'onglet",
-      "viewAll": "Tout afficher",
       "appsEmpty": "Aucune app pour l’instant",
-      "artifactsEmpty": "Aucun artefact pour l’instant"
+      "artifactsEmpty": "Aucun artefact pour l’instant",
+      "goalsEmpty": "Aucun objectif pour l’instant",
+      "searchGoals": "Rechercher des objectifs",
+      "noMatches": "Aucun résultat"
     },
     "customize": "Personnaliser",
     "sessions": "Sessions",

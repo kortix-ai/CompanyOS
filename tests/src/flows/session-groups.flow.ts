@@ -32,6 +32,7 @@ const ROUTES = {
   sharing: 'PUT /v1/projects/:projectId/session-groups/:groupId/sharing',
   tabs: 'PUT /v1/projects/:projectId/session-groups/:groupId/tabs',
   memoryUpdate: 'POST /v1/projects/:projectId/session-groups/:groupId/memory/update',
+  sessionSharing: 'PUT /v1/projects/:projectId/sessions/:sessionId/sharing',
 };
 const MEMORY_ROUTES = {
   layer: 'GET /v1/projects/:projectId/memory/layers/:layerKey',
@@ -55,6 +56,7 @@ const TABS = '/v1/workspaces/:projectId/session-groups/:groupId/tabs';
 const MEMORY_UPDATE = '/v1/workspaces/:projectId/session-groups/:groupId/memory/update';
 const ASSIGN = '/v1/workspaces/:projectId/sessions/:sessionId/group';
 const SESSIONS = '/v1/workspaces/:projectId/sessions';
+const SESSION_SHARING = '/v1/workspaces/:projectId/sessions/:sessionId/sharing';
 const SESSION = '/v1/workspaces/:projectId/sessions/:sessionId';
 
 type Group = { group_id: string; name: string; description: string | null; position: number };
@@ -505,7 +507,7 @@ flow('SGRP-4', createMeta([ROUTES.create, SESSION_ROUTES.create, SESSION_ROUTES.
   }
 });
 
-flow('SGRP-8', flowMeta('session-groups', [ROUTES.create, ROUTES.update, ROUTES.list, ROUTES.sharing, ROUTES.memoryUpdate, ...Object.values(MEMORY_ROUTES)], { timeoutMs: 120_000 }), async (ctx) => {
+flow('SGRP-8', flowMeta('session-groups', [ROUTES.create, ROUTES.update, ROUTES.list, ROUTES.sharing, ROUTES.memoryUpdate, ROUTES.sessionSharing, ROUTES.assign, ...Object.values(MEMORY_ROUTES)], { timeoutMs: 120_000 }), async (ctx) => {
   const { team, project, world } = await openWorld(ctx);
   const params = { projectId: project.id };
   const ana = await team.addMember('member');
@@ -608,6 +610,39 @@ flow('SGRP-8', flowMeta('session-groups', [ROUTES.create, ROUTES.update, ROUTES.
       await world.db.query("UPDATE kortix.project_session_groups SET memory_update_lease_until = now() + interval '5 minutes' WHERE group_id = $1", [space]);
       (await world.owner.post(MEMORY_UPDATE, {}, spaceParams)).status(409).body().has('$.code', 'memory_update_running');
       await world.db.query("UPDATE kortix.project_session_groups SET memory_update_lease_until = now() - interval '1 second' WHERE group_id = $1", [space]);
+      (await world.owner.post(MEMORY_UPDATE, {}, spaceParams)).status(200);
+    });
+
+    await ctx.step('a session of a private space (and a child of it) stays private: sharing it with the project or named people → 409 space_session_private and nothing changes; narrowing to private → 200', async () => {
+      const own = await insertSession(world, world.ownerUserId, 'private');
+      await world.db.query('UPDATE kortix.project_sessions SET group_id = $2 WHERE session_id = $1', [own, space]);
+      const child = await insertSession(world, world.ownerUserId, 'private');
+      await world.db.query('UPDATE kortix.project_sessions SET parent_session_id = $2 WHERE session_id = $1', [child, own]);
+      for (const sessionId of [own, child]) {
+        for (const body of [{ mode: 'project' }, { mode: 'members', memberIds: [ana.userId] }]) {
+          (await world.owner.put(SESSION_SHARING, body, { params: { ...params, sessionId } })).status(409).body().has('$.code', 'space_session_private');
+        }
+        const { rows } = await world.db.query('SELECT visibility::text AS v FROM kortix.project_sessions WHERE session_id = $1', [sessionId]);
+        if (rows[0]?.v !== 'private') fail('a refused sharing change was stored', rows);
+        (await world.owner.put(SESSION_SHARING, { mode: 'private' }, { params: { ...params, sessionId } })).status(200);
+      }
+    });
+
+    await ctx.step('a session shared with the project is not filed into a private space → 409 space_session_private; a private one is (200)', async () => {
+      const shared = await insertSession(world, world.ownerUserId, 'project');
+      (await world.owner.put(ASSIGN, { group_id: space }, { params: { ...params, sessionId: shared } })).status(409).body().has('$.code', 'space_session_private');
+      const { rows } = await world.db.query('SELECT group_id FROM kortix.project_sessions WHERE session_id = $1', [shared]);
+      if (rows[0]?.group_id !== null) fail('a refused filing was stored', rows);
+      const mine = await insertSession(world, world.ownerUserId, 'private');
+      (await world.owner.put(ASSIGN, { group_id: space }, { params: { ...params, sessionId: mine } })).status(200).body().has('$.group_id', space);
+    });
+
+    await ctx.step('a session of the space with an impossible stored sync mark (month 99) does not break the update: POST memory/update → 200, and the mark is still unread', async () => {
+      const odd = await insertSession(world, world.ownerUserId, 'private', {
+        metadata: { space_memory_synced_seq: 5, space_memory_synced_at: '2026-99-28T11:00:00.000Z' },
+      });
+      await world.db.query('UPDATE kortix.project_session_groups SET memory_update_lease_until = NULL WHERE group_id = $1', [space]);
+      await world.db.query('UPDATE kortix.project_sessions SET group_id = $2 WHERE session_id = $1', [odd, space]);
       (await world.owner.post(MEMORY_UPDATE, {}, spaceParams)).status(200);
     });
 

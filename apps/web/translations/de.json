@@ -1686,9 +1686,11 @@
       "more": "Mehr",
       "pinTab": "Tab anzeigen",
       "unpinTab": "Tab ausblenden",
-      "viewAll": "Alle anzeigen",
       "appsEmpty": "Noch keine Apps",
-      "artifactsEmpty": "Noch keine Artefakte"
+      "artifactsEmpty": "Noch keine Artefakte",
+      "goalsEmpty": "Noch keine Ziele",
+      "searchGoals": "Ziele suchen",
+      "noMatches": "Keine Treffer"
     },
     "customize": "Anpassen",
     "sessions": "Sitzungen",

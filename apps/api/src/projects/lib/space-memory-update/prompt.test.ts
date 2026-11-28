@@ -38,6 +38,20 @@ describe('sync marks and due sessions', () => {
     expect(syncMarkOf(null)).toEqual({ seq: 0, at: null });
   });
 
+  test('an impossible or loosely shaped mark time reads as unset, seq too: empty, month 99 (past or future), Feb 30, day 32, no milliseconds', () => {
+    for (const at of ['', '2026-99-28T11:00:00.000Z', '2025-99-28T11:00:00.000Z', '2026-02-30T11:00:00.000Z', '2026-11-32T11:00:00.000Z', '2026-11-28T11:00:00Z', '2026-11-28 11:00']) {
+      expect(syncMarkOf({ [SPACE_MEMORY_SYNCED_SEQ_KEY]: 7, [SPACE_MEMORY_SYNCED_AT_KEY]: at }, NOW)).toEqual({ seq: 0, at: null });
+    }
+  });
+
+  test('a future mark (past 5 min of clock skew) reads as unset, seq and time both; inside the skew it counts', () => {
+    const future = { [SPACE_MEMORY_SYNCED_SEQ_KEY]: 999, [SPACE_MEMORY_SYNCED_AT_KEY]: '2026-11-28T12:06:00.000Z' };
+    expect(syncMarkOf(future, NOW)).toEqual({ seq: 0, at: null });
+    expect(sessionDue({ updatedAt: minutesAgo(6), metadata: future, now: NOW, manual: false })).toBe(true);
+    const skewed = { [SPACE_MEMORY_SYNCED_SEQ_KEY]: 4, [SPACE_MEMORY_SYNCED_AT_KEY]: '2026-11-28T12:04:00.000Z' };
+    expect(syncMarkOf(skewed, NOW)).toEqual({ seq: 4, at: '2026-11-28T12:04:00.000Z' });
+  });
+
   test('the job reads a session idle 5 min that changed after its mark, inside the lookback', () => {
     expect(sessionDue({ updatedAt: minutesAgo(6), metadata: {}, now: NOW, manual: false })).toBe(true);
     // Still active: the job waits, the route does not.

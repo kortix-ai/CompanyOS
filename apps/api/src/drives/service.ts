@@ -20,7 +20,7 @@
 import { logger } from '../lib/logger';
 import { accountMembers, driveConflicts, driveMountRevocations, drives, iamRoles, projectSessionGroups, projectSessions, projectSpaceLinks, projectSpaceMembers, projectSpaces, roleAssignments, serviceAccounts, sessionSandboxes } from '@kortix/db';
 import { SESSION_GROUPS_DIR, sessionGroupDriveFolder, spaceDriveFolders } from '@kortix/shared';
-import { groupFolderAccess, ownerSeesGroup } from '../shared/session-group-access';
+import { groupFolderAccess, ownerSeesGroup, spaceFolderMountable } from '../shared/session-group-access';
 import { privateChannelAccess } from '../shared/space-access';
 import { and, asc, count, desc, eq, inArray, isNull, lte, ne, or, sql } from 'drizzle-orm';
 import { projectFeatureFlagEnabled } from '../feature-flags/for-project';
@@ -675,13 +675,16 @@ export async function sessionSpaceFolder(projectId: string, sessionId: string, g
  * itself). Null for no group, the flag off, or a session whose owner
  * (`created_by`) no longer sees the group (`ownerSeesGroup`): a person removed
  * from a private space keeps their sessions, but their boxes no longer mount
- * its folder. Read when the box's mounts are planned (`planSessionDrives`).
+ * its folder. Also null for a session of a private space that reaches people
+ * beyond its owner (`spaceFolderMountable`: shared with the project or named
+ * people). Read when the box's mounts are planned (`planSessionDrives`).
  */
 export async function sessionGroupOf(projectId: string, sessionId: string): Promise<{ groupId: string; name: string; description: string | null } | null> {
   if (!(await projectFeatureFlagEnabled(projectId, 'session_groups'))) return null;
   const rows = (await db.execute(sql`
     SELECT g.group_id, g.name, g.description, g.visibility, g.created_by AS group_created_by,
            s.created_by AS owner_id, s.account_id,
+           s.visibility::text AS session_visibility, p.visibility::text AS parent_visibility,
            (s.created_by IS NOT NULL AND EXISTS (
               SELECT 1 FROM kortix.project_session_group_members m WHERE m.group_id = g.group_id AND m.user_id = s.created_by
            )) AS owner_is_member
@@ -703,9 +706,13 @@ export async function sessionGroupOf(projectId: string, sessionId: string): Prom
     owner_id: string | null;
     account_id: string;
     owner_is_member: boolean;
+    session_visibility: string | null;
+    parent_visibility: string | null;
   }>;
   const row = rows[0];
   if (!row) return null;
+  const audience = { groupVisibility: row.visibility, sessionVisibility: row.session_visibility, parentVisibility: row.parent_visibility };
+  if (!spaceFolderMountable(audience)) return null;
   const seen = await ownerSeesGroup({ visibility: row.visibility, createdBy: row.group_created_by }, row.owner_id, !!row.owner_is_member, () =>
     hasAccountSessionOversight(row.owner_id!, row.account_id).catch(() => false),
   );

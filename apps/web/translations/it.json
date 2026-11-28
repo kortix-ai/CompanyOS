@@ -1686,9 +1686,11 @@
       "more": "Altro",
       "pinTab": "Mostra scheda",
       "unpinTab": "Nascondi scheda",
-      "viewAll": "Mostra tutto",
       "appsEmpty": "Ancora nessuna app",
-      "artifactsEmpty": "Ancora nessun artefatto"
+      "artifactsEmpty": "Ancora nessun artefatto",
+      "goalsEmpty": "Ancora nessun obiettivo",
+      "searchGoals": "Cerca obiettivi",
+      "noMatches": "Nessun risultato"
     },
     "customize": "Personalizza",
     "sessions": "Sessioni",

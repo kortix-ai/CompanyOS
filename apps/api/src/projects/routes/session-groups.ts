@@ -53,7 +53,7 @@ import {
 import { serializeTabs } from '../lib/project-spaces';
 import { updateSpaceMemory } from '../lib/space-memory-update/service';
 import { canManageGroup, canSeeGroup, groupMemberAddedAt, groupMemberIds, type GroupViewer } from '../../shared/session-group-access';
-import { groupViewerFor } from '../lib/session-group-viewer';
+import { groupViewerFor, SPACE_SESSION_PRIVATE } from '../lib/session-group-viewer';
 import { resolveUserIdentities, type UserIdentity } from '../lib/user-identity';
 import { accountMemberRolesAmong } from '../../iam/membership-read';
 import { workspaceIdParam } from '../../shared/route-params';
@@ -479,13 +479,13 @@ export function registerSessionGroupsRoutes(): void {
       path: '/{workspaceId}/sessions/{sessionId}/group',
       tags: ['sessions'],
       summary: 'File a session into a session group',
-      description: '`group_id` files the session into that group of its project (one the caller sees: 404 `group_not_found` otherwise); `null` takes it out of its group. A group shares the sessions in it, so only the session’s owner may file a session that is not visible to the whole project (403 `group_share_forbidden`). The session keeps its `updated_at`, so it keeps its place in the list. A session another session started stays with its parent: 400 `group_child_session`.',
+      description: '`group_id` files the session into that group of its project (one the caller sees: 404 `group_not_found` otherwise); `null` takes it out of its group. A group shares the sessions in it, so only the session’s owner may file a session that is not visible to the whole project (403 `group_share_forbidden`). The session keeps its `updated_at`, so it keeps its place in the list. A session another session started stays with its parent: 400 `group_child_session`. A session shared beyond its owner (`project` or `restricted`) is not filed into a private group: 409 `space_session_private` (make it private first, or share the group with the workspace).',
       ...auth,
       request: {
         params: sessionParams,
         body: { required: true, content: { 'application/json': { schema: SessionGroupAssignInputSchema } } },
       },
-      responses: { 200: json(SessionGroupAssignmentSchema, 'The session and its group'), ...errors(400, 403, 404) },
+      responses: { 200: json(SessionGroupAssignmentSchema, 'The session and its group'), ...errors(400, 403, 404, 409) },
     }),
     async (c) => {
       const loaded = await loadGroupsProject(c, 'session');
@@ -505,6 +505,8 @@ export function registerSessionGroupsRoutes(): void {
         const group = isUuid(target) ? await findSessionGroup(loaded.row.projectId, target) : null;
         const memberIds = group ? ((await groupMemberIds([group.groupId])).get(group.groupId) ?? []) : [];
         if (!group || !canSeeGroup(group, memberIds, viewer)) return c.json(GROUP_NOT_FOUND, 404);
+        // A session of a private Space is private to its owner: a shared one is not filed into one.
+        if (group.visibility === 'private' && session.visibility !== 'private') return c.json(SPACE_SESSION_PRIVATE, 409);
       }
       const result = await setSessionGroup(loaded.row.projectId, sessionId, target);
       if (!result.ok) {

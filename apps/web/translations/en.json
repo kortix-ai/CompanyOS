@@ -1686,9 +1686,11 @@
       "more": "More",
       "pinTab": "Show tab",
       "unpinTab": "Hide tab",
-      "viewAll": "View all",
       "appsEmpty": "No apps yet",
-      "artifactsEmpty": "No artifacts yet"
+      "artifactsEmpty": "No artifacts yet",
+      "goalsEmpty": "No goals yet",
+      "searchGoals": "Search goals",
+      "noMatches": "No matches"
     },
     "customize": "Customize",
     "sessions": "Sessions",

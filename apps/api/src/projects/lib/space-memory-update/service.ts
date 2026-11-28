@@ -32,7 +32,7 @@ import { resolveInternalModel, standaloneGatewayUrl } from '../../session-title-
 import { sessionOwnerSeesGroup } from '../session-group-viewer';
 import { sessionTitleFromMetadata } from '../session-title-placeholder';
 import { sessionGroupDriveFolder } from '@kortix/shared';
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, type SQL, sql } from 'drizzle-orm';
 import {
   marksToAdvance,
   newSessionText,
@@ -72,11 +72,23 @@ const LEASE_MS = 5 * 60_000;
 /** After a failed automatic update, the job leaves the Space alone this long. */
 const RETRY_AFTER_MS = 30 * 60_000;
 
-/** The mark condition in SQL: changed after its mark (`syncMarkOf`'s time; a malformed value reads as never). */
-const changedSinceMark = sql`${projectSessions.updatedAt} > coalesce(
-  CASE WHEN ${projectSessions.metadata}->>${SPACE_MEMORY_SYNCED_AT_KEY} ~ '^\\d{4}-\\d{2}-\\d{2}T'
-       THEN (${projectSessions.metadata}->>${SPACE_MEMORY_SYNCED_AT_KEY})::timestamptz END,
-  '-infinity'::timestamptz)`;
+/** A timestamp as `toISOString()` text (UTC, milliseconds, `Z`): the only shape the server writes a mark in. */
+const isoText = (value: SQL) => sql`to_char((${value}) at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
+
+/**
+ * The stored mark is valid (`syncMarkOf` in SQL), compared as text and never
+ * cast: a stored value is only ever compared with `toISOString()` text, whose
+ * text order is its time order. Valid: the strict ISO shape, and not after
+ * now plus `SPACE_MEMORY_MARK_SKEW_MS`. The pattern bounds each field (month
+ * 01-12, day 01-31, …), so month 99, past or future, reads as unset. A day
+ * the month lacks (Feb 30) passes here; `syncMarkOf` rejects it in JS, and
+ * `advanceMarks` keeps no seq of a mark JS did not read as valid.
+ */
+const validMark = sql`(coalesce(${projectSessions.metadata}->>${SPACE_MEMORY_SYNCED_AT_KEY} ~ '^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])T([01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d\\.\\d{3}Z$', false)
+  AND ${projectSessions.metadata}->>${SPACE_MEMORY_SYNCED_AT_KEY} <= ${isoText(sql`now() + interval '5 minutes'`)})`;
+
+/** The mark condition in SQL: changed after its mark; an unset, malformed or future mark reads as never. */
+const changedSinceMark = sql`(NOT ${validMark} OR ${isoText(sql`${projectSessions.updatedAt}`)} > ${projectSessions.metadata}->>${SPACE_MEMORY_SYNCED_AT_KEY})`;
 
 /**
  * Only a session whose content every member of the Space may read: one in no
@@ -158,7 +170,14 @@ function spaceLayer(projectId: string, groupId: string, name: string, drive: Lay
 }
 
 /** The stored mark seq, as a number (0 when absent or not a number). */
-const storedSeq = sql`CASE WHEN jsonb_typeof(${projectSessions.metadata}->${SPACE_MEMORY_SYNCED_SEQ_KEY}) = 'number'
+/**
+ * The stored seq, only when the stored time is exactly the valid one this run
+ * read (`syncMarkOf`, which checks the calendar in JS: Feb 30 and month 99
+ * read as unset there). Anything else (an invalid time, a time this run did
+ * not read, an unset or empty time: `readAt` null) keeps no stored seq: the
+ * whole mark is replaced.
+ */
+const storedSeq = (readAt: string | null) => readAt === null ? sql`0` : sql`CASE WHEN ${projectSessions.metadata}->>${SPACE_MEMORY_SYNCED_AT_KEY} = ${readAt} AND jsonb_typeof(${projectSessions.metadata}->${SPACE_MEMORY_SYNCED_SEQ_KEY}) = 'number'
   THEN (${projectSessions.metadata}->>${SPACE_MEMORY_SYNCED_SEQ_KEY})::numeric ELSE 0 END`;
 
 /**
@@ -168,16 +187,15 @@ const storedSeq = sql`CASE WHEN jsonb_typeof(${projectSessions.metadata}->${SPAC
  * text order is their time order), so an older run that finishes last never moves a
  * mark back. `updated_at` is not touched.
  */
-async function advanceMarks(marks: ReadonlyArray<{ sessionId: string; seq: number }>, cutoff: Date): Promise<void> {
+async function advanceMarks(marks: ReadonlyArray<{ sessionId: string; seq: number; readAt: string | null }>, cutoff: Date): Promise<void> {
   for (const mark of marks) {
     await db
       .update(projectSessions)
       .set({
         metadata: sql`coalesce(${projectSessions.metadata}, '{}'::jsonb) || jsonb_build_object(
-          ${SPACE_MEMORY_SYNCED_SEQ_KEY}::text, greatest(${storedSeq}, ${mark.seq}::numeric),
+          ${SPACE_MEMORY_SYNCED_SEQ_KEY}::text, greatest(${storedSeq(mark.readAt)}, ${mark.seq}::numeric),
           ${SPACE_MEMORY_SYNCED_AT_KEY}::text, greatest(
-            coalesce(CASE WHEN ${projectSessions.metadata}->>${SPACE_MEMORY_SYNCED_AT_KEY} ~ '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$'
-              THEN ${projectSessions.metadata}->>${SPACE_MEMORY_SYNCED_AT_KEY} END, ''),
+            ${mark.readAt === null ? sql`''` : sql`coalesce(CASE WHEN ${projectSessions.metadata}->>${SPACE_MEMORY_SYNCED_AT_KEY} = ${mark.readAt} THEN ${projectSessions.metadata}->>${SPACE_MEMORY_SYNCED_AT_KEY} END, '')`},
             ${cutoff.toISOString()}::text))`,
       })
       .where(eq(projectSessions.sessionId, mark.sessionId));
@@ -295,19 +313,19 @@ async function runUpdate(
   const members = (
     await db.select({ userId: projectSessionGroupMembers.userId }).from(projectSessionGroupMembers).where(eq(projectSessionGroupMembers.groupId, group.groupId))
   ).map((row) => row.userId);
-  const marks: Array<{ sessionId: string; seq: number }> = [];
+  const marks: Array<{ sessionId: string; seq: number; readAt: string | null }> = [];
   const read: Array<{ sessionId: string; title: string | null; text: string }> = [];
   for (const session of candidates) {
-    const mark = syncMarkOf(session.metadata);
+    const mark = syncMarkOf(session.metadata, cutoff);
     const owner = session.createdBy;
     if (!(await sessionOwnerSeesGroup(group, owner, !!owner && members.includes(owner), group.accountId))) {
       // Never read: its owner no longer sees the Space. The mark moves so it does not hold a slot every tick.
-      marks.push({ sessionId: session.sessionId, seq: mark.seq });
+      marks.push({ sessionId: session.sessionId, seq: mark.seq, readAt: mark.at });
       continue;
     }
     const page = await readSessionLogPage({ sessionId: session.sessionId, threadId: null, beforeSeq: null, limit: SPACE_MEMORY_MESSAGES_PER_SESSION });
     const fresh = page && page !== 'unknown_thread' ? newSessionText(page.messages, mark.seq) : { text: '', maxSeq: mark.seq };
-    marks.push({ sessionId: session.sessionId, seq: fresh.maxSeq });
+    marks.push({ sessionId: session.sessionId, seq: fresh.maxSeq, readAt: mark.at });
     if (fresh.text) read.push({ sessionId: session.sessionId, title: sessionTitleFromMetadata(session.metadata) || null, text: fresh.text });
   }
   if (read.length === 0) {

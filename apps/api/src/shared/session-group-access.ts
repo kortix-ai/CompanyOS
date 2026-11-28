@@ -58,6 +58,22 @@ export async function ownerSeesGroup(
   return canSeeGroup(group, members, { userId: ownerId, oversight: await oversight() });
 }
 
+/**
+ * May a session's box mount its Space's folder, by who the session reaches?
+ * A `project` Space: always (everyone who can reach the session sees the
+ * Space). A `private` Space: only while the session (and, for a child, its
+ * parent) is private to its owner. A session shared with the project or with
+ * named people would hand the folder to people who may not see the Space.
+ */
+export function spaceFolderMountable(input: {
+  groupVisibility: string;
+  sessionVisibility: string | null;
+  parentVisibility: string | null;
+}): boolean {
+  if (input.groupVisibility === 'project') return true;
+  return input.sessionVisibility === 'private' && (input.parentVisibility === null || input.parentVisibility === 'private');
+}
+
 /** Each group's members, in the order they were added. */
 export async function groupMemberIds(groupIds: readonly string[]): Promise<Map<string, string[]>> {
   const out = new Map<string, string[]>(groupIds.map((id) => [id, []]));

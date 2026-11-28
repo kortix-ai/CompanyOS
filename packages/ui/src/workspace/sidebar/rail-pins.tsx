@@ -2,11 +2,11 @@
 
 import { useFeatureFlag } from '@kortix/sdk/react';
 import {
-  AppWindowIcon,
   CalendarBlankIcon,
   CardsThreeIcon,
   FoldersIcon,
   GitPullRequestIcon,
+  GlobeSimpleIcon,
   HardDrivesIcon,
   PushPinIcon,
   TargetIcon,
@@ -35,7 +35,8 @@ export type PinnablePage = (typeof PINNABLE_PAGES)[number];
  */
 export const DEFAULT_RAIL_PINS: readonly PinnablePage[] = ['review', 'apps', 'artifacts'];
 
-const storageKey = (projectId: string) => `kortix:rail-pins:${projectId}`;
+// v2: the defaults (Review, Apps, Artifacts) came with v2, so every person starts once from them.
+const storageKey = (projectId: string) => `kortix:rail-pins:v2:${projectId}`;
 /** The stored value of a person who never changed the pins. */
 const UNSET = 'unset';
 
@@ -158,7 +159,7 @@ function usePinnedApps(projectId: string): PinnedPage {
   const visible = useAppsRowVisible(projectId);
   const href = uiRoutes().apps(projectId);
   if (!visible || !href) return null;
-  return { href, label: tI18nComplete.raw('text89dd748442c1'), icon: <AppWindowIcon /> };
+  return { href, label: tI18nComplete.raw('text89dd748442c1'), icon: <GlobeSimpleIcon /> };
 }
 
 function usePinnedCalendar(projectId: string): PinnedPage {

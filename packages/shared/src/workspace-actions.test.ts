@@ -12,10 +12,10 @@ const legacy = Object.keys(WORKSPACE_ACTION_BY_LEGACY);
 const workspace = Object.values(WORKSPACE_ACTION_BY_LEGACY);
 
 describe('workspace action alias map', () => {
-  test('is a bijection: 84 legacy names, 84 distinct workspace names', () => {
-    expect(legacy).toHaveLength(84);
-    expect(new Set(workspace).size).toBe(84);
-    expect(Object.keys(LEGACY_ACTION_BY_WORKSPACE)).toHaveLength(84);
+  test('is a bijection: 85 legacy names, 85 distinct workspace names', () => {
+    expect(legacy).toHaveLength(85);
+    expect(new Set(workspace).size).toBe(85);
+    expect(Object.keys(LEGACY_ACTION_BY_WORKSPACE)).toHaveLength(85);
   });
 
   test('every workspace name starts with workspace. and no legacy name does', () => {
@@ -67,4 +67,11 @@ describe('workspace action alias map', () => {
     expect(toWorkspaceAction('project.settings.write')).toBe('workspace.settings.write');
     expect(toWorkspaceAction('account.write')).toBe('workspace.account.write');
   });
+});
+
+
+test('session.list short name normalizes without granting session.read', () => {
+  expect(toLegacyAction('session.list')).toBe('project.session.list');
+  expect(toLegacyAction('workspace.session.list')).toBe('project.session.list');
+  expect(toLegacyAction('session.read')).toBe('session.read');
 });

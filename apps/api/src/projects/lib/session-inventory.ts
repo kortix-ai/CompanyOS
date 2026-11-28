@@ -112,6 +112,8 @@ export function selectSessionRowsForViewer(input: {
    * never the launcher's other private or restricted ones.
    */
   agentPrincipal?: boolean;
+  /** Enumeration only. Never changes canAccess or a read/write gate. */
+  canListSessions?: boolean;
   /** Recently deleted (KRTX-2853): `SessionListFilter.deleted`. */
   deleted?: boolean;
   /** Now, for the restore window. */
@@ -133,7 +135,7 @@ export function selectSessionRowsForViewer(input: {
   /** Other members' DM spaces (`foreignDmSpaceIds`): never listed through `myKortixTriggerRuns`. */
   myKortixForeignDms?: ReadonlySet<string>;
 }): { authorized: boolean; items: SessionInventoryItem[] } {
-  if (input.scope === 'project' && !input.canManageProject) {
+  if (input.scope === 'project' && !input.canManageProject && !input.canListSessions) {
     return { authorized: false, items: [] };
   }
 
@@ -202,7 +204,7 @@ export function selectSessionRowsForViewer(input: {
     authorized: true,
     items: items.filter((item) => {
       if (item.deletedAt) return false;
-      if (!item.canAccess) return false;
+      if (!item.canAccess && !input.canListSessions) return false;
       // A stopped session lists whatever its runtime row says: a terminal turn
       // error parks the session (`parkTurnError`) while its box is still up,
       // and a session stopped before its first box was created has no runtime

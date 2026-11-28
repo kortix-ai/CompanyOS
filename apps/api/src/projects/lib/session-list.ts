@@ -287,6 +287,7 @@ export interface SessionListViewer {
   viewerId: string;
   boundCredentialSessionId: string | null;
   agentPrincipal: boolean;
+  canListSessions?: boolean;
   canManageProject: boolean;
   /** `hasAccountSessionOversight`. Applied to the `project` scope only. */
   accountSessionOversight: boolean;
@@ -410,7 +411,7 @@ export function sessionListViewerSql(viewer: SessionListViewer): SQL {
     : canAccess === undefined
       ? undefined
       : and(spaceVisible, canAccess);
-  return and(tombstone, access) ?? sql`true`;
+  return and(tombstone, viewer.canListSessions && !viewer.deleted ? undefined : access) ?? sql`true`;
 }
 
 /** JS twin of `searchMatchSql`, for `search_match: self | child`. `ownerText`
@@ -564,6 +565,7 @@ async function foldSessionRows(
     boundCredentialSessionId: input.boundCredentialSessionId,
     accountSessionOversight,
     agentPrincipal: input.agentPrincipal === true,
+    canListSessions: input.canListSessions,
     deleted: input.filter?.deleted === true,
     hiddenSpaceIds: ctx.hiddenSpaceIds,
     sharedGroupIds: ctx.sharedGroupIds,
@@ -694,6 +696,8 @@ export async function loadProjectSessionInventory(input: {
   boundCredentialSessionId: string | null;
   /** The caller is an agent session under the agent-principal model (spec §2). */
   agentPrincipal?: boolean;
+  /** Already authorized by the list route; never forwarded to content gates. */
+  canListSessions?: boolean;
   probeManageCapability: () => Promise<boolean>;
   /** Max VISIBLE items to return. Clamped to `SESSION_PAGE_MAX_LIMIT`. */
   limit?: number;
@@ -830,6 +834,7 @@ export async function loadProjectSessionInventory(input: {
       viewerId: input.userId,
       boundCredentialSessionId: input.boundCredentialSessionId,
       agentPrincipal: input.agentPrincipal === true,
+      canListSessions: input.canListSessions,
       canManageProject,
       accountSessionOversight,
       myKortixTriggerRuns,
@@ -842,7 +847,7 @@ export async function loadProjectSessionInventory(input: {
   // subject: the WHERE reads the viewer's groups itself, and the subject feeds
   // only the fold that re-checks each row.
   const firstChunkRead = Promise.all([standingRead, oversightRead, hiddenRead, myKortixTriggerRunsRead]).then(([allowed, oversight, hidden, myKortix]) =>
-    managerInventory && !allowed ? [] : readChunk(cursor, viewerSql(allowed, oversight, hidden, myKortix)),
+    managerInventory && !allowed && !input.canListSessions ? [] : readChunk(cursor, viewerSql(allowed, oversight, hidden, myKortix)),
   );
   // Both are awaited after the caller reads. A rejection surfaces there, in
   // the original order, and must not be unhandled before.
@@ -853,7 +858,7 @@ export async function loadProjectSessionInventory(input: {
     standingRead,
   ]);
 
-  if (managerInventory && !canManageProject) {
+  if (managerInventory && !canManageProject && !input.canListSessions) {
     return {
       authorized: false,
       items: [],

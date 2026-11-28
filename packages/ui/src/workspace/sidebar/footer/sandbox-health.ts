@@ -6,11 +6,10 @@ import { useTranslations } from '../../../i18n';
 import type { SandboxRuntimeStatus } from '@kortix/sdk';
 import {
   fixSandboxWithAgent,
-  getProjectSandboxHealth,
   rebuildProjectSnapshot,
   type ProjectSandboxHealth,
 } from '@kortix/sdk';
-import { qk } from '@kortix/sdk/react';
+import { qk, sandboxHealthQueryOptions } from '@kortix/sdk/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUiRouter } from '../../../providers/ui-provider';
 import { useCallback } from 'react';
@@ -20,12 +19,10 @@ import {
   type SandboxAlertSeverity,
 } from './sandbox-alert-state';
 import type { SidebarAlertTone } from './sidebar-alert';
-export const SANDBOX_HEALTH_QUERY_KEY = (projectId: string) => ['sandbox-health', projectId];
+export const SANDBOX_HEALTH_QUERY_KEY = (projectId: string) => sandboxHealthQueryOptions(projectId).queryKey;
 export function useSandboxHealth(projectId: string) {
   return useQuery<ProjectSandboxHealth>({
-    queryKey: SANDBOX_HEALTH_QUERY_KEY(projectId),
-    queryFn: () => getProjectSandboxHealth(projectId),
-    staleTime: 30_000,
+    ...sandboxHealthQueryOptions(projectId),
     refetchInterval: (query) => sandboxHealthRefetchInterval(query.state.data),
     refetchOnWindowFocus: true,
   });

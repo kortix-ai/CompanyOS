@@ -1,11 +1,11 @@
 'use client';
 
 import { ShieldWarningIcon } from '@phosphor-icons/react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { useLocale, useTranslations } from '@/i18n/use-translations';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 
 import { Button } from '@kortix/ui/button';
 import Loading from '@kortix/ui/loading';
@@ -21,21 +21,14 @@ import { PROJECT_LANDING_PATH } from '@kortix/ui/internal/lib/onboarding/landing
 import { forgetLastProjectId } from '@kortix/ui/internal/lib/onboarding/last-project-cookie';
 import { useAppHome } from '@kortix/ui/internal/lib/onboarding/use-app-home';
 import { focusWithoutScroll } from '@kortix/ui/internal/lib/utils/focus-without-scroll';
-import { getWorkspace, requestProjectAccess, restoreWorkspace, type WorkspaceState } from '@kortix/sdk';
+import type { RequestWorkspaceAccessResult, WorkspaceState } from '@kortix/sdk';
 import { formatWorkspaceDate } from '@kortix/ui/workspace/project-selector/project-selector-model';
-import { prefetchSessionOpen, qk, useAdminImpersonate } from '@kortix/sdk/react';
+import { errorStatus, prefetchSessionOpen, prefetchWorkspaceShell, useAdminImpersonate, useRestoreWorkspace, useWorkspaceAccess, type WorkspaceAccess } from '@kortix/sdk/react';
 import { prefetchSessionRouteReads } from '@kortix/ui/session/status/session-route-prefetch';
-import { prefetchProjectShellReads } from '@/components/projects/project-shell-prefetch';
 import { useHomeTypingBuffer } from '@/components/projects/use-home-typing-buffer';
-
-/** How often the waiting screen re-checks whether a manager approved the request. */
-const APPROVAL_POLL_MS = 15_000;
 
 /** Matches the server's own ceiling (apps/api projects access-requests route). */
 const MESSAGE_MAX_LENGTH = 2_000;
-
-/** Derived from the SDK so a new result status becomes a type error here. */
-type RequestResultStatus = Awaited<ReturnType<typeof requestProjectAccess>>['status'];
 
 // ─── State machine (pure — see project-access-boundary.test.ts) ───────────────
 
@@ -73,13 +66,7 @@ export function gateCopyKeys(state: AccessGateState): AccessGateCopyKeys {
   return GATE_COPY_KEYS[state];
 }
 
-/** Pulls the HTTP status off either error shape the SDK can surface. */
-export function errorStatus(error: unknown): number | undefined {
-  return (
-    (error as { status?: number; response?: { status?: number } } | null)?.status ??
-    (error as { response?: { status?: number } } | null)?.response?.status
-  );
-}
+export { errorStatus, workspaceAccessQueryOptions as projectGateQuery } from '@kortix/sdk/react';
 
 /**
  * Maps a failed `getProject` to the screen it should show. 403 is the only
@@ -98,7 +85,7 @@ export function gateStateForError(error: unknown): AccessGateState {
  * `already_has_access` returns null: the caller re-fetches instead, because the
  * project is readable now and the right screen is the project itself.
  */
-export function gateStateForRequestResult(status: RequestResultStatus): WaitingGateState | null {
+export function gateStateForRequestResult(status: RequestWorkspaceAccessResult['status']): WaitingGateState | null {
   switch (status) {
     case 'created':
       return 'sent';
@@ -214,20 +201,6 @@ export function routeSessionIdFromParams(params: Record<string, unknown> | null 
   return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
-/**
- * The gate's read. It uses the shell's canonical project slot, so the
- * shell, ⌘K and settings read this answer instead of asking again (2 GETs per
- * load before). A user switch empties the cache before the new user is
- * published (`resetClientState`).
- */
-export function projectGateQuery(projectId: string) {
-  return {
-    queryKey: qk.project.summary(projectId),
-    queryFn: () => getWorkspace(projectId, { showErrors: false }),
-    retry: false,
-  } as const;
-}
-
 // ─── Boundary ────────────────────────────────────────────────────────────────
 
 interface ProjectAccessBoundaryProps {
@@ -247,18 +220,8 @@ export function ProjectAccessBoundary(props: ProjectAccessBoundaryProps) {
 function ProjectAccessForUser({ projectId, children }: ProjectAccessBoundaryProps) {
   const { user, isLoading: isAuthLoading } = useAuth();
   const authReady = !isAuthLoading && !!user?.id;
-  // A submitted request is held HERE, above the error branch, so a transient
-  // 401/500/offline poll result cannot unmount the waiting screen and hand the
-  // user a fresh request form for a request they already sent.
-  const [waiting, setWaiting] = useState<WaitingGateState | null>(null);
-
-  const query = useQuery({
-    ...projectGateQuery(projectId),
-    enabled: authReady && !!projectId,
-    // Keep a gone verdict across remounts; transient errors may recover.
-    retryOnMount: (query) => errorStatus(query.state.error) !== 404,
-    refetchOnMount: (query) => errorStatus(query.state.error) === 404 ? false : 'always',
-  });
+  const access = useWorkspaceAccess(projectId, { authReady });
+  const { query } = access;
 
   // Do not speculate on inaccessible projects: a deleted URL must settle
   // from the access check alone, without a burst of shell/session 404s.
@@ -272,39 +235,11 @@ function ProjectAccessForUser({ projectId, children }: ProjectAccessBoundaryProp
 
   useEffect(() => {
     if (!authReady || !query.isSuccess || !query.isFetchedAfterMount || !projectId) return;
-    prefetchProjectShellReads(queryClient, projectId);
+    prefetchWorkspaceShell(queryClient, projectId);
   }, [authReady, query.isSuccess, query.isFetchedAfterMount, projectId, queryClient]);
 
-  const { refetch } = query;
-  // Background poll: silent, and must never touch the button's pending state.
-  const recheck = useCallback(() => {
-    if (authReady) void refetch();
-  }, [authReady, refetch]);
-
-  // The user's own "Check now" press, tracked separately so the 15s background
-  // poll cannot disable the button under their cursor.
-  const [manualRecheck, setManualRecheck] = useState(false);
-  const recheckNow = useCallback(() => {
-    if (!authReady) return;
-    setManualRecheck(true);
-    void refetch().finally(() => setManualRecheck(false));
-  }, [authReady, refetch]);
-
   const errorState = query.isError ? gateStateForError(query.error) : null;
-  const state = resolveGateState(waiting, errorState);
-  // Stop the moment access lands, or the interval outlives the gate: this
-  // component wraps the shell for the whole session, so a poll that ignores
-  // success keeps calling getProject every 15s while the user works.
-  const polling = authReady && !query.isSuccess && shouldPollForApproval(state);
-
-  // Poll while waiting so "this page opens on its own" is a fact, not a promise
-  // the user has to keep by reloading. `recheck` is stable, so the interval is
-  // a true 15s cadence rather than 15s-since-the-last-render.
-  useEffect(() => {
-    if (!polling) return;
-    const id = setInterval(recheck, APPROVAL_POLL_MS);
-    return () => clearInterval(id);
-  }, [polling, recheck]);
+  const state = resolveGateState(access.waiting ? gateStateForRequestResult(access.waiting) : null, errorState);
 
   const forbidden = errorState === 'request';
   // The two TERMINAL unrenderable verdicts. `unavailable` is deliberately not
@@ -356,7 +291,6 @@ function ProjectAccessForUser({ projectId, children }: ProjectAccessBoundaryProp
         projectId={projectId}
         name={query.data?.name ?? ''}
         deletionScheduledFor={query.data?.deletion_scheduled_for ?? null}
-        onRestored={() => void refetch()}
       />
     );
   }
@@ -367,9 +301,7 @@ function ProjectAccessForUser({ projectId, children }: ProjectAccessBoundaryProp
     <AccessGateScreen
       projectId={projectId}
       state={state}
-      rechecking={manualRecheck}
-      onRecheck={recheckNow}
-      onWaiting={setWaiting}
+      access={access}
     />
   );
 }
@@ -386,28 +318,19 @@ function DeletingWorkspaceScreen({
   projectId,
   name,
   deletionScheduledFor,
-  onRestored,
 }: {
   projectId: string;
   name: string;
   deletionScheduledFor: string | null;
-  onRestored: () => void;
 }) {
   const t = useTranslations('workspaces.deleting');
   const locale = useLocale();
-  const queryClient = useQueryClient();
   const { user } = useAuth();
   const escapeHome = gateEscapePath(useAppHome(), projectId);
   useEffect(() => {
     forgetLastProjectId(user?.id, projectId);
   }, [user?.id, projectId]);
-  const restore = useMutation({
-    mutationFn: () => restoreWorkspace(projectId),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: qk.projects.scope() });
-      onRestored();
-    },
-  });
+  const restore = useRestoreWorkspace(projectId);
   const date = formatWorkspaceDate(deletionScheduledFor, locale);
   return (
     <AuthFrame art={false}>
@@ -449,18 +372,13 @@ function DeletingWorkspaceScreen({
 function AccessGateScreen({
   projectId,
   state,
-  rechecking,
-  onRecheck,
-  onWaiting,
+  access: { rechecking, recheckNow, request: requestMutation },
 }: {
   projectId: string;
   state: AccessGateState;
-  rechecking: boolean;
-  onRecheck: () => void;
-  onWaiting: (state: WaitingGateState) => void;
+  access: WorkspaceAccess;
 }) {
   const t = useTranslations('hardcodedUi');
-  const queryClient = useQueryClient();
   const { user } = useAuth();
   // Where both "Back to projects" controls below point. Leaving THIS project
   // (access denied, or the user just left it) is not a browse-the-list escape,
@@ -493,22 +411,6 @@ function AccessGateScreen({
     shownState.current = state;
     focusWithoutScroll(bodyRef.current);
   }, [state]);
-
-  const requestMutation = useMutation({
-    mutationFn: () => requestProjectAccess(projectId, message),
-    onMutate: () => setInlineError(null),
-    onSuccess: (result) => {
-      const next = gateStateForRequestResult(result.status);
-      if (next) {
-        onWaiting(next);
-        return;
-      }
-      // already_has_access — the project is readable now, so show the project.
-      void queryClient.invalidateQueries({ queryKey: qk.project.summary(projectId) });
-    },
-    onError: (error: Error) =>
-      setInlineError(error.message || t.raw('projectAccessBoundary.requestFailed')),
-  });
 
   // Platform-admin escape hatch: act as the project's account (the same grant
   // as Admin → Accounts → Open as account: one hour, a banner, audited on the
@@ -572,7 +474,11 @@ function AccessGateScreen({
                 // focus in flight, which means it stays clickable and the guard
                 // has to live here.
                 if (requestMutation.isPending) return;
-                requestMutation.mutate();
+                setInlineError(null);
+                requestMutation.mutate(message, {
+                  onError: (error: Error) =>
+                    setInlineError(error.message || t.raw('projectAccessBoundary.requestFailed')),
+                });
               }}
             >
               <label
@@ -620,7 +526,7 @@ function AccessGateScreen({
               size="lg"
               variant={action === 'recheck' ? 'secondary' : 'default'}
               className="mt-5 w-full"
-              onClick={onRecheck}
+              onClick={recheckNow}
               disabled={rechecking}
             >
               {rechecking ? <Loading className="size-4 shrink-0" /> : null}

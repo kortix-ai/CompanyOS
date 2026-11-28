@@ -43,29 +43,6 @@ function copyBlock(locale: string): Record<string, string> {
 
 const en = copyBlock('en');
 
-describe('project access waits for the authenticated identity', () => {
-  test('the query waits for auth hydration', () => {
-    expect(componentSource).toContain('const { user, isLoading: isAuthLoading } = useAuth();');
-    expect(componentSource).toContain('const authReady = !isAuthLoading && !!user?.id;');
-    expect(componentSource).toContain('enabled: authReady && !!projectId');
-  });
-
-  test('the boundary renders what resolveBoundaryView decides', () => {
-    expect(componentSource).toContain('const view = resolveBoundaryView({');
-    expect(componentSource).toContain("if (view === 'pending') return <ProjectPendingScreen />;");
-    expect(componentSource).toContain("if (view === 'project') return <>{children}</>;");
-    expect(componentSource).toContain('const polling = authReady &&');
-  });
-
-  test('identity changes remount gate state and retain the signed-out escape', () => {
-    const boundary = componentSource.slice(componentSource.indexOf('export function ProjectAccessBoundary'), componentSource.indexOf('function ProjectAccessForUser'));
-    expect(boundary).toContain('useSignedOutRedirect();');
-    expect(boundary).toContain('key={`${props.projectId}:${user?.id ?? "pending"}`}');
-    expect(componentSource).toContain('if (authReady) void refetch();');
-    expect(componentSource).toContain('if (!authReady) return;');
-  });
-});
-
 /** The English the user actually reads on a given screen. */
 function englishCopy(state: AccessGateState) {
   const keys = gateCopyKeys(state);
@@ -323,22 +300,7 @@ describe('the last-project cookie self-heal', () => {
   });
 });
 
-describe('polling lifecycle', () => {
-  test('the poll stops as soon as the project becomes readable', () => {
-    // This boundary wraps the project shell for the whole session, so a poll
-    // that only checks `waiting` keeps calling getProject every 15s while the
-    // user works. The guard must include the success case.
-    expect(componentSource).toContain('!query.isSuccess && shouldPollForApproval');
-    expect(componentSource).toMatch(/if \(!polling\) return;/);
-  });
-
-  test('the background poll never drives the user-facing pending state', () => {
-    // `query.isFetching` is true for the automatic poll too, so binding the
-    // button to it makes "Check now" disable itself every 15 seconds.
-    expect(componentSource).not.toContain('rechecking={query.isFetching}');
-    expect(componentSource).toContain('rechecking={manualRecheck}');
-  });
-
+describe('request form focus', () => {
   test('neither the note field nor the submit button is `disabled` while in flight', () => {
     // Disabling a focused element drops keyboard focus to <body>. The field
     // uses readOnly and the button uses aria-disabled + a guard in onSubmit.

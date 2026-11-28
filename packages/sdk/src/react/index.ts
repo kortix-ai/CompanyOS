@@ -149,6 +149,9 @@ export {
   type UseWorkspacesResult,
   type UseWorkspaceOptions,
 } from './use-workspaces';
+// The workspace access gate (read, request, approval poll, restore) and the shell reads warmed once it opens.
+export { errorStatus, useRestoreWorkspace, useWorkspaceAccess, workspaceAccessQueryOptions, type WorkspaceAccess, type WorkspaceAccessWaiting } from './use-workspace-access';
+export { prefetchWorkspaceShell, sandboxHealthQueryOptions } from './prefetch-workspace-shell';
 export { useWorkspaceSecrets, useProjectSecrets, workspaceSecretsKey, projectSecretsKey } from './use-project-secrets';
 export { useAccountSecretResources, useSessionProviderSecretPools, useSubscriptionUsage, useSubscriptionUsages, useSubscriptionConnections } from './use-provider-secrets';
 export {

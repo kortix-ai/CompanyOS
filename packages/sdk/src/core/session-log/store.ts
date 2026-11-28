@@ -32,6 +32,9 @@
  *    queued prompt (the API never stores one). A page of an older generation than the thread's
  *    last newest page changes nothing (`isStaleSessionLogPage`). A page's streaming copy never
  *    replaces a finished record held.
+ *  - A newest page that reaches no held message of its thread (every held one is below its first
+ *    seq) leaves a hole nothing reads: the held messages leave with their revs, a queued prompt
+ *    stays, and the thread offers its older pages again (KRTX-4973).
  *  - `older` keeps each thread's `has_more` from the oldest page read (`useSessionLogOlder`).
  *  - A streaming put (`status: 'streaming'`) is an ordinary put: the deltas that follow
  *    append to its blocks, and the final put (a higher `rev`) replaces it.
@@ -205,7 +208,8 @@ export function applySessionLogPage(state: SessionLogState, page: SessionLogPage
   const pageGenerations = state.pageGenerations ?? {};
   let messages = state.messages;
   let older = state.older;
-  const held = thread === null ? undefined : messages[thread];
+  let revs = state.revs;
+  let held = thread === null ? undefined : messages[thread];
   if (thread !== null) {
     // The page answers for the thread's older messages when it reaches back as far as the
     // held ones: an older page, the first page of the thread, or a page holding all of it.
@@ -213,6 +217,27 @@ export function applySessionLogPage(state: SessionLogState, page: SessionLogPage
     const first = page.messages[0]?.seq;
     const oldest = beforeSeq !== undefined || !held?.length || !page.has_more || (first !== undefined && first <= held[0]!.seq);
     if (oldest && state.older[thread] !== page.has_more) older = { ...older, [thread]: page.has_more };
+  }
+  // A newest page that reaches no held message (every held one is below its first seq): what lies
+  // between them is unknown. A re-open applies the device's saved copy, the page of the last open,
+  // then the newest page; a tab that missed more than a page reads the newest page after it. Kept,
+  // the held messages and the page left a hole that nothing reads: older pages are read only below
+  // the first held message, so the replies in the hole stayed missing until a hard refresh
+  // (KRTX-4973). The held messages leave, with their revs, so the older pages the thread offers
+  // again put them back in order. A queued prompt's seq is no position: it stays.
+  if (thread !== null && held?.length && beforeSeq === undefined && page.has_more) {
+    const real = (m: SessionLogMessage) => m.seq < SESSION_LOG_QUEUED_SEQ_FLOOR;
+    const first = page.messages.reduce((min, m) => (real(m) ? Math.min(min, m.seq) : min), Infinity);
+    if (first !== Infinity && !held.some((m) => real(m) && m.seq >= first)) {
+      const gone = held.filter(real);
+      if (gone.length) {
+        held = held.filter((m) => !real(m));
+        messages = { ...messages, [thread]: held };
+        revs = { ...revs };
+        for (const m of gone) delete revs[m.message_id];
+        older = { ...older, [thread]: true };
+      }
+    }
   }
   // The page is the thread's truth from its first seq (from the start without `has_more`) up to
   // `beforeSeq` (an older page), or to the end (the box's own page): a held message there that
@@ -237,7 +262,7 @@ export function applySessionLogPage(state: SessionLogState, page: SessionLogPage
     // The API never stores a queued prompt: only the box's page answers for one.
     const queued = (m: SessionLogMessage) => m.seq >= SESSION_LOG_QUEUED_SEQ_FLOOR;
     const vouched = (m: SessionLogMessage) => m.seq >= from && m.seq < to && (queued(m) ? !!options?.box : m.seq <= last);
-    const settled = held.filter((m) => !vouched(m) || kept.has(m.message_id) || state.revs[m.message_id] !== undefined);
+    const settled = held.filter((m) => !vouched(m) || kept.has(m.message_id) || revs[m.message_id] !== undefined);
     if (settled.length !== held.length) messages = { ...messages, [thread]: settled };
   }
   for (const message of page.messages) {
@@ -267,6 +292,7 @@ export function applySessionLogPage(state: SessionLogState, page: SessionLogPage
     session: newer ? { ...state.session, ...page.session } : { ...page.session, ...state.session },
     threads,
     messages,
+    revs,
     older,
     // Only the newest page answers for the tail; an older page (`beforeSeq`) does not move it.
     pageGenerations:

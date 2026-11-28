@@ -1250,6 +1250,50 @@ function takeDeltaEventId(sessionID: string, tailKey: string, id: string): boole
 }
 
 /**
+ * The optimistic stubs of this tab's sends that `log` holds, under the stub's own id or under
+ * the id the control plane re-minted it to (`optimisticEchoes`). Only threads with a stub in
+ * flight are read, so a frame with no send pending costs one map lookup per thread.
+ */
+function loggedSends(log: SessionLogState): Array<{ thread: string; stub: string; logged: string }> {
+	const out: Array<{ thread: string; stub: string; logged: string }> = [];
+	for (const [thread, list] of Object.entries(log.messages)) {
+		const marks = sessionScratch.get(thread);
+		if (!marks?.optimisticIds.size) continue;
+		const held = new Set(list.filter((m) => m.role === "user").map((m) => m.message_id));
+		for (const stub of marks.optimisticIds) {
+			const echo = marks.optimisticEchoes.get(stub);
+			const logged = held.has(stub) ? stub : echo !== undefined && held.has(echo) ? echo : undefined;
+			if (logged !== undefined) out.push({ thread, stub, logged });
+		}
+	}
+	return out;
+}
+
+/**
+ * KRTX-4973. Once the session log holds a send, the log is its record and the stub leaves the
+ * v1 store. Kept, the stub was hidden only while the log held its id (`heldByLog`): a log
+ * rebuilt without that message (a re-open whose newest page starts after it) painted the stub
+ * again, untimed so below every reply, and without its own replies. The person saw their old
+ * messages piled up at the bottom of the chat until a hard refresh.
+ */
+function withoutLoggedSends(s: SyncState, log: SessionLogState): Pick<SyncState, "messages" | "parts"> | null {
+	const released = loggedSends(log);
+	if (!released.length) return null;
+	let { messages, parts } = s;
+	for (const { thread, stub, logged } of released) {
+		releaseConfirmedOptimisticId(thread, stub, logged);
+		const list = messages[thread];
+		const kept = list?.filter((m) => m.id !== stub);
+		if (list && kept && kept.length !== list.length) messages = { ...messages, [thread]: kept };
+		if (stub in parts) {
+			const { [stub]: _released, ...rest } = parts;
+			parts = rest;
+		}
+	}
+	return { messages, parts };
+}
+
+/**
  * One `log.*` frame into `sessionId`'s log. `log.block.delta` shares the v1
  * delta path's duplicate-delivery check (keyed by thread, the runtime session
  * id) and counts as runtime activity, as `message.part.delta` does.
@@ -1275,7 +1319,10 @@ function applySessionLogFrame(sessionId: string, event: SessionLogEventInput): v
 	}
 	if (next === current) return;
 	if (delta) state.noteSessionActivity(delta.thread_id);
-	useSyncStore.setState((s) => ({ sessionLogs: { ...s.sessionLogs, [sessionId]: next } }));
+	useSyncStore.setState((s) => ({
+		sessionLogs: { ...s.sessionLogs, [sessionId]: next },
+		...(event.type === "log.message" ? withoutLoggedSends(s, next) : null),
+	}));
 }
 
 /**
@@ -2428,7 +2475,7 @@ export const useSyncStore = create<SyncState>()((set, get) => ({
 			const current = s.sessionLogs[sessionId] ?? EMPTY_SESSION_LOG_STATE;
 			// A page's session record is a patch; the id it was read for is its `session_id`.
 			const next = applySessionLogPage(current, { ...page, session: { session_id: sessionId, ...page.session } }, beforeSeq, options);
-			return next === current ? s : { sessionLogs: { ...s.sessionLogs, [sessionId]: next } };
+			return next === current ? s : { sessionLogs: { ...s.sessionLogs, [sessionId]: next }, ...withoutLoggedSends(s, next) };
 		}),
 
 	applySessionLogEvent: (sessionId, event) => applySessionLogFrame(sessionId, event),

@@ -128,6 +128,62 @@ describe('selectSessionRows: the v1 hooks read the session log through toV1', ()
   });
 });
 
+// KRTX-4973: an idle send paints an optimistic stub (no time: "the newest thing the user did").
+// The log hid it while it held the same id. A re-open whose newest page started after it let go
+// of that id, and the stub came back below every reply, without its own: the person's old
+// messages piled up at the bottom of the chat until a hard refresh.
+describe('an optimistic send the session log held', () => {
+  const shown = () => {
+    const s = store();
+    const state = s.sessionLogs[SESSION]!;
+    const thread = selectSessionLogThread(state)!;
+    return sessionLogThreadWithV1Rows(state, thread, selectSessionRows(s, thread.thread_id), (id) => s.optimisticEchoOf(thread.thread_id, id)).messages.map((m) => m.message_id);
+  };
+  const sent = () => log.threads[0]!.messages.find((m) => m.role === 'user' && m.seq > 4)!;
+  const after = (seq: number): SessionLogPage => ({ ...page(), messages: page().messages.filter((m) => m.seq > seq + 2), has_more: true });
+  const paint = (id: string) => {
+    store().optimisticAdd(ROOT, { id, sessionID: ROOT, role: 'user', time: {} } as unknown as Message, [{ id: `prt_${id}`, sessionID: ROOT, messageID: id, type: 'text', text: 'sent here' } as Part]);
+    store().markOptimisticInboxBacked(ROOT, id);
+  };
+
+  test('does not come back when a re-open\'s newest page starts after it (page put)', () => {
+    const x = sent();
+    paint(x.message_id);
+    store().applySessionLogPage(SESSION, page());
+    expect(shown().filter((id) => id === x.message_id)).toHaveLength(1);
+    store().dropSessionLog(SESSION);
+    store().applySessionLogPage(SESSION, after(x.seq));
+    expect(shown()).not.toContain(x.message_id);
+  });
+
+  test('does not come back after the stream put it either', () => {
+    const x = sent();
+    paint(x.message_id);
+    store().applySessionLogPage(SESSION, { ...page(), messages: page().messages.filter((m) => m.seq < x.seq) });
+    store().applySessionLogEvent(SESSION, ev('log.message', { rev: 7, message: x }) as never);
+    store().dropSessionLog(SESSION);
+    store().applySessionLogPage(SESSION, after(x.seq));
+    expect(shown()).not.toContain(x.message_id);
+  });
+
+  test('a re-minted echo: the log held the echo id, the stub painted under the wire id does not come back', () => {
+    const x = sent();
+    paint('msg_wire_x');
+    store().registerOptimisticEcho(ROOT, 'msg_wire_x', x.message_id);
+    store().applySessionLogPage(SESSION, page());
+    store().dropSessionLog(SESSION);
+    store().applySessionLogPage(SESSION, after(x.seq));
+    expect(shown()).not.toContain('msg_wire_x');
+    expect(shown()).not.toContain(x.message_id);
+  });
+
+  test('a send the log has not held yet still shows, at the bottom', () => {
+    store().applySessionLogPage(SESSION, page());
+    paint('msg_not_logged');
+    expect(shown().at(-1)).toBe('msg_not_logged');
+  });
+});
+
 // KRTX-2880: a streamed delta costs work proportional to what it changed, not to the transcript.
 describe('session log: per-delta work (KRTX-2880)', () => {
   const delta = (messageId: string, blockId: string, text: string, id?: string) =>

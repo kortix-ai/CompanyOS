@@ -371,7 +371,7 @@ const KORTIX_REPO = 'https://github.com/kortix-ai/suna.git';
 export const BUILTIN_DATASETS: Record<string, { path: string; description: string }> = {
   'kortix/my-kortix': {
     path: 'evals/my-kortix',
-    description: 'What My Kortix can do, one task per capability (agents, colleagues, triggers, connectors, secrets, memory, Drive, Apps, documents, code, research, browser, media, evals, permissions, asking first, follow-through), each graded on the workspace it leaves, in a workspace of its own. Run it before and after any change to My Kortix.',
+    description: 'Setting up and running a Kortix workspace through My Kortix, one task per core flow (agents, access, connectors, secrets, automations, people, memory, Drive, Apps, evals, usage, whole company setups), each graded on the workspace it leaves, in a workspace of its own. Run it before and after any change to My Kortix.',
   },
 };
 

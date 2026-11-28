@@ -180,6 +180,27 @@ describe('applySessionLogPage', () => {
     expect(ids(state)).toEqual(all.map((m) => m.message_id));
   });
 
+  test('a prompt the stream put at its queued seq moves to its real seq when a page holds it there (its relive frame was lost)', () => {
+    const all = rootMessages();
+    const prompt = all.find((m) => m.role === 'user')!;
+    const before = all.filter((m) => m.seq < prompt.seq);
+    // The stream put the prompt while it waited behind a running turn; the frame that put it
+    // again at its real seq never arrived.
+    let state = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page(before));
+    state = applySessionLogEvent(state, ev('log.message', { rev: 5, message: { ...prompt, seq: Number.MAX_SAFE_INTEGER } }));
+    expect(ids(state).at(-1)).toBe(prompt.message_id);
+    for (const box of [false, true]) {
+      const settled = applySessionLogPage(state, page(all), undefined, box ? { box } : undefined);
+      expect(ids(settled)).toEqual(all.map((m) => m.message_id));
+      expect(settled.messages[ROOT]!.find((m) => m.message_id === prompt.message_id)!.seq).toBe(prompt.seq);
+      // Its rev stays: a late queued put cannot move it back.
+      expect(applySessionLogEvent(settled, ev('log.message', { rev: 5, message: { ...prompt, seq: Number.MAX_SAFE_INTEGER } }))).toBe(settled);
+    }
+    // A box page that still holds it queued leaves it queued.
+    const waiting = applySessionLogPage(state, page([...before, { ...prompt, seq: Number.MAX_SAFE_INTEGER }]), undefined, { box: true });
+    expect(ids(waiting).at(-1)).toBe(prompt.message_id);
+  });
+
   test('an older page of an older generation changes nothing either', () => {
     const all = rootMessages();
     const state = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page(all.slice(0, -1), 2));

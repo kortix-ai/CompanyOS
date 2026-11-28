@@ -387,14 +387,12 @@ describe('cleanPromptText', () => {
     expect(rows[0].text).toBe('summarize');
   });
 });
-test("platform context remains identifiable after projecting a truncated preview", () => {
+test("an agent's report waiting for the next step is not listed over the composer (KRTX-5238)", () => {
   const full = "Synthetic platform report with full accepted content";
   const { rows } = projectQueueRows({
     prompts: [prompt({ synthetic: true, text: "Synthetic", full_text: full })],
   });
-  expect(rows[0].synthetic).toBe(true);
-  expect(rows[0].rawText).toBe(full);
-  expect(
-    projectQueueRows({ prompts: [prompt()] }).rows[0].synthetic,
-  ).toBeUndefined();
+  expect(rows).toHaveLength(0);
+  // A person's message is still listed.
+  expect(projectQueueRows({ prompts: [prompt()] }).rows).toHaveLength(1);
 });

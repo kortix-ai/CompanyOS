@@ -45,7 +45,7 @@ function render(working: boolean) {
 }
 
 const findBurst = () => mounted!.root.find(node => typeof node.type === 'function' && node.type.name === 'ActivityBurstImpl');
-const workRow = () => mounted!.root.find(node => node.type === 'button' && node.props['aria-expanded'] !== undefined && String(node.props.children?.[0]?.props?.children ?? '').startsWith('Worked'));
+const workRow = () => mounted!.root.find(node => node.type === 'button' && node.props['aria-expanded'] !== undefined && String(node.props.children?.[0]?.props?.children ?? '').startsWith('Work'));
 /** The keyed wrapper around a segment: its `hidden` is the fold. */
 const wrapperOf = (node: ReturnType<typeof findBurst>) => {
   let current = node.parent;
@@ -54,21 +54,22 @@ const wrapperOf = (node: ReturnType<typeof findBurst>) => {
   return current;
 };
 
-test('an untouched live turn folds closed at completion, without a remount', async () => {
+test('a live turn folds from its first step, and nothing changes at completion (KRTX-5238)', async () => {
   await act(async () => { mounted = create(render(true)); });
   const burst = findBurst();
-  expect(wrapperOf(burst).props.hidden).toBe(false);
+  expect(workRow().props['aria-expanded']).toBe(false);
+  expect(wrapperOf(burst).props.hidden).toBe(true);
   await act(async () => mounted?.update(render(false)));
   expect(findBurst()).toBe(burst);
   expect(workRow().props['aria-expanded']).toBe(false);
   expect(wrapperOf(burst).props.hidden).toBe(true);
-  // The burst closed again when the turn stopped: an opened row reads as one line per burst.
   expect(burst.findAllByType(Disclosure)[0].props.open).toBe(false);
 });
 
-test('a turn the reader touched while live settles open, its tree as the reader left it', async () => {
+test('a row the reader opened while live stays open at completion, its tree as they left it (KRTX-5238)', async () => {
   await act(async () => { mounted = create(render(true)); });
   const burst = findBurst();
+  await act(async () => workRow().props.onClick());
   await act(async () => burst.findAllByType(Disclosure)[0].props.onOpenChange(true));
   await act(async () => mounted?.update(render(false)));
   expect(findBurst()).toBe(burst);

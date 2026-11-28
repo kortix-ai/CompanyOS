@@ -371,7 +371,10 @@ function EntityModalBody({
       </ModalHeader>
 
       <ModalBody className="max-h-[70vh] overflow-hidden p-0">
-        <div className="flex min-h-0 flex-col overflow-y-auto lg:h-[70vh] lg:flex-row lg:overflow-hidden">
+        {/* Below `lg` this column is the scroller, so it needs its own height
+            bound: without `max-h-[70vh]` it grows to the content, the body's
+            `overflow-hidden` clips it, and the bottom sheet cannot scroll. */}
+        <div className="flex max-h-[70vh] min-h-0 flex-col overflow-y-auto overscroll-contain lg:h-[70vh] lg:flex-row lg:overflow-hidden">
           {hasFileRail ? fileRail : null}
 
           {/* Left — the entity's settings, when it has any. Scrolls itself so a

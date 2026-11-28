@@ -556,7 +556,9 @@ test('password sign-in without an address still refuses an SSO-enforced domain',
     const tree = await passwordFirst('person@sso.example.test');
     try {
       expect(lastSubmit).toBeNull();
-      expect(tree.root.findAllByProps({ role: 'alert' }).length).toBeGreaterThan(0);
+      // Back on the entry step, where the SSO action lives, with the address kept.
+      expect(tree.root.findByProps({ id: 'email' }).props.value).toBe('person@sso.example.test');
+      expect(JSON.stringify(tree.toJSON())).toContain('requires single sign-on');
     } finally {
       await act(async () => tree.unmount());
     }

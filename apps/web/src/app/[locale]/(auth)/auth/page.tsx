@@ -797,7 +797,9 @@ function AuthCardForm({
     setPendingAction('continue');
 
     const formData = new FormData(e.currentTarget);
-    const target = email.trim();
+    // An editable address is read from the field itself: a password manager
+    // can fill it without React seeing an onChange.
+    const target = (credEmailEditable ? credEmailRef.current?.value || email : email).trim();
     formData.set('email', target);
     formData.set('returnUrl', returnUrl);
     formData.set('origin', window.location.origin);
@@ -805,37 +807,40 @@ function AuthCardForm({
       formData.set('mobileCallback', 'true');
       formData.set('mobileCallbackState', mobileCallbackState);
     }
-    // The address was typed on this step, so its mode is not known yet. Resolve
-    // it on every submit: the visitor can change the address between attempts.
     let mode = credMode;
-    if (credEmailEditable) {
-      try {
-        const { mode: resolved } = await resolveAuthMode(target);
+    try {
+      // The address was typed on this step, so its mode is not known yet.
+      // Resolve it on every submit: the address can change between attempts.
+      if (credEmailEditable) {
+        let resolved: EmailFlowMode;
+        try {
+          resolved = (await resolveAuthMode(target)).mode;
+        } catch (err) {
+          if (isUnrecognizedActionError(err) && recoverStaleBundle(target)) return;
+          failWith(t('errors.unexpected'));
+          return;
+        }
         if (resolved === 'sso') {
+          // The SSO action lives on the entry step: send the visitor there
+          // with the address kept, and say why.
+          setEmail(target);
+          setCredEmailEditable(false);
+          setStep('entry');
           failWith(t('errors.ssoRequired'));
-          submitInFlight.current = false;
-          setPendingAction(null);
           return;
         }
         mode = resolved;
         setCredMode(resolved);
-      } catch (err) {
-        submitInFlight.current = false;
-        setPendingAction(null);
-        if (isUnrecognizedActionError(err) && recoverStaleBundle(target)) return;
-        failWith(t('errors.unexpected'));
-        return;
+        if (email !== target) setEmail(target);
       }
-    }
-    const copy = credentialsCopy(mode, tI18nComplete);
-    if (copy.submitsAs === 'signup') {
-      // Single password field (with reveal toggle) — the server still expects
-      // a confirmation value, so mirror it.
-      formData.set('confirmPassword', (formData.get('password') as string) || '');
-      formData.set('acceptedTerms', 'true');
-    }
+      const copy = credentialsCopy(mode, tI18nComplete);
+      if (copy.submitsAs === 'signup') {
+        // Single password field (with reveal toggle) — the server still expects
+        // a confirmation value, so mirror it.
+        formData.set('confirmPassword', (formData.get('password') as string) || '');
+        formData.set('acceptedTerms', 'true');
+      }
 
-    try {
       // Bounded, abortable POST (see submit-auth): same rationale as the
       // email-code submit — the visitor must always get an error they can
       // retry, never a button that never comes back.
@@ -1157,8 +1162,11 @@ function AuthCardForm({
                     if (credEmailEditable) {
                       // No address typed yet: go back to the email-first entry
                       // step. A typed address must be valid before a code goes out.
-                      if (!email.trim()) return goToEntry();
+                      const typed = (credEmailRef.current?.value || email).trim();
+                      if (!typed) return goToEntry();
                       if (credEmailRef.current && !credEmailRef.current.reportValidity()) return;
+                      void sendMagic(typed);
+                      return;
                     }
                     void sendMagic();
                   },

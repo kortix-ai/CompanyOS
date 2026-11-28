@@ -101,6 +101,14 @@ describe('kortix_agents', () => {
     })
   })
 
+  // Agent Evals on dev: promoted to primary, a helper kept `hidden: true` and never showed in the picker.
+  test('update: making a hidden helper primary clears hidden and keeps its instructions', async () => {
+    fakeKortix(`'agents config support-replies --json') echo '{"block":{"behavior":{"prompt":"Never send anything.","mode":"subagent","hidden":true}}}' ;;
+  'agents config support-replies --file '*' --json') cp "$5" ${JSON.stringify(join('$BIN', 'promote.json'))}; echo '{"ok":true,"agent":"support-replies","block":{}}' ;;`.replaceAll('$BIN', bin))
+    expect((await run('kortix_agents', { action: 'update', name: 'support-replies', mode: 'primary', model: 'kortix/glm-5.3-flash' })).ok).toBe(true)
+    expect(JSON.parse(readFileSync(join(bin, 'promote.json'), 'utf8'))).toEqual({ behavior: { prompt: 'Never send anything.', mode: 'primary', model: 'kortix/glm-5.3-flash' } })
+  })
+
   test('create: the person asked for a primary agent — no subagent default, nothing hidden', async () => {
     fakeKortix(`'agents config primary-writer --json') echo '{"kortix_error":{"kind":"failed","status":404,"message":"No agent primary-writer"}}' >&2; exit 1 ;;
   'agents config primary-writer --file '*' --json') cp "$5" ${JSON.stringify(join('$BIN', 'primary.json'))}; echo '{"ok":true,"agent":"primary-writer","block":{}}' ;;`.replaceAll('$BIN', bin))
@@ -210,6 +218,32 @@ describe('kortix_connectors', () => {
     const result = await run('kortix_connectors', { action: 'connect', slug: 'gmail' })
     expect(result.card.title).toBe('gmail is not added yet')
     expect(result.error?.message).toContain('Add it first')
+  })
+
+  // secret-request on three models (2026-11-28): the models ran `kortix secrets request` in the shell and
+  // copied its ~600-character link by hand. Kimi cut it short (a dead link); GLM left it out of the reply.
+  test('secret: the save link is the card action, from the CLI, never copied by the model', async () => {
+    fakeKortix(`'secrets request ACME_API_KEY --json') echo '{"url":"https://kortix.example.test/secret-intake/ksl_abc","names":["ACME_API_KEY"],"scope":"runtime","expires_at":"2026-12-05T10:00:00.000Z","withheld":[]}' ;;`)
+    const result = await run('kortix_connectors', { action: 'secret', names: ['acme_api_key'] })
+    expect(result.card.status).toBe('needs_you')
+    expect(result.card.title).toBe('Save ACME_API_KEY')
+    expect(result.card.links).toEqual([{ label: 'Save the key', href: 'https://kortix.example.test/secret-intake/ksl_abc' }])
+    expect(result.card.subtitle).toContain('never in chat')
+    expect(argvs()).toEqual(['secrets request ACME_API_KEY --json'])
+  })
+
+  test('secret: a key only a connector spends is minted with --scope connector, and a withheld name is said', async () => {
+    fakeKortix(`'secrets request STRIPE_KEY --scope connector --json') echo '{"url":"https://kortix.example.test/secret-intake/ksl_x","names":["STRIPE_KEY"],"scope":"connector","expires_at":"2026-12-05T10:00:00.000Z","withheld":[{"name":"STRIPE_KEY"}]}' ;;`)
+    const result = await run('kortix_connectors', { action: 'secret', names: 'STRIPE_KEY', for_connector: true })
+    expect(result.card.links?.[0]?.href).toBe('https://kortix.example.test/secret-intake/ksl_x')
+    expect(result.card.subtitle).toContain('This session will not receive STRIPE_KEY')
+  })
+
+  test('secret without a name asks which key', async () => {
+    fakeKortix('')
+    const result = await run('kortix_connectors', { action: 'secret' })
+    expect(result.error?.message).toContain('Pass names')
+    expect(argvs().filter(Boolean)).toEqual([])
   })
 
   test('connect: the sign-in link is the card action and the person must act', async () => {
@@ -562,6 +596,21 @@ describe('kortix_people and kortix_access', () => {
     const result = await run('kortix_people', { action: 'set_role', who: 'ADA@example.com', role: 'member' })
     expect(result.card.title).toBe('ada@example.com is now member')
     expect(result.card.changes).toEqual([{ field: 'role', before: 'owner', after: 'member' }])
+  })
+
+  // Agent Evals on dev: set_role said "not a member" and invite said "already invited", so an invited
+  // person's role could not change through the tool.
+  test('set_role on someone only invited replaces the invitation; remove cancels it', async () => {
+    fakeKortix(`${ROSTER}
+  'access pending --json') echo '{"pending":[{"invite_id":"inv_9","email":"sam.reyes@example.test","project_role":"member","invite_expired":false}]}' ;;
+  'access cancel inv_9') echo 'Cancelled' ;;
+  'access invite sam.reyes@example.test --role manager --json') echo '{"email_sent":true}' ;;`)
+    const changed = await run('kortix_people', { action: 'set_role', who: 'sam.reyes@example.test', role: 'manager' })
+    expect(changed.card.title).toBe("sam.reyes@example.test's invitation is now as manager")
+    expect(changed.card.changes).toEqual([{ field: 'role', before: 'member', after: 'manager' }])
+    expect(argvs().filter((a) => a.startsWith('access cancel') || a.startsWith('access invite'))).toEqual(['access cancel inv_9', 'access invite sam.reyes@example.test --role manager --json'])
+    const removed = await run('kortix_people', { action: 'remove', who: 'sam.reyes@example.test' })
+    expect(removed.card.title).toBe("Cancelled sam.reyes@example.test's invitation")
   })
 
   test('who_can_grant lists the managers', async () => {
@@ -1183,6 +1232,22 @@ test('kortix_schedules resume: a filtered automation goes live only after a samp
   expect(argvs().filter((a) => a.startsWith('triggers resume'))).toEqual(['triggers resume mail-triage --apply'])
 })
 
+// Agent Evals on dev: a weekday automation with no filter went live after a dry run, which always matches.
+test('kortix_schedules resume: an automation with no filter goes live only after a run_now run succeeded, not after a dry run', async () => {
+  setSystemTime(new Date('2026-11-27T13:00:00.000Z'))
+  fakeKortix(`'triggers show cr-daily --json') echo '{"type":"cron","filter":null}' ;;
+  'triggers fire cr-daily --dry-run --payload={} --json') echo '{"filter_matches":true,"rendered_prompt":"Go"}' ;;
+  'triggers run cr-daily --wait=0') echo 'Fired' ;;
+  'triggers runs cr-daily --limit=5 --json') echo '{"runs":[{"status":"fired","run_status":"succeeded","started_at":"2026-11-27T13:00:03.000Z"}]}' ;;
+  'triggers resume cr-daily --apply') echo 'Enabled' ;;`)
+  await run('kortix_schedules', { action: 'test', name: 'cr-daily', payload: {} })
+  const refused = await run('kortix_schedules', { action: 'resume', id: 'cr-daily' })
+  expect(refused.error?.message).toContain('A dry run shows nothing')
+  await run('kortix_schedules', { action: 'run_now', id: 'cr-daily' })
+  expect((await run('kortix_schedules', { action: 'resume', id: 'cr-daily' })).ok).toBe(true)
+  setSystemTime()
+})
+
 describe('kortix_schedules resume after run_now', () => {
   beforeEach(() => setSystemTime(new Date('2026-11-27T13:00:00.000Z')))
   afterEach(() => setSystemTime())
@@ -1213,5 +1278,17 @@ describe('kortix_schedules resume after run_now', () => {
       expect(refused.error?.message).toContain(says)
     }
     expect(argvs().filter((a) => a.startsWith('triggers resume'))).toEqual([])
+  })
+
+  // The run settles minutes after its session ends: a finished session counts, a running one does not.
+  test('a run still marked running counts once its session completed', async () => {
+    for (const [state, ok] of [['completed', true], ['working', false], ['failed', false]] as const) {
+      fakeKortix(`'triggers run trigger.dddddddddddd') echo 'Fired' ;;
+  'triggers runs trigger.dddddddddddd --limit=5 --json') echo '{"runs":[{"status":"fired","run_status":"running","session_id":"s_9","started_at":"2026-11-27T13:00:04.000Z"}]}' ;;
+  'sessions show s_9 --json') echo '{"session_id":"s_9","board_state":"${state}"}' ;;
+  'triggers resume trigger.dddddddddddd') echo 'Resumed' ;;`)
+      await run('kortix_schedules', { action: 'run_now', id: 'trigger.dddddddddddd' })
+      expect((await run('kortix_schedules', { action: 'resume', id: 'trigger.dddddddddddd' })).ok).toBe(ok)
+    }
   })
 })

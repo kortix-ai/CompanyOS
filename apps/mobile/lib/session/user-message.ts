@@ -108,6 +108,21 @@ export function buildSessionRefsBlock(sessions: readonly { id: string; title: st
   return `Referenced sessions (${SESSION_REFERENCE_HINT}):\n${refs}`;
 }
 
+/**
+ * The `Referenced files` block that names files for the agent to read. Same wire
+ * shape as the web composer (`buildFileRefsBlock` in
+ * packages/ui/src/internal/lib/project-preamble.ts; pinned by
+ * `lib/artifacts/artifact-chat.test.ts`). The transcript strips it
+ * (`parseUserMessageText`).
+ */
+export function buildFileRefsBlock(files: readonly { path: string; name: string }[]): string {
+  if (!files.length) return '';
+  const refs = files
+    .map((f) => `<file_ref path="${escapeAttr(f.path)}" name="${escapeAttr(f.name)}" />`)
+    .join('\n');
+  return `Referenced files (the user has explicitly @-mentioned these — read them if relevant; a path that is not on this computer is a workspace repo file: read it with \`kortix files cat <path>\`):\n${refs}`;
+}
+
 function unescapeAttr(value: string): string {
   return value
     .replace(/&quot;/g, '"')

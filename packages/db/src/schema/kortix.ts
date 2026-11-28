@@ -9004,89 +9004,6 @@ export const jobQueue = kortixSchema.table(
   ],
 );
 
-// ─── Humanoid (flag `humanoid`) ─────────────────────────────────────────────
-// A workspace that is one AI humanoid: its Base Identity and its event log
-// (.agents/skills/learnings/work/humanoid/README.md).
-
-/** One per humanoid workspace: where each part of its Base Identity lives. Secrets stay in the vault. */
-export const humanoidIdentities = kortixSchema.table(
-  'humanoid_identities',
-  {
-    projectId: uuid('project_id')
-      .primaryKey()
-      .references(() => projects.projectId, { onDelete: 'cascade' }),
-    name: text('name').notNull(),
-    role: text('role'),
-    /** The managed inbox (`connector_connections` row of `kortix_email`). Null until provisioned. */
-    emailConnectionId: uuid('email_connection_id'),
-    emailAddress: text('email_address'),
-    /** E.164. Null until a phone is provisioned. */
-    phoneNumber: text('phone_number'),
-    /** The humanoid's persistent browser on Platinum. */
-    browserId: text('browser_id'),
-    /** The `Humanoid` project drive. */
-    driveId: uuid('drive_id'),
-    /** The humanoid's own conversation: it receives every event nobody addressed to it. */
-    mindSessionId: text('mind_session_id'),
-    /** `provisioning`, `ready` or `failed`. */
-    status: text('status').default('provisioning').notNull(),
-    lastError: text('last_error'),
-    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-  },
-  (table) => [check('humanoid_identities_status_check', sql`${table.status} in ('provisioning', 'ready', 'failed')`)],
-);
-
-/**
- * The humanoid's event log: every inbound and outbound event, written before
- * anything acts on it, and kept while the humanoid exists (its episodic
- * memory). Dispatch rides on `job_queue` (`humanoid/events.ts`).
- */
-export const humanoidEvents = kortixSchema.table(
-  'humanoid_events',
-  {
-    /** Arrival order. */
-    eventId: bigint('event_id', { mode: 'number' }).primaryKey().generatedByDefaultAsIdentity(),
-    projectId: uuid('project_id')
-      .notNull()
-      .references(() => projects.projectId, { onDelete: 'cascade' }),
-    /** `email`, `slack`, `teams`, `sms`, `call`, `connector`, `webhook`, `schedule`, `goal`, `session`, `browser`, `person`. */
-    source: text('source').notNull(),
-    /** `<source>.<object>.<verb>`, e.g. `email.message.received`. */
-    type: text('type').notNull(),
-    /** The thread key: events of one subject are dispatched one at a time, in order. */
-    subject: text('subject'),
-    /** The upstream id: unique per project and source, so a redelivery is a no-op. */
-    externalId: text('external_id').notNull(),
-    /** `in` (received) or `out` (the humanoid acted). */
-    direction: text('direction').default('in').notNull(),
-    occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
-    receivedAt: timestamp('received_at', { withTimezone: true }).defaultNow().notNull(),
-    /** Who caused it: `{ kind, id, name }`. */
-    actor: jsonb('actor').$type<Record<string, unknown>>(),
-    /** `public`, `team` or `private:<person key>`: who may see it later. */
-    audience: text('audience').default('team').notNull(),
-    /** One line, made by code. */
-    summary: text('summary').notNull(),
-    payload: jsonb('payload').$type<Record<string, unknown>>().default({}).notNull(),
-    /** `pending`, `routed`, `digested`, `recorded` (needs no delivery) or `dead`. */
-    dispatchStatus: text('dispatch_status').default('pending').notNull(),
-    routedSessionId: text('routed_session_id'),
-    routedAt: timestamp('routed_at', { withTimezone: true }),
-    lastError: text('last_error'),
-  },
-  (table) => [
-    uniqueIndex('idx_humanoid_events_external').on(table.projectId, table.source, table.externalId),
-    index('idx_humanoid_events_project').on(table.projectId, table.eventId.desc()),
-    index('idx_humanoid_events_subject').on(table.projectId, table.subject, table.eventId),
-    check('humanoid_events_direction_check', sql`${table.direction} in ('in', 'out')`),
-    check(
-      'humanoid_events_dispatch_status_check',
-      sql`${table.dispatchStatus} in ('pending', 'routed', 'digested', 'recorded', 'dead')`,
-    ),
-  ],
-);
-
 // ─── Kortix Capture ──────────────────────────────────────────────────────────
 //
 // Capture is a standalone product whose tenant is a Kortix account (an
@@ -10212,6 +10129,8 @@ export const artifacts = kortixSchema.table('artifacts', {
   title: text('title').notNull(),
   description: text('description'),
   type: varchar('type', { length: 16 }).notNull(),
+  /** What the artifact is for the gallery: slides, sheet, doc, pdf or page. Null: derived from type and entry (`resolveArtifactKind`). */
+  kind: varchar('kind', { length: 16 }),
   visibility: varchar('visibility', { length: 16 }).default('private').notNull(),
   sharedWithUserIds: uuid('shared_with_user_ids').array().default(sql`'{}'::uuid[]`).notNull(),
   pinnedByUserIds: uuid('pinned_by_user_ids').array().default(sql`'{}'::uuid[]`).notNull(),
@@ -10230,6 +10149,7 @@ export const artifacts = kortixSchema.table('artifacts', {
   index('idx_artifacts_project_updated').on(table.projectId, table.updatedAt),
   uniqueIndex('idx_artifacts_drive_path').on(table.driveId, table.root, table.entry),
   check('artifacts_type_check', sql`${table.type} in ('doc', 'html')`),
+  check('artifacts_kind_check', sql`${table.kind} is null or ${table.kind} in ('slides', 'sheet', 'doc', 'pdf', 'page')`),
   check('artifacts_visibility_check', sql`${table.visibility} in ('private', 'project', 'public')`),
 ]);
 

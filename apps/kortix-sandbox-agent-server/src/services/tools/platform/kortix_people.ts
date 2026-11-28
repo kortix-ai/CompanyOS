@@ -93,9 +93,35 @@ async function invite(email: string, role: string, context: PlatformToolContext)
   })
 }
 
+/** The open invitation for an email, when the person has not joined yet. */
+async function openInvitation(who: string, context: PlatformToolContext) {
+  if (!who.includes('@')) return null
+  const open = await cliJson<{ pending?: Array<{ invite_id?: string; email?: string; project_role?: string; invite_expired?: boolean }> }>(['access', 'pending', '--json'], context)
+  if ('error' in open) return null
+  return (open.value.pending ?? []).find((i) => i.email?.toLowerCase() === who.toLowerCase() && !i.invite_expired && i.invite_id) ?? null
+}
+
 async function setRole(who: string, role: string, context: PlatformToolContext) {
   const member = await resolveMember(who, context)
-  if (!member?.user_id) return fail(TOOL, 'set_role', `Could not find ${who}`, { kind: 'not_found', message: `${who} is not a member of this workspace.` }, context)
+  if (!member?.user_id) {
+    // Someone invited but not joined yet: their role is the invitation's, so a new invitation replaces it
+    // (Agent Evals on dev: set_role answered "not a member", invite answered "already invited", and the
+    // role could not change through the tool at all).
+    const pending = await openInvitation(who, context)
+    if (pending?.invite_id) {
+      const cancelled = await cliRun(['access', 'cancel', pending.invite_id], context)
+      if ('error' in cancelled) return fail(TOOL, 'set_role', `Could not change ${who}'s invitation`, cancelled.error, context)
+      const sent = await cliJson<{ email_sent?: boolean; invite_url?: string }>(['access', 'invite', who, '--role', role, '--json'], context)
+      if ('error' in sent) return fail(TOOL, 'set_role', `Cancelled ${who}'s invitation, but could not send the new one`, sent.error, context)
+      return ok(TOOL, 'set_role', {
+        title: `${who}'s invitation is now as ${role}`,
+        subtitle: sent.value.email_sent === false ? 'The old link no longer works, and no email went out: send them the new invitation link yourself.' : 'The old link no longer works; a new invitation email went out.',
+        changes: [{ field: 'role', before: pending.project_role ?? 'member', after: role }],
+        ...(sent.value.email_sent === false && sent.value.invite_url ? { status: 'needs_you' as const, links: [{ label: 'Invitation link', href: sent.value.invite_url }] } : { links: [{ label: 'Members', href: membersHref(context.env) }] }),
+      }, { email: who, role, replaced_invitation: true })
+    }
+    return fail(TOOL, 'set_role', `Could not find ${who}`, { kind: 'not_found', message: `${who} is not a member of this workspace and has no open invitation.` }, context)
+  }
   const done = await cliRun(['access', 'grant', member.user_id, '--role', role], context)
   if ('error' in done) return fail(TOOL, 'set_role', `Could not change ${memberName(member)}'s role`, done.error, context)
   return ok(TOOL, 'set_role', {
@@ -107,7 +133,16 @@ async function setRole(who: string, role: string, context: PlatformToolContext) 
 
 async function remove(who: string, context: PlatformToolContext) {
   const member = await resolveMember(who, context)
-  if (!member?.user_id) return fail(TOOL, 'remove', `Could not find ${who}`, { kind: 'not_found', message: `${who} is not a member of this workspace.` }, context)
+  if (!member?.user_id) {
+    // Not joined yet: removing them withdraws the open invitation.
+    const pending = await openInvitation(who, context)
+    if (pending?.invite_id) {
+      const cancelled = await cliRun(['access', 'cancel', pending.invite_id], context)
+      if ('error' in cancelled) return fail(TOOL, 'remove', `Could not cancel ${who}'s invitation`, cancelled.error, context)
+      return ok(TOOL, 'remove', { title: `Cancelled ${who}'s invitation`, subtitle: 'Its link no longer works.', links: [{ label: 'Members', href: membersHref(context.env) }] }, { email: who, cancelled_invitation: true })
+    }
+    return fail(TOOL, 'remove', `Could not find ${who}`, { kind: 'not_found', message: `${who} is not a member of this workspace and has no open invitation.` }, context)
+  }
   const done = await cliRun(['access', 'revoke', member.user_id], context)
   if ('error' in done) return fail(TOOL, 'remove', `Could not remove ${memberName(member)}`, done.error, context)
   return ok(TOOL, 'remove', { title: `Removed ${memberName(member)} from the workspace`, links: [{ label: 'Members', href: membersHref(context.env) }] })
@@ -116,7 +151,7 @@ async function remove(who: string, context: PlatformToolContext) {
 export default {
   description:
     'The people of this workspace and their workspace roles (owner > admin > manager > member; owners, admins and managers manage it). ' +
-    'Actions: `list`; `pending` (open invitations); `invite` (email, role); `set_role` (who: email, name or user id; role); `remove` (who). ' +
+    'Actions: `list`; `pending` (open invitations); `invite` (email, role); `set_role` (who: email, name or user id; role; for someone invited but not joined, it replaces the invitation with one in the new role); `remove` (who; for someone invited but not joined, it cancels the invitation). ' +
     'Inviting, changing a role and removing someone affect another person: say what will happen and ask once before you do it.',
   parameters: {
     type: 'object',

@@ -347,8 +347,6 @@ export {
   connectorAttachments,
   promptAttachments,
   jobQueue,
-  humanoidIdentities,
-  humanoidEvents,
   captureDeviceGrants,
   captureDevices,
   captureEnrollmentTokens,

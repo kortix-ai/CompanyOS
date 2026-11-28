@@ -3,13 +3,16 @@
  * Skia canvas), the three sheets and the rest of the screen stay as they were,
  * because the draft lives in `HomeComposer`. Send still sends the text as
  * typed, once per tap burst. The drawer's New session focuses the composer
- * once home is the screen on top.
+ * once home is the screen on top. Ask AI on an artifact (KRTX-5255): the
+ * attached artifact shows on the composer and rides the send; while its read
+ * loads or after it fails, Send refuses and keeps the draft.
  */
 import { afterEach, beforeAll, beforeEach, expect, mock, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import React from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { markComposerFocus } from '@/lib/onboarding/composer-handoff';
+import { useArtifactChatStore } from '@/stores/artifact-chat-store';
 
 (globalThis as any).__DEV__ = true;
 (globalThis as any).requestAnimationFrame ??= (callback: () => void) => setTimeout(callback, 0);
@@ -29,7 +32,15 @@ let composerRenders = 0;
 const submitted: any[] = [];
 const NO_FILES: any[] = [];
 const attachments = { files: NO_FILES, uploads: {}, add() {}, remove() {}, takeForSend: async () => ({ files: [], fileParts: [] }), clearAfterSend() {}, reclaim() {} };
-const toast = { error() {} };
+const toasts: string[] = [];
+const toast = { error: (message: string) => toasts.push(message) };
+// Keys come back as keys, with the title: what a toast names is checkable.
+const i18n = { t: (key: string, options?: { title?: string }) => (options?.title ? `${key}:${options.title}` : key) };
+const ARTIFACT = { artifact_id: 'artifact-1', path: 'artifacts/q3-plan', title: 'Q3 plan', type: 'doc' };
+let refetches = 0;
+const read = (overrides: Record<string, unknown>) => ({ data: undefined, isError: false, refetch: async () => refetches++, ...overrides });
+let artifactRead = read({});
+const artifactReads: Array<[unknown, unknown]> = [];
 const models = { providers: undefined, models: [{ providerID: 'kortix', providerName: 'Kortix', modelID: 'kimi-k3', modelName: 'Kimi K3' }], modelDefaults: undefined, isLoading: false, refetchModelCount() {} };
 let screenFocused = true;
 const store = { selectedAgent: null, setAgent() {}, globalDefault: null, agentModels: {}, setModelForAgent() {}, modelVariants: {}, setVariant() {} };
@@ -58,6 +69,13 @@ const moduleMocks: Record<string, Record<string, any>> = {
   '@/lib/projects/hooks': { useComposerModels: () => models, useProjectDetail: () => ({ data: undefined }) },
   '@/lib/session/use-composer-draft': { useComposerDraft() {} },
   '@/lib/session/local-config': { useLocalConfigStore: (selector: any) => selector(store) },
+  'react-i18next': { useTranslation: () => i18n },
+  '@kortix/sdk/react': {
+    useArtifact: (projectId: unknown, artifactId: unknown) => {
+      artifactReads.push([projectId, artifactId]);
+      return artifactRead;
+    },
+  },
 };
 // Pure logic stays real: what the screen resolves and decides on Send.
 const KEEP_REAL = new Set([
@@ -72,6 +90,8 @@ const KEEP_REAL = new Set([
   '@/lib/session/composer-uploads',
   '@/components/session/use-pasted-tiles',
   '@/lib/onboarding/composer-handoff',
+  '@/lib/artifacts/artifact-chat',
+  '@/stores/artifact-chat-store',
 ]);
 
 // Type-only imports are erased; mocking them would hide the real module from the kept-real ones.
@@ -105,6 +125,11 @@ beforeEach(() => {
   composerRenders = 0;
   submitted.length = 0;
   screenFocused = true;
+  toasts.length = 0;
+  refetches = 0;
+  artifactRead = read({});
+  artifactReads.length = 0;
+  useArtifactChatStore.setState({ attached: null });
 });
 afterEach(async () => {
   if (tree) await act(async () => tree?.unmount());
@@ -273,4 +298,107 @@ test('an abandoned home render preserves the handed-back draft until a composer 
   await act(async () => { tree!.update(<React.Suspense fallback={null}>{renderHome()}</React.Suspense>); });
   expect(composer.value).toBe('restored after suspension');
   expect(pending.text).toBe('');
+});
+
+/** Ask AI in the artifact `···` sheet: attach, then project home opens. */
+const attach = (projectId = 'project-1') => useArtifactChatStore.getState().attach(projectId, ARTIFACT);
+
+test('Ask AI: the artifact shows on the composer before any message and rides the send', async () => {
+  attach();
+  artifactRead = read({ data: ARTIFACT });
+  await mount();
+  // Read again by id for this project, not trusted from the sheet.
+  expect(artifactReads.at(-1)).toEqual(['project-1', 'artifact-1']);
+  expect(composer.header.props).toMatchObject({ title: 'Q3 plan', state: 'ready', doc: true });
+
+  await act(async () => composer.onChangeText('What is the launch date?'));
+  await act(async () => composer.onSubmit());
+  expect(submitted).toHaveLength(1);
+  expect(submitted[0]).toMatchObject({
+    text: 'What is the launch date?',
+    artifact: { artifactId: 'artifact-1', path: 'artifacts/q3-plan', title: 'Q3 plan' },
+  });
+  // Sent: the next new chat starts without it.
+  expect(useArtifactChatStore.getState().attached).toBeNull();
+});
+
+test('a failed artifact read refuses the send with an actionable toast; the draft stays', async () => {
+  attach();
+  artifactRead = read({ isError: true });
+  await mount();
+  expect(composer.header.props.state).toBe('error');
+
+  await act(async () => composer.onChangeText('Summarise it'));
+  await act(async () => composer.onSubmit());
+  expect(submitted).toHaveLength(0);
+  expect(toasts).toEqual(['artifacts.askAgentLoadError:Q3 plan']);
+  expect(composer.value).toBe('Summarise it');
+  expect(useArtifactChatStore.getState().attached?.artifactId).toBe('artifact-1');
+  // Tapping the failed chip reads it again.
+  await act(async () => composer.header.props.onRetry());
+  expect(refetches).toBe(1);
+});
+
+test('while the artifact still loads, Send waits for it instead of sending without it', async () => {
+  attach();
+  await mount();
+  expect(composer.header.props.state).toBe('loading');
+  await act(async () => composer.onChangeText('Summarise it'));
+  await act(async () => composer.onSubmit());
+  expect(submitted).toHaveLength(0);
+  expect(toasts).toEqual(['artifacts.askAgentLoading:Q3 plan']);
+});
+
+test('its X cancels the attachment: nothing is sent, and a later send carries no artifact', async () => {
+  attach();
+  artifactRead = read({ data: ARTIFACT });
+  await mount();
+  await act(async () => composer.header.props.onRemove());
+  expect(submitted).toHaveLength(0);
+  expect(useArtifactChatStore.getState().attached).toBeNull();
+  expect(composer.header).toBeNull();
+
+  await act(async () => composer.onChangeText('hello'));
+  await act(async () => composer.onSubmit());
+  expect(submitted[0].artifact).toBeNull();
+});
+
+test('leaving home drops the attachment; arriving with one keeps it', async () => {
+  screenFocused = false;
+  await mount();
+  attach();
+  screenFocused = true;
+  await act(async () => tree?.update(home()));
+  expect(useArtifactChatStore.getState().attached?.artifactId).toBe('artifact-1');
+
+  screenFocused = false;
+  await act(async () => tree?.update(home()));
+  expect(useArtifactChatStore.getState().attached).toBeNull();
+  expect(submitted).toHaveLength(0);
+});
+
+test("another project's attached artifact is not this home's", async () => {
+  attach('project-2');
+  await mount();
+  expect(composer.header).toBeNull();
+  await act(async () => composer.onChangeText('hello'));
+  await act(async () => composer.onSubmit());
+  expect(submitted[0].artifact).toBeNull();
+});
+
+test('leaving the project unmounts home with the attachment: coming back starts an empty chat', async () => {
+  attach();
+  artifactRead = read({ data: ARTIFACT });
+  await mount();
+  expect(composer.header).not.toBeNull();
+  // Back to the projects list: home unmounts while still focused, no blur first.
+  await act(async () => tree?.unmount());
+  tree = undefined;
+  expect(useArtifactChatStore.getState().attached).toBeNull();
+
+  await mount();
+  expect(composer.header).toBeNull();
+  await act(async () => composer.onChangeText('hello'));
+  await act(async () => composer.onSubmit());
+  expect(submitted[0].artifact).toBeNull();
 });

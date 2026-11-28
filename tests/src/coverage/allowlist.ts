@@ -162,6 +162,12 @@ export const uncoveredAllow: AllowEntry[] = [
       "DEBT, not a considered exemption, and NOT introduced by this branch. The route exists on the app but was missing from tests/spec/routes.generated.json, so the gate never saw it; regenerating the manifest for the headless-auth routes surfaced it. Nothing covers it — it needs a flow. This entry keeps the gap visible instead of letting a stale manifest re-hide it.",
   },
   {
+    method: "PUT",
+    path: "/v1/admin/api/projects/:*/restricted-models",
+    reason:
+      "Kortix staff only (platform operator): turns restricted managed models on for one workspace. Covered against the real route and database in apps/api/src/__tests__/integration-restricted-models-http.test.ts: a workspace manager gets 403 and nothing is stored; an operator write is read back by the gateway; a non-restricted id is 400; an unknown or archived project is 404.",
+  },
+  {
     method: "POST",
     path: "/v1/admin/api/accounts/:*/members/:*/role",
     reason:

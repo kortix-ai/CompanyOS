@@ -10,9 +10,9 @@
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { accountMembers, accounts, projectSessions, projectTriggerExecutions, projectTriggerRuntime, projects, sessionLifecycleCommands } from '@kortix/db';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 
-import { newRuntimeTriggerId, parseRuntimeTriggerBody, runtimeTriggerSpec, runtimeWebhookSpec } from '../projects/lib/runtime-triggers';
+import { newRuntimeTriggerId, parseRuntimeTriggerBody, runtimeTriggerSpec, runtimeWebhookSpec, listRuntimeAgentTriggers, serializeRuntimeTrigger } from '../projects/lib/runtime-triggers';
 import { fireChangeRequestMergedTriggers } from '../projects/lib/change-request-triggers';
 import { countActiveSessionReminders, insertSessionReminder } from '../projects/lib/session-reminders';
 import { fireGitTrigger } from '../projects/lib/trigger-fire';
@@ -78,6 +78,34 @@ afterAll(async () => {
 });
 
 describe('runtime triggers', () => {
+  test('the runtime list omits SQL and JSON null specs and preserves both runtime prefixes', async () => {
+    const sqlNullId = 'trigger.nullsql';
+    const jsonNullId = 'automation.nulljson';
+    const validId = 'trigger.valid';
+    const legacyId = 'automation.valid';
+    const ids = [sqlNullId, jsonNullId, validId, legacyId];
+    const base: GitTriggerSpec = {
+      slug: validId, path: '', name: 'valid', type: 'webhook', agent: 'kortix', model: null,
+      enabled: true, promptTemplate: 'check', cron: null, runAt: null, timezone: 'UTC',
+      secretEnv: 'HOOK_SECRET', sessionMode: 'fresh', pinnedSessionId: null, sessionKey: null, filter: null,
+    };
+    try {
+      await db.insert(projectTriggerRuntime).values(ids.map((slug, index) => ({
+        projectId: PROJECT, slug, triggerType: 'webhook', enabled: true,
+        scheduleSpec: index === 0 ? null : index === 1 ? sql`'null'::jsonb` : { ...base, slug },
+      })));
+      const rows = await listRuntimeAgentTriggers(PROJECT);
+      // This is the same adapter the GET /triggers/all handler calls.
+      const serialized = rows.map((row) => serializeRuntimeTrigger(row));
+      expect(serialized.map((row) => row.id).sort()).toEqual([validId, legacyId].sort());
+      for (const row of serialized) {
+        expect(row).toMatchObject({ origin: 'runtime', state: 'active', agent: 'kortix', source: { type: 'webhook' }, target: { kind: 'agent', agent: 'kortix' } });
+      }
+    } finally {
+      for (const slug of ids) await db.delete(projectTriggerRuntime).where(and(eq(projectTriggerRuntime.projectId, PROJECT), eq(projectTriggerRuntime.slug, slug)));
+    }
+  });
+
   test('a webhook into a session queues its rendered prompt into that session and counts as active', async () => {
     const sessionId = await seedSession();
     const spec = await seedSessionTrigger(sessionId, { prompt: 'Build {{ body.ref }}', source: { type: 'webhook', secret_env: 'CI_SECRET' } });

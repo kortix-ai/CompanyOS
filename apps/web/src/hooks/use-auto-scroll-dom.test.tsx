@@ -5,20 +5,11 @@ import { Window } from 'happy-dom';
 import { useAutoScroll } from '@kortix/ui/internal/hooks/use-auto-scroll';
 
 /**
- * The DOM half of the anchor contract, through the real hook.
- *
- * `pickAnchorIndex` (the pure physics) is pinned in `use-auto-scroll.test.ts`.
- * What only a DOM can pin is the SELECTION `sizeRoom` runs over it: a
- * compaction and the work after it carry `data-turn-continues` and must never
- * become the anchor — anchoring on a running compaction is the reported
- * blank page (KRTX-2565): the marker alone at the top of the screen, the
- * whole conversation above it scrolled out, a large empty room under it.
- *
- * Geometry is stubbed per element (`getBoundingClientRect`, `clientHeight`),
- * so the numbers below are chosen so that the anchored turn CHANGES the
- * spacer: anchoring the continued turn and anchoring the continuation row
- * produce different `spacer.style.height` values. The spacer height is
- * `sizeRoom`'s output — that is what the assertions read.
+ * The transcript sits on the composer (KRTX-5238), through the real hook: the gap under the
+ * last turn is one fixed value, so nothing above it moves when the agent starts or stops, when
+ * a person sends, or when another agent reports. The old hook sized a room under the newest
+ * turn (viewport − turn height) that appeared while the agent worked and vanished when it
+ * stopped: the reported jumping.
  */
 
 const win = new Window({ width: 1000, height: 600 });
@@ -60,10 +51,12 @@ const stubRect = (el: Element, rect: Rect) => {
   });
 };
 
-/** A viewport that never scrolls: end = scrollHeight − clientHeight = 0. */
-const stubViewport = (el: Element, clientHeight: number) => {
+/** A viewport over `scrollHeight` px of content; `scrollTop` is a plain value the hook writes. */
+const stubViewport = (el: Element, clientHeight: number, scrollHeight = clientHeight) => {
+  let top = 0;
   Object.defineProperty(el, 'clientHeight', { value: clientHeight, configurable: true });
-  Object.defineProperty(el, 'scrollHeight', { value: clientHeight, configurable: true });
+  Object.defineProperty(el, 'scrollHeight', { value: scrollHeight, configurable: true });
+  Object.defineProperty(el, 'scrollTop', { get: () => top, set: (v: number) => (top = v), configurable: true });
 };
 
 /** The stubbed geometry of one fixture row. */
@@ -109,13 +102,13 @@ document.body.appendChild(host);
 const root = createRoot(host);
 
 /** Mount the fixture and stub the geometry `sizeRoom` reads. */
-function mount(rows: Row[], viewport = 600) {
+function mount(rows: Row[], viewport = 600, scrollHeight = viewport) {
   act(() => {
     root.render(<Harness rows={rows} />);
   });
   const content = host.querySelector('[data-test="content"]')!;
   const scroll = host.querySelector('[data-test="scroll"]')!;
-  stubViewport(scroll, viewport);
+  stubViewport(scroll, viewport, scrollHeight);
   const els = Array.from(content.querySelectorAll('[data-turn-id]'));
   for (const [i, row] of rows.entries()) stubRect(els[i]!, { top: row.top, height: row.height });
   // The spacer lives at the end of the content: its top edge is the content end.
@@ -124,80 +117,46 @@ function mount(rows: Row[], viewport = 600) {
   return { content, scroll };
 }
 
-/** The spacer height after a fresh `sizeRoom` (`scrollToBottom` drives it). */
+/** The spacer height after a settle (`scrollToBottom` drives one). */
 function spacerHeight(): string | null {
   const spacer = host.querySelector<HTMLElement>('[data-test="spacer"]');
   act(() => autoRef?.scrollToBottom());
   return spacer?.style.height ?? null;
 }
 
-const room = (viewport: number, span: number) => Math.max(24, viewport - span - 24);
-
 afterEach(async () => {
   await act(async () => root.render(null));
   autoRef = null;
 });
 
-describe('sizeRoom over the real DOM — the anchor never lands on a continuation', () => {
-  test('a running compaction under a turn: the anchor stays the continued turn', () => {
-    // The recorded shape (KRTX-2565): one prompt answered, then a mid-turn
-    // compaction and its continuation. u1 is 300px tall, the marker and the
-    // empty continuation ~100px together — content SHORTER than the viewport
-    // below the continued turn, so the two anchor choices differ:
-    //   u1  → span 400 → room 176 (the fix: the conversation stays in view)
-    //   cont → span  40 → room 536 (the bug: the marker alone on a blank page)
+describe('the transcript sits on the composer: one fixed gap under the last turn', () => {
+  test('a short newest turn gets no room under it, only the 24 px gap', () => {
+    // A 40 px newest turn in a 600 px viewport: the old room was 600 − 40 − 24 = 536 px.
     mount([
-      { id: 'u1', top: 0, height: 300 },
-      { id: 'm1', top: 300, height: 60, continues: true },
-      { id: 'm1:continued', top: 360, height: 40, continues: true },
+      { id: 'u0', top: 0, height: 400 },
+      { id: 'u1', top: 400, height: 40 },
     ]);
-    expect(spacerHeight()).toBe(`${room(600, 400)}px`);
+    expect(spacerHeight()).toBe('24px');
   });
 
-  test('the continuation streaming cannot pull the anchor onto itself', () => {
-    const rows: Row[] = [
-      { id: 'u1', top: 0, height: 300 },
-      { id: 'm1', top: 300, height: 60, continues: true },
-      { id: 'm1:continued', top: 360, height: 40, continues: true },
-    ];
-    const { content } = mount(rows);
-    expect(spacerHeight()).toBe(`${room(600, 400)}px`);
-    // A streaming frame: the continuation grew 100px, the content end moved.
-    const cont = content.querySelectorAll('[data-turn-id]')[2]!;
-    stubRect(cont, { top: 360, height: 140 });
-    stubRect(content.querySelector('[data-test="spacer"]')!, { top: 500, height: 0 });
-    //   u1   → span 500 → room  76 (the anchor held)
-    //   cont → span 140 → room 436 (re-anchored: the bug again)
-    expect(spacerHeight()).toBe(`${room(600, 500)}px`);
-  });
-
-  test('a transcript of only compactions still finds an anchor (the fallback list)', () => {
-    // `prompts.length ? prompts : all rows` — every row is a continuation
-    // (back-to-back compactions keep their own turns), so the filtered list is
-    // empty. Anchoring the LAST row is the only choice left.
+  test('the gap does not change with the newest turn: a send, a report, a turn end', () => {
+    mount([{ id: 'u0', top: 0, height: 100 }]);
+    expect(spacerHeight()).toBe('24px');
     mount([
-      { id: 'c1', top: 0, height: 60, continues: true },
-      { id: 'c2', top: 60, height: 40, continues: true },
+      { id: 'u0', top: 0, height: 100 },
+      { id: 'u1', top: 100, height: 300 },
+      { id: 'report', top: 400, height: 20, continues: true },
     ]);
-    expect(spacerHeight()).toBe(`${room(600, 40)}px`);
-  });
-});
-
-describe('sizeRoom over the real DOM — the first prompt stand-in', () => {
-  test('while the stand-in sits above server turn 0, the stand-in is the anchor', () => {
-    // KRTX-2931: turn 0 renders under the stand-in before the hand-off. Anchoring
-    // turn 0 pushed the bubble just sent off the top, then glided back.
-    //   optimistic → span 300 → room 276 (the fix: the bubble stays put)
-    //   t0         → span 180 → room 396 (the bug)
-    mount([
-      { id: 'optimistic', top: 0, height: 120 },
-      { id: 't0', top: 120, height: 180 },
-    ]);
-    expect(spacerHeight()).toBe(`${room(600, 300)}px`);
+    expect(spacerHeight()).toBe('24px');
   });
 
-  test('once the stand-in leaves, turn 0 takes the anchor', () => {
-    mount([{ id: 't0', top: 0, height: 300 }]);
-    expect(spacerHeight()).toBe(`${room(600, 300)}px`);
+  test('a send puts the viewport at the end in one instant write', () => {
+    const { scroll } = mount([{ id: 'u0', top: 0, height: 2000 }], 600, 2000);
+    let glides = 0;
+    Object.defineProperty(scroll, 'scrollTo', { value: () => (glides += 1), configurable: true });
+    act(() => autoRef?.anchorTurn('u0'));
+    expect((scroll as HTMLElement).scrollTop).toBe(1400);
+    expect(glides).toBe(0);
+    expect((scroll as HTMLElement).dataset.follow).toBe('true');
   });
 });

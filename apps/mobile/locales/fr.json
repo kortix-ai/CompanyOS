@@ -1403,6 +1403,10 @@
     "movedToFolder": "Déplacé vers {{name}}",
     "moveFailed": "Impossible de déplacer l’artefact",
     "emptyFolder": "Aucun artefact dans ce dossier",
-    "emptyUnfiled": "Aucun artefact sans dossier"
+    "emptyUnfiled": "Aucun artefact sans dossier",
+    "askAgent": "Demander à l’IA",
+    "askAgentRemove": "Retirer {{title}}",
+    "askAgentLoadError": "Impossible de joindre « {{title}} ». Touchez-le pour réessayer, ou retirez-le.",
+    "askAgentLoading": "« {{title}} » est encore en cours d’ajout. Renvoyez dans un instant."
   }
 }

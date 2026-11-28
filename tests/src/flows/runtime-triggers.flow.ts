@@ -83,6 +83,22 @@ flow(
         }
       });
 
+      await ctx.step('runtime rows without a spec do not break the combined list', async () => {
+        const slugs = ['trigger.missing-spec', 'automation.null-spec'];
+        try {
+          await world.db.query(
+            `INSERT INTO kortix.project_trigger_runtime (project_id, slug, trigger_type, enabled, schedule_spec)
+             VALUES ($1, $2, 'webhook', true, NULL), ($1, $3, 'webhook', true, 'null'::jsonb)`,
+            [project.id, ...slugs],
+          );
+          const rows = (await owner.get(ALL, { params })).status(200).json<{ triggers: TriggerRow[] }>().triggers;
+          if (rows.some((row) => slugs.includes(row.id))) throw new Error('a spec-less row appeared in the list');
+          if (!rows.some((row) => row.id === loopId)) throw new Error('the valid loop disappeared');
+        } finally {
+          await world.db.query('DELETE FROM kortix.project_trigger_runtime WHERE project_id = $1 AND slug = ANY($2::text[])', [project.id, slugs]);
+        }
+      });
+
       let crId = '';
       await ctx.step('a merged-change-request trigger into the session → 201 active, no next fire', async () => {
         const r = await owner.post(RUNTIME, {

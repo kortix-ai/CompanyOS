@@ -18,6 +18,15 @@
  * (KRTX-251, `planComposerSend`). A long paste is a "Pasted text" tile
  * (`usePastedTiles`) and rides the prompt inline.
  *
+ * Ask AI on an artifact (KRTX-5255) opens this screen with the artifact
+ * attached (`stores/artifact-chat-store.ts`): a chip on the composer names
+ * it, and the send starts the chat with web's artifact prompt and label
+ * (`lib/artifacts/artifact-chat.ts`). The artifact is read again here; while
+ * that read loads or after it fails, Send refuses with a toast and keeps the
+ * draft, so no chat starts without the artifact. A failed chip retries on tap.
+ * Its X, a send, or leaving this screen (a blur or an unmount) drops the
+ * attachment.
+ *
  * Layout:
  * - The symbol (`ProjectHero`) is absolutely centred in the keyboard-avoiding
  *   area. At rest that area is the whole screen; while typing it is the part
@@ -45,6 +54,8 @@ import {
   splitPastedContent,
   type PastedContent,
 } from '@kortix/shared';
+import { useArtifact } from '@kortix/sdk/react';
+import { useTranslation } from 'react-i18next';
 import { Keyboard, Pressable, View, type TextInputInstance } from 'react-native';
 import { useIsFocused, useRouter } from 'expo-router';
 import {
@@ -55,9 +66,11 @@ import Reanimated, { useAnimatedStyle } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/ui/button';
+import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
 
 import { Composer } from '@/components/kortix/composer';
+import { KortixLoader } from '@/components/kortix/kortix-loader';
 import type { SheetRef } from '@/components/kortix/sheet';
 import { useToast } from '@/components/kortix/toast-provider';
 import { FloatingMenuButton } from '@/components/session/FloatingMenuButton';
@@ -89,6 +102,9 @@ import {
 } from '@/lib/session/model-picker';
 import type { Agent, Command } from '@/lib/session/runtime-data';
 import { SlashCommandSuggestions } from '@/components/session/SessionChatInput';
+import { attachedArtifactState, type ArtifactChatContext, type AttachedArtifactState } from '@/lib/artifacts/artifact-chat';
+import { BrowserIcon, FileTextIcon, WarningCircleIcon, XIcon } from '@/lib/icons';
+import { useArtifactChatStore } from '@/stores/artifact-chat-store';
 
 /** One identity while the project detail loads, so the sheet's agent memo does not churn. */
 const EMPTY_AGENTS: Agent[] = [];
@@ -114,6 +130,8 @@ export interface ProjectHomeSubmit {
   picks: { model: { providerID: string; modelID: string }; variant: string } | null;
   /** The agent to start the session on. Null: none is sent and the server decides. */
   agent: string | null;
+  /** The artifact the chat starts with (Ask AI), or none. */
+  artifact?: ArtifactChatContext | null;
 }
 
 /**
@@ -154,6 +172,7 @@ export function ProjectHome({
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const toast = useToast();
+  const { t } = useTranslation();
   // Snapshot at mount; an abandoned render must not consume the parent's draft.
   const [initialDraft] = React.useState(initialDraftProp ?? { text: '', files: [] });
   React.useEffect(() => {
@@ -193,6 +212,40 @@ export function ProjectHome({
       retries.forEach(clearTimeout);
     };
   }, [focusRequest, isScreenFocused]);
+  // Ask AI: the artifact this chat starts with, read again so the send names
+  // its current path and a lost access shows before the send.
+  const attachedArtifact = useArtifactChatStore((s) => (s.attached?.projectId === projectId ? s.attached : null));
+  const clearAttachedArtifact = useArtifactChatStore((s) => s.clear);
+  const artifactRead = useArtifact(attachedArtifact ? projectId : null, attachedArtifact?.artifactId);
+  const attachedArtifactId = attachedArtifact?.artifactId;
+  const artifactState = React.useMemo(
+    () =>
+      attachedArtifactId
+        ? attachedArtifactState(attachedArtifactId, { data: artifactRead.data, isError: artifactRead.isError })
+        : null,
+    [attachedArtifactId, artifactRead.data, artifactRead.isError],
+  );
+  // Leaving home (a page or a thread covers it, or the project closes and
+  // unmounts it with no blur) cancels the attachment: the next new chat
+  // starts empty. Arriving with one keeps it.
+  const wasFocusedRef = React.useRef(isScreenFocused);
+  React.useEffect(() => {
+    if (wasFocusedRef.current && !isScreenFocused) clearAttachedArtifact(projectId);
+    wasFocusedRef.current = isScreenFocused;
+  }, [isScreenFocused, clearAttachedArtifact, projectId]);
+  React.useEffect(() => () => clearAttachedArtifact(projectId), [clearAttachedArtifact, projectId]);
+  const { refetch: refetchArtifact } = artifactRead;
+  const artifactChip =
+    attachedArtifact && artifactState ? (
+      <AttachedArtifactChip
+        title={artifactState.status === 'ready' ? artifactState.context.title : attachedArtifact.title}
+        state={artifactState.status}
+        doc={artifactRead.data?.artifact_id === attachedArtifact.artifactId && artifactRead.data.type === 'doc'}
+        onRetry={() => void refetchArtifact()}
+        onRemove={() => clearAttachedArtifact(projectId)}
+      />
+    ) : null;
+
   const attachments = useComposerAttachments(projectId, { initialFiles: initialDraft.files });
   useRecoverPendingPick(attachments.add);
   const files = attachments.files;
@@ -376,6 +429,20 @@ export function ProjectHome({
       openConnectSheet();
       return;
     }
+    // Never a chat without the artifact it was asked about: the draft stays.
+    let artifact: ArtifactChatContext | null = null;
+    if (artifactState) {
+      if (artifactState.status !== 'ready') {
+        const title = attachedArtifact?.title ?? '';
+        toast.error(
+          artifactState.status === 'error'
+            ? t('artifacts.askAgentLoadError', { title })
+            : t('artifacts.askAgentLoading', { title }),
+        );
+        return;
+      }
+      artifact = artifactState.context;
+    }
     let sent: { files: AttachedFile[]; fileParts: SessionPromptPart[] } = { files: [], fileParts: [] };
     if (files.length > 0) {
       setPreparing(true);
@@ -398,13 +465,20 @@ export function ProjectHome({
       model: explicit ? sessionModelRef(explicit) : null,
       picks: firstPromptPicks(activeKey ?? null, variant, levels),
       agent: agentName,
+      artifact,
     });
-    if (!ok) {
+    if (ok) clearAttachedArtifact(projectId);
+    else {
       attachments.reclaim(
         sent.files.map((f) => f.uploadId).filter((id): id is string => Boolean(id)),
       );
     }
   }, [
+    artifactState,
+    attachedArtifact,
+    clearAttachedArtifact,
+    projectId,
+    t,
     files,
     isSending,
     modelUnavailable,
@@ -467,6 +541,7 @@ export function ProjectHome({
               onPasteFile={attachments.add}
               chip={chip}
               onChipPress={openModelSheet}
+              header={artifactChip}
             />
           </Reanimated.View>
         </View>
@@ -522,6 +597,7 @@ function HomeComposer({
   onRemoveAttachment: (index: number) => void;
   chip: React.ComponentProps<typeof Composer>['chip'];
   onChipPress: () => void;
+  header: React.ReactNode;
 }) {
   const [initial] = React.useState(() => splitPastedContent(initialText));
   const [draft, setDraft] = React.useState(initial.text);
@@ -587,6 +663,62 @@ function HomeComposer({
         onSubmit={handleSubmit}
         placeholder="Ask anything"
       />
+    </View>
+  );
+}
+
+/**
+ * The attached artifact on the composer (Ask AI): its glyph, its title and an
+ * X, as the thread's staged command chip. Loading shows the loader in place of
+ * the glyph; a failed read shows a warning and retries on tap.
+ */
+function AttachedArtifactChip({
+  title,
+  state,
+  doc,
+  onRetry,
+  onRemove,
+}: {
+  title: string;
+  state: AttachedArtifactState['status'];
+  /** A doc gets the Artifacts list's doc glyph; a page, the page glyph. */
+  doc: boolean;
+  onRetry: () => void;
+  onRemove: () => void;
+}) {
+  const { t } = useTranslation();
+  const failed = state === 'error';
+  return (
+    <View className="flex-row items-center gap-2">
+      <View className="shrink flex-row items-center gap-1.5 rounded-full bg-secondary py-1.5 pl-3 pr-2">
+        <Pressable
+          onPress={failed ? onRetry : undefined}
+          disabled={!failed}
+          accessibilityRole={failed ? 'button' : 'text'}
+          accessibilityLabel={failed ? t('artifacts.askAgentLoadError', { title }) : title}
+          className="shrink flex-row items-center gap-1.5 active:opacity-60">
+          {state === 'loading' ? (
+            <KortixLoader customSize={14} />
+          ) : (
+            <Icon
+              as={failed ? WarningCircleIcon : doc ? FileTextIcon : BrowserIcon}
+              size={14}
+              className={failed ? 'text-destructive' : 'text-muted-foreground'}
+            />
+          )}
+          <Text variant="small" numberOfLines={1} className="shrink leading-5">
+            {title}
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={onRemove}
+          hitSlop={11}
+          accessibilityRole="button"
+          accessibilityLabel={t('artifacts.askAgentRemove', { title })}
+          className="active:opacity-60">
+          <Icon as={XIcon} size={14} className="text-muted-foreground" />
+        </Pressable>
+      </View>
     </View>
   );
 }

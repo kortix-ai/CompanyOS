@@ -789,7 +789,7 @@ function noteTest(context: PlatformToolContext, name: string, outcome: 'matched'
  * or after it failed. The run is the newest one since run_now (2 min of clock slack); null = it succeeded.
  */
 async function runNowOutcome(id: string, ranAt: number, context: PlatformToolContext): Promise<string | null> {
-  const read = await runJson<{ runs?: Array<{ status?: string; run_status?: string | null; error?: string | null; run_error?: string | null; started_at?: string }> }>(
+  const read = await runJson<{ runs?: Array<{ status?: string; run_status?: string | null; error?: string | null; run_error?: string | null; session_id?: string | null; started_at?: string }> }>(
     ['triggers', 'runs', id, '--limit=5', '--json'],
     context,
   )
@@ -797,6 +797,14 @@ async function runNowOutcome(id: string, ranAt: number, context: PlatformToolCon
   const run = (read.value.runs ?? []).find((r) => Date.parse(r.started_at ?? '') >= ranAt - 120_000)
   const retry = 'If the person said to skip the test, call resume with force: true.'
   if (!run) return `The test run has not shown up yet: read the runs of ${id}, then resume. ${retry}`
+  // The API settles a run's status from its turns minutes after the session ends (Agent Evals on dev:
+  // the worker had reported, the run still read running, and resume was refused): its session decides.
+  if (run.status === 'fired' && run.run_status === 'running' && run.session_id) {
+    const session = await runJson<{ board_state?: string | null }>(['sessions', 'show', run.session_id, '--json'], context)
+    const state = 'error' in session ? null : session.value.board_state
+    if (state === 'completed' || state === 'idle') return null
+    if (state === 'failed' || state === 'stopped') return `The test run ${state}: fix it and run_now again before it goes live. ${retry}`
+  }
   if (run.status === 'queued' || run.status === 'running' || run.run_status === 'running') return `The test run is still running: wait for it, read its result with runs, then resume. ${retry}`
   if (run.status === 'failed' || run.status === 'rejected' || run.run_status === 'failed') return `The test run failed (${run.error || run.run_error || 'no reason given'}): fix it and run_now again before it goes live. ${retry}`
   if (run.status === 'skipped') return `The test run was skipped (${run.error || 'no reason given'}): it has not shown the work yet. ${retry}`
@@ -856,6 +864,9 @@ async function untested(id: string, context: PlatformToolContext): Promise<strin
   // An App event automation starts live (its test is a real App event); one the CLI cannot read is not blocked here.
   if ('error' in shown || shown.value.type === 'app') return null
   const filtered = !!shown.value.filter && Object.keys(shown.value.filter).length > 0
+  // With no filter, a dry run always matches and shows nothing (Agent Evals on dev: a weekday automation
+  // went live after one, and the reply said it was tested): only a run_now that succeeded is its test.
+  if (!filtered && !seen.ranAt) return `A dry run shows nothing for an automation with no filter: run_now ${id}, read its runs, then resume once the run succeeded. If the person said to skip the test, call resume with force: true.`
   if (!seen.matched) return `Test it first: \`test\` ${id} with a sample that should run${filtered ? ', and one that should be skipped' : ''}, then resume. If the person said to skip the test, call resume with force: true.`
   if (filtered && !seen.skipped) return `Its filter is untested: \`test\` ${id} with a sample that should be skipped, then resume. If the person said to skip the test, call resume with force: true.`
   return null
@@ -906,7 +917,7 @@ export default {
     'If it answers that Loops are not enabled, tell the person and ask them or a workspace admin to turn Loops on in Workspace settings → Feature flags. ' +
     'Actions: `follow_up` (text + ONE of in "3h", at ISO time, every "4h" (min 5m), cron "0 9 * * 1-5" + timezone; with several, the first of at, in, cron, every is used); ' +
     '`wake_on` (text + on); `events` (connector); `list` (this session\'s follow-ups and wake-ons, and the project schedules, with ids); ' +
-    '`create` (prompt + agent + one schedule: each run starts a new session of that agent; with an agent it is saved paused: run_now tests it, resume puts it live); `pause`, `resume`, `run_now`, `remove` (each needs `id` as list shows it; `delete` = remove). ' +
+    '`create` (prompt + agent + one schedule: each run starts a new session of that agent; with an agent it is saved paused: run_now tests it, resume puts it live); `pause`, `resume`, `run_now`, `remove` (each needs `id` as list shows it; `delete` = remove). To stop one, pause it: remove deletes it for good, so only when the person says delete or remove, after the yes. ' +
     'AUTOMATIONS (work that starts by itself whenever something happens, with no one asking: each new email from a customer, each new issue, each form submission, each failed build, every weekday at 9): `automate` (name + on + agent + prompt; on=connector_event: connector + event (+ config), run `events` first; an automation runs only on the shared sign-in of the workspace, so when the app still needs one, call kortix_connectors connect with for_trigger=true once (one card, never a private one first); webhook: secret_env, give the outside system the returned URL; app_event: app (+ event); schedule: every or cron + timezone). ' +
     'No event fits (none, or too coarse): have a colleague build a watcher App that posts App events, then `automate` its check (on=schedule + every + target_app + target_path "/tick": calls the App, no session, no model) and its work (on=app_event, with expect_event_within of a few check intervals). To tell the person in this chat instead, the work is `wake_on` on=app_event with expect_event_within. ' +
     'Do it well: 1) `filter` at the source so noise never starts a run (skip bots and Kortix itself, keep only the actions that matter: { "body.action": ["opened"], "body.sender.login": { "not": "kortix-bot" } }); ' +

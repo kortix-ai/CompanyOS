@@ -421,14 +421,14 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
           const stored = await loader(projectId, sessionId, query, signal);
           return stored && typeof stored === 'object' ? { ...(stored as SessionLogPage), source: 'store' } : stored;
         };
-  function mount(options: { enabled?: boolean; loader?: LoadSessionLogPage | null; livePage?: LivePage; boxReady?: boolean }) {
+  function mount(options: { enabled?: boolean; loader?: LoadSessionLogPage | null; livePage?: LivePage; boxReady?: boolean; deadlines?: boolean }) {
     const state = { dialect: '', setBoxReady: (_: boolean) => {} };
     // Built once: a new loader on each render would restart the read.
     const loader = viaApi(options.loader, options.livePage ?? null);
     render(() => {
       const [boxReady, setBoxReady] = useState(options.boxReady ?? !!options.livePage);
       state.setBoxReady = setBoxReady;
-      state.dialect = useSessionLogSync(PROJECT, SESSION, { enabled: options.enabled ?? true, loader, boxReady, joinStream, schedule });
+      state.dialect = useSessionLogSync(PROJECT, SESSION, { enabled: options.enabled ?? true, loader, boxReady, joinStream, schedule, ...(options.deadlines ? { readSchedule: schedule } : {}) });
       return null;
     });
     return state;
@@ -1217,6 +1217,41 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
         expect(heldMessages()).toEqual(page().messages);
       });
     }
+
+    test('a read that never settles (its body stalled after the headers) gives up at its deadline, and the reply recovers without a refresh', async () => {
+      let apiReads = 0;
+      let boxReads = 0;
+      let committed = false;
+      mount({
+        deadlines: true,
+        loader: async () => { apiReads++; return committed ? page() : userPage(); },
+        livePage: async () => {
+          boxReads++;
+          // The second box read hangs for good, and ignores its abort signal too.
+          if (boxReads === 2) return new Promise<never>(() => {});
+          return committed ? page() : userPage();
+        },
+      });
+      await flush();
+      expect([apiReads, boxReads]).toEqual([1, 1]);
+      const stream = latestStream();
+      act(() => stream.onRuntimeResync());
+      await flush();
+      expect(boxReads).toBe(2);
+      // The reply commits while the read hangs, and its stream frames are lost.
+      committed = true;
+      act(() => {
+        stream.onConnectionChange(false);
+        stream.onConnectionChange(true);
+        notifyHostSignal('visible');
+      });
+      await flush();
+      expect(heldMessages()).toEqual(userPage().messages);
+      // The deadline ends the hung read; the queued invalidation reads again.
+      await runTimers();
+      await flush();
+      expect(heldMessages()).toEqual(page().messages);
+    });
 
     test('KRTX-4973: invalidations during stored fallback after a failed live read queue one fresh live read', async () => {
       const fallback = deferredPage();

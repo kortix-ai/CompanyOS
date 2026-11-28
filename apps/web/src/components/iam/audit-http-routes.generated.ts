@@ -257,6 +257,7 @@ const AUDIT_HTTP_ROUTE_KEYS = [
   "GET|v1|admin|api|impersonate|active",
   "GET|v1|admin|api|projects",
   "PUT|v1|admin|api|projects|:id|features",
+  "PUT|v1|admin|api|projects|:id|restricted-models",
   "GET|v1|admin|api|provider-analytics",
   "GET|v1|admin|api|provider-distribution",
   "PUT|v1|admin|api|provider-distribution",

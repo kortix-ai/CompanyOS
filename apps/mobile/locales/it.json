@@ -1403,6 +1403,10 @@
     "movedToFolder": "Spostato in {{name}}",
     "moveFailed": "Impossibile spostare l’artefatto",
     "emptyFolder": "Nessun artefatto in questa cartella",
-    "emptyUnfiled": "Nessun artefatto senza cartella"
+    "emptyUnfiled": "Nessun artefatto senza cartella",
+    "askAgent": "Chiedi all’IA",
+    "askAgentRemove": "Rimuovi {{title}}",
+    "askAgentLoadError": "Impossibile allegare «{{title}}». Toccalo per riprovare o rimuovilo.",
+    "askAgentLoading": "«{{title}}» è ancora in allegato. Invia di nuovo tra un attimo."
   }
 }

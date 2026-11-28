@@ -25,7 +25,10 @@ import { useTranslation } from 'react-i18next';
 import { ApiError, type Artifact, type ArtifactDetail } from '@kortix/sdk';
 import { useArtifact } from '@kortix/sdk/react';
 
-import { ArtifactActionsSheet, type ArtifactActionsSheetRef } from '@/components/artifacts/ArtifactActionsSheet';
+import {
+  ArtifactActionsSheet,
+  type ArtifactActionsSheetRef,
+} from '@/components/artifacts/ArtifactActionsSheet';
 import { ArtifactWebView } from '@/components/artifacts/ArtifactWebView';
 import { HEADER_ICON_SIZE } from '@/components/kortix/header-button';
 import { KortixLoader } from '@/components/kortix/kortix-loader';
@@ -39,6 +42,7 @@ import { DotsThreeIcon } from '@/lib/icons';
 import { THEME } from '@/lib/utils/theme';
 import { useTone } from '@/lib/utils/tone';
 import { useArtifactChatStore } from '@/stores/artifact-chat-store';
+import { useAuthContext } from '@/contexts/AuthContext';
 import { useArtifactViewerStore } from '@/stores/artifact-viewer-store';
 
 export function ArtifactViewerSheet({
@@ -49,7 +53,11 @@ export function ArtifactViewerSheet({
   /** Opens project home (the drawer's New session); Ask AI attaches the artifact first. */
   onNewChat: () => void;
 }) {
-  const target = useArtifactViewerStore((s) => s.target);
+  const { user } = useAuthContext();
+  const userId = user?.id ?? null;
+  const target = useArtifactViewerStore((s) =>
+    s.userId === userId && s.target?.projectId === projectId ? s.target : null
+  );
   const close = useArtifactViewerStore((s) => s.close);
   const modalRef = React.useRef<BottomSheetModal>(null);
   const actionsRef = React.useRef<ArtifactActionsSheetRef>(null);
@@ -57,22 +65,23 @@ export function ArtifactViewerSheet({
   const { t } = useTranslation();
   const background = THEME[useTone()].background;
 
-  // Links into this project open here (`openArtifactLink`). Leaving the
-  // project closes a viewer that is still open.
+  // Hydration may finish after the project mounts. Bind only after it, and
+  // never persist a signed content URL or another user's artifact.
   React.useEffect(() => {
-    const store = useArtifactViewerStore.getState();
-    store.setProjectId(projectId);
+    const bind = () => useArtifactViewerStore.getState().bind(userId, projectId);
+    const unsubscribe = useArtifactViewerStore.persist.onFinishHydration(bind);
+    if (useArtifactViewerStore.persist.hasHydrated()) bind();
     return () => {
+      unsubscribe();
       const now = useArtifactViewerStore.getState();
       if (now.projectId === projectId) now.setProjectId(null);
-      if (now.target?.projectId === projectId) now.close();
     };
-  }, [projectId]);
+  }, [projectId, userId]);
 
   // The store is the source of truth: an open presents the sheet, its dismiss clears it.
   React.useEffect(() => {
-    if (target) modalRef.current?.present();
-  }, [target]);
+    if (target?.projectId === projectId) modalRef.current?.present();
+  }, [target, projectId]);
 
   // Android back closes the viewer before it reaches the project stack.
   React.useEffect(() => {
@@ -86,11 +95,13 @@ export function ArtifactViewerSheet({
   }, [target]);
 
   const query = useArtifact(target?.projectId, target?.artifactId);
-  const artifact = query.data && query.data.artifact_id === target?.artifactId ? query.data : undefined;
+  const artifact =
+    query.data && query.data.artifact_id === target?.artifactId ? query.data : undefined;
 
   const [reloadKey, setReloadKey] = React.useState(0);
-  const reload = React.useCallback(() => {
-    void query.refetch();
+  const reload = React.useCallback(async () => {
+    // Keep the loaded page until the authorized read has updated the query.
+    await query.refetch();
     setReloadKey((value) => value + 1);
   }, [query]);
 
@@ -106,11 +117,12 @@ export function ArtifactViewerSheet({
       modalRef.current?.dismiss();
       onNewChat();
     },
-    [onNewChat, projectId],
+    [onNewChat, projectId]
   );
 
   const onRemoved = React.useCallback((artifactId: string) => {
-    if (useArtifactViewerStore.getState().target?.artifactId === artifactId) modalRef.current?.dismiss();
+    if (useArtifactViewerStore.getState().target?.artifactId === artifactId)
+      modalRef.current?.dismiss();
   }, []);
 
   return (
@@ -183,6 +195,11 @@ function ArtifactBody({
   const [pageError, setPageError] = React.useState(false);
   const retriedRef = React.useRef(false);
   const { refetch } = query;
+  const [loadedUrl, setLoadedUrl] = React.useState(artifactViewUrl);
+  const viewUrl = loadedUrl ?? artifactViewUrl;
+  React.useEffect(() => {
+    if (!loadedUrl && artifactViewUrl) setLoadedUrl(artifactViewUrl);
+  }, [loadedUrl, artifactViewUrl]);
 
   const onHttpError = React.useCallback(
     (status: number) => {
@@ -191,30 +208,45 @@ function ArtifactBody({
         // A fresh read with a new signed URL remounts the WebView on it. A
         // failed read keeps the cached artifact, and the same URL loads
         // nothing new: both show the error instead of the refused page.
-        const failedUrl = artifactViewUrl;
+        const failedUrl = viewUrl;
         void refetch().then((result) => {
-          if (result.isError || result.data?.version.view_url === failedUrl) setPageError(true);
+          const nextUrl = result.data?.version.view_url;
+          if (result.isError || !nextUrl || nextUrl === failedUrl) setPageError(true);
+          else setLoadedUrl(nextUrl);
         });
         return;
       }
       setPageError(true);
     },
-    [artifactViewUrl, refetch],
+    [viewUrl, refetch]
   );
   const onLoadError = React.useCallback(() => setPageError(true), []);
 
-  if (query.isError && !artifactViewUrl) {
-    const gone = query.error instanceof ApiError && (query.error.status === 404 || query.error.status === 403);
+  const gone =
+    query.isError &&
+    query.error instanceof ApiError &&
+    (query.error.status === 404 || query.error.status === 403);
+  if (gone || (query.isError && !viewUrl)) {
     return gone ? (
       <ViewerStatus title={t('artifacts.notFoundTitle')} detail={t('artifacts.notFoundHint')} />
     ) : (
-      <ViewerStatus title={t('artifacts.openError')} retryLabel={t('artifacts.retry')} onRetry={onRetry} />
+      <ViewerStatus
+        title={t('artifacts.openError')}
+        retryLabel={t('artifacts.retry')}
+        onRetry={onRetry}
+      />
     );
   }
   if (pageError) {
-    return <ViewerStatus title={t('artifacts.openError')} retryLabel={t('artifacts.retry')} onRetry={onRetry} />;
+    return (
+      <ViewerStatus
+        title={t('artifacts.openError')}
+        retryLabel={t('artifacts.retry')}
+        onRetry={onRetry}
+      />
+    );
   }
-  if (!artifactViewUrl) {
+  if (!viewUrl) {
     return (
       <View className="flex-1 items-center justify-center" style={{ backgroundColor: background }}>
         <KortixLoader />
@@ -223,8 +255,8 @@ function ArtifactBody({
   }
   return (
     <ArtifactWebView
-      key={artifactViewUrl}
-      viewUrl={artifactViewUrl}
+      key={viewUrl}
+      viewUrl={viewUrl}
       background={background}
       bottomInset={bottomInset}
       onHttpError={onHttpError}

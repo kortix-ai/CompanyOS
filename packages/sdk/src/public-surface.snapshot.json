@@ -465,6 +465,7 @@
     "denyCaptureDeviceGrant",
     "denyCaptureEnrollment",
     "denyPeerMessage",
+    "deriveTurnSources",
     "describeAccountInvite",
     "describeConnectorTool",
     "destroyAppMachine",

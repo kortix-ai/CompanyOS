@@ -1,7 +1,10 @@
-import type { ToolPart } from '../../../internal/session-types';
-import { toolCallBlock, type ToolCallBlock } from '@kortix/sdk';
 import { describe, expect, it } from 'bun:test';
-import { deriveTurnSources } from './derive-panels';
+
+import type { ToolPart } from '../../runtime/client';
+import { toolCallBlock } from '../../session-log/tool-call';
+import type { ToolCallBlock } from '../../session-log/types';
+import * as root from '../../../index';
+import { deriveTurnSources } from './turn-sources';
 
 let n = 0;
 function call(
@@ -23,6 +26,10 @@ const search = (results: Array<Record<string, unknown>>) =>
   call('web_search', { query: 'edge ai' }, JSON.stringify({ query: 'edge ai', results }));
 
 describe('deriveTurnSources', () => {
+  it('is exported from the package root', () => {
+    expect(root.deriveTurnSources).toBe(deriveTurnSources);
+  });
+
   it('lists every search result with its domain, title and excerpt, in order', () => {
     const sources = deriveTurnSources([
       search([
@@ -43,6 +50,26 @@ describe('deriveTurnSources', () => {
     ]);
     expect(sources).toHaveLength(1);
     expect(sources[0]).toMatchObject({ domain: 'example.com', snippet: 'Excerpt.' });
+  });
+
+  it('names a scraped page by the title the scrape returned, and each URL of a batch is one source', () => {
+    const output = JSON.stringify({
+      results: [
+        { url: 'https://a.example/x', title: 'Page A' },
+        { url: 'https://b.example/y', title: '' },
+      ],
+    });
+    const sources = deriveTurnSources([call('scrape_webpage', { urls: 'https://a.example/x, https://b.example/y' }, output)]);
+    expect(sources.map((s) => [s.title, s.domain])).toEqual([
+      ['Page A', 'a.example'],
+      ['b.example', 'b.example'],
+    ]);
+  });
+
+  it('names a fetched HTML page by its <title>', () => {
+    const html = '<html><head><title> The Real Title </title></head><body>x</body></html>';
+    const sources = deriveTurnSources([call('web_fetch', { url: 'https://site.example/a', format: 'html' }, html)]);
+    expect(sources).toEqual([{ url: 'https://site.example/a', title: 'The Real Title', domain: 'site.example', snippet: undefined }]);
   });
 
   it('adds nothing for a failed call, a bare query, a non-web tool or a non-http URL', () => {

@@ -11,7 +11,7 @@ Your sandbox is wired into Slack. When a teammate `@`-mentions the bot, or the p
 The `slack` CLI is on `$PATH` and **just works** — every call runs through the Kortix connector gateway, which resolves the Slack bot token **server-side**. There is no token in your sandbox and nothing to configure: don't look for `$SLACK_BOT_TOKEN`, don't reach for an MCP/HTTP workaround, just run the commands below. They are the full, supported surface (posting, **file upload**, history, reactions, search, edit/delete — all of it). Two patterns matter most:
 
 - **`slack step "..."`** — narrate progress. Updates the live plan block in the Slack thread *as you go*.
-- **`slack send "..."`** — finalize the turn with your answer. This closes the plan block and posts the reply. A turn that ends without it still answers: the platform posts your last message as the reply. Use `slack send` when the answer needs Block Kit or a file; plain prose may simply be your last message.
+- **`slack send "..."`** — finalize the turn with your answer. This closes the plan block and posts the reply. A turn that ends without it still answers: the platform posts your last message as the reply. That holds for a turn a colleague's report or another session's message started, too: when the report brings the person nothing new, end that turn with no text. Use `slack send` when the answer needs Block Kit or a file; plain prose may simply be your last message.
 
 Everything else (`slack history`, `slack react`, `slack send --file`, `slack search`, …) is for when the task explicitly asks for it.
 </overview>

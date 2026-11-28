@@ -11,7 +11,7 @@
 import type { Artifact } from '@kortix/sdk';
 import { create } from 'zustand';
 
-export interface AttachedArtifact {
+interface AttachedArtifact {
   projectId: string;
   artifactId: string;
   /** Shown on the composer until the read lands. */

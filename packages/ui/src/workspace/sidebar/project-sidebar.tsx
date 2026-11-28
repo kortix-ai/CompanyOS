@@ -27,7 +27,7 @@ import { NewAgentModalProvider } from './new-agent-modal-provider';
 import { ProjectNavItems } from './project-nav-items';
 import { ProjectSessionList } from './project-session-list';
 import { ProjectSpacesNav } from './project-spaces-nav';
-import { createPeekController } from '../../primitives/sidebar-peek';
+import { SIDEBAR_PEEK_CLOSE_DELAY_MS, SIDEBAR_PEEK_OPEN_DELAY_MS } from '../../primitives/sidebar-peek';
 import { isRailPanelPage, RailPageActions, RailPagePanel, railPanelPageOf, type RailPanelPage } from './rail-page-panel';
 import { SidebarMoreGroup } from './sidebar-more-group';
 import { useIsCreatingProjectSession } from '../../internal/hooks/projects/new-session-guard';
@@ -54,7 +54,7 @@ import { WorkspaceSettingsRailPublisher, type WorkspaceSettingsRailHost } from '
 import { ProjectRail } from './project-rail';
 import { SpaceFormModal } from '../session-spaces/space-form-modal';
 import { isProjectAdminPath } from '../../internal/layout/project-capability-nav';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { SidebarBalanceWarning } from './footer/project-balance-warning';
 import { SidebarUpgradeButton } from './footer/project-upgrade-button';
 import { SidebarGlyph as PanelLeft } from '../../icons/sidebar-toggle';
@@ -641,22 +641,45 @@ export function ProjectSidebar({
  * Docked open, with the rail: a hover on a rail item shows that item's list in
  * the panel. The same hover intent as the collapsed peek: 100 ms to show, so
  * a pointer crossing the rail does not flash lists, and 250 ms to go back to
- * the route's list after the pointer leaves the rail and the panel.
+ * the route's list after the pointer leaves the rail and the panel. While a
+ * menu opened from the list is up (it portals outside the panel), the list
+ * stays, so the menu's row does not unmount under the pointer.
  */
 function useRailPreview(active: boolean) {
   const [on, setOn] = useState(false);
-  const controller = useMemo(() => createPeekController(setOn), []);
-  useEffect(() => () => controller.cancel(), [controller]);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clear = useCallback(() => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+  }, []);
+  useEffect(() => clear, [clear]);
   useEffect(() => {
-    if (!active) controller.cancel();
-  }, [active, controller]);
-  return {
-    on: active && on,
-    enter: controller.enter,
-    leave: controller.leave,
-    // Entering the panel keeps a preview that is up; it never starts one.
-    keep: () => {
-      if (on) controller.enter();
-    },
-  };
+    if (active) return;
+    clear();
+    setOn(false);
+  }, [active, clear]);
+
+  const enter = useCallback(() => {
+    clear();
+    if (on) return;
+    timer.current = setTimeout(() => setOn(true), SIDEBAR_PEEK_OPEN_DELAY_MS);
+  }, [clear, on]);
+  const leave = useCallback(() => {
+    clear();
+    const end = () => {
+      timer.current = null;
+      if (document.querySelector('[role="menu"]')) {
+        timer.current = setTimeout(end, SIDEBAR_PEEK_CLOSE_DELAY_MS);
+        return;
+      }
+      setOn(false);
+    };
+    timer.current = setTimeout(end, SIDEBAR_PEEK_CLOSE_DELAY_MS);
+  }, [clear]);
+  // Entering the panel keeps a preview that is up; it never starts one.
+  const keep = useCallback(() => {
+    if (on) clear();
+  }, [clear, on]);
+
+  return { on: active && on, enter, leave, keep };
 }

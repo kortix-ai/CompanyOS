@@ -1404,6 +1404,10 @@
     "movedToFolder": "Moved to {{name}}",
     "moveFailed": "Could not move the artifact",
     "emptyFolder": "No artifacts in this folder",
-    "emptyUnfiled": "No unfiled artifacts"
+    "emptyUnfiled": "No unfiled artifacts",
+    "askAgent": "Ask AI",
+    "askAgentRemove": "Remove {{title}}",
+    "askAgentLoadError": "Couldn't attach “{{title}}”. Tap it to try again, or remove it.",
+    "askAgentLoading": "“{{title}}” is still attaching. Send again in a moment."
   }
 }

@@ -1398,6 +1398,10 @@
     "movedToFolder": "{{name}} に移動しました",
     "moveFailed": "成果物を移動できませんでした",
     "emptyFolder": "このフォルダにアーティファクトはありません",
-    "emptyUnfiled": "フォルダー未分類のアーティファクトはありません"
+    "emptyUnfiled": "フォルダー未分類のアーティファクトはありません",
+    "askAgent": "AI に聞く",
+    "askAgentRemove": "{{title}} を外す",
+    "askAgentLoadError": "「{{title}}」を添付できませんでした。タップして再試行するか、外してください。",
+    "askAgentLoading": "「{{title}}」はまだ添付中です。少し待ってからもう一度送信してください。"
   }
 }

@@ -1043,7 +1043,7 @@ export function ProjectScreen() {
         </ProjectRouteProvider>
         {/* One artifact viewer for the project: the Artifacts page's rows and a
             thread's artifact links open it over the screen they are on. */}
-        <ArtifactViewerSheet projectId={projectId} />
+        <ArtifactViewerSheet projectId={projectId} onNewChat={startNewSession} />
         </KortixProjectProvider>
         </DrawerPeekCard>
       </Drawer>

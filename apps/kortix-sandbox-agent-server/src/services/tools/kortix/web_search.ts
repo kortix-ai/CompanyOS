@@ -46,8 +46,9 @@ export default {
     'Returns titles, URLs, snippets, relevance scores, images, and a synthesized AI answer. ' +
     'Supports batch queries separated by |||. ' +
     "Use topic='news' for current events, topic='finance' for financial data. " +
-    'The app lists the pages you used under your answer, so do not end with a Sources section or a list of links ' +
-    'unless the person asks for one. Link a page inline only where one claim needs it.',
+    'The Kortix app lists the pages you used under your answer: an answer to a person in the app does not end with a ' +
+    'Sources section or a list of links, unless the person asks for one, and links a page inline only where one claim needs it. ' +
+    'A report to another agent, or a reply posted to Slack or another channel, keeps its sources as that agent or channel asks.',
   parameters: {
     type: 'object',
     properties: {

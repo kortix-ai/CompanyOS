@@ -385,3 +385,20 @@ test("another project's attached artifact is not this home's", async () => {
   await act(async () => composer.onSubmit());
   expect(submitted[0].artifact).toBeNull();
 });
+
+test('leaving the project unmounts home with the attachment: coming back starts an empty chat', async () => {
+  attach();
+  artifactRead = read({ data: ARTIFACT });
+  await mount();
+  expect(composer.header).not.toBeNull();
+  // Back to the projects list: home unmounts while still focused, no blur first.
+  await act(async () => tree?.unmount());
+  tree = undefined;
+  expect(useArtifactChatStore.getState().attached).toBeNull();
+
+  await mount();
+  expect(composer.header).toBeNull();
+  await act(async () => composer.onChangeText('hello'));
+  await act(async () => composer.onSubmit());
+  expect(submitted[0].artifact).toBeNull();
+});

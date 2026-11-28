@@ -24,7 +24,8 @@
  * (`lib/artifacts/artifact-chat.ts`). The artifact is read again here; while
  * that read loads or after it fails, Send refuses with a toast and keeps the
  * draft, so no chat starts without the artifact. A failed chip retries on tap.
- * Its X, a send, or leaving this screen drops the attachment.
+ * Its X, a send, or leaving this screen (a blur or an unmount) drops the
+ * attachment.
  *
  * Layout:
  * - The symbol (`ProjectHero`) is absolutely centred in the keyboard-avoiding
@@ -224,13 +225,15 @@ export function ProjectHome({
         : null,
     [attachedArtifactId, artifactRead.data, artifactRead.isError],
   );
-  // Leaving home (a page or a thread covers it) cancels the attachment: the
-  // next new chat starts empty. Arriving with one keeps it.
+  // Leaving home (a page or a thread covers it, or the project closes and
+  // unmounts it with no blur) cancels the attachment: the next new chat
+  // starts empty. Arriving with one keeps it.
   const wasFocusedRef = React.useRef(isScreenFocused);
   React.useEffect(() => {
     if (wasFocusedRef.current && !isScreenFocused) clearAttachedArtifact(projectId);
     wasFocusedRef.current = isScreenFocused;
   }, [isScreenFocused, clearAttachedArtifact, projectId]);
+  React.useEffect(() => () => clearAttachedArtifact(projectId), [clearAttachedArtifact, projectId]);
   const { refetch: refetchArtifact } = artifactRead;
   const artifactChip =
     attachedArtifact && artifactState ? (

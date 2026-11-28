@@ -1,5 +1,5 @@
 import catalogJson from './catalog.generated.json' with { type: 'json' };
-import { PLATINUM_PROVIDER, type Catalog, type CatalogModel } from './lite';
+import { LLMTR_PROVIDER, PLATINUM_PROVIDER, type Catalog, type CatalogModel } from './lite';
 
 /**
  * The bundled models.dev snapshot. Kept out of `index.ts` so consumers that
@@ -8,7 +8,7 @@ import { PLATINUM_PROVIDER, type Catalog, type CatalogModel } from './lite';
  */
 export const CATALOG: Catalog = {
   ...(catalogJson as Catalog),
-  providers: [...(catalogJson as Catalog).providers, PLATINUM_PROVIDER],
+  providers: [...(catalogJson as Catalog).providers, PLATINUM_PROVIDER, LLMTR_PROVIDER],
 };
 
 function modelsByWireId(catalog: Catalog): Map<string, CatalogModel> {

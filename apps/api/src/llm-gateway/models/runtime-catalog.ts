@@ -1,4 +1,4 @@
-import { CATALOG, PLATINUM_PROVIDER, type Catalog, type CatalogModel } from '@kortix/llm-catalog';
+import { CATALOG, LLMTR_PROVIDER, PLATINUM_PROVIDER, type Catalog, type CatalogModel } from '@kortix/llm-catalog';
 import { CODEX_MODELS_URL, CODEX_SEED_MODEL_IDS, parseCodexContextWindows, parseCodexModelIds } from './codex-models';
 
 const DEFAULT_SOURCE_URL = 'https://models.dev/api.json';
@@ -126,8 +126,9 @@ function normalizeCatalog(data: ModelsDevResponse, sourceUrl: string, fetchedAt:
   if (providers.length === 0 || modelCount === 0) {
     throw new Error('catalog API returned no providers or models');
   }
-  // Platinum is not on models.dev; keep it a provider across every refresh.
+  // Platinum and LLMTR are not on models.dev; keep them across every refresh.
   if (!providers.some((p) => p.id === PLATINUM_PROVIDER.id)) providers.push(PLATINUM_PROVIDER);
+  if (!providers.some((p) => p.id === LLMTR_PROVIDER.id)) providers.push(LLMTR_PROVIDER);
 
   return {
     source: sourceUrl,

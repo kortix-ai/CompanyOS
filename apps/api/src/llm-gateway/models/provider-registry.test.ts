@@ -118,6 +118,14 @@ describe('runtime catalog provider resolution', () => {
     });
   });
 
+  test('resolves LLMTR to its OpenAI-compatible gateway with LLMTR_API_KEY', () => {
+    expect(resolveCatalogUpstream('llmtr')).toMatchObject({
+      kind: 'openai-compat',
+      envVar: 'LLMTR_API_KEY',
+      baseUrl: 'https://llmtr.com/v1',
+    });
+  });
+
   test('returns null for an unknown provider', () => {
     expect(resolveCatalogUpstream('definitely-not-a-provider')).toBeNull();
   });

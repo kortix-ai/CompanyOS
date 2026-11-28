@@ -56,6 +56,7 @@ describe('runtime model catalog', () => {
       modelCount: 1,
     });
     expect(catalog.snapshot().providers.map((p) => p.id)).toContain('platinum');
+    expect(catalog.snapshot().providers.map((p) => p.id)).toContain('llmtr');
     expect(catalog.snapshot().providers[0]?.models[0]).toMatchObject({
       id: 'live-model',
       released: '2026-07-01',

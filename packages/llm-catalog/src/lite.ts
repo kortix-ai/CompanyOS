@@ -17,9 +17,26 @@ export const PLATINUM_PROVIDER: CatalogProvider = {
   models: [],
 };
 
+/**
+ * LLMTR is an OpenAI-compatible gateway. It is not on models.dev, so it is
+ * appended to every catalog (the bundled snapshot, its id/env projection,
+ * and the API's live models.dev refresh). Model IDs are vendor/model paths
+ * the user supplies; this entry does not freeze a model list.
+ */
+export const LLMTR_PROVIDER: CatalogProvider = {
+  id: 'llmtr',
+  name: 'LLMTR',
+  env: ['LLMTR_API_KEY'],
+  doc: 'https://llmtr.com',
+  api: 'https://llmtr.com/v1',
+  npm: '@ai-sdk/openai-compatible',
+  models: [],
+};
+
 const PROVIDER_ENV: ReadonlyArray<{ id: string; env: string[] }> = [
   ...(providerEnvJson as ReadonlyArray<{ id: string; env: string[] }>),
   { id: PLATINUM_PROVIDER.id, env: PLATINUM_PROVIDER.env! },
+  { id: LLMTR_PROVIDER.id, env: LLMTR_PROVIDER.env! },
 ];
 
 export {
@@ -516,6 +533,7 @@ export const MODEL_SELECTOR_PROVIDER_IDS = [
 
 export const PROVIDER_LABELS: Record<string, string> = {
   platinum: 'Platinum',
+  llmtr: 'LLMTR',
   anthropic: 'Anthropic',
   openai: 'OpenAI',
   codex: 'ChatGPT subscription',

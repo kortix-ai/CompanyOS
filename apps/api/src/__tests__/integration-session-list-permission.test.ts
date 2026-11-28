@@ -98,6 +98,32 @@ test('HTTP agent caller can list, but cannot read transcripts, write, or cross w
   const childMatch = await app.request(`/v1/projects/${projectId}/sessions?label=synthetic-child-topic&parent=root`, { headers });
   expect(childMatch.status).toBe(200);
   expect((await childMatch.json()).map((row: { session_id: string }) => row.session_id)).toEqual([own]);
+  // Each content predicate can match a different readable row in the tree.
+  await db.update(projectSessions).set({ metadata: { first_prompt: 'synthetic-readable-search', spawned_by_session: own } }).where(eq(projectSessions.sessionId, readableChild));
+  for (const label of ['synthetic-visible-topic', 'synthetic-child-topic']) {
+    const combined = await app.request(`/v1/projects/${projectId}/sessions?label=${label}&q=synthetic-readable-search&parent=root`, { headers });
+    expect(combined.status).toBe(200);
+    expect((await combined.json()).map((row: { session_id: string }) => row.session_id)).toEqual([own]);
+  }
+  await db.update(projectSessions).set({ metadata: { first_prompt: 'synthetic-root-search' } }).where(eq(projectSessions.sessionId, own));
+  const rootSearch = await app.request(`/v1/projects/${projectId}/sessions?label=synthetic-child-topic&q=synthetic-root-search&parent=root`, { headers });
+  expect(rootSearch.status).toBe(200);
+  expect((await rootSearch.json()).map((row: { session_id: string }) => row.session_id)).toEqual([own]);
+  const secondChild = crypto.randomUUID();
+  await db.insert(projectSessions).values({
+    sessionId: secondChild, accountId, projectId, branchName: secondChild,
+    parentSessionId: own, visibility: 'private', createdBy: userId,
+    metadata: { spawned_by_session: own }, labels: ['synthetic-second-child-topic'],
+  });
+  for (const label of ['synthetic-second-child-topic', 'synthetic-confidential-topic']) {
+    const separateChildren = await app.request(`/v1/projects/${projectId}/sessions?label=${label}&q=synthetic-readable-search&parent=root`, { headers });
+    expect(separateChildren.status).toBe(200);
+    expect((await separateChildren.json()).map((row: { session_id: string }) => row.session_id)).toEqual(label === 'synthetic-second-child-topic' ? [own] : []);
+  }
+  const privateSearch = await app.request(`/v1/projects/${projectId}/sessions?label=synthetic-second-child-topic&q=synthetic-child-only-secret&parent=root`, { headers });
+  expect(privateSearch.status).toBe(200);
+  expect(await privateSearch.json()).toEqual([]);
+  await db.delete(projectSessions).where(eq(projectSessions.sessionId, secondChild));
   await db.delete(projectSessions).where(eq(projectSessions.sessionId, readableChild));
   await db.update(projectSessions).set({ parentSessionId: null }).where(eq(projectSessions.sessionId, unrelated[0]));
 

@@ -182,13 +182,13 @@ describe('a notice turn folds its row into the work fold (KRTX-4732)', () => {
     expect(wrapperOf(row).props.hidden).toBe(false);
   });
 
-  test('a live report turn shows the peer message until the turn settles', () => {
+  test('a live report turn folds the peer message from the start (KRTX-5238)', () => {
     const html = renderRow(reportTurn, true);
     const row = html.indexOf('data-testid="peer-message-turn"');
     expect(row).toBeGreaterThan(-1);
-    // No fold while the turn works: the row renders visible, not hidden.
-    expect(html.slice(Math.max(0, row - 300), row)).not.toContain('hidden');
-    expect(html).not.toContain('Worked for');
+    // The fold stands while the turn works: nothing moves into it when the turn settles.
+    expect(html.slice(Math.max(0, row - 300), row)).toContain('hidden=""');
+    expect(html).toContain('Working');
   });
 
   test('a report turn with no answer keeps the row at the top level', () => {
@@ -203,7 +203,7 @@ describe('a notice turn folds its row into the work fold (KRTX-4732)', () => {
     const row = html.indexOf('data-testid="peer-message-turn"');
     expect(row).toBeGreaterThan(-1);
     // No answer row to fold into: the row renders visible at the top level.
-    expect(html.slice(Math.max(0, row - 300), row)).not.toContain('hidden');
+    expect(html.slice(Math.max(0, row - 300), row)).not.toContain('hidden=""');
     expect(html).not.toContain('Worked for');
   });
 
@@ -214,7 +214,7 @@ describe('a notice turn folds its row into the work fold (KRTX-4732)', () => {
     const html = renderRow(inlineAnswerTurn);
     const row = html.indexOf('data-testid="peer-message-turn"');
     expect(row).toBeGreaterThan(-1);
-    expect(html.slice(Math.max(0, row - 300), row)).not.toContain('hidden');
+    expect(html.slice(Math.max(0, row - 300), row)).not.toContain('hidden=""');
     expect(html).toContain('Going with the plan-based quote.');
   });
 });

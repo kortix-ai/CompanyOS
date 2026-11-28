@@ -1,3 +1,4 @@
+import { normalizeSlackLinks } from './slack-links';
 import { holdPendingSetupLink } from './setup-links/util';
 import { stripKortixSystemTags } from '../internal/lib/utils/kortix-system-tags';
 import { looksLikeFilePath as sharedLooksLikeFilePath } from '../internal/lib/utils/path-detection';
@@ -19,7 +20,7 @@ import { hasReferenceDefinitionOutsideFences, prepareMarkdownForMath } from '@ko
  */
 export function prepareMarkdownSource(content: string, isStreaming: boolean): string {
   const prepared = stripKortixSystemTags(prepareMarkdownForMath(content));
-  return autoLinkUrls(isStreaming ? holdPendingSetupLink(prepared) : prepared);
+  return normalizeSlackLinks(autoLinkUrls(isStreaming ? holdPendingSetupLink(prepared) : prepared));
 }
 
 /** A reference-style link target: `[label]: destination`, up to three spaces in. */

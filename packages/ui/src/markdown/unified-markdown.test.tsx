@@ -916,3 +916,47 @@ describe('UnifiedMarkdown line breaks', () => {
     ]);
   });
 });
+
+describe('Slack-style labelled links', () => {
+  test('renders the report label as one clickable link', () => {
+    const html = renderToStaticMarkup(withIntl(<UnifiedMarkdown trust="agent" content="See <https://kortix.com/report|Engineering’s report and evidence>." />));
+    expect(html).toContain('href="https://kortix.com/report"');
+    expect(html).toContain('Engineering’s report and evidence</a>');
+    expect(html).not.toContain('|Engineering');
+  });
+});
+
+test('Slack labels stay literal and destination parentheses remain in the href', () => {
+  const html = renderToStaticMarkup(withIntl(<UnifiedMarkdown trust="agent" content={'<https://example.com/a(b)|[report] *now* &copy;>'} />));
+  expect(html).toContain('href="https://example.com/a%28b%29"');
+  expect(html).toContain('[report] *now* &amp;copy;</a>');
+  expect(html).not.toContain('<em>');
+});
+
+test('complete Slack links render while streaming and incomplete prefixes retain their label', () => {
+  const prefix = '<https://example.com/report|Engineering report';
+  for (const content of [prefix, `${prefix}>`]) {
+    const html = renderToStaticMarkup(withIntl(<UnifiedMarkdown trust="agent" content={content} isStreaming />));
+    if (content.endsWith('>')) {
+      expect(html).toContain('href="https://example.com/report"');
+      expect(html).toContain('Engineering');
+      expect(html).not.toContain('|Engineering');
+    } else {
+      expect(html).toContain('|Engineering');
+    }
+  }
+});
+
+test('Slack single-word labels are not protected as CommonMark autolinks', () => {
+  const html = renderToStaticMarkup(withIntl(<UnifiedMarkdown trust="agent" content="<https://example.com/path|Report>" />));
+  expect(html).toContain('href="https://example.com/path"');
+  expect(html).toContain('>Report</a>');
+  expect(html).not.toContain('%7CReport');
+});
+
+test('Slack destinations preserve literal ampersand entities', () => {
+  const html = renderToStaticMarkup(withIntl(<UnifiedMarkdown trust="agent" content={'<https://example.com/?x=&copy;|Report now>'} />));
+  expect(html).toContain('href="https://example.com/?x=&amp;copy;"');
+  expect(html).not.toContain('%C2%A9');
+  expect(html).toContain('>Report now</a>');
+});

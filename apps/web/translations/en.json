@@ -25424,6 +25424,7 @@
     "exportWaiting": "Saving your edits, then exporting…",
     "exportBlocked": "Export stopped: your latest edits are not saved.",
     "clearFilters": "Clear filters",
+    "typeApp": "App",
     "linkCopyFailed": "Could not copy the link. Select it in the field and copy it.",
     "shareDropsPeople": "{count, plural, one {Saving removes the person you added. Only Private keeps a list of people.} other {Saving removes the # people you added. Only Private keeps a list of people.}}",
     "askAgentHistoryError": "Could not load earlier chats.",

@@ -25424,6 +25424,7 @@
     "exportWaiting": "編集を保存してからエクスポートします…",
     "exportBlocked": "エクスポートを中止しました: 最新の編集が保存されていません。",
     "clearFilters": "フィルターをクリア",
+    "typeApp": "アプリ",
     "linkCopyFailed": "リンクをコピーできませんでした。フィールドで選択してコピーしてください。",
     "shareDropsPeople": "{count, plural, other {保存すると、追加した # 人が外れます。ユーザーの一覧を保持するのは「非公開」だけです。}}",
     "askAgentHistoryError": "以前のチャットを読み込めませんでした。",

@@ -1,7 +1,8 @@
 'use client';
 
-import type { Artifact, ArtifactListScope } from '@kortix/sdk';
-import { useArtifactFolders, useArtifactMutations, useArtifacts, useProjectConfig } from '@kortix/sdk/react';
+import type { App, Artifact, ArtifactListScope } from '@kortix/sdk';
+import { useArtifactFolders, useArtifactMutations, useArtifacts, useProjectConfig, useWorkspaceApps } from '@kortix/sdk/react';
+import { cardPreviewApp, gridApps } from '@kortix/ui/apps';
 import { Button } from '@kortix/ui/button';
 
 import { EmptyState } from '@kortix/ui/empty-state';
@@ -15,10 +16,12 @@ import { Tabs, TabsList, TabsTrigger } from '@kortix/ui/tabs';
 import { errorToast, successToast } from '@kortix/ui/toast';
 import {
   ALL_SPACES,
+  PROJECT_ACTIONS,
   ProjectPageHeader,
   SpaceFilterTabs,
   spaceFilterLabel,
   spaceScope,
+  useProjectCan,
   useSpaceFilter,
   useSpacesEnabled,
 } from '@kortix/ui/workspace';
@@ -31,7 +34,7 @@ import { useTranslations } from '@/i18n/use-translations';
 
 import { ArtifactFolderActions, ArtifactFolderCrumb, ArtifactFolderEditor, ArtifactFolderTile } from './artifact-folders';
 import { folderChildren, folderPath } from './artifact-folder-tree';
-import { ArtifactCard, CreatingCard, useColumnWidth } from './artifact-card';
+import { AppArtifactCard, ArtifactCard, CreatingCard, useColumnWidth } from './artifact-card';
 import { artifactHref } from './artifact-meta';
 
 const SCOPES: ArtifactListScope[] = ['all', 'mine', 'shared', 'pinned'];
@@ -45,6 +48,11 @@ function matches(a: Artifact, scope: ArtifactListScope, q: string, viewerId: str
   if (scope === 'shared' && a.created_by.user_id === viewerId) return false;
   if (scope === 'pinned' && !a.pinned) return false;
   return !q || a.title.toLowerCase().includes(q) || !!a.description?.toLowerCase().includes(q);
+}
+
+/** An App has no owner, pin or folder here: it shows under All, at the root, and matches its name. */
+function appMatches(app: App, scope: ArtifactListScope, q: string): boolean {
+  return scope === 'all' && (!q || app.name.toLowerCase().includes(q) || app.slug.includes(q));
 }
 
 type ArtifactSort = 'activity' | 'name' | 'created';
@@ -109,12 +117,23 @@ export function ArtifactsGallery({ projectId }: { projectId: string }) {
   const useServer = paged && filtered && (server.data !== undefined || server.isError);
   const list = useServer ? server : all;
   const cards = list.data ?? [];
+  // Apps are an artifact type (KRTX-5217). The list holds only the Apps the viewer may open (the
+  // API filters it by each App's access), and the Apps page's own card rule picks the cards: a tab
+  // of an App or a background App is never a second card. Every App action stays on its own page.
+  const appList = useWorkspaceApps(projectId);
+  const canAdminApps = useProjectCan(projectId, PROJECT_ACTIONS.PROJECT_APP_ADMIN).allowed === true;
+  const apps = folderId ? [] : gridApps(appList.data ?? [], canAdminApps);
   // An artifact sits in its bound space, else its agent's space, else Project-wide.
   // Spaces are Work in progress: with `chat` off every artifact is
   // project-wide, and the page shows no filter, chip or "Move to space".
   const config = useProjectConfig(projectId);
   const spacesOn = useSpacesEnabled(projectId);
-  const { spaces, groups, spaceOf } = spaceScope(cards, config, spacesOn, (artifact) => artifact);
+  const { spaces, groups, spaceOf } = spaceScope<Artifact | App>(
+    [...cards, ...apps],
+    config,
+    spacesOn,
+    (item) => ('artifact_id' in item ? item : item.display),
+  );
   const labels = new Map(groups.map((group) => [group.name, group.label]));
   const [space, setSpace] = useSpaceFilter(projectId);
   const tSort = useTranslations('listSort');
@@ -130,6 +149,7 @@ export function ArtifactsGallery({ projectId }: { projectId: string }) {
     ),
     sort,
   );
+  const shownApps = apps.filter((app) => appMatches(app, scope, query) && (space === ALL_SPACES || spaceOf(app) === space));
 
   return (
     <div role="region" aria-label={t('title')} className="flex h-svh flex-col overflow-hidden">
@@ -237,9 +257,9 @@ export function ArtifactsGallery({ projectId }: { projectId: string }) {
                 ))}
               </div>
             ) : (<>
-              {shown.length === 0 && !create.isPending && paged && filtered && (server.isLoading || server.isPlaceholderData) ? (
+              {shown.length === 0 && !shownApps.length && !create.isPending && paged && filtered && (server.isLoading || server.isPlaceholderData) ? (
                 <div role="status" aria-label={tCommon('loading')} className="flex justify-center py-12"><Loading className="size-5" /></div>
-              ) : shown.length === 0 && !create.isPending ? (
+              ) : shown.length === 0 && !shownApps.length && !create.isPending ? (
               <EmptyState
                 title={
                   q || scope !== 'all'
@@ -289,6 +309,16 @@ export function ArtifactsGallery({ projectId }: { projectId: string }) {
                     space={spacesOn && space === ALL_SPACES ? labels.get(spaceOf(artifact)) : undefined}
                     current={spaceOf(artifact)}
                     spaces={spaces}
+                  />
+                ))}
+                {apps.map((app) => (
+                  <AppArtifactCard
+                    key={app.app_id}
+                    projectId={projectId}
+                    app={app}
+                    shown={cardPreviewApp(appList.data ?? [], app, canAdminApps)}
+                    hidden={!shownApps.includes(app)}
+                    space={spacesOn && space === ALL_SPACES ? labels.get(spaceOf(app)) : undefined}
                   />
                 ))}
               </div>

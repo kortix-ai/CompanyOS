@@ -25424,6 +25424,7 @@
     "exportWaiting": "正在保存你的编辑，然后导出…",
     "exportBlocked": "导出已停止：你最近的编辑尚未保存。",
     "clearFilters": "清除筛选",
+    "typeApp": "应用",
     "linkCopyFailed": "无法复制链接。请在输入框中选中后复制。",
     "shareDropsPeople": "{count, plural, other {保存后将移除你添加的 # 人。只有“私密”会保留人员列表。}}",
     "askAgentHistoryError": "无法加载之前的聊天。",

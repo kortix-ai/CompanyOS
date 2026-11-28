@@ -25424,6 +25424,7 @@
     "exportWaiting": "Deine Änderungen werden gespeichert, dann exportiert…",
     "exportBlocked": "Export abgebrochen: Deine letzten Änderungen sind nicht gespeichert.",
     "clearFilters": "Filter zurücksetzen",
+    "typeApp": "App",
     "linkCopyFailed": "Der Link konnte nicht kopiert werden. Markiere ihn im Feld und kopiere ihn.",
     "shareDropsPeople": "{count, plural, one {Beim Speichern wird die hinzugefügte Person entfernt. Nur Privat behält eine Liste von Personen.} other {Beim Speichern werden die # hinzugefügten Personen entfernt. Nur Privat behält eine Liste von Personen.}}",
     "askAgentHistoryError": "Frühere Chats konnten nicht geladen werden.",

@@ -49,6 +49,8 @@ let emailFailureStatus: number | null = null;
 // The mode the send action answers with (the server-side existence check that
 // decides which email GoTrue mints). Null = an older action answer without it.
 let emailCodeMode: string | null = null;
+type Submitted = { path: string; email: FormDataEntryValue | null };
+let lastSubmit: Submitted | null = null;
 mock.module('./actions', () => ({
   resolveAuthMode: async () => ({ mode: resolvedMode }),
 }));
@@ -57,7 +59,9 @@ mock.module('@/lib/auth/submit-auth', () => ({
   AUTH_TIMEOUT_MESSAGE: 'This is taking longer than expected. Please try again.',
   AUTH_NETWORK_MESSAGE: 'The request could not be sent. Please try again.',
   AUTH_UNEXPECTED_MESSAGE: 'Something went wrong. Please try again.',
-  submitAuthForm: async (_path: string, _body: FormData) => {
+  submitAuthForm: async (path: string, body: FormData) => {
+    lastSubmit = { path, email: body.get('email') };
+    if (path.startsWith('/api/auth/password')) return { ok: false, reason: 'server' as const, message: 'stop', status: 400 };
     emailCodeSends += 1;
     if (emailFailure) {
       return {
@@ -488,5 +492,97 @@ test('remembered password keeps enforced-SSO shut and renders closed signups as 
     } finally {
       await act(async () => tree.unmount());
     }
+  }
+});
+
+// "Use a password" with an empty entry field opens the password step with its
+// own address field, instead of refusing until the visitor types an address.
+async function passwordFirst(address: string) {
+  let root: ReturnType<typeof create> | undefined;
+  await act(async () => {
+    root = create(<NextIntlClientProvider locale="en" messages={messages}><AuthPage /></NextIntlClientProvider>);
+  });
+  if (!root) throw new Error('Auth page did not render');
+  const tree = root;
+  await goToPasswordForm(tree);
+  const emailField = tree.root.findByProps({ id: 'credentials-email' });
+  expect(emailField.props.readOnly).toBeUndefined();
+  expect(emailField.props.autoFocus).toBe(true);
+  await act(async () => emailField.props.onChange({ target: { value: address } }));
+  await act(async () =>
+    tree.root.findByType('form').props.onSubmit({
+      preventDefault() {},
+      currentTarget: {},
+    }),
+  );
+  return tree;
+}
+
+const RealFormData = globalThis.FormData;
+function withFormData<T>(run: () => Promise<T>) {
+  // The page builds FormData from the submitted form; the test renderer has no
+  // DOM form, so hand it an empty one the page fills itself.
+  globalThis.FormData = class extends RealFormData {
+    constructor() {
+      super();
+      this.set('password', 'synthetic-password');
+    }
+  } as typeof FormData;
+  return run().finally(() => {
+    globalThis.FormData = RealFormData;
+  });
+}
+
+test('password sign-in opens without an address and resolves the mode on submit', () =>
+  withFormData(async () => {
+    resolvedMode = 'signin';
+    emailCodeSends = 0;
+    lastSubmit = null;
+    const tree = await passwordFirst('returning@example.test');
+    try {
+      expect((lastSubmit as Submitted | null)?.path).toBe('/api/auth/password?intent=signin');
+      expect((lastSubmit as Submitted | null)?.email).toBe('returning@example.test');
+      expect(JSON.stringify(tree.toJSON())).toContain('Welcome back');
+      expect(emailCodeSends).toBe(0);
+    } finally {
+      await act(async () => tree.unmount());
+    }
+  }));
+
+test('password sign-in without an address still refuses an SSO-enforced domain', () =>
+  withFormData(async () => {
+    resolvedMode = 'sso';
+    lastSubmit = null;
+    const tree = await passwordFirst('person@sso.example.test');
+    try {
+      expect(lastSubmit).toBeNull();
+      // Back on the entry step, where the SSO action lives, with the address kept.
+      expect(tree.root.findByProps({ id: 'email' }).props.value).toBe('person@sso.example.test');
+      expect(JSON.stringify(tree.toJSON())).toContain('requires single sign-on');
+    } finally {
+      await act(async () => tree.unmount());
+    }
+  }));
+
+test('"Email me a code" with no address typed returns to the email-first entry step', async () => {
+  emailCodeSends = 0;
+  let root: ReturnType<typeof create> | undefined;
+  await act(async () => {
+    root = create(<NextIntlClientProvider locale="en" messages={messages}><AuthPage /></NextIntlClientProvider>);
+  });
+  if (!root) throw new Error('Auth page did not render');
+  const tree = root;
+  try {
+    await goToPasswordForm(tree);
+    const back = buttonByLabel(tree, 'Email me a code');
+    if (!back) throw new Error('Email-me-a-code button did not render');
+    await act(async () => back.props.onClick());
+    expect(tree.root.findAllByProps({ id: 'credentials-email' })).toHaveLength(0);
+    expect(tree.root.findByProps({ autoComplete: 'email' }).props.id).toBe('email');
+    expect(emailCodeSends).toBe(0);
+    // Continue on the entry step stays email-first: no remembered password choice.
+    expect(preferences.get('kortix:auth-method') ?? null).not.toBe('password');
+  } finally {
+    await act(async () => tree.unmount());
   }
 });

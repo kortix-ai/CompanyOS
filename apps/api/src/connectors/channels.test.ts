@@ -47,6 +47,15 @@ describe('Slack curated defaults reach the outgoing request', () => {
     expect((await sent('list_users', {})).get('limit')).toBeNull();
   });
 
+  test('history pagination is advertised and reaches Slack unchanged', async () => {
+    const action = channelCatalog('slack').find((a) => a.path === 'get_history');
+    const args = { channel: 'C1', cursor: 'page+2=', oldest: '1700000000.000001', latest: '1800000000.000002', inclusive: true };
+    const properties = action?.inputSchema?.properties;
+    for (const key of Object.keys(args)) expect(properties).toHaveProperty(key);
+    const query = await sent('get_history', args);
+    for (const [key, value] of Object.entries(args)) expect(query.get(key)).toBe(String(value));
+  });
+
   test('non-slack platforms and http connectors are untouched', () => {
     expect(withChannelDefaults('teams', 'list_channels', {})).toEqual({});
   });

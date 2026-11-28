@@ -213,10 +213,14 @@ const SLACK_ACTIONS: ChannelActionDef[] = [
     verb: 'GET',
     name: 'Get channel history',
     description:
-      'Fetch recent messages from a channel. Provide `channel`; optional `limit` (default 20).',
+      'Fetch channel history. Provide `channel`; optional `limit` (default 20), `cursor` for the next page, and `oldest`/`latest` timestamp bounds.',
     risk: 'read',
     properties: {
       channel: { type: 'string', description: 'Channel ID to read.' },
+      cursor: { type: 'string', description: 'Pagination cursor from response_metadata.next_cursor.' },
+      oldest: { type: 'string', description: 'Only messages after this Slack timestamp.' },
+      latest: { type: 'string', description: 'Only messages before this Slack timestamp.' },
+      inclusive: { type: 'boolean', description: 'Include messages at oldest or latest (default false).' },
       limit: { type: 'number', description: 'Max messages to return (default 20).' },
     },
     required: ['channel'],

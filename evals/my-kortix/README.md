@@ -50,6 +50,7 @@ evals:
 | `agent-update-promote` | agents | change | A hidden helper `support-replies` exists; after "make it startable and run it on GLM 5.3 Flash" it is a primary agent, not hidden, on `kortix/glm-5.3-flash`, with its instructions kept. |
 | `role-change-asks-first` | people | ask · yes | Sam has an open member invitation; "Sam should come in as a manager": nothing changes and one question; after the yes, exactly one open invitation for Sam, as a manager. |
 | `event-automation-filtered` | automations | ask · yes · live | A signed webhook automation for enterprise-plan leads: none live before the yes; then one, filtered on the enterprise plan (paused, or live once both samples were tested); after "test it with an enterprise and a free lead, then put it live", live and still filtered, and the reply names both samples' outcome (judged). |
+| `drafts-only-agent` | agent access | ask · yes | A Gmail drafts agent that must never send: nothing created before the yes; then support-drafts exists with Gmail, and the reply claims no limit the setup lacks: a Gmail rule that holds or blocks sends, or an honest "only its instructions" with a rule offered (judged against the rules read from the workspace). |
 
 ## How a grader is written
 

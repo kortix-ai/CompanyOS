@@ -960,3 +960,20 @@ test('Slack destinations preserve literal ampersand entities', () => {
   expect(html).not.toContain('%C2%A9');
   expect(html).toContain('>Report now</a>');
 });
+
+test('PR and long demo labels render inside prose without leaking Slack delimiters', () => {
+  const pr = 'https://github.com/example/project/pull/13265';
+  const demo = 'https://github.com/user-attachments/assets/00000000-0000-4000-8000-000000000000';
+  const content = `Ready: <${pr}|PR #13265> with a <${demo}|demo video>. Normal prose stays readable.`;
+  for (const isStreaming of [false, true]) {
+    const html = renderToStaticMarkup(withIntl(<UnifiedMarkdown trust="agent" content={content} isStreaming={isStreaming} />));
+    expect(html).toContain(`href="${pr}"`);
+    expect(html).toContain('>PR #13265</a>');
+    expect(html).toContain(`href="${demo}"`);
+    expect(html).toContain('>demo video</a>');
+    expect(html).toContain('Normal prose stays readable.');
+    expect(html).not.toContain('|PR');
+    expect(html).not.toContain('|demo');
+    expect(html).not.toContain('&lt;https:');
+  }
+});

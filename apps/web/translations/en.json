@@ -3972,6 +3972,137 @@
       }
     }
   },
+  "signup": {
+    "home": "Kortix home",
+    "signIn": "Sign in",
+    "progress": "Step {current} of {total}",
+    "continue": "Continue",
+    "back": "Back",
+    "skip": "Skip intro",
+    "team": {
+      "title": "Where does your team work?",
+      "description": "Kortix is the open-source CompanyOS. Pick one to see how it fits.",
+      "email": "Email",
+      "solo": "Just me for now",
+      "teams": "Microsoft Teams"
+    },
+    "alone": {
+      "title": "Today, everyone uses AI alone",
+      "description": "Separate chats, context pasted in again and again, and results stuck in one person's tab."
+    },
+    "together": {
+      "title": "A workspace for people and agents",
+      "description": "Work together in the Kortix workspace. Your team shares agents, skills and company memory, from the web, Slack or the CLI."
+    },
+    "memory": {
+      "title": "A framework underneath. A repo you own.",
+      "description": "kortix.yaml declares your agents, tools and triggers. Extend the pi agents with skills, build on @kortix/sdk and @kortix/ui, and keep every change in git."
+    },
+    "tools": {
+      "title": "Agents work in the apps you already use",
+      "description": "3,000+ apps in a click, plus MCP, OpenAPI, Postman, GraphQL and raw HTTP.",
+      "channel": "Add Kortix to {channel}, invite the bot, mention it with a task."
+    },
+    "work": {
+      "title": "Agents deliver finished work",
+      "description": "Each session runs on its own isolated cloud computer. Session work reaches main through a change request a person approves."
+    },
+    "finish": {
+      "title": "Create your workspace",
+      "description": "Start on the Free plan. Your account comes first, then a workspace of your own.",
+      "cta": "Create your account",
+      "signIn": "I already have an account",
+      "pointOpen": "Open source. Read it, fork it, audit it.",
+      "pointModels": "Any model provider with your own keys. Or your ChatGPT or Claude Pro/Max subscription, subject to the provider's limits.",
+      "pointHost": "Run on Kortix Cloud or your own infrastructure. With self-hosting, you manage the servers and pay for compute and models."
+    },
+    "art": {
+      "workspace": "Your workspace",
+      "shared": "Shared agents, skills and memory",
+      "changeTitle": "Weekly pipeline report",
+      "changeMeta": "Change request opened by an agent",
+      "review": "Ready for review"
+    }
+  },
+  "workspaceOnboarding": {
+    "setup": {
+      "title": "Set up your selected apps",
+      "description": "Connect only the apps you chose. Go back to change your selection, or continue and connect later."
+    },
+    "progress": "Step {current} of {total}",
+    "back": "Back",
+    "continue": "Continue",
+    "skip": "Skip for now",
+    "tryAgain": "Try again",
+    "connected": "Connected",
+    "profile": {
+      "title": "Tell Kortix about your team",
+      "description": "Your answers give the agents context from the first message. Every field is optional.",
+      "useCase": "What will you use Kortix for?",
+      "useCaseNote": "Tell us in a few words",
+      "size": "Team size",
+      "sizeOption": "{size} people",
+      "domain": "Company website",
+      "saveFailed": "Your answers were not saved. {reason}",
+      "domainPlaceholder": "acme.com"
+    },
+    "useCases": {
+      "founder": "Running a company",
+      "engineering": "Engineering",
+      "product_design": "Product and design",
+      "sales": "Sales",
+      "marketing": "Marketing",
+      "support": "Customer support",
+      "finance_ops": "Finance and operations",
+      "hr_recruiting": "People and hiring",
+      "other": "Something else"
+    },
+    "model": {
+      "title": "Connect a model",
+      "description": "Agents need a model to run. Use your ChatGPT or Claude subscription, or any provider with your own key.",
+      "ready": "{count, plural, one {# model ready} other {# models ready}}",
+      "addKey": "Add provider key",
+      "readFailed": "The model list could not be read."
+    },
+    "apps": {
+      "title": "Bring your tools",
+      "description": "Connect the apps your team works in. Connector credentials are brokered server-side and never enter the machine.",
+      "slackMeta": "Mention Kortix in a channel with a task",
+      "addSlack": "Add to Slack",
+      "connect": "Connect",
+      "connectName": "Connect {name}",
+      "meta": {
+        "github": "Repositories, issues and pull requests",
+        "gmail": "Read and draft email",
+        "googlecalendar": "Meetings and availability",
+        "notion": "Docs and wikis",
+        "linear": "Issues and projects"
+      },
+      "more": "3,000+ apps in a click.",
+      "browse": "Browse all apps",
+      "readFailed": "The workspace's apps could not be read.",
+      "search": "Find an app to connect",
+      "noResults": "No matching apps here. Try another name.",
+      "loading": "Loading apps…",
+      "loadMore": "Show more apps"
+    },
+    "finish": {
+      "title": "Review and open your workspace",
+      "description": "This is what the agents start with. Anything not connected can be added later.",
+      "cta": "Open workspace",
+      "failed": "Setup could not be finished. {reason}",
+      "profileSaved": "Team profile saved",
+      "profileSkipped": "Team profile skipped",
+      "modelMissing": "No model connected",
+      "appsConnected": "{count, plural, one {# app connected} other {# apps connected}}",
+      "appsSkipped": "No apps connected",
+      "modelWarning": "Sessions cannot run until a model is connected. The first chat offers to connect one."
+    },
+    "art": {
+      "workspace": "Your Kortix workspace",
+      "shared": "Shared agents, skills and memory"
+    }
+  },
   "firstChat": {
     "title": "Your first chat with Kortix",
     "greeting": "Welcome, {name}. I'm Kortix.",
@@ -4800,7 +4931,7 @@
       "line267JsxTextStarsOnGitHub": "stars on GitHub",
       "line269JsxTextALeadingOpenSourceAIWorkspace": "The open-source alternative to Claude Cowork and ChatGPT Work.",
       "line331JsxTextGiveYourCompanyAWorkforce": "Run your whole company from one repo you own.",
-      "line334JsxTextFreeToSelfHostManagedCloudFrom20": "Start with one workflow, connect the tools it needs, and let your team use it from Slack, the web, or the CLI. Self-host for free, or managed cloud from $20 / seat + usage.",
+      "line334JsxTextFreeToSelfHostManagedCloudFrom20": "Start with one workflow, connect the tools it needs, and let your team use it from Slack, the web, or the CLI. Run on your own infrastructure, or managed cloud from $20 / seat + usage.",
       "line337JsxTextGetStarted": "Get started",
       "line338JsxTextTalkToSales": "Request demo",
       "line339JsxTextSeePricing": "See pricing",
@@ -11093,7 +11224,7 @@
       "text0ffc4db692f7": "Start an agent session from this change. The agent merges the latest base branch, resolves the conflicts, runs checks, and opens a replacement change.",
       "text100a17657e7b": "A set of permissions. A permission is one action, like reading a secret or managing members. Built-in roles cover the common sets; a custom role names its own.",
       "text101f2ff3de22": "Rows",
-      "text102fd4438086": "Give your company a workforce of agents that run on a schedule, ship real deliverables, and improve one reviewed change at a time. Free to self-host, managed cloud from $20.",
+      "text102fd4438086": "Give your company a workforce of agents that run on a schedule, ship real deliverables, and improve one reviewed change at a time. Self-host on your own infrastructure, managed cloud from $20.",
       "text103433433717": "repeat(auto-fill, minmax(150px, 1fr))",
       "text1044a4c056d0": "Members",
       "text1044b2d7aa48": "to send",
@@ -11136,7 +11267,7 @@
       "text115e22ef7526": "Kortix links a chat sender to a Kortix account before the agent runs for them. Run /kortix login and sign in. An unlinked sender gets a prompt to link, not a session — so a stranger in a shared channel cannot spend your compute.",
       "text1169a4e6f771": "Do the reading. Keep the deciding.",
       "text1171c854cfa8": "No ledger entries",
-      "text11776662ccda": "Kortix is the open-source CompanyOS where your company’s knowledge compounds. Free to start, free to self-host, free to own your learning loop.",
+      "text11776662ccda": "Kortix is the open-source CompanyOS where your company’s knowledge compounds. Free to start, self-host on your own infrastructure, free to own your learning loop.",
       "text1178e164da4c": "Variance, with the reason attached",
       "text11790d7a2dd3": "Run Kortix on your own machine, with your files and your terminal.",
       "text1185f37d33b0": "deleted",
@@ -11773,7 +11904,7 @@
       "text244210e48437": "workspace",
       "text24433c70eba5": "Activate",
       "text244b84350614": "planner",
-      "text2461783e77d5": "Self-hosting is free and always will be. Kortix Cloud is the same product with the box, the upgrades and the sandbox tier taken off your hands.",
+      "text2461783e77d5": "With self-hosting, you manage the infrastructure and its costs. Kortix Cloud is the same product with the box, the upgrades and the sandbox tier taken off your hands.",
       "text2463759d5e71": "Read windows, UI trees, and screenshots",
       "text2467c93661b7": "Session overrides configured",
       "text246d55bd2682": "Start this workspace's sessions with it",
@@ -11822,7 +11953,7 @@
       "text25c9ab3f2bf6": "Can't show these links",
       "text25cb42517890": "Failed to delete webhook",
       "text25cc3dcfa2a5": "Grant this member a workspace from the workspace's Access list.",
-      "text25d01f9cf522": "Same freedom, built for more than one person. Free to start, free to self-host.",
+      "text25d01f9cf522": "Same freedom, built for more than one person. Free to start, self-host on your own infrastructure.",
       "text25d302d271e6": "For up to one hour, everything you do lands on this workspace. Every change you make is written to the customer's own audit log with your identity attached.",
       "text25df917eafc7": "If your site is a repo, the copy is code — and a copy change is a change request with a preview, reviewed exactly like a code change, by whoever owns the words.",
       "text25e8e1211a52": "Agents open change requests. Merge is default-deny for an agent and granted explicitly in kortix.yaml — so an agent cannot widen its own reach without a change someone else approves.",
@@ -11926,7 +12057,7 @@
       "text29151178dbf3": "Custom Application",
       "text292117ca3ac2": "user message · 2 attachments → same square tile, no cap",
       "text29241ab2d244": "Pick a date",
-      "text2928e9dd01ed": "Hand a Kortix agent a real task and get a finished result back. Free to start, free to self-host.",
+      "text2928e9dd01ed": "Hand a Kortix agent a real task and get a finished result back. Free to start, self-host on your own infrastructure.",
       "text292ad1466ce9": "Do NOT enable the Advanced settings \"SAML attribute transform (JSONata)\" to build groups — a JSONata transform OVERRIDES all your SAML attribute statements, wiping out the email/id/firstName/lastName mappings from the previous step. Use plain attribute statements only.",
       "text292fd30cb1b5": "Failed to allow permissions",
       "text29300070ca98": "19 days",
@@ -12101,7 +12232,7 @@
       "text2e3571a5c710": "reviewed by a person, then merged",
       "text2e4186244bbd": "Token name",
       "text2e46006a5eeb": "End time",
-      "text2e531f2487d9": "Connect your first tool and watch it come back with something you can use. Free to start, free to self-host.",
+      "text2e531f2487d9": "Connect your first tool and watch it come back with something you can use. Free to start, self-host on your own infrastructure.",
       "text2e53bdcd0740": "Tool",
       "text2e544a292f69": "Shift",
       "text2e5532bea639": "Product name cleared",
@@ -13426,7 +13557,7 @@
       "text5439ad4a88da": "Listed gateway models",
       "text544792b85010": "switch workspace workspaces project projects change move open all list",
       "text54483ce856e0": "Replace credential",
-      "text54529c95dca9": "Start with one job, connect the tools it needs, and reach it from Slack, the web or the CLI. Free to start, free to self-host.",
+      "text54529c95dca9": "Start with one job, connect the tools it needs, and reach it from Slack, the web or the CLI. Free to start, self-host on your own infrastructure.",
       "text545403adb9e5": "No fallback models.",
       "text545c02357695": "Audience",
       "text546dc281747b": "I’ve added the identity provider metadata URL",
@@ -14235,7 +14366,7 @@
       "text6c848b936d1d": "Hide cron expression",
       "text6c8a12831e1d": "Brand & content",
       "text6c94c3a6a6fa": "It is the same Compose project everywhere. What changes is where you point the domain and how much you give it.",
-      "text6cad1856bada": "Self-host free",
+      "text6cad1856bada": "Self-host on your infrastructure",
       "text6caf3e311a76": "and the rest of your repo",
       "text6cc00d310273": "Where it runs",
       "text6cd606384bc7": "Loading connector…",
@@ -14793,7 +14924,7 @@
       "text7d870610b59d": "Added the connector, but authorization failed: {value0}",
       "text7d92aa0e75c4": "Operator switch",
       "text7d9eb7acb13e": "Close",
-      "text7da07ad47ba0": "Connect your tools and hand a Kortix agent a real task. Free to start, free to self-host.",
+      "text7da07ad47ba0": "Connect your tools and hand a Kortix agent a real task. Free to start, self-host on your own infrastructure.",
       "text7db20897053b": "People",
       "text7db7002fa9e9": "Join Kortix with my referral link",
       "text7dc864ffbdfe": "Group runs by",
@@ -14846,7 +14977,7 @@
       "text7ed6e98ab599": "Failed to update policy",
       "text7ed7c4532413": "SAML / OIDC single sign-on for the workspace.",
       "text7ed96629073e": "Name A–Z",
-      "text7ee0ad224441": "Kortix passes the test of sovereignty. Free to start, free to self-host, free to own your AI future.",
+      "text7ee0ad224441": "Kortix passes the test of sovereignty. Free to start, self-host on your own infrastructure, free to own your AI future.",
       "text7eeb9965afc9": "Start building your learning loop today.",
       "text7eeffb726e71": "Features you can switch on before they are generally available.",
       "text7ef60018d7f5": "I’ve turned on the sync actions",
@@ -18462,7 +18593,7 @@
       "texte5ee1e7e84aa": "Session expired",
       "texte5fb560ba65a": "On the SSO tab, copy the \"Issuer URL\" (it is a live, hosted metadata endpoint) and paste it below — keep the \"Dynamic configuration\" option selected. Prefer this over pasting XML: the hosted URL auto-refreshes if OneLogin rotates the signing certificate.",
       "texte5fd643538b9": "Workspace · Audit log",
-      "texte60053964d37": "Kortix is the open-source CompanyOS where your company's knowledge compounds. Connect your tools, deploy an agent, and start accumulating your own token capital. Free to start, free to self-host.",
+      "texte60053964d37": "Kortix is the open-source CompanyOS where your company's knowledge compounds. Connect your tools, deploy an agent, and start accumulating your own token capital. Free to start, self-host on your own infrastructure.",
       "texte600bb5b5953": "Repository and organisation membership is access too, and it is the access that most often outlives the reason for it. It reads the org state and reports what does not match your documented roles.",
       "texte61180e0dd8a": "Link expired",
       "texte6158ee80566": "claim) to specific IAM groups.",
@@ -20527,7 +20658,7 @@
       "text146aaf3c71fa": "Keeps SSO, SCIM, RBAC, and audit entitled for a signed Enterprise workspace that is also billed through a paid plan, so the Stripe reconciliation cannot strip them.",
       "text517105fd13ce": "Credits fund sandbox compute — even a BYOK trial needs wallet balance to run sessions. The free welcome grant is $2.",
       "text2f1d17f50af8": "Enterprise unlocks SAML SSO, SCIM directory sync, RBAC and audit access for this workspace. The billed plan is unchanged.",
-      "text1554fd387f25": "Free is $0: 500 credits a month on your first workspace and every feature, with your own key or ChatGPT subscription for models. Kortix-managed models need a paid plan. Paid plans are credits: pick a monthly amount, members are free and unlimited, and one pool covers the whole workspace. Self-hosting the software costs nothing; you pay your own model bill and your own compute bill instead.",
+      "text1554fd387f25": "Free is $0: 500 credits a month on your first workspace and every feature, with your own key or ChatGPT subscription for models. Kortix-managed models need a paid plan. Paid plans are credits: pick a monthly amount, members are free and unlimited, and one pool covers the whole workspace. With self-hosting, you run the infrastructure and pay for your own compute and models.",
       "text5dffd4db88c5": "Your plan, credits, and billing for this workspace.",
       "text49fd64c206dd": "Your plan is active. Credits are ready.",
       "textad828837ddd8": "members member workspace access collaborators people teammates roster who can see permissions grant share",

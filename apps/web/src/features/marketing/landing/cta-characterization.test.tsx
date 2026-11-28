@@ -55,7 +55,7 @@ for (const path of ['/about', '/about/', '/en/about', '/de/about/']) {
 }
 test('default SSR anchor hydrates to remembered project and retains signup/demo handlers', () => {
   user = { id: 'synthetic-project' };
-  expect(renderToStaticMarkup(<CtaSection />)).toContain('href="/auth"');
+  expect(renderToStaticMarkup(<CtaSection />)).toContain('href="/signup"');
   const host = mount();
   const link = host.querySelector('a');
   expect(link?.getAttribute('href')).toBe('/projects/synthetic-project');
@@ -65,7 +65,7 @@ test('default SSR anchor hydrates to remembered project and retains signup/demo 
   expect(demos).toEqual(['footer-cta']);
   expect(host.querySelectorAll('p')).toHaveLength(1);
 });
-test('signed-out default remains an /auth anchor', () => {
+test('signed-out default is a /signup anchor: the explanation before the account', () => {
   const host = mount();
-  expect(host.querySelector('a')?.getAttribute('href')).toBe('/auth');
+  expect(host.querySelector('a')?.getAttribute('href')).toBe('/signup');
 });

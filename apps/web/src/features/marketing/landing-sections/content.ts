@@ -113,7 +113,7 @@ export const security = {
       id: 'hosting',
       title: 'Where it runs',
       description:
-        'Run it on Kortix Cloud, in your VPC, or on your own on-prem network. Self-host is free.',
+        'Run it on Kortix Cloud, in your VPC, or on your own on-prem network. With self-hosting, you manage the infrastructure and its costs.',
     },
     {
       id: 'compliance',

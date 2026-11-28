@@ -50,6 +50,8 @@ import {
 } from 'react';
 
 const CTA_LINK = '/auth';
+/** "Get started" opens the explanation before the account; "Sign in" goes straight to /auth. */
+const GET_STARTED_LINK = '/signup';
 
 /** The bar turns solid once the page has scrolled this far. */
 const SOLID_AFTER_PX = 20;
@@ -589,7 +591,7 @@ export function Navbar({ solidAtTop = false }: { solidAtTop?: boolean } = {}) {
                     <Link href={CTA_LINK}>{signInLabel}</Link>
                   </MarketingButton>
                   <MarketingButton variant="primary" asChild className="hit-area-y-3">
-                    <Link href={CTA_LINK} onClick={trackCtaSignup}>
+                    <Link href={GET_STARTED_LINK} onClick={trackCtaSignup}>
                       {getStartedLabel}
                     </Link>
                   </MarketingButton>
@@ -758,10 +760,10 @@ export function Navbar({ solidAtTop = false }: { solidAtTop?: boolean } = {}) {
                 </MarketingButton>
                 <MarketingButton size="md" asChild>
                   <Link
-                    href={CTA_LINK}
+                    href={GET_STARTED_LINK}
                     onClick={(e) => {
                       trackCtaSignup();
-                      handleDrawerNavClick(CTA_LINK)(e);
+                      handleDrawerNavClick(GET_STARTED_LINK)(e);
                     }}
                   >
                     {getStartedLabel}

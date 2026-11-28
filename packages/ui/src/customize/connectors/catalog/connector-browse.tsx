@@ -110,7 +110,9 @@ const CatalogEntryCard = memo(function CatalogEntryCard({
   connectedKeys,
   hrefFor,
   install,
+  selection,
 }: {
+  selection?: { keys: ReadonlySet<string>; onToggle: (entry: CatalogEntry) => void };
   entry: CatalogEntry;
   connectedKeys: ReadonlySet<string>;
   hrefFor: (entry: CatalogEntry) => string;
@@ -125,6 +127,11 @@ const CatalogEntryCard = memo(function CatalogEntryCard({
     subtitle: <span className="text-muted-foreground text-xs">{catalogEntryKindLabel(entry)}</span>,
     trailing: <CatalogAffordance entry={entry} connected={connected} install={install} />,
   };
+  if (selection) {
+    return <CatalogCard {...shared} trailing={undefined}
+      onClick={() => selection.onToggle(entry)}
+      select={{ checked: selection.keys.has(entry.key), onCheckedChange: () => selection.onToggle(entry), label: `Select ${entry.name}` }} />;
+  }
   // Only the Install control needs to sit beside the link. The "Added" badge
   // stays inside it, so a click on the badge still opens the page.
   return (
@@ -216,7 +223,9 @@ export function ConnectorBrowse({
   emptyTitle,
   emptyDescription,
   suppressNoMatch = false,
+  selection,
 }: {
+  selection?: { keys: ReadonlySet<string>; onToggle: (entry: CatalogEntry) => void };
   state: CatalogState;
   connectedKeys: ReadonlySet<string>;
   /** The card's app page. */
@@ -303,6 +312,7 @@ export function ConnectorBrowse({
               connectedKeys={connectedKeys}
               hrefFor={hrefFor}
               install={install}
+              selection={selection}
             />
           ))}
           {/* Inside the grid, not under it, so the next page's cards land

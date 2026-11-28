@@ -311,6 +311,10 @@ describe('session replay: what a recording hides', () => {
     expect(replayMasksPage('/secret-intake/tok_123', false)).toBe(true);
     expect(replayMasksPage('/inbox', false)).toBe(true);
     expect(replayMasksPage('/authors', false)).toBe(false);
+    // The explanation before the account carries the visitor's return URL.
+    expect(replayMasksPage('/signup', false)).toBe(true);
+    expect(replayMasksPage('/de/signup', false)).toBe(true);
+    expect(replayMasksPage('/signups', false)).toBe(false);
   });
 
   test('masked text keeps its shape and loses every character', () => {

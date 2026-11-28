@@ -1,11 +1,11 @@
 'use client';
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ACCOUNT_PANEL_PARAM, hubTarget } from '../../internal/stores/account-panel-store';
+import { hubTarget } from '../../internal/stores/account-panel-store';
 import { SplitNoticeBanner } from '../settings/split-notice-banner';
 import { SetupBanner } from '../setup/setup-banner';
 import { useTranslations } from '../../i18n';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import {
   ComposerChatInput,
@@ -32,17 +32,17 @@ import {
   getProject,
   listProjectAccessRequests,
   listProjectSandboxes,
-  setProjectOnboardingComplete,
   type SandboxTemplate,
   type SessionPromptOverrides,
 } from '@kortix/sdk';
 import type { AttachmentSubmission } from '../../session/composer/attachment-submission';
-import { contract, invalidateProject, qk, useProjectConfig, useRuntimeAgents, type Command } from '@kortix/sdk/react';
+import { contract, qk, useProjectConfig, useRuntimeAgents, type Command } from '@kortix/sdk/react';
 import { MY_KORTIX_SANDBOX_SLUG, isMyKortixAgentName } from '@kortix/shared';
 import { AccessRequestsBell } from '../home/access-requests-bell';
 import { NoAgentHome, type NoAgentReason } from '../home/no-agent-home';
 import { composerSelectableAgents } from '../../session/composer/composer-agent-access';
 import { FirstChat } from '../home/first-chat';
+import { WorkspaceOnboardingWizard } from '../home/workspace-onboarding-wizard';
 import { SandboxPicker } from '../home/sandbox-picker';
 import { ProjectHomeWallpaper, ProjectHomeWelcomeBody } from '../home/welcome-body';
 import { useProjectHomeCall } from './use-project-home-call';
@@ -75,11 +75,12 @@ export interface ProjectHomeSendOptions extends ComposerOptions {
  * instead (`home/first-chat.tsx`): the same composer, docked at the bottom
  * under a welcome from Kortix.
  *
- * With `onboarding`, a project that is not onboarded yet redirects here, and
- * the first chat's composer holds "Onboard me". It sends itself as soon as a
- * model is usable; the agent runs the onboarding from there (the
- * `kortix-onboarding` skill). Without a model the composer's tray offers
- * Upgrade and Connect model.
+ * With `onboarding`, a project that is not onboarded yet shows the setup
+ * wizard instead (`home/workspace-onboarding-wizard.tsx`): profile, model,
+ * apps. Nothing starts a session while it is open. Finishing stamps the
+ * project onboarded and opens the first chat with "Onboard me" in the
+ * composer, for the person to send (the `kortix-onboarding` skill runs from
+ * there).
  *
  * This component owns the composer's WIRING — which sandbox, which agent, what
  * a send carries, what a prefill does. Everything it renders is a component of
@@ -104,9 +105,9 @@ export type ProjectHomeProps = {
   /** With the default send: runs first; throw to refuse the send (the draft stays). */
   beforeSend?: () => Promise<void>;
   /**
-   * A project that is not onboarded yet opens on the first chat, whose
-   * composer sends "Onboard me" once a model is usable. Off by default: a
-   * white-label or SDK host decides its own first run. Kortix web turns it on.
+   * A project that is not onboarded yet opens on the setup wizard, then the
+   * first chat. Off by default: a white-label or SDK host decides its own
+   * first run. Kortix web turns it on.
    */
   onboarding?: boolean;
 };
@@ -213,12 +214,11 @@ function ProjectHomeView({
     (projectRowQuery.data?.metadata as { onboarding_completed_at?: string } | undefined)
       ?.onboarding_completed_at,
   );
-  // Only someone who can finish the onboarding is sent into it: the kickoff
-  // starts a session (project.session.start) and the stamp,
-  // `PATCH /projects/:id/onboarding`, asserts project.settings.write. A role
-  // missing either would auto-send a kickoff whose stamp is refused, and get
-  // the onboarding again on every visit. `=== true`: an unresolved probe
-  // never redirects someone the onboarding is not for.
+  // Only someone who can finish the onboarding is sent into it: the wizard's
+  // writes, `PATCH /projects/:id/onboarding`, assert project.settings.write,
+  // and it ends in the first chat (project.session.start). A role missing
+  // either would meet a wizard it cannot finish on every visit. `=== true`:
+  // an unresolved probe never shows the wizard to someone it is not for.
   const onboardingCans = useProjectCans(projectId, ONBOARDING_ACTIONS);
   const canSetUpProject = ONBOARDING_ACTIONS.every(
     (action) => onboardingCans[action]?.allowed === true,
@@ -265,32 +265,31 @@ function ProjectHomeView({
   }, [noAgent, recheckAgents]);
   const onboarding =
     onboardingEnabled && projectRowQuery.isSuccess && !onboarded && canSetUpProject && !noAgent;
-  // The onboarding lands on the first chat: it starts the chat (the sidebar
-  // row) and moves the address to it. Rendered as the first chat from this
-  // render on, so the usual home never paints in between.
-  // An old account-settings link (`?accountId=`, or a bare `?accountTab=`) is
-  // the hub router's to resolve (`account-hub-router.tsx`): replacing the
-  // address here first would drop it, and the link would land on the first
-  // chat instead of its section.
-  const hubLinkPending = Boolean(searchParams?.get(ACCOUNT_PANEL_PARAM) || searchParams?.get('accountTab'));
-  useEffect(() => {
-    if (!onboarding || hubLinkPending) return;
+  // An unstamped project whose permission probe is still out may be about to
+  // show the wizard: hold the column empty rather than flash the usual home.
+  const onboardingResolving =
+    onboardingEnabled &&
+    projectRowQuery.isSuccess &&
+    !onboarded &&
+    ONBOARDING_ACTIONS.some((action) => onboardingCans[action]?.isLoading);
+  // The wizard's exit: the project is stamped (the wizard waited for it), so
+  // open the first chat, the sidebar row and the address, with the kickoff
+  // (or a prompt that arrived meanwhile) in the composer for the person to send. Drawn as the first chat from
+  // this render on, before the address catches up.
+  const [wizardFinished, setWizardFinished] = useState(false);
+  const finishOnboarding = useCallback(() => {
     useFirstChatStore.getState().start(projectId);
-    if (!firstChatRequested) router.replace(firstChatHref(projectId));
-  }, [onboarding, hubLinkPending, firstChatRequested, projectId, router]);
-  const firstChat = (firstChatPending && firstChatRequested) || onboarding;
-
-  // Once per mount: a second prefill id would send a second kickoff. Not
-  // before the config is read: a repository that runs no agent turns the
-  // home into the setup page, and a kickoff queued before that is known
-  // would be refused.
-  const configRead = roster !== undefined;
-  const kickoffQueuedRef = useRef(false);
+    setWizardFinished(true);
+    // A prompt that arrived while the wizard was open (`?q=`) wins over the kickoff.
+    setPrefill((pending) => pending ?? { text: tFirstChat('kickoff'), id: Date.now() });
+    router.replace(firstChatHref(projectId));
+  }, [projectId, router, tFirstChat]);
+  // Bridge only the router transition. Once the URL catches up, later
+  // navigation back to the plain workspace must show its normal home.
   useEffect(() => {
-    if (!onboarding || !configRead || kickoffQueuedRef.current) return;
-    kickoffQueuedRef.current = true;
-    setPrefill({ text: tFirstChat('kickoff'), id: Date.now(), submit: 'when-ready' });
-  }, [onboarding, configRead, tFirstChat]);
+    if (wizardFinished && firstChatRequested) setWizardFinished(false);
+  }, [firstChatRequested, wizardFinished]);
+  const firstChat = (firstChatPending && firstChatRequested) || wizardFinished;
   // Resolved during render so the bell is an anchor and Next holds its payload
   // in the segment cache. `account_id` arrives on a different query than the
   // count, so the bell can paint before the destination exists.
@@ -320,20 +319,9 @@ function ProjectHomeView({
           attachments,
         ),
       );
-      // The first send opened a session: the project is onboarded. Stamped
-      // only after the create resolves, so a refused send keeps the
-      // onboarding for the next visit.
-      if (onboarding) {
-        // Spent: a composer mounted later must not apply it again.
-        setPrefill(null);
-        void sent
-          .then(() => setProjectOnboardingComplete(projectId, true))
-          .then(() => invalidateProject(queryClient, projectId))
-          .catch(() => undefined);
-      }
       return sent;
     },
-    [metaSelected, selectedSlug, send, onboarding, projectId, queryClient],
+    [metaSelected, selectedSlug, send],
   );
 
   // Nothing typed: the Send button calls a new session instead (flag
@@ -500,10 +488,13 @@ function ProjectHomeView({
 
       {/* The way back to the setup page while a step is open: it floats at the
           bottom of the page, out of the composer's flow. Keyed: switching
-          workspaces reuses this view, and each workspace counts its own steps. */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-6 z-20 flex justify-center px-4 empty:hidden">
-        <SetupBanner key={projectId} projectId={projectId} className="pointer-events-auto w-full max-w-xl" />
-      </div>
+          workspaces reuses this view, and each workspace counts its own steps.
+          Not over the wizard: its apps step is the setup. */}
+      {onboarding ? null : (
+        <div className="pointer-events-none absolute inset-x-0 bottom-6 z-20 flex justify-center px-4 empty:hidden">
+          <SetupBanner key={projectId} projectId={projectId} className="pointer-events-auto w-full max-w-xl" />
+        </div>
+      )}
 
       {/* No bubble or "Thinking" row is painted here on send. The page stays
           the welcome screen with the sentence held in the composer until the
@@ -516,6 +507,12 @@ function ProjectHomeView({
           repoUrl={projectRowQuery.data?.repo_url}
           branch={projectRowQuery.data?.default_branch}
           dashboardUrl={projectRowQuery.data?.dashboard_url}
+        />
+      ) : onboardingResolving && !wizardFinished ? null : onboarding && !wizardFinished && projectRowQuery.data ? (
+        <WorkspaceOnboardingWizard
+          projectId={projectId}
+          project={projectRowQuery.data}
+          onFinished={finishOnboarding}
         />
       ) : firstChat ? (
         <FirstChat projectId={projectId} composer={composer} />

@@ -89,7 +89,7 @@ export default async function UseCasesIndexPage() {
         actions={
           <>
             <MarketingButton size="md" className="hit-area-y-1" asChild>
-              <Link href="/auth">Start for free</Link>
+              <Link href="/signup">Start for free</Link>
             </MarketingButton>
             <MarketingButton size="md" variant="secondary" className="hit-area-y-1" asChild>
               <Link href="/case-studies">See case studies</Link>
@@ -111,7 +111,7 @@ export default async function UseCasesIndexPage() {
         </p>
         <div className="flex flex-wrap gap-2.5">
           <MarketingButton size="md" asChild>
-            <Link href="/auth">Start for free</Link>
+            <Link href="/signup">Start for free</Link>
           </MarketingButton>
           {isServicesPagesEnabled() ? (
             <MarketingButton size="md" variant="secondary" asChild>

@@ -273,7 +273,12 @@ test('a signed-in visitor sees the projects button; a signed-out one sees Get St
   container?.remove();
   authUser = null;
   await mountNavbar();
-  expect(container!.innerHTML).toContain('href="/auth"');
+  // Sign in goes straight to /auth; Get started opens the /signup explanation first.
+  const links = [...header()!.querySelectorAll<HTMLAnchorElement>('a')];
+  const signIn = links.filter((a) => a.getAttribute('href') === '/auth');
+  const getStarted = links.filter((a) => a.textContent === 'componentsHomeNavbar.line312JsxTextGetStarted');
+  expect(signIn).toHaveLength(1);
+  expect(getStarted.map((a) => a.getAttribute('href'))).toEqual(['/signup']);
 });
 
 test('mobile tap targets: the brand links span the 64px bar and the menu toggles are 44px ghost buttons', async () => {
@@ -309,7 +314,7 @@ test('mobile tap targets: the Get started CTA extends its hit area to the 44px f
   // visitor sees, so its tap target extends through the shared hit-area
   // pseudo-element instead (36px box + 3*spacing each side ≈ 58px).
   await mountNavbar();
-  const cta = [...header()!.querySelectorAll<HTMLAnchorElement>('a[href="/auth"]')].find(
+  const cta = [...header()!.querySelectorAll<HTMLAnchorElement>('a[href="/signup"]')].find(
     (a) => a.textContent === 'componentsHomeNavbar.line312JsxTextGetStarted',
   );
   expect(cta).toBeDefined();

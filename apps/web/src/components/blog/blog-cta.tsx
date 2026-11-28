@@ -17,7 +17,7 @@ export function BlogCta() {
   const openDemo = useRequestDemo();
 
   // `latestProjectPath` reads document.cookie, which the server pass cannot
-  // see. Seeding with `/auth` keeps both passes identical and lets this be a
+  // see. Seeding with `/signup` keeps both passes identical and lets this be a
   // real anchor: hydration adopts the remembered project afterwards. The CTA at
   // the foot of every post therefore supports middle-click, cmd-click and "copy
   // link address", which a button does not.
@@ -26,7 +26,7 @@ export function BlogCta() {
   // an authed route. No dependency array: the remembered project can change in
   // another tab, and a frozen href is visible in the status bar, not just wrong
   // on click. The setter is guarded, so it cannot loop.
-  const [startHref, setStartHref] = useState('/auth');
+  const [startHref, setStartHref] = useState('/signup');
   useEffect(() => {
     if (!user) return;
     const href = latestProjectPath(user.id);

@@ -524,11 +524,18 @@ const nextConfig = (): NextConfig => ({
         destination: '/workspaces',
         permanent: false,
       },
-      // The paths people type to sign in or up (KRTX-3154). /auth asks for the
+      // The paths people type to sign in (KRTX-3154). /auth asks for the
       // email first and picks sign-in or sign-up itself.
       {
-        source: '/:path(login|signin|sign-in|signup|sign-up|register)',
+        source: '/:path(login|signin|sign-in)',
         destination: '/auth',
+        permanent: false,
+      },
+      // The paths people type to sign up land on /signup, which explains
+      // Kortix and then hands over to /auth with the same query.
+      {
+        source: '/:path(sign-up|register)',
+        destination: '/signup',
         permanent: false,
       },
       // The per-release changelog moved to /changelog/releases (2026-10-19);

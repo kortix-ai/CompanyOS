@@ -79,6 +79,7 @@ export function useWorkspaceModelGate(projectId: string): WorkspaceModelGateView
   return view;
 }
 
-function flattenCatalog(catalog: Parameters<typeof projectLlmCatalogToProviderList>[0]) {
+/** Every model of a `/model-picker` answer, flat. The onboarding wizard counts the runnable ones. */
+export function flattenCatalog(catalog: Parameters<typeof projectLlmCatalogToProviderList>[0]) {
   return flattenModels(projectLlmCatalogToProviderList(catalog));
 }

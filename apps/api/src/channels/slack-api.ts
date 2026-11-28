@@ -1,6 +1,5 @@
+import { config } from '../config';
 import { logger } from '../lib/logger';
-
-const SLACK_API_BASE = 'https://slack.com/api';
 
 interface SlackApiResult {
   ok: boolean;
@@ -62,7 +61,7 @@ async function slackApiCall(
   let last: SlackApiResult = { ok: false, error: 'unknown' };
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      const res = await fetch(`${SLACK_API_BASE}/${method}`, {
+      const res = await fetch(`${config.SLACK_API_URL}/${method}`, {
         method: 'POST',
         headers: {
           'Content-Type': form

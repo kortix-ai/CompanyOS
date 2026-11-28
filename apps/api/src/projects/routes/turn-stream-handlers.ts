@@ -498,7 +498,15 @@ async function publishTurnEnd(
   // The turn's last assistant text (kortixd sends it on `end`): the reply a
   // chat thread gets when the agent ran no `slack send` of its own.
   const finalText = status === 'idle' && typeof body.text === 'string' ? body.text : undefined;
-  const ok = relayEnd ? await relayTurnEnd(sessionId, status, errorInfo, finalText) : false;
+  const turnMessageId = typeof body.turn_message_id === 'string' && body.turn_message_id ? body.turn_message_id : null;
+  // A turn no Slack message started (a colleague's report) answers the thread
+  // when its prompt's source says the platform started it for that thread.
+  // Only a turn that ended: a retryable error (`non_terminal`) still runs, and
+  // a late frame while another turn runs is stale.
+  const followUp = turnMessageId && turnEndWorkDue(turnCompletion)
+    ? { messageId: turnMessageId, source: () => turnPromptSource(sessionId, turnMessageId) }
+    : undefined;
+  const ok = relayEnd ? await relayTurnEnd(sessionId, status, errorInfo, finalText, followUp) : false;
   // A Telegram chat has no live turn that shows the error. Tell it when no Slack
   // or Teams turn carried the end. The gate is the push's own (turnEndPushType):
   // an end that closed a root turn in THIS call with a non-abort error, so once
@@ -506,7 +514,6 @@ async function publishTurnEnd(
   // Tracked, so a deploy drain waits for the send; never awaited, so the
   // daemon's acknowledgement does not.
   if (!ok && pushType === 'error') {
-    const turnMessageId = typeof body.turn_message_id === 'string' ? body.turn_message_id : null;
     trackDetached(
       turnPromptSource(sessionId, turnMessageId)
         .catch(() => null)

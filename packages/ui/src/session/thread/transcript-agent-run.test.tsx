@@ -139,7 +139,7 @@ describe('agent run fold (KRTX-4732)', () => {
   });
 
   test('one row over the work; every reply the agent wrote stays in view, in order (KRTX-5238)', () => {
-    const out = html({ ...base(launch), agentRun: hostedRun, runTurns: hostedTurns });
+    const out = html({ ...base(launch), agentRun: hostedRun, runTurns: hostedTurns, foldStartedWork: layout.settledLaunches.has(launch.id) });
     const row = out.indexOf('Worked for');
     expect(row).toBeGreaterThan(-1);
     expect(out.match(/Worked for/g)).toHaveLength(1);
@@ -215,12 +215,45 @@ describe('agent run fold (KRTX-4732)', () => {
     expect(wrapper?.props.hidden).toBe(true);
   });
 
-  test('the launch turn folds its agent rows from the start, live or settled (KRTX-5238)', () => {
-    for (const props of [base(launch), { ...base(launch), foldStartedWork: true }]) {
-      const out = html(props);
-      expect(out).toContain('Worked for 6s');
-      expect(out).toContain('Three colleagues are on it.');
-      expect(out).not.toContain('Draft the launch post');
+  test('outstanding agents stay visible with work collapsed, then fold after all reports', async () => {
+    const liveLaunch = sessionLogTurns(sessionLogOfV1Rows('p', 'rs', [
+      rows[0]!,
+      { info: assistantInfo('live-a', 'launch', min(0), min(0.1)),
+        parts: [tool('live-a', 1, 'agent', { description: 'Review the draft', subagent_type: 'draft-reviewer' }, { sessionId: child(4), background: true }),
+          textPart('live-a', 'The reviewer is checking the draft.')] } as V1MessageRow,
+    ]).threads[0]!)[0]!;
+    const client = new QueryClient();
+    const render = (foldStartedWork: boolean) => (
+      <QueryClientProvider client={client}>
+        <TranscriptTurnRow {...base(liveLaunch)} isWorkingTurn sessionWorking foldStartedWork={foldStartedWork} />
+      </QueryClientProvider>
+    );
+    await act(async () => { mounted = create(render(false)); });
+    const draftVisible = () => {
+      const draft = mounted!.root.findAll(node => node.type === 'span' && node.props.children === 'Review the draft')[0];
+      if (!draft) return false;
+      let ancestor = draft.parent;
+      while (ancestor) { if (ancestor.props.hidden === true) return false; ancestor = ancestor.parent; }
+      return true;
+    };
+    expect(draftVisible()).toBe(true);
+    const toggle = mounted!.root.findAll(node => node.type === 'button' && node.props['aria-expanded'] !== undefined)[0]!;
+    await act(async () => toggle.props.onClick());
+    await act(async () => toggle.props.onClick());
+    expect(draftVisible()).toBe(true);
+    const running = mounted!.root.find(node => node.props['data-agent-status'] === 'running');
+    let statusAncestor = running.parent;
+    while (statusAncestor) {
+      expect(statusAncestor.props.hidden).not.toBe(true);
+      statusAncestor = statusAncestor.parent;
     }
+    await act(async () => { mounted!.update(render(true)); });
+    // Completed launch rows remain reachable inside the disclosure, but are no longer shown by default.
+    const tree = mounted!.root;
+    const draft = tree.findAll(node => node.type === 'span' && node.props.children === 'Review the draft')[0];
+    let ancestor = draft?.parent;
+    let hidden = false;
+    while (ancestor) { hidden ||= ancestor.props.hidden === true; ancestor = ancestor.parent; }
+    expect(hidden).toBe(true);
   });
 });

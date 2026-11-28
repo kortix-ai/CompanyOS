@@ -263,6 +263,11 @@ function AuthCardForm({
   // 'signin' (account exists), 'signup' (new), or 'unknown' (the existence
   // check couldn't answer — the adaptive signup action covers both).
   const [credMode, setCredMode] = useState<CredentialsMode>('unknown');
+  // True when "Use a password" opened the password step before any address was
+  // typed: the step then asks for the address itself and resolves the mode on
+  // submit, instead of bouncing the visitor back to fill the entry field first.
+  const [credEmailEditable, setCredEmailEditable] = useState(false);
+  const credEmailRef = useRef<HTMLInputElement>(null);
   // SSO interstitial state: the IdP redirect URL from the signInWithSSO probe,
   // plus what the existence check said the escape hatches should do.
   const [ssoUrl, setSsoUrl] = useState<string | null>(null);
@@ -377,6 +382,7 @@ function AuthCardForm({
     setCode('');
     setSsoUrl(null);
     ssoFallbackMode.current = 'unknown';
+    setCredEmailEditable(false);
     setStep('entry');
   };
 
@@ -748,12 +754,20 @@ function AuthCardForm({
   // one before switching, and bounce focus back if we somehow have neither.
   // Resolves existence on the way so the step opens in the right mode.
   const goToPassword = async () => {
-    if (step === 'entry' && emailRef.current && !emailRef.current.reportValidity()) return;
     const target = (emailRef.current?.value || email || sentEmail || '').trim();
     if (!target) {
-      emailRef.current?.focus();
+      // No address yet: open the password step with its own address field.
+      // The mode resolves when the visitor submits both. The password choice is
+      // not remembered here: "Email me a code" must lead straight back to the
+      // email-first entry step, and a remembered choice would reroute Continue.
+      clearNotices();
+      setCredMode('unknown');
+      setCredEmailEditable(true);
+      setStep('credentials');
       return;
     }
+    if (step === 'entry' && emailRef.current && !emailRef.current.reportValidity()) return;
+    setCredEmailEditable(false);
     if (email !== target) setEmail(target);
     clearNotices();
     setPendingAction('password');
@@ -783,22 +797,50 @@ function AuthCardForm({
     setPendingAction('continue');
 
     const formData = new FormData(e.currentTarget);
-    formData.set('email', email.trim());
+    // An editable address is read from the field itself: a password manager
+    // can fill it without React seeing an onChange.
+    const target = (credEmailEditable ? credEmailRef.current?.value || email : email).trim();
+    formData.set('email', target);
     formData.set('returnUrl', returnUrl);
     formData.set('origin', window.location.origin);
     if (mobileCallbackState) {
       formData.set('mobileCallback', 'true');
       formData.set('mobileCallbackState', mobileCallbackState);
     }
-    const copy = credentialsCopy(credMode, tI18nComplete);
-    if (copy.submitsAs === 'signup') {
-      // Single password field (with reveal toggle) — the server still expects
-      // a confirmation value, so mirror it.
-      formData.set('confirmPassword', (formData.get('password') as string) || '');
-      formData.set('acceptedTerms', 'true');
-    }
-
+    let mode = credMode;
     try {
+      // The address was typed on this step, so its mode is not known yet.
+      // Resolve it on every submit: the address can change between attempts.
+      if (credEmailEditable) {
+        let resolved: EmailFlowMode;
+        try {
+          resolved = (await resolveAuthMode(target)).mode;
+        } catch (err) {
+          if (isUnrecognizedActionError(err) && recoverStaleBundle(target)) return;
+          failWith(t('errors.unexpected'));
+          return;
+        }
+        if (resolved === 'sso') {
+          // The SSO action lives on the entry step: send the visitor there
+          // with the address kept, and say why.
+          setEmail(target);
+          setCredEmailEditable(false);
+          setStep('entry');
+          failWith(t('errors.ssoRequired'));
+          return;
+        }
+        mode = resolved;
+        setCredMode(resolved);
+        if (email !== target) setEmail(target);
+      }
+      const copy = credentialsCopy(mode, tI18nComplete);
+      if (copy.submitsAs === 'signup') {
+        // Single password field (with reveal toggle) — the server still expects
+        // a confirmation value, so mirror it.
+        formData.set('confirmPassword', (formData.get('password') as string) || '');
+        formData.set('acceptedTerms', 'true');
+      }
+
       // Bounded, abortable POST (see submit-auth): same rationale as the
       // email-code submit — the visitor must always get an error they can
       // retry, never a button that never comes back.
@@ -820,7 +862,7 @@ function AuthCardForm({
         const failureCode = (result.code as string | null) ?? null;
         const failure = passwordFailureCopy(
           {
-            mode: credMode,
+            mode,
             code: failureCode,
             fallback: sentinelKeyFor(result.message as string) ?? (result.message as string),
           },
@@ -831,9 +873,9 @@ function AuthCardForm({
         // relabel the step so the retry reads as the sign-in it really is.
         if (failure.switchToSignin) setCredMode('signin');
         const localizedFailure =
-          failureCode === 'invalid_credentials' && (credMode === 'signin' || credMode === 'closed')
+          failureCode === 'invalid_credentials' && (mode === 'signin' || mode === 'closed')
             ? t('errors.incorrectPassword')
-            : failureCode === 'existing_account_wrong_password' && credMode === 'signup'
+            : failureCode === 'existing_account_wrong_password' && mode === 'signup'
               ? t('errors.existingAccountWrongPassword')
               : failureCode === 'existing_account_wrong_password'
                 ? t('errors.incorrectPassword')
@@ -1031,31 +1073,52 @@ function AuthCardForm({
           {info && <InfoStrip message={info} />}
 
           <form onSubmit={handleCredentialsSubmit} className="space-y-5">
-            {/* The address this password is for. Read-only: the pen goes back
-                to the entry step to change it. Password managers pair the
-                password with this field (autoComplete="username"). */}
+            {/* The address this password is for. Read-only when the entry step
+                supplied it: the pen goes back there to change it. Editable when
+                "Use a password" was pressed before any address was typed.
+                Password managers pair the password with this field
+                (autoComplete="username"). */}
             <div className="space-y-3">
               <FieldLabel htmlFor="credentials-email">{t('email')}</FieldLabel>
-              <div className="relative">
+              {credEmailEditable ? (
                 <Input
+                  ref={credEmailRef}
                   id="credentials-email"
                   type="email"
                   name="username"
                   size="md"
                   autoComplete="username"
+                  placeholder={t('emailPlaceholder')}
                   value={email}
-                  readOnly
-                  className="pr-10"
+                  onChange={(e) => {
+                    if (errorMessage) setErrorMessage(null);
+                    setEmail(e.target.value);
+                  }}
+                  required
+                  autoFocus
                 />
-                <button
-                  type="button"
-                  onClick={goToEntry}
-                  aria-label={t('changeEmail')}
-                  className="text-muted-foreground hover:text-foreground absolute inset-y-0 right-0 flex w-10 items-center justify-center transition-colors"
-                >
-                  <PencilSimpleIcon className="size-4" />
-                </button>
-              </div>
+              ) : (
+                <div className="relative">
+                  <Input
+                    id="credentials-email"
+                    type="email"
+                    name="username"
+                    size="md"
+                    autoComplete="username"
+                    value={email}
+                    readOnly
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={goToEntry}
+                    aria-label={t('changeEmail')}
+                    className="text-muted-foreground hover:text-foreground absolute inset-y-0 right-0 flex w-10 items-center justify-center transition-colors"
+                  >
+                    <PencilSimpleIcon className="size-4" />
+                  </button>
+                </div>
+              )}
             </div>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
@@ -1074,7 +1137,7 @@ function AuthCardForm({
                 name="password"
                 placeholder={t(`credentials.${credentialKey}.passwordPlaceholder`)}
                 autoComplete={copy.passwordAutoComplete}
-                autoFocus
+                autoFocus={!credEmailEditable}
                 invalid={!!errorMessage}
                 describedBy={errorMessage ? 'password-error' : undefined}
               />
@@ -1095,7 +1158,18 @@ function AuthCardForm({
                   key: 'link',
                   label: pendingAction === 'link' ? t('sending') : t('emailLinkInstead'),
                   hint: resendIn > 0 ? t('link.resendIn', { seconds: resendIn }) : null,
-                  onClick: () => void sendMagic(),
+                  onClick: () => {
+                    if (credEmailEditable) {
+                      // No address typed yet: go back to the email-first entry
+                      // step. A typed address must be valid before a code goes out.
+                      const typed = (credEmailRef.current?.value || email).trim();
+                      if (!typed) return goToEntry();
+                      if (credEmailRef.current && !credEmailRef.current.reportValidity()) return;
+                      void sendMagic(typed);
+                      return;
+                    }
+                    void sendMagic();
+                  },
                   disabled: resendIn > 0,
                 },
               ]}

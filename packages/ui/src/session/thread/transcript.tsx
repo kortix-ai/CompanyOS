@@ -2721,9 +2721,13 @@ function SessionTurnImpl(props: SessionTurnProps) {
   const retry = useTurnRetryState({ sessionStatus, isWorkingTurn });
   const meta = useTurnSettledMeta({ working: model.working, turn });
   // The pages this response read, for its Sources button. Only a settled turn shows the bar.
+  // A run's report turns draw no bar of their own (KRTX-5238): their pages count on the host's.
   const sources = useMemo(
-    () => (model.working ? NO_SOURCES : deriveTurnSources(model.blocks.filter(isToolCallBlock))),
-    [model.working, model.blocks],
+    () =>
+      model.working
+        ? NO_SOURCES
+        : deriveTurnSources([model.blocks, ...(props.runTurns ?? []).map(turnBlocks)].flat().filter(isToolCallBlock)),
+    [model.working, model.blocks, props.runTurns],
   );
   const segments = useTurnSegments({
     blocks: model.blocks,

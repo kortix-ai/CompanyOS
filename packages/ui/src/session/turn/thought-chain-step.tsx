@@ -73,7 +73,7 @@ function ThoughtStepBody({ texts, running }: { texts: ReadonlyArray<string>; run
         rootClassName={cn('h-auto', THOUGHT_MAX_H)}
         className={THOUGHT_MAX_H}
       >
-        <p className="text-muted-foreground text-sm leading-[1.5] text-pretty">{text}</p>
+        <p className="text-muted-foreground text-sm text-pretty">{text}</p>
       </FadedScrollArea>
     </div>
   );
@@ -173,8 +173,8 @@ function ThoughtChainStepImpl({
    */
   autoOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(autoOpen && running);
-  const userToggled = useRef(false);
+  // Only the reader opens or closes the step (KRTX-5238).
+  const [open, setOpen] = useState(false);
   const liveElapsed = useLiveElapsedMs(running);
   const elapsed = formatDuration(running ? liveElapsed : (durationMs ?? 0));
   const label = elapsed
@@ -183,18 +183,10 @@ function ThoughtChainStepImpl({
       : `Thought for ${elapsed}`
     : 'Thinking';
 
-  useEffect(() => {
-    if (userToggled.current) return;
-    setOpen(autoOpen && running);
-  }, [running, autoOpen]);
-
   return (
     <ChainOfThoughtStep
       open={open}
-      onOpenChange={(next) => {
-        userToggled.current = true;
-        setOpen(next);
-      }}
+      onOpenChange={setOpen}
     >
       {/* Trigger + content must be ONE child, not two siblings.
 			    `React.Children.toArray` flattens arrays but not fragments, and
@@ -209,7 +201,7 @@ function ThoughtChainStepImpl({
           icon={!bare && <CircleDashedIcon className="text-muted-foreground size-4 flex-none" />}
           label={
             running ? (
-              <TextShimmer className="leading-[1.5] font-medium tabular-nums">{label}</TextShimmer>
+              <TextShimmer className="font-medium tabular-nums">{label}</TextShimmer>
             ) : (
               <span className="font-medium tabular-nums">{label}</span>
             )

@@ -154,6 +154,10 @@ export function projectQueueRows(input: {
     if (prompt.reason === 'held' && prompt.state !== 'failed') heldCount += 1;
     if (isFirstPromptRow(prompt) || prompt.placement === 'transcript') continue;
     if (onScreen(prompt, input.transcriptMessageIds)) continue;
+    // Another agent's report waiting for the next step is not the person's message: it lands
+    // in the run's fold when the agent reads it. Listed here, it docked a row over the composer
+    // and took it away a moment later, and the transcript moved twice (KRTX-5238).
+    if (prompt.synthetic) continue;
 
     const draft = prompt.client_message_id ? draftsById.get(prompt.client_message_id) : undefined;
     const rawText = prompt.full_text ?? prompt.text;

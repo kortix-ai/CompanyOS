@@ -1694,7 +1694,7 @@ export function SessionChat({
   // ~125 ms setup never freezes a streaming reply (see `warmHighlighter`).
   useEffect(() => warmHighlighter(), []);
 
-  // ---- Auto-scroll: see use-auto-scroll.ts (room + end + follow) ----
+  // ---- Auto-scroll: see use-auto-scroll.ts (the transcript sits on the composer + follow) ----
   const messageCount = messages?.length ?? 0;
   const {
     scrollRef,
@@ -1705,12 +1705,7 @@ export function SessionChat({
     smoothScrollToAbsoluteBottom,
     anchorTurn,
     startAtTop,
-  } = useAutoScroll({
-    hasContent: messageCount > 0,
-    // Pin the newest prompt while it runs. Settled history needs only the
-    // bottom gap, so short conversations reveal their earlier turns.
-    room: !transcriptRows && effectiveBusy,
-  });
+  } = useAutoScroll({ hasContent: messageCount > 0 });
   // Cmd/Ctrl+P prints the WHOLE conversation. The shortcut is intercepted
   // because neither half of what printing needs can be done in CSS: the
   // transcript is paged (so the tail would print alone) and its ancestors clip
@@ -1794,7 +1789,7 @@ export function SessionChat({
         // On the session log a transcript shorter than its viewport cannot be scrolled: a 40-message
         // first page often folds to a few rows (a turn is one row), and the reader has no other way
         // to reach older history. Pull until it fills the viewport, within the auto-load page budget.
-        // The auto-scroll spacer pads the content to the viewport: measure without it.
+        // Measured without the auto-scroll spacer (the gap under the last turn).
         const root = scrollRef.current;
         const cannotScroll =
           transcriptOnLog && !!root && root.scrollHeight - (spacerElRef.current?.offsetHeight ?? 0) <= root.clientHeight;
@@ -4713,8 +4708,8 @@ export function SessionChat({
                 ref={scrollContainerCallbackRef}
                 className={cn(
                   // overflow-anchor:none — this scroll area does ALL of its own
-                  // anchoring (useAutoScroll's spacer + RAF follow, the send-path
-                  // turn anchor, and the history-prepend content-space restore in
+                  // anchoring (useAutoScroll's follow at the end, and the
+                  // history-prepend content-space restore in
                   // session-history-scroll.ts). The browser's native scroll
                   // anchoring (default `overflow-anchor: auto`) tries to
                   // compensate for the SAME prepends independently, and the two
@@ -4736,7 +4731,7 @@ export function SessionChat({
                   // into each other, so a difference here is a sideways jump on
                   // screen, not a style opinion. See session-body.tsx.
                   //
-                  // No bottom padding, there or here: the space under the last
+                  // No bottom padding, there or here: the gap under the last
                   // message is the auto-scroll spacer's job alone. The `pb-32`
                   // that used to sit here stacked 128px of dead space on top of
                   // it — the "extra inset at the bottom of the session".
@@ -4982,7 +4977,10 @@ export function SessionChat({
                               // (Failed compaction rows need no stacking rule any
                               // more — at most one is visible at a time.)
                               viewportClassName={
-                                turnIndex === 0 || transcriptRows
+                                // An absorbed run turn draws nothing: no gap either, from its first
+                                // frame. Its gap dropped only once it measured empty, and every report
+                                // moved the transcript by that gap (KRTX-5238).
+                                turnIndex === 0 || transcriptRows || agentRunLayout.absorbed.has(turn.id)
                                   ? ''
                                   : // A compaction, the work after it and another agent's notice continue the turn above.
                                     turn.compaction || turn.continues || agentNoticeTurnIds.has(turn.id)
@@ -5194,15 +5192,10 @@ export function SessionChat({
                       )
                     )}
                   </div>
-                  {/* Spacer — the transcript's anchor space. It is sized from
-                      the scroll container so the newest turn
-                      can sit at the TOP of the viewport with the answer
-                      streaming in beneath it, and it keeps that height when the
-                      turn ends — nothing shifts on idle. Height is written
-                      directly by use-auto-scroll.ts. */}
-                  {/* `data-scroll-spacer`: this box is sized to the viewport so
-                      the last turn can sit at the top of it. On paper that is a
-                      blank page, so `print.css` removes it by this hook. */}
+                  {/* The fixed gap under the last turn (`BOTTOM_GAP_PX`, written by
+                      use-auto-scroll.ts): the transcript sits on the composer, and
+                      nothing above it moves when a turn starts or ends. `print.css`
+                      removes it by `data-scroll-spacer`. */}
                   <div ref={spacerElRef} data-scroll-spacer />
                 </div>
               </div>

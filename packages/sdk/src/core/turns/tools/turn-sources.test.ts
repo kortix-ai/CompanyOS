@@ -72,6 +72,28 @@ describe('deriveTurnSources', () => {
     expect(sources).toEqual([{ url: 'https://site.example/a', title: 'The Real Title', domain: 'site.example', snippet: undefined }]);
   });
 
+  it('decodes entities and collapses whitespace in a fetched title, as the page shows it', () => {
+    const html = '<!DOCTYPE html><html><head><title>Foo &amp;amp; Bar &#8211; Site\n  Name</title></head><body><p>x</p></body></html>';
+    const sources = deriveTurnSources([call('web_fetch', { url: 'https://wp.example/p' }, html)]);
+    expect(sources[0]?.title).toBe('Foo &amp; Bar \u2013 Site Name');
+  });
+
+  it('finds the title of an HTML page that starts with a comment', () => {
+    const html = '<!-- cached --><html><head><title>Commented</title></head><body><div>x</div></body></html>';
+    const sources = deriveTurnSources([call('web_fetch', { url: 'https://c.example/' }, html)]);
+    expect(sources[0]?.title).toBe('Commented');
+  });
+
+  it('strips tags inside the title and skips a commented-out title, as the old web list did', () => {
+    const tagged = '<html><head><title>The <b>title</b></title></head><body><p>x</p></body></html>';
+    const commented = '<html><head><!-- <title>Cached</title> --><title>Live</title></head><body><p>x</p></body></html>';
+    const sources = deriveTurnSources([
+      call('web_fetch', { url: 'https://t.example/' }, tagged),
+      call('web_fetch', { url: 'https://m.example/' }, commented),
+    ]);
+    expect(sources.map((s) => s.title)).toEqual(['The title', 'Live']);
+  });
+
   it('adds nothing for a failed call, a bare query, a non-web tool or a non-http URL', () => {
     expect(
       deriveTurnSources([

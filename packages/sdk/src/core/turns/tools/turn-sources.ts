@@ -3,10 +3,10 @@
  * (the web "N sources" button, the mobile sources row). Pure data → data.
  */
 import type { ToolCallBlock } from '../../session-log/types';
-import { titleFromHtml } from '../html-scan';
+import { readableHtmlTitle } from '../html-scan';
 import { safeHttpUrl } from '../safe-url';
 import { toolKind } from '../tool-kind';
-import { parseWebSearchOutput, wsDomain } from './web-helpers';
+import { looksLikeHtml, parseWebSearchOutput, wsDomain } from './web-helpers';
 
 /** One web page a turn consulted, as the turn's Sources list shows it. */
 export interface TurnSource {
@@ -112,10 +112,11 @@ function scrapeTitlesOf(output: string): Map<string, string> {
   return titles;
 }
 
-/** The `<title>` of a fetch that returned HTML. */
+/** The `<title>` of a fetch that returned HTML, as the page shows it: entities decoded, whitespace collapsed. */
 function fetchedHtmlTitle(call: ToolCallBlock): string | undefined {
   const output = outputOf(call);
   const format = inputOf(call).format;
-  const isHtml = format === 'html' || (!format && /^\s*<(?:!doctype|html|head)\b/i.test(output));
-  return isHtml && output ? titleFromHtml(output, output.toLowerCase()) : undefined;
+  const isHtml = format === 'html' || (!format && looksLikeHtml(output));
+  if (!isHtml || !output) return undefined;
+  return readableHtmlTitle(output) || undefined;
 }

@@ -4887,6 +4887,10 @@
     "deleteSessionFromIDB",
     "indexedDBKeyValueStorage"
   ],
+  "./iam-actions": [
+    "PROJECT_ACTIONS",
+    "WORKSPACE_ACTION_BY_LEGACY"
+  ],
   "./internal/diagnostics-store": [
     "DiagnosticSeverity",
     "DiagnosticsState",
@@ -4992,9 +4996,5 @@
     "toWorkspaceSearchEntry",
     "workspaceEntryMatchesQuery",
     "workspaceQueryLooksPathLike"
-  ],
-  "./iam-actions": [
-    "PROJECT_ACTIONS",
-    "WORKSPACE_ACTION_BY_LEGACY"
   ]
 }

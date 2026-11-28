@@ -19,6 +19,7 @@ import {
   runGitCapture,
 } from './mirror';
 import type { GitBackedProject } from './types';
+import { validateWorkspaceCommit } from './workspace-validator';
 
 // Bounded concurrency for blob hashing below — enough to cut many-file
 // install wall-clock time without spawning an unbounded pile of `git
@@ -450,13 +451,14 @@ export async function commitMultipleFilesToBranch(
       opts.message,
       identEnv,
     );
+    const validated = await validateWorkspaceCommit(project, repoPath, parentSha, commitSha);
     const landedOnRemote = await pushCommitWithRaceRecovery(
       project,
       repoPath,
       branch,
       parentSha,
       commitSha,
-      expectedFileRevision,
+      expectedFileRevision ?? (validated ? { path: branch, sha: null, candidatePaths: [] } : undefined),
       authHost,
     );
     if (landedOnRemote) {

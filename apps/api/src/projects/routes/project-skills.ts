@@ -1,3 +1,4 @@
+import { ManifestWriteRefusedError } from '../manifest-io';
 import { configCommitMessage } from '../lib/config-commit-message';
 // POST /v1/projects/:projectId/skills — create a skill on the default branch.
 //
@@ -152,6 +153,7 @@ export function registerProjectSkillsRoutes(): void {
       invalidateProjectResourceConfig(projectId);
       return c.json({ ok: true as const, commitSha: result.commitSha, removed: plan.deletes }, 200);
     } catch (error) {
+      if (error instanceof ManifestWriteRefusedError) throw error;
       if (error instanceof GitFileRevisionConflictError || isRemotePushPolicyRejection(error)) {
         return c.json({ error: error.message }, 409);
       }
@@ -284,6 +286,7 @@ export function registerProjectSkillsRoutes(): void {
       });
       invalidateProjectResourceConfig(projectId);
     } catch (err) {
+      if (err instanceof ManifestWriteRefusedError) throw err;
       if (err instanceof GitFileRevisionConflictError) {
         return c.json({ error: err.message }, 409);
       }

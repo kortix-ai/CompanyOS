@@ -128,6 +128,11 @@
         "pattern": "^(?![/\\s])(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)[^\\\\*?\\[\\]{}]*[^\\\\*?\\[\\]{}\\s/]/?$"
       }
     },
+    "config_validator": {
+      "type": "string",
+      "pattern": "\\S",
+      "description": "Required validator command for platform config writes. Runs on the complete candidate tree in a running project sandbox, never in the API process. The base manifest selects the command. A missing sandbox, timeout or nonzero exit refuses the write with manifest_invalid. The sandbox is the workspace trust boundary: the command can access that sandbox, not only its cleared environment. No sandbox is created or started for a config write."
+    },
     "default_agent": {
       "type": "string",
       "pattern": "\\S",

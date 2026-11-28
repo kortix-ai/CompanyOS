@@ -1,11 +1,11 @@
+import { ManifestWriteRefusedError } from '../manifest-io';
 import { configCommitMessage } from './config-commit-message';
 import { isAbsolute } from 'node:path';
 import { commitFileToBranch, invalidateProjectMirror } from '../git';
 import { commitMultipleFilesToBranch } from '../git/branches';
 import { isRemotePushPolicyRejection, isTransientGitMirrorError } from '../git/mirror';
-import { commitFile, getFileSha, type GitHubAuthContext } from '../github';
 import { MANIFEST_FILENAME, type GitTriggerSpec, type ParsedManifest, manifestWrites, readManifest, synthesizeBlankManifest, triggerSpecToOnRunEntry, triggerSpecToFlatEntry } from '../triggers';
-import { parseGitHubRepoUrl, resolveProjectGitAuth, withProjectGitAuth } from './git';
+import { withProjectGitAuth } from './git';
 import type { ProjectRow } from './serializers';
 
 /**
@@ -132,65 +132,7 @@ export async function commitRepoFile(
   },
 ): Promise<{ ok: true } | { error: string; status: number }> {
   message = configCommitMessage(message);
-  const repo = parseGitHubRepoUrl(project.repoUrl);
-  if (repo && expectedFileRevision === undefined && !extra) {
-    return commitGitHubRepoFile(project, repo, path, content, message);
-  }
   return commitGitCliRepoFile(project, path, content, message, expectedFileRevision, expectedCandidatePaths, extra);
-}
-
-async function commitGitHubRepoFile(
-  project: ManifestProject,
-  repo: NonNullable<ReturnType<typeof parseGitHubRepoUrl>>,
-  path: string,
-  content: string,
-  message: string,
-): Promise<{ ok: true } | { error: string; status: number }> {
-  const branch = project.defaultBranch;
-  // A pre-resolved row passes its token straight through (an anonymous read
-  // when it has none); anything else resolves here.
-  const preResolved: GitHubAuthContext | null | undefined = hasResolvedGitAuth(project)
-    ? project.gitAuthToken
-      ? { token: project.gitAuthToken, source: 'project_credential' }
-      : undefined
-    : null;
-  const auth = await gitAuthOr502(
-    preResolved,
-    async () => (await resolveProjectGitAuth(project)).auth ?? undefined,
-    'GitHub',
-  );
-  if (!auth.ok) return auth;
-  try {
-    const existingSha = await getFileSha({
-      owner: repo.owner,
-      repo: repo.repo,
-      path,
-      branch,
-      auth: auth.value,
-    });
-    await commitFile({
-      owner: repo.owner,
-      repo: repo.repo,
-      path,
-      content,
-      message,
-      branch,
-      existingSha: existingSha ?? undefined,
-      auth: auth.value,
-    });
-  } catch (err) {
-    return {
-      error: `Failed to commit ${path}: ${(err as Error).message || String(err)}`,
-      status: 502,
-    };
-  }
-  invalidateProjectMirror(project.projectId);
-  // The base branch moved through the Contents API. The git-CLI path below
-  // notifies from `commitMultipleFilesToBranch`.
-  void import('./config-convergence-triggers')
-    .then((triggers) => triggers.notifyBaseBranchMoved(project.projectId, branch, 'manifest-write'))
-    .catch(() => {});
-  return { ok: true };
 }
 
 async function commitGitCliRepoFile(
@@ -203,7 +145,7 @@ async function commitGitCliRepoFile(
   extra?: Parameters<typeof commitRepoFile>[6],
 ): Promise<{ ok: true } | { error: string; status: number }> {
   const branch = project.defaultBranch;
-  // Any other host (GitLab, generic HTTPS remote): commit via the git CLI.
+  // Every host uses the same candidate-tree policy and compare-and-swap boundary.
   // The old code bailed here with "Project repo URL is
   // not a GitHub URL", which broke every connector and trigger manifest edit
   // on managed/self-hosted projects.
@@ -249,6 +191,7 @@ async function commitGitCliRepoFile(
       });
     }
   } catch (err) {
+    if (err instanceof ManifestWriteRefusedError) throw err;
     if (err instanceof Error && err.name === 'GitFileRevisionConflictError') {
       return { error: err.message, status: 409 };
     }

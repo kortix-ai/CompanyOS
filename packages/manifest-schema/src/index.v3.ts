@@ -394,6 +394,8 @@ export interface ManifestV3 {
   /** Obsolete and ignored: the manifest has no version. */
   kortix_version?: 3;
   default_agent: string;
+  /** Required command for platform config writes, executed in a project sandbox. */
+  config_validator?: string;
   /** @deprecated Selects nothing: every new session runs pi. Remove the line. */
   runtime?: 'opencode' | 'pi';
   imports?: string[];
@@ -427,6 +429,7 @@ const TOP_LEVEL_KEYS_V3 = [
   'kortix_version',
   'project',
   'default_agent',
+  'config_validator',
   'runtime',
   'imports',
   'env',
@@ -542,6 +545,9 @@ export function validateManifestBody(parsed: Record<string, unknown>, issues: Ma
     });
   }
 
+  if (parsed.config_validator !== undefined && (typeof parsed.config_validator !== 'string' || !parsed.config_validator.trim())) {
+    issues.push({ path: 'config_validator', message: 'config_validator must be a non-empty command.', severity: 'error' });
+  }
   validateImports(parsed.imports, 'imports', issues);
   validateProject(parsed.project, 'project', issues);
   validateEnv(parsed.env, 'env', issues);

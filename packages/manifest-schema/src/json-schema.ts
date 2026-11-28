@@ -1424,6 +1424,10 @@ export function buildManifestSchema(): JsonSchemaFragment {
         description: 'YAML files or folders whose collections merge into this file.',
         items: { type: 'string', pattern: IMPORT_PATH_PATTERN },
       },
+      config_validator: {
+        ...NON_BLANK_STRING,
+        description: 'Required validator command for platform config writes. Runs on the complete candidate tree in a running project sandbox, never in the API process. The base manifest selects the command. A missing sandbox, timeout or nonzero exit refuses the write with manifest_invalid. The sandbox is the workspace trust boundary: the command can access that sandbox, not only its cleared environment. No sandbox is created or started for a config write.',
+      },
       default_agent: {
         ...NON_BLANK_STRING,
         description: 'The agent a session or trigger runs when it names none, and the agent My Kortix starts when it names none. A declared agent that is enabled and whose `mode` is `primary` or `all`, or `mykortix` when `builtin_agents.my_kortix` is true. Omitted: My Kortix when it is on.',

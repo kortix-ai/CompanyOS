@@ -14,7 +14,6 @@ let gitCommit:
     }
   | undefined;
 let contentsWrites = 0;
-let contentsMessage = '';
 
 let shaReads = 0;
 let shaError: Error | null = null;
@@ -38,8 +37,7 @@ mock.module('../github', () => ({
     if (shaError) throw shaError;
     return 'b'.repeat(40);
   },
-  commitFile: async (options: Parameters<typeof github.commitFile>[0]) => {
-    contentsMessage = options.message;
+  commitFile: async () => {
     contentsWrites += 1;
   },
 }));
@@ -68,13 +66,13 @@ beforeEach(() => {
 
 describe('manifest compare-and-swap routing', () => {
   for (const revision of [undefined, 'a'.repeat(40)]) {
-    test(`attributes the ${revision ? 'git CLI' : 'GitHub Contents'} write`, async () => {
+    test(`attributes the git CLI write with revision ${revision ?? 'absent'}`, async () => {
       await runWithContext('PATCH', '/config', async () => {
         setContextField('userId', 'synthetic-actor');
         setContextField('authSessionId', 'synthetic-session');
         const result = await commitManifest(project, { path: 'kortix.yaml', revision, raw: { connectors: [] } }, 'chore: edit config');
         expect(result).toEqual({ ok: true });
-        expect(revision ? gitCommit?.options.message : contentsMessage).toBe('chore: edit config\n\nKortix-Actor: synthetic-actor\nKortix-Session: synthetic-session');
+        expect(gitCommit?.options.message).toBe('chore: edit config\n\nKortix-Actor: synthetic-actor\nKortix-Session: synthetic-session');
       });
     });
   }
@@ -203,42 +201,18 @@ describe('manifest compare-and-swap routing', () => {
     expect(JSON.stringify(result)).not.toContain('github.com/example');
   });
 
-  test('keeps the GitHub Contents API for unguarded writes', async () => {
-    const result = await commitManifest(
-      project,
-      {
-        path: 'kortix.yaml',
-        raw: { connectors: [] },
-      },
-      'unguarded manifest write',
-    );
-
+  test('unguarded writes also pass through the validated git commit boundary', async () => {
+    const result = await commitManifest(project, { path: 'kortix.yaml', raw: { connectors: [] } }, 'unguarded manifest write');
     expect(result).toEqual({ ok: true });
-    expect(contentsWrites).toBe(1);
-    expect(shaReads).toBe(1);
-    expect(gitCommit).toBeUndefined();
+    expect(contentsWrites).toBe(0);
+    expect(shaReads).toBe(0);
+    expect(gitCommit?.options.expectedFileRevision).toBeUndefined();
   });
 
-  test('maps an unguarded GitHub revision read failure to 502', async () => {
-    shaError = new github.GitHubApiError(
-      'upstream unavailable',
-      500,
-      '/repos/example/connectors/contents/kortix.yaml',
-    );
-
-    const result = await commitManifest(
-      project,
-      {
-        path: 'kortix.yaml',
-        raw: { connectors: [] },
-      },
-      'unguarded manifest write',
-    );
-
-    expect(result).toEqual({
-      error: 'Failed to commit kortix.yaml: upstream unavailable',
-      status: 502,
-    });
+  test('validator diagnostics propagate unchanged to the shared manifest_invalid handler', async () => {
+    const { ManifestWriteRefusedError } = await import('../manifest-io');
+    commitError = new ManifestWriteRefusedError('required connector', [{ path: 'config_validator', message: 'required connector', severity: 'error' }]);
+    await expect(commitManifest(project, { path: 'kortix.yaml', raw: { connectors: [] } }, 'refused')).rejects.toBe(commitError);
     expect(contentsWrites).toBe(0);
   });
 });

@@ -1,3 +1,4 @@
+import { ManifestWriteRefusedError } from '../manifest-io';
 import { configCommitMessage } from '../lib/config-commit-message';
 // Agent-config CRUD — the dashboard "agent builder" surface.
 //
@@ -357,6 +358,7 @@ export function registerAgentConfigRoutes(): void {
                 },
         });
       } catch (error) {
+        if (error instanceof ManifestWriteRefusedError) throw error;
         if (error instanceof GitFileRevisionConflictError) {
           return c.json({ error: error.message }, 409);
         }
@@ -550,6 +552,7 @@ export function registerAgentConfigRoutes(): void {
                 },
         });
       } catch (err) {
+        if (err instanceof ManifestWriteRefusedError) throw err;
         if (err instanceof GitFileRevisionConflictError) {
           return c.json({ error: err.message }, 409);
         }

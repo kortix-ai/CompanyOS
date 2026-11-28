@@ -617,6 +617,34 @@ flow(
         (await ctx.client.as(ctx.P.NONMEMBER).get(path, { params: { projectId: project.id, agentName: 'worker' } })).status(403).body().has('$.code', 'workspace_access_denied');
       },
     );
+    await ctx.step('a required workspace validator without a running sandbox returns 409 manifest_invalid and leaves the branch unchanged', async () => {
+      if (ctx.env.target !== 'local') throw new Error('This contract requires the local Git fixture');
+      const { execFileSync } = await import('node:child_process');
+      const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
+      const { tmpdir } = await import('node:os');
+      const { join } = await import('node:path');
+      const repo = await withDb(ctx, async (db) => (await db.query<{ repo_url: string; default_branch: string }>(
+        'SELECT repo_url, default_branch FROM kortix.projects WHERE project_id = $1', [project.id],
+      )).rows[0]);
+      if (!repo || !repo.repo_url.startsWith('/')) throw new Error('missing local repository');
+      const git = (...args: string[]) => execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+      const work = await mkdtemp(join(tmpdir(), 'workspace-validator-flow-'));
+      try {
+        git('clone', '-q', repo.repo_url, work);
+        const content = git('-C', work, 'show', 'HEAD:kortix.yaml');
+        await writeFile(join(work, 'kortix.yaml'), `config_validator: node scripts/policy.mjs\n${content}\n`);
+        git('-C', work, 'add', 'kortix.yaml');
+        git('-C', work, '-c', 'user.name=Synthetic', '-c', 'user.email=synthetic@example.test', 'commit', '-m', 'require validator');
+        git('-C', work, 'push', 'origin', `HEAD:${repo.default_branch}`);
+        const before = git('--git-dir', repo.repo_url, 'rev-parse', repo.default_branch);
+        const response = await ctx.client.as(ctx.P.OWNER).put('/v1/workspaces/:projectId/agents/:agentName/config',
+          { behavior: { description: 'refused candidate' } }, { params: { projectId: project.id, agentName: 'worker' } });
+        response.status(409).body().has('$.code', 'manifest_invalid');
+        if (!response.text().includes('no running project sandbox')) throw new Error(`validator diagnostic missing: ${response.text()}`);
+        if (git('--git-dir', repo.repo_url, 'rev-parse', repo.default_branch) !== before) throw new Error('refused config changed the branch');
+      } finally { await rm(work, { recursive: true, force: true }); }
+    });
+
   },
 );
 

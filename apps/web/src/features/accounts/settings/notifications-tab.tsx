@@ -1,5 +1,8 @@
 'use client';
 
+import { parseBrowserRoute } from '@/lib/auth/browser-route';
+import { useTranslations } from '@/i18n/use-translations';
+
 /**
  * `NotificationToggle` — one labeled switch row. This file used to also
  * export a full `NotificationsTab` (the enable-notifications switch plus the
@@ -51,7 +54,10 @@ export function NotificationToggle({
   disabled,
   idPrefix = '',
 }: NotificationToggleProps) {
+  const t = useTranslations('browserLogins');
+  const selected = typeof window !== 'undefined' && !!parseBrowserRoute(window.location.pathname);
   const id = `${idPrefix}${label}`;
+  if (selected) return <p role="status" className="px-4 py-3 text-sm text-muted-foreground">{t('text44')}</p>;
   return (
     <div className="flex items-start justify-between gap-4 px-4 py-3">
       <div className="flex flex-1 items-start gap-3">

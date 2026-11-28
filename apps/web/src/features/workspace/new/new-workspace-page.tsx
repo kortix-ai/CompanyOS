@@ -6,7 +6,8 @@ import { useTranslations } from '@/i18n/use-translations';
 import { useSignedOutRedirect } from '@/lib/auth/use-signed-out-redirect';
 import { AnimatePresence, m } from 'motion/react';
 import { useReducedMotion } from '@kortix/ui/internal/hooks/use-reduced-motion';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { useEffect, useMemo, useState } from 'react';
 
 import { DesktopCloseButton } from '@/components/desktop/desktop-close-button';

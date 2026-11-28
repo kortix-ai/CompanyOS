@@ -1,4 +1,6 @@
 'use client';
+import { safeSessionGetItem, safeSessionRemoveItem, safeSessionSetItem } from '@kortix/ui/internal/lib/storage/managed-storage';
+
 
 import { createProjectSession, type ArtifactDetail, type ModelKey } from '@kortix/sdk';
 import { modelKeyToWire, useProjectSessions, useSession } from '@kortix/sdk/react';
@@ -50,7 +52,7 @@ const storageKey = (artifactId: string) => `kortix:artifact-ask:${artifactId}`;
 /** The session this artifact's sheet last opened, kept for the tab (a reload shows the same chat). */
 function readSessionId(artifactId: string): string | null {
   try {
-    return sessionStorage.getItem(storageKey(artifactId));
+    return safeSessionGetItem(storageKey(artifactId));
   } catch {
     return null;
   }
@@ -58,8 +60,8 @@ function readSessionId(artifactId: string): string | null {
 
 function writeSessionId(artifactId: string, sessionId: string | null) {
   try {
-    if (sessionId) sessionStorage.setItem(storageKey(artifactId), sessionId);
-    else sessionStorage.removeItem(storageKey(artifactId));
+    if (sessionId) safeSessionSetItem(storageKey(artifactId), sessionId);
+    else safeSessionRemoveItem(storageKey(artifactId));
   } catch {
     // Storage blocked: the chat lasts until the page closes.
   }

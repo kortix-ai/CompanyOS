@@ -1,4 +1,6 @@
 'use client';
+import { safeGetItem, safeSetItem } from '@kortix/ui/internal/lib/storage/managed-storage';
+
 
 import { useTranslations } from '@/i18n/use-translations';
 
@@ -17,7 +19,8 @@ import { useUpgradeDialogStore } from '@kortix/ui/internal/stores/upgrade-dialog
 import { getProject } from '@kortix/sdk';
 import { contract, qk, useFeatureFlag } from '@kortix/sdk/react';
 import { useQuery } from '@tanstack/react-query';
-import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useParams, usePathname, useSearchParams } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { useEffect, useRef } from 'react';
 
 import { resolveHomeLanding } from './home-landing';
@@ -73,9 +76,9 @@ export default function ProjectIndexPage() {
     if (freeGrantUnspent !== false) return;
 
     const storageKey = `${FREE_ONBOARDING_UPGRADE_MODAL_KEY}:${projectAccountId}`;
-    if (window.localStorage.getItem(storageKey) === '1') return;
+    if (safeGetItem(storageKey) === '1') return;
 
-    window.localStorage.setItem(storageKey, '1');
+    safeSetItem(storageKey, '1');
     openUpgradeDialog(
       billingDialogArgs('no_subscription', accountState, projectAccountId, tI18nComplete),
     );

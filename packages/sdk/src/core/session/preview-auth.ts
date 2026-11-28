@@ -18,6 +18,7 @@
  * reloaded, bookmarked, or sent to anyone.
  */
 
+import { partitionPreviewUrl } from './preview-partition';
 import { backendApi } from '../http/api-client';
 import { getAuthToken } from '../http/auth';
 import { platformConfig } from '../http/config';
@@ -37,6 +38,7 @@ export async function ensurePreviewSessionCookie(
   previewUrl: string,
   options: { serverUrl?: string } = {},
 ): Promise<boolean> {
+  if (platformConfig().getToken?.identityKey?.()) return false;
   // The configured backend is the trusted origin when the caller names none.
   const authEndpoint = buildPreviewAuthEndpoint(
     previewUrl,
@@ -89,12 +91,26 @@ export async function authorizePreviewUrl(
   previewUrl: string,
   options: { serverUrl?: string } = {},
 ): Promise<string> {
+  const selectedIdentity = Boolean(platformConfig().getToken?.identityKey?.());
+  if (selectedIdentity && !isSubdomainPreviewUrl(previewUrl)) throw new Error('Selected previews require a preview origin');
   if (isSubdomainPreviewUrl(previewUrl)) {
     // The shape alone proves nothing: only an origin this deployment serves
     // may receive the credential. Anything else opens bare.
-    if (!(await shouldAttachPreviewToken(previewUrl, options))) return previewUrl;
+    if (!(await shouldAttachPreviewToken(previewUrl, options))) {
+      if (selectedIdentity) throw new Error('Untrusted selected preview origin');
+      return previewUrl;
+    }
     const token = await getAuthToken();
-    if (!token) return previewUrl;
+    if (!token) {
+      if (selectedIdentity) throw new Error('Preview identity unavailable');
+      return previewUrl;
+    }
+    const selected = platformConfig().getToken?.identityKey?.();
+    if (selected) {
+      const subject = await platformConfig().getUserId?.();
+      if (!subject) throw new Error('Preview identity unavailable');
+      previewUrl = await partitionPreviewUrl(previewUrl, subject);
+    }
     const response = await backendApi.post<{ ticket: string }>('/p/ticket', { preview_url: previewUrl });
     const result = response.data;
     if (!response.success || !result || typeof result.ticket !== 'string' || !result.ticket) {

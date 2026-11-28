@@ -10491,6 +10491,40 @@ export const selfHostSignupPolicy = kortixSchema.table('self_host_signup_policy'
   check('self_host_signup_policy_mode_check', sql`${table.signupMode} in ('open', 'invite', 'closed')`),
 ]).enableRLS();
 
+// Server-owned browser vault. Supabase auth foreign keys live in the SQL migration.
+export const browserLoginHandles = kortixSchema.table('browser_login_handles', {
+  handleHash: text('handle_hash').primaryKey(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  idleExpiresAt: timestamp('idle_expires_at', { withTimezone: true }).notNull().default(sql`now() + interval '30 days'`),
+  absoluteExpiresAt: timestamp('absolute_expires_at', { withTimezone: true }).notNull().default(sql`now() + interval '90 days'`),
+  removedAt: timestamp('removed_at', { withTimezone: true }),
+}).enableRLS();
+export const browserLoginSlots = kortixSchema.table('browser_login_slots', {
+  revokeAttempts: integer('revoke_attempts').notNull().default(0),
+  revokeAfter: timestamp('revoke_after', { withTimezone: true }).notNull().defaultNow(),
+  handleHash: text('handle_hash').notNull().references(() => browserLoginHandles.handleHash, { onDelete: 'cascade' }),
+  slot: text('slot').notNull(),
+  userId: uuid('user_id').notNull(),
+  sessionId: uuid('session_id').notNull(),
+  credential: text('credential').notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  revision: bigint('revision', { mode: 'number' }).notNull().default(1),
+  removedAt: timestamp('removed_at', { withTimezone: true }),
+  revokePending: boolean('revoke_pending').notNull().default(false),
+}, table => [primaryKey({columns:[table.handleHash,table.slot]}),unique("browser_login_slots_handle_hash_user_id_key").on(table.handleHash,table.userId)]).enableRLS();
+export const browserLoginAttempts = kortixSchema.table('browser_login_attempts', {
+  revokeAttempts: integer('revoke_attempts').notNull().default(0),
+  revokeAfter: timestamp('revoke_after', { withTimezone: true }).notNull().defaultNow(),
+  handleHash: text('handle_hash').notNull().references(() => browserLoginHandles.handleHash, { onDelete: 'cascade' }),
+  attempt: text('attempt').notNull(),
+  method: text('method').notNull(),
+  secret: text('secret').notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull().default(sql`now() + interval '5 minutes'`),
+  consumed: boolean('consumed').notNull().default(false),
+  candidate: text('candidate'),
+  userId: uuid('user_id'),
+  sessionId: uuid('session_id'),
+}, table => [primaryKey({columns:[table.handleHash,table.attempt]}),check('browser_login_attempts_method_check',sql`${table.method} IN ('password','email','google')`)]).enableRLS();
 // Credit codes: a code a person types (or opens as /redeem?code=…) to add
 // credits to an account's wallet, e.g. a campaign code worth $100. Staff
 // create them in the admin console (apps/api/src/admin/credit-codes.ts). The

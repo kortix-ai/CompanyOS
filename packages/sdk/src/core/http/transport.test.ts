@@ -442,3 +442,27 @@ describe('client surface', () => {
     expect(seen.map((s) => s.headers.get('authorization'))).toEqual([null, null]);
   });
 });
+
+test('does not replay a mutation under a changed identity after 401', async () => {
+  let user = 'a';
+  let calls = 0;
+  configureKortix({ backendUrl: 'http://backend.test/v1', getToken: async () => user + '-token', getUserId: async () => user, fetch: async () => { calls++; user = 'b'; return new Response(null, {status:401}); } });
+  expect((await send('http://backend.test/v1/projects', {method:'POST', body:'{}'})).status).toBe(401);
+  expect(calls).toBe(1);
+});
+
+test('does not replay after browser slot generation changes for the same user', async () => {
+ let generation=1;let calls=0;
+ const getToken=Object.assign(async()=>`token-${generation}`,{identityKey:()=>`slot:${generation}`});
+ configureKortix({backendUrl:'http://backend.test/v1',getToken,getUserId:async()=>'same-user',fetch:async()=>{calls++;generation++;return new Response(null,{status:401});}});
+ expect((await send('http://backend.test/v1/projects',{method:'POST',body:'{}'})).status).toBe(401);
+ expect(calls).toBe(1);
+});
+
+test('slot generation switch during identity snapshot prevents the initial dispatch', async () => {
+ let generation=1;let calls=0;
+ const getToken=Object.assign(async()=>'old-token',{identityKey:()=>String(generation)});
+ configureKortix({backendUrl:'http://backend.test/v1',getToken,getUserId:async()=>{generation++;return 'same-user';},fetch:async()=>{calls++;return new Response(null);}});
+ await expect(send('http://backend.test/v1/projects',{method:'POST',body:'{}'})).rejects.toBeInstanceOf(AuthError);
+ expect(calls).toBe(0);
+});

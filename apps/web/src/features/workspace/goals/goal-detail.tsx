@@ -28,7 +28,8 @@ import { EvidenceFile, GoalDescription, GoalFilesData, GoalFrame, GoalSkeleton, 
 import { GoalRail } from './goal-rail';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import {  } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 
 
 /**

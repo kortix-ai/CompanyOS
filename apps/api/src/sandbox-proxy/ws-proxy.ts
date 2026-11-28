@@ -17,10 +17,11 @@
 // ════════════════════════════════════════════════════════════════════════════
 
 import { authenticatePreviewPrincipalDetailed } from './preview-auth';
+import { previewLoginSessionLive } from './preview-partition';
 import { bindPreviewResource, bindPreviewSession } from './preview-audit';
 import { resolvePreviewWsUpstream } from './forward';
 import { invalidatePreviewLink, resolveSandboxIngress } from './backend';
-import { establishPreviewSession, resolvePreviewRequest, sessionFromCookies } from './preview-origin';
+import { resolvePreviewSession, resolvePreviewRequest } from './preview-origin';
 import { onSpaceAccessBust } from '../shared/space-access';
 import { recheckStreamAccess } from '../shared/stream-access-recheck';
 
@@ -194,6 +195,7 @@ export async function preparePreviewWsUpgrade(
     search: url.search,
     userId: principal.userId,
     callerSessionId: principal.sessionId,
+    loginSessionId: principal.loginSessionId,
   });
 }
 
@@ -229,16 +231,11 @@ export async function preparePreviewHostWsUpgrade(
     return { ok: false, status: 403, message: 'cross-site websocket to a preview' };
   }
 
-  let session = sessionFromCookies(req, target);
-  if (!session) {
-    // No cookie yet — accept the same one-shot credential the HTTP handshake
-    // takes, so a client that opens a socket before any page load still works.
-    const established = await establishPreviewSession(req, url, target);
-    if ('refusal' in established) {
-      return { ok: false, status: established.refusal.status, message: established.refusal.message };
-    }
-    session = established.session;
+  const established = await resolvePreviewSession(req, url, target);
+  if ('refusal' in established) {
+    return { ok: false, status: established.refusal.status, message: established.refusal.message };
   }
+  const session = established.session;
   bindPreviewSession(session);
   bindPreviewResource(session.sandboxId, target.port);
   if (session.kind !== 'principal') {
@@ -253,6 +250,7 @@ export async function preparePreviewHostWsUpgrade(
     search: url.search,
     userId: session.userId,
     callerSessionId: session.callerSessionId,
+    loginSessionId: session.loginSessionId,
   });
 }
 
@@ -264,6 +262,7 @@ async function resolveUpgradeForPrincipal(input: {
   search: string;
   userId: string;
   callerSessionId: string | null;
+  loginSessionId?: string;
 }): Promise<
   | { ok: true; data: PreviewWsData }
   | { ok: false; status: number; message: string }
@@ -308,7 +307,16 @@ async function resolveUpgradeForPrincipal(input: {
       data: {
         type: 'preview-ws', url: upstream.url, headers: upstream.headers,
         ingress: { sandboxId, port: upstreamPort },
-        accessCheck: upstream.accessCheck,
+        accessCheck: async () => {
+          if (input.loginSessionId) {
+            try {
+              if (!await previewLoginSessionLive(userId, input.loginSessionId)) return false;
+            } catch {
+              return false;
+            }
+          }
+          return upstream.accessCheck();
+        },
       },
     };
   } catch (err) {

@@ -283,3 +283,12 @@ describe('createSafeSessionJSONStorage', () => {
     expect(() => storage.removeItem('p')).not.toThrow();
   });
 });
+
+test('a legacy route with a nested u segment keeps its unscoped storage', () => {
+  const store = install(1024);
+  (globals.window as Record<string, unknown>).location = {
+    pathname: '/projects/u/legacy',
+  };
+  store.setItem('legacy-preference', 'kept');
+  expect(safeGetItem('legacy-preference')).toBe('kept');
+});

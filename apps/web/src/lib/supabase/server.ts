@@ -1,4 +1,6 @@
 'use server';
+import { authUser } from '@kortix/sdk';
+import type { Session, User } from '@supabase/supabase-js';
 import { createServerClient } from '@supabase/ssr';
 import { cookies, headers } from 'next/headers';
 import { KORTIX_SUPABASE_AUTH_COOKIE } from './constants';
@@ -37,7 +39,7 @@ export async function createClient() {
   if (userAgent) forwarded['user-agent'] = userAgent;
   if (clientIp) forwarded['x-forwarded-for'] = clientIp;
 
-  return createServerClient(supabaseUrl, supabaseAnonKey, {
+  const client = createServerClient(supabaseUrl, supabaseAnonKey, {
     global: { headers: forwarded },
     // `@supabase/ssr` never sets `secure` itself — see the doc comment in
     // `lib/supabase/client.ts`. Server-side, `NODE_ENV` is the reliable signal
@@ -49,9 +51,10 @@ export async function createClient() {
     },
     cookies: {
       getAll() {
-        return cookieStore.getAll();
+        return requestHeaders.has('x-kortix-browser-slot') ? [] : cookieStore.getAll();
       },
       setAll(cookiesToSet) {
+        if (requestHeaders.has('x-kortix-browser-slot')) throw new Error('Saved sign-in credential writes are unavailable');
         try {
           cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
         } catch {
@@ -62,4 +65,20 @@ export async function createClient() {
       },
     },
   });
+  if (!requestHeaders.has('x-kortix-browser-slot')) return client;
+  const token = requestHeaders.get('x-kortix-browser-token');
+  if (!token) throw new Error('Browser identity unavailable');
+  const read = async () => {
+    const { user } = await authUser(token, {
+      backendUrl: process.env.BACKEND_URL || process.env.KORTIX_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL,
+      fetch: (input, init) => fetch(input, { ...init, cache: 'no-store', redirect: 'error' }),
+    });
+    return { access_token: token, refresh_token: '', token_type: 'bearer', expires_in: 0, user: { ...user, aud: 'authenticated', app_metadata: user.app_metadata ?? {}, user_metadata: user.user_metadata ?? {}, created_at: user.created_at ?? '' } as User } as Session;
+  };
+  const auth = new Proxy(client.auth, { get(_target, key) {
+    if (key === 'getSession') return async () => ({ data: { session: await read() }, error: null });
+    if (key === 'getUser') return async () => ({ data: { user: (await read()).user }, error: null });
+    return () => { throw new Error('Saved sign-in credential operation unavailable'); };
+  } });
+  return new Proxy(client, { get(target, key) { return key === 'auth' ? auth : Reflect.get(target, key); } });
 }

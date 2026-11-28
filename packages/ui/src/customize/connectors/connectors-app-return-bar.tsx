@@ -1,4 +1,6 @@
 'use client';
+import { safeSessionGetItem, safeSessionSetItem } from '@kortix/ui/internal/lib/storage/managed-storage';
+
 
 import { useUiSearchParams } from '../../providers/ui-provider';
 import { useEffect, useSyncExternalStore } from 'react';
@@ -17,7 +19,7 @@ const subscribeToNothing = () => () => {};
 
 function readRemembered(): string | null {
   try {
-    return window.sessionStorage.getItem(RETURN_TO_STORAGE_KEY);
+    return safeSessionGetItem(RETURN_TO_STORAGE_KEY);
   } catch {
     return null;
   }
@@ -49,7 +51,7 @@ export function ConnectorsAppReturnBar() {
   useEffect(() => {
     if (!fromUrl) return;
     try {
-      window.sessionStorage.setItem(RETURN_TO_STORAGE_KEY, fromUrl);
+      safeSessionSetItem(RETURN_TO_STORAGE_KEY, fromUrl);
     } catch {
       // Storage is blocked (private mode): the bar lasts for this URL only.
     }

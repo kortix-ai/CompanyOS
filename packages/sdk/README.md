@@ -1972,6 +1972,63 @@ and `switch [session-id] <model> --prompt "Continue verification" --idempotency-
 The new verbs default to `KORTIX_SESSION_ID`. The existing `sessions model <session-id> <model>` remains supported.
 Never send a peer message to yourself to continue a model switch.
 
+### Browser identity broker (experimental, disabled by default)
+
+`kortix.auth.browserLogins` (also exported as `browserLogins`) calls the same-origin
+`/v1/auth/browser-logins` cookie broker. It exposes initialize, roster, begin,
+sendEmail, complete, confirm, cancel, token, remove, removeAll, mfaFactors, challengeMfa, and verifyMfa. Completion
+creates a candidate; confirmation returns a slot. No method returns a refresh token.
+
+```ts
+import { createKortix, createBrowserIdentity } from '@kortix/sdk';
+const identity = createBrowserIdentity({ saveSlot: slot => saveThisTabSlot(slot) });
+identity.select(loadThisTabSlot());
+const kortix = createKortix({ backendUrl: '/v1', getToken: identity.getToken, getUserId: identity.getUserId });
+```
+
+The host injects slot persistence scoped to one tab. It never stores credentials.
+The adapter caches access tokens in memory, discards pending results after selection
+changes, and exposes a token-free `subscribe`/`invalidateRoster` seam. Host roster
+notifications call `invalidateRoster`; they never synchronize active selection.
+A 401 replay checks `getUserId` before reissuing a request with a refreshed token.
+The host must clear identity-scoped caches and stop streams when selection changes.
+Full browser acceptance remains in implementation. Keep the flag off.
+
+Saved browser sign-ins discover add availability through `browserLogins.capabilities()`.
+Its `{ enabled }` response contains no key material. Disabling additions leaves roster,
+verification, selection, and removal available. The web account menu opens
+`/auth/browser-logins`. Selection loads a `/u/<slot>/…` document for this tab.
+The browser stores no password or refresh token. Google uses server-owned PKCE;
+the initiating tab confirms the verified identity before selecting it.
+
+Selected browser identities authorize previews through `authorizePreviewUrl` before navigation.
+The async authorization stage derives a non-secret origin partition from the verified user.
+It exchanges the bearer for a 60-second preview ticket. It never places a refresh credential in a URL.
+Selected callers require an origin URL; authorization failures do not fall back to shared preview cookies.
+Pure synchronous URL builders return transport candidates, which selected callers must authorize before use.
+Legacy programmatic clients retain the existing unpartitioned transport.
+
+
+### Saved browser sign-ins: initial limitations
+
+The API flag `KORTIX_BROWSER_LOGINS_ENABLED` defaults to `false`. Restart API replicas after changing configuration.
+Up to five sign-ins share one browser cookie partition; each tab selects its own account.
+When adding from an ordinary browser sign-in, authenticate the current account once to save it first.
+The host retires the old browser session without sharing its rotating credential or signing out other devices.
+Then authenticate the additional account. Failed or cancelled authentication preserves the current account.
+Browser logout leaves other devices signed in. Billing and permissions remain separate.
+Selected sign-ins gate profile/password changes and authenticator enrollment with an explicit notice.
+Use the ordinary sign-in page and explicitly authenticate the intended account for those settings.
+Existing authenticator verification is available in Manage browser sign-ins.
+Browser push notifications are unavailable for selected sign-ins. Native clients are outside the initial feature.
+Legacy desktop and extension authentication remain unchanged.
+Handles expire after 30 idle days or 90 absolute days; add attempts expire after five minutes.
+Disabling additions preserves recovery and removal. Keep old encryption keys during rotation and rollback.
+The server event `auth_identity_operation` records candidate authentication success, not switches or confirmed additions.
+
+The optional `has_handle` capability lets hosts omit roster requests when no browser vault exists.
+Roster `needs_sign_in` reports uncertain or owned refresh credentials. Access-token expiry alone does not require signing in again.
+A stalled refresh is recovered through verified reauthentication; hosts must never retry its rotating refresh token.
 ### Artifact gallery folders
 
 `listArtifactFolders`, `createArtifactFolder`, `updateArtifactFolder`, and

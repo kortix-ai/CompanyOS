@@ -6,7 +6,8 @@ import {
   useDenyCaptureDevice,
   useNow,
 } from '@kortix/sdk/react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { Suspense, useState } from 'react';
 
 import Link from 'next/link';

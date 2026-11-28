@@ -1,3 +1,4 @@
+import { safeSessionGetItem, safeSessionSetItem } from '@kortix/ui/internal/lib/storage/managed-storage';
 import { CHUNK_RELOAD_WINDOW_MS } from '@kortix/ui/internal/lib/chunk-load-recovery';
 
 /**
@@ -23,9 +24,9 @@ export const CHUNK_BOOT_RECOVERY_SCRIPT = `
   function reloadOnce() {
     try {
       var now = Date.now();
-      var mark = sessionStorage.getItem('kortix:chunk-reload-at');
+      var mark = safeSessionGetItem('kortix:chunk-reload-at');
       if (mark !== null && Number.isFinite(Number(mark)) && now - Number(mark) < ${CHUNK_RELOAD_WINDOW_MS}) return;
-      sessionStorage.setItem('kortix:chunk-reload-at', String(now));
+      safeSessionSetItem('kortix:chunk-reload-at', String(now));
     } catch (_) {
       return;
     }

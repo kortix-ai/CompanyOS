@@ -1,6 +1,9 @@
 'use client';
+import { safeGetItem, safeRemoveItem } from '@kortix/ui/internal/lib/storage/managed-storage';
 
-import { useRouter, useSearchParams } from 'next/navigation';
+
+import { useSearchParams } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { Suspense, useEffect, useEffectEvent, useRef, useState } from 'react';
 
 import { AuthPendingScreen } from '@kortix/ui/internal/auth/auth-consent';
@@ -267,7 +270,7 @@ function GitHubSetup() {
 /** The stored return path, validated, WITHOUT clearing it. */
 function peekGitHubSetupReturn(): string | null {
   try {
-    const value = window.localStorage.getItem('kortix:github_setup_return');
+    const value = safeGetItem('kortix:github_setup_return');
     // `\` reads as `/` and tab/CR/LF are dropped, so either could leave the origin.
     if (!value || !value.startsWith('/') || value.startsWith('//') || /[\\\u0000-\u001f\u007f]/.test(value)) return null;
     return value;
@@ -278,7 +281,7 @@ function peekGitHubSetupReturn(): string | null {
 
 function clearGitHubSetupReturn(): void {
   try {
-    window.localStorage.removeItem('kortix:github_setup_return');
+    safeRemoveItem('kortix:github_setup_return');
   } catch {
     // A blocked storage read is not a reason to fail the navigation.
   }

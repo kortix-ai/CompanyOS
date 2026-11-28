@@ -1898,6 +1898,20 @@
       "when": 1795869804149,
       "tag": "20261128124324_session_group_memory_update_lease",
       "breakpoints": true
+    },
+    {
+      "idx": 271,
+      "version": "7",
+      "when": 1795869805149,
+      "tag": "20261128150000_browser_login_vault",
+      "breakpoints": true
+    },
+    {
+      "idx": 272,
+      "version": "7",
+      "when": 1795869806149,
+      "tag": "20261128150100_browser_login_revocation_schedule",
+      "breakpoints": true
     }
   ]
 }

@@ -90,7 +90,7 @@ export function isSubdomainPreviewUrl(candidateUrl: string): boolean {
     const { hostname } = new URL(candidateUrl);
     return (
       /^p\d+-[^.]+\./.test(hostname)
-      || /^(?:dev|staging|prod|preview)-p\d+-[a-z0-9-]+\./i.test(hostname)
+      || /^(?:dev|staging|prod|preview|d|s|p|r)-p\d+-[a-z0-9-]+\./i.test(hostname)
     );
   } catch {
     return false;

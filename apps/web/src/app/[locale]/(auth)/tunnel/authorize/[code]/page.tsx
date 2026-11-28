@@ -3,7 +3,9 @@
 import { ArrowsClockwiseIcon } from '@phosphor-icons/react';
 import { useTranslations } from '@/i18n/use-translations';
 import { useParams } from 'next/navigation';
-import { Suspense, useMemo, useState } from 'react';
+import { useRouter } from '@/lib/navigation/use-identity-router';
+import { Suspense, useEffect, useMemo, useState } from 'react';
+
 
 import { Alert as BannerAlert, AlertTitle as BannerAlertTitle, AlertDescription as BannerAlertDescription, AlertMedia as BannerAlertMedia } from '@kortix/ui/alert';
 import { Input } from '@kortix/ui/input';

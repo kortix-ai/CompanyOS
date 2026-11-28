@@ -3,7 +3,7 @@
 import { useAuth } from '@/features/providers/auth-provider';
 import { SESSION_ENDED_REASON } from '@/lib/auth/session-expiry';
 import { isSigningOut } from '@/lib/auth/sign-out-sequence';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { useEffect } from 'react';
 
 /**

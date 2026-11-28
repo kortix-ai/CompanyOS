@@ -1,4 +1,6 @@
 'use client';
+import { safeSessionGetItem, safeSessionRemoveItem, safeSessionSetItem } from '@kortix/ui/internal/lib/storage/managed-storage';
+
 
 import { addBreadcrumb, captureMessage } from '../../lib/telemetry';
 import { useEffect } from 'react';
@@ -42,7 +44,7 @@ export const HEAP_PRESSURE_BYTES = 1_500_000_000;
 /** A failed lazy chunk is the one involuntary reload cause we can see COMING. */
 export function noteChunkLoadFailure(message: string): void {
   try {
-    sessionStorage.setItem(CHUNK_ERROR_KEY, JSON.stringify({ message, at: Date.now() }));
+    safeSessionSetItem(CHUNK_ERROR_KEY, JSON.stringify({ message, at: Date.now() }));
   } catch {
     /* storage unavailable — the label is a nice-to-have, never a requirement */
   }
@@ -56,7 +58,7 @@ export function noteHeapSample(now = Date.now()): void {
     const memory = (performance as Performance & { memory?: { usedJSHeapSize?: number } }).memory;
     const used = memory?.usedJSHeapSize;
     if (typeof used !== 'number') return;
-    sessionStorage.setItem(HEAP_SAMPLE_KEY, JSON.stringify({ used, at: now }));
+    safeSessionSetItem(HEAP_SAMPLE_KEY, JSON.stringify({ used, at: now }));
   } catch {
     /* storage or the API is unavailable — the label is a nice-to-have */
   }
@@ -92,7 +94,7 @@ export function readReloadForensics(now = Date.now()): ReloadForensics {
     /* no navigation timing */
   }
   try {
-    const raw = sessionStorage.getItem(CHUNK_ERROR_KEY);
+    const raw = safeSessionGetItem(CHUNK_ERROR_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as { message?: string; at?: number };
       // Only the previous life counts. An hour-old entry says nothing about
@@ -100,20 +102,20 @@ export function readReloadForensics(now = Date.now()): ReloadForensics {
       if (parsed?.at && now - parsed.at < 30_000 && parsed.message) {
         recentChunkError = parsed.message;
       }
-      sessionStorage.removeItem(CHUNK_ERROR_KEY);
+      safeSessionRemoveItem(CHUNK_ERROR_KEY);
     }
   } catch {
     /* storage unavailable */
   }
 
   try {
-    const raw = sessionStorage.getItem(HEAP_SAMPLE_KEY);
+    const raw = safeSessionGetItem(HEAP_SAMPLE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as { used?: number; at?: number };
       if (parsed?.at && now - parsed.at < 120_000 && typeof parsed.used === 'number') {
         heapBeforeReload = parsed.used;
       }
-      sessionStorage.removeItem(HEAP_SAMPLE_KEY);
+      safeSessionRemoveItem(HEAP_SAMPLE_KEY);
     }
   } catch {
     /* storage unavailable */

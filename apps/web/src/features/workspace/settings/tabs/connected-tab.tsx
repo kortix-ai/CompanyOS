@@ -16,7 +16,7 @@ import { usePermission } from '@kortix/ui/workspace';
 import { hubTarget, type HubTarget } from '@kortix/ui/internal/stores/account-panel-store';
 import { deleteGitHubInstallation, listGitHubInstallations } from '@kortix/sdk';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { SettingsTabHeader } from '@kortix/ui/customize/settings/settings-tab-header';
 import { useSettingsAccountId } from '../use-settings-account-id';
 

@@ -1,5 +1,8 @@
 'use client';
 
+import { BrowserSettingsCapability } from './browser-settings-capability';
+import { parseBrowserRoute } from '@/lib/auth/browser-route';
+
 import { AccountDeletionSection, AccountDeletionSectionView, DEFAULT_PROFILE_TAB_COPY, type AccountDeletionSectionViewProps, type ProfileTabCopy } from './account-deletion-section';
 export { DEFAULT_PROFILE_TAB_COPY } from './account-deletion-section';
 import { localizedCopy } from './localized-copy';
@@ -231,6 +234,13 @@ export function ProfileTabView({
  *  tab is active (`SettingsTabPane` in `settings-panel.tsx` returns `null`
  *  otherwise), so nothing here fetches on panel open. */
 export function ProfileTab() {
+  if (typeof window !== 'undefined' && parseBrowserRoute(window.location.pathname)) {
+    return <BrowserSettingsCapability />;
+  }
+  return <LegacyProfileTab />;
+}
+
+function LegacyProfileTab() {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const t = useTranslations('settings.profile');
   const copy = useMemo(

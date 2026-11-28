@@ -97,7 +97,7 @@ import {
   UserPlusIcon,
 } from '@phosphor-icons/react';
 import { useQuery } from '@tanstack/react-query';
-import Link from 'next/link';
+import { IdentityLink as Link } from '@/components/identity-link';
 import * as React from 'react';
 import { useEffect, useState } from 'react';
 

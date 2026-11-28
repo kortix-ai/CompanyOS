@@ -5,7 +5,8 @@ import { isDesktop } from '@kortix/ui/internal/lib/desktop';
 import { desktopTabsMounted } from '@/features/desktop-tabs/desktop-tabs-gate';
 import { CUSTOMIZE_TAB_ID, useProjectSessionTabsStore } from '@/stores/project-session-tabs-store';
 import { useUserPreferencesStore } from '@kortix/ui/internal/stores/user-preferences-store';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { useEffect } from 'react';
 
 /**

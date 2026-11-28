@@ -4,7 +4,8 @@ import { useTranslations } from '@/i18n/use-translations';
 
 import { callbackTimeoutMessage, callbackUnreachableMessage } from './callback-errors';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Button } from '@kortix/ui/button';

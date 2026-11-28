@@ -1,3 +1,4 @@
+import { safeGetItem } from '@kortix/ui/internal/lib/storage/managed-storage';
 /**
  * Client-side session-readiness benchmarking.
  *
@@ -28,7 +29,7 @@ function enabled(): boolean {
   if (typeof window === 'undefined') return false;
   if (process.env.NODE_ENV !== 'production') return true;
   try {
-    return window.localStorage.getItem('kortix_session_timing') === '1';
+    return safeGetItem('kortix_session_timing') === '1';
   } catch {
     return false;
   }

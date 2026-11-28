@@ -18,16 +18,20 @@ export function isServablePreviewUrl(candidate: string, template: string | null)
   }
   if (url.protocol !== shape.protocol) return false;
 
-  // `dev-p{port}-{sandbox}.p.kortix.com` -> suffix `.p.kortix.com`, prefix `dev-`
-  const shapeHost = shape.hostname;
-  const firstDot = shapeHost.indexOf('.');
-  if (firstDot === -1) return false;
-  const domain = shapeHost.slice(firstDot); // ".p.kortix.com"
-  const envPrefix = shapeHost.slice(0, shapeHost.indexOf('-p1-') + 1); // "dev-"
-  if (!envPrefix || !domain) return false;
-  if (!url.hostname.endsWith(domain)) return false;
-
-  const label = url.hostname.slice(0, -domain.length);
-  if (label.includes('.')) return false;
-  return new RegExp(`^${envPrefix}p\\d{1,5}-[a-z0-9-]+$`).test(label);
+  if (url.port !== shape.port || url.username || url.password) return false;
+  const marker = '65000-kortixpreviewplaceholder';
+  const trusted = new URL(
+    template.replace('{port}', '65000').replace('{sandbox}', 'kortixpreviewplaceholder'),
+  );
+  const parts = trusted.hostname.split(marker);
+  if (parts.length !== 2) return false;
+  const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const compact = (
+    { 'dev-p': 'd-p', 'staging-p': 's-p', 'prod-p': 'p-p', 'preview-p': 'r-p' } as Record<
+      string,
+      string
+    >
+  )[parts[0]];
+  const prefix = compact ? `(?:${escape(parts[0])}|${escape(compact)})` : escape(parts[0]);
+  return new RegExp(`^${prefix}\\d{1,5}-[a-z0-9-]+${escape(parts[1])}$`).test(url.hostname);
 }

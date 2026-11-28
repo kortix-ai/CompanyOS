@@ -10,7 +10,8 @@ import {
   SignOutIcon,
 } from '@phosphor-icons/react';
 import Link from 'next/link';
-import { notFound, usePathname, useRouter } from 'next/navigation';
+import { notFound, usePathname } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { useEffect, useState, type ReactNode } from 'react';
 
 import { ProjectPendingScreen } from '@/components/projects/project-pending-screen';

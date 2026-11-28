@@ -12,7 +12,8 @@
 
 import { useTranslations } from '@/i18n/use-translations';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { useEffect, useRef, useState } from 'react';
 
 import { ConnectorHandshake } from '@kortix/ui/markdown/setup-links/connector-handshake';

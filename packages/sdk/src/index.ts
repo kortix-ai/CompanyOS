@@ -721,3 +721,7 @@ export {
   type ComposerModelResolution,
   type SessionModelFallback,
 } from './core/models/composer-model';
+
+export { createBrowserIdentity, type BrowserIdentityOptions, type BrowserLoginToken } from './core/auth/browser-identity';
+
+export { browserLogins, type BrowserBrokerOptions, type BrowserLoginSlot, type BrowserLoginCompletion } from './core/rest/platform-client/browser-logins';

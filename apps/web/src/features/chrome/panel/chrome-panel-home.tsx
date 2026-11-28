@@ -40,8 +40,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@kortix/ui/popover';
 import { Skeleton } from '@kortix/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@kortix/ui/tabs';
 import { errorToast } from '@kortix/ui/toast';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { IdentityLink as Link } from '@/components/identity-link';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 
 import { quickEntryRecentSessions } from '@/components/desktop/desktop-quick-entry';

@@ -118,13 +118,13 @@ export interface PostHogUser {
 
 /** The client once `startPostHog` ran, or null on hosts that do not report. */
 export function getPostHog(): Promise<PostHog | null> {
-  if (typeof window === 'undefined') return Promise.resolve(null);
+  if (typeof window === 'undefined' || /(?:^|\/)u\/[^/]+(?:\/|$)/.test(window.location.pathname)) return Promise.resolve(null);
   return clientReady;
 }
 
 /** Initialize once. `user`: the signed-in Supabase user at page load, if any. */
 export function startPostHog(user: PostHogUser | null): Promise<PostHog | null> {
-  if (typeof window === 'undefined') return Promise.resolve(null);
+  if (typeof window === 'undefined' || /(?:^|\/)u\/[^/]+(?:\/|$)/.test(window.location.pathname)) return Promise.resolve(null);
   if (!started) {
     started = true;
     void start(user)

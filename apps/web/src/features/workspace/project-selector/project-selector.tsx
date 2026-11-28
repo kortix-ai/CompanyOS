@@ -4,8 +4,8 @@ import { acceptAccountInviteAndLand, type MyAccountInvite, type ProvisionPhase }
 import { qk } from '@kortix/sdk/react';
 import { ArrowRightIcon, MagnifyingGlassIcon, PlusIcon } from '@phosphor-icons/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { IdentityLink as Link } from '@/components/identity-link';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { useEffect, useMemo, useState, useTransition, type MouseEvent } from 'react';
 
 import { Button } from '@kortix/ui/button';

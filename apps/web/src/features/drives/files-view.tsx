@@ -47,7 +47,8 @@ import {
   ListIcon,
 } from '@phosphor-icons/react';
 import { useQuery } from '@tanstack/react-query';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { useDebounce } from '@kortix/ui';
 import { type ComponentType, type ReactNode, useEffect, useMemo, useState } from 'react';
 

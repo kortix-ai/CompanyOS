@@ -708,7 +708,7 @@ describe('preview navigation tickets', () => {
       clock.mockRestore();
     }
   });
-  test('a forged ticket cannot renew an existing authenticated cookie', async () => {
+  test('a legacy cookie remains authoritative over a forged ticket', async () => {
     const response = await handlePreviewOriginRequest(...request('/?preview_ticket=forged', {
       headers: { Cookie: mintCookieFor('sbx-known', 8081), 'sec-fetch-dest': 'document' },
     }));
@@ -748,4 +748,54 @@ describe('preview navigation tickets', () => {
     expect((await handlePreviewOriginRequest(...request('/?preview_ticket=forged')))?.status).toBe(401);
     expect(forwarded).toBe(0);
   });
+});
+
+
+describe('legacy preview cookies retain ambient authority', () => {
+  test('HTTP accepts its cookie despite an application bearer header', async () => {
+    const response = await handlePreviewOriginRequest(...request('/', {
+      headers: { Cookie: mintCookieFor('sbx-known', 8081), Authorization: 'Bearer wrong' },
+    }));
+    expect(response?.status).toBe(200);
+    expect(forwarded).toBe(1);
+  });
+
+  test('HTTP accepts its cookie despite a stale ticket', async () => {
+    const response = await handlePreviewOriginRequest(...request('/?preview_ticket=wrong', {
+      headers: { Cookie: mintCookieFor('sbx-known', 8081) },
+    }));
+    expect(response?.status).toBe(200);
+    expect(forwarded).toBe(1);
+  });
+
+  test('WebSocket accepts its cookie despite an application bearer header', async () => {
+    const result = await preparePreviewHostWsUpgrade(...request('/hmr', {
+      headers: { Cookie: mintCookieFor('sbx-known', 8081), Authorization: 'Bearer wrong' },
+    }));
+    expect(result.ok).toBe(true);
+    expect(wsUpstreamResolutions).toBe(1);
+  });
+});
+
+describe('partition authority at HTTP and websocket boundaries', () => {
+ test('rejects a legacy cookie and a principal from another partition', async () => {
+  const host='p8081-sbx-known--iaaaaaaaaaaaaaaaaaaaa.localhost:8008';
+  const cookie=mintCookieFor('sbx-known',8081);
+  expect((await handlePreviewOriginRequest(...request('/',{headers:{cookie}},host)))?.status).toBe(401);
+  expect((await handlePreviewOriginRequest(...request('/?token=good',{},host)))?.status).toBe(401);
+  const [req,url]=request('/hmr',{headers:{cookie,origin:`http://${host}`}},host);
+  expect(await preparePreviewHostWsUpgrade(req,url)).toMatchObject({ok:false,status:401});
+  expect(wsUpstreamResolutions).toBe(0);
+ });
+});
+
+test('a valid legacy navigation ticket for B replaces an existing A cookie', async () => {
+  const { mintPreviewSession, verifyPreviewSession } = await import('./preview-session');
+  const ticket = mintPreviewSession({kind:'principal',sandboxLabel:'sbx-known',sandboxId:'sbx_KNOWN',port:8081,userId:'user-2',callerSessionId:null,sandboxAuthored:false},60,'ticket');
+  const response = await handlePreviewOriginRequest(...request('/?preview_ticket='+encodeURIComponent(ticket),{headers:{cookie:mintCookieFor('sbx-known',8081),'sec-fetch-dest':'document'}}));
+  expect(response?.status).toBe(302);
+  const cookie=response!.headers.getSetCookie().find(x=>x.startsWith('__kortix_preview='));
+  expect(cookie).toBeDefined();
+  const token=cookie!.split(';')[0]!.slice('__kortix_preview='.length);
+  expect(verifyPreviewSession(token,{sandboxLabel:'sbx-known',port:8081})).toMatchObject({kind:'principal',userId:'user-2'});
 });

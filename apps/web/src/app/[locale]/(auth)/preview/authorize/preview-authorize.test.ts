@@ -65,3 +65,33 @@ describe('isServablePreviewUrl', () => {
     expect(isServablePreviewUrl('javascript:alert(1)', TEMPLATE)).toBe(false);
   });
 });
+
+it('accepts the configured loopback origin and refuses a different port', () => {
+  expect(
+    isServablePreviewUrl(
+      'http://p3000-sbx.localhost:17708/',
+      'http://p{port}-{sandbox}.localhost:17708',
+    ),
+  ).toBe(true);
+  expect(
+    isServablePreviewUrl(
+      'http://p3000-sbx.localhost:9999/',
+      'http://p{port}-{sandbox}.localhost:17708',
+    ),
+  ).toBe(false);
+});
+
+it('accepts only this environment compressed partitioned hostname', () => {
+  expect(
+    isServablePreviewUrl('https://d-p3000-sbx--iaaaaaaaaaaaaaaaaaaaa.p.kortix.com/open', TEMPLATE),
+  ).toBe(true);
+  expect(
+    isServablePreviewUrl('https://s-p3000-sbx--iaaaaaaaaaaaaaaaaaaaa.p.kortix.com/open', TEMPLATE),
+  ).toBe(false);
+  expect(
+    isServablePreviewUrl(
+      'https://d-p3000-sbx--iaaaaaaaaaaaaaaaaaaaa.p.kortix.com:444/open',
+      TEMPLATE,
+    ),
+  ).toBe(false);
+});

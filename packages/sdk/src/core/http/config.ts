@@ -33,7 +33,11 @@ export interface KortixPlatformConfig {
    * calls it when the API answers 401, before its one replay, so the replay
    * asks for a fresh token instead of re-sending the dead one.
    */
-  getToken: (() => Promise<string | null>) & { invalidate?: (rejectedToken: string) => void };
+  getToken: (() => Promise<string | null>) & {
+    invalidate?: (rejectedToken: string) => void;
+    /** Opaque tab identity generation. Changes prevent dispatch and 401 replay. */
+    identityKey?: () => string | null;
+  };
   /**
    * Send the token from `getToken` raw in this header instead of
    * `Authorization: Bearer`. For a backend proxy that reads the credential from

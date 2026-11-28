@@ -97,7 +97,7 @@ const SUBDOMAIN_URL_REGEX =
  * without the options that built it.
  */
 const PREVIEW_ORIGIN_URL_REGEX =
-  /^https?:\/\/(?:dev|staging|prod|preview)-p(\d+)-([a-z0-9-]+)\.[^/]+?(?::(\d+))?(\/.*)?$/i;
+  /^https?:\/\/(?:dev|staging|prod|preview|d|s|p|r)-p(\d+)-([a-z0-9-]+)\.[^/]+?(?::(\d+))?(\/.*)?$/i;
 
 /**
  * Ports that should NOT be rewritten — they're already exposed/handled natively
@@ -637,7 +637,7 @@ export function parseSubdomainUrl(url: string): {
   if (subMatch) {
     return {
       port: parseInt(subMatch[1], 10),
-      sandboxId: subMatch[2],
+      sandboxId: subMatch[2].replace(/--i[a-z2-7]{20}$/, ''),
       backendPort: subMatch[3] ? parseInt(subMatch[3], 10) : 80,
       path: subMatch[4] || '/',
     };
@@ -663,7 +663,7 @@ export function parseSubdomainUrl(url: string): {
     }
     return {
       port: parseInt(originMatch[1], 10),
-      sandboxId: originMatch[2],
+      sandboxId: originMatch[2].replace(/--i[a-z2-7]{20}$/, ''),
       backendPort,
       path: originMatch[4] || '/',
     };

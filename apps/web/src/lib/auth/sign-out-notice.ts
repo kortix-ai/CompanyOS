@@ -1,3 +1,4 @@
+import { safeSessionGetItem, safeSessionRemoveItem, safeSessionSetItem } from '@kortix/ui/internal/lib/storage/managed-storage';
 /**
  * Carry "the server sign-out did not complete" across the sign-out's own
  * document load.
@@ -23,7 +24,7 @@ const SIGN_OUT_NOTICE_KEY = 'kortix-sign-out-notice';
 /** Remember, for the next document in this tab, that the sign-out did not complete. */
 export function stashSignOutNotice(): void {
   try {
-    sessionStorage.setItem(SIGN_OUT_NOTICE_KEY, '1');
+    safeSessionSetItem(SIGN_OUT_NOTICE_KEY, '1');
   } catch {
     // Safari private mode and partitioned iframes can refuse storage access.
     // A notice that cannot be stashed is the pre-fix behaviour; the sign-out
@@ -34,8 +35,8 @@ export function stashSignOutNotice(): void {
 /** Read-and-clear the notice. True at most once per failed sign-out in this tab. */
 export function takeSignOutNotice(): boolean {
   try {
-    const present = sessionStorage.getItem(SIGN_OUT_NOTICE_KEY) !== null;
-    sessionStorage.removeItem(SIGN_OUT_NOTICE_KEY);
+    const present = safeSessionGetItem(SIGN_OUT_NOTICE_KEY) !== null;
+    safeSessionRemoveItem(SIGN_OUT_NOTICE_KEY);
     return present;
   } catch {
     return false;

@@ -1,4 +1,6 @@
 'use client';
+import { safeGetItem, safeSessionGetItem, safeSessionRemoveItem, safeSessionSetItem, safeSetItem } from '@kortix/ui/internal/lib/storage/managed-storage';
+
 
 /**
  * Unified auth — ONE flow for login and registration (email → link or
@@ -23,7 +25,8 @@ import {
 } from '@phosphor-icons/react';
 import { m } from 'motion/react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { type FormEvent, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { EmailLinkStep } from './email-link-step';
 import { resolveAuthMode } from './actions';
@@ -97,14 +100,14 @@ const STALE_BUNDLE_EMAIL_KEY = 'kortix:stale-bundle-email';
 const AUTH_METHOD_KEY = 'kortix:auth-method';
 function prefersPassword(): boolean {
   try {
-    return window.localStorage.getItem(AUTH_METHOD_KEY) === 'password';
+    return safeGetItem(AUTH_METHOD_KEY) === 'password';
   } catch {
     return false;
   }
 }
 function rememberAuthMethod(method: 'password' | 'magic') {
   try {
-    window.localStorage.setItem(AUTH_METHOD_KEY, method);
+    safeSetItem(AUTH_METHOD_KEY, method);
   } catch {
     // Sign-in still works when browser storage is unavailable.
   }
@@ -159,7 +162,7 @@ function recoverStaleBundle(email: string): boolean {
   if (reloadedForStaleBundle || typeof window === 'undefined') return false;
   reloadedForStaleBundle = true;
   try {
-    if (email) window.sessionStorage.setItem(STALE_BUNDLE_EMAIL_KEY, email);
+    if (email) safeSessionSetItem(STALE_BUNDLE_EMAIL_KEY, email);
   } catch {
     // Storage full or disabled: reload without the prefill.
   }
@@ -312,9 +315,9 @@ function AuthCardForm({
   // repaints from state.
   useEffect(() => {
     try {
-      const stashed = window.sessionStorage.getItem(STALE_BUNDLE_EMAIL_KEY);
+      const stashed = safeSessionGetItem(STALE_BUNDLE_EMAIL_KEY);
       if (stashed) {
-        window.sessionStorage.removeItem(STALE_BUNDLE_EMAIL_KEY);
+        safeSessionRemoveItem(STALE_BUNDLE_EMAIL_KEY);
         setEmail(stashed);
       }
     } catch {
@@ -715,9 +718,9 @@ function AuthCardForm({
       window.dispatchEvent(new CustomEvent('kortix:auth-hydrated'));
     } catch {}
     try {
-      const stashRaw = window.sessionStorage.getItem(ENTRY_EMAIL_STASH_KEY);
+      const stashRaw = safeSessionGetItem(ENTRY_EMAIL_STASH_KEY);
       const stash = parseEntryStash(stashRaw);
-      const flaggedAt = Number(window.sessionStorage.getItem(ENTRY_SUBMIT_FLAG_KEY));
+      const flaggedAt = Number(safeSessionGetItem(ENTRY_SUBMIT_FLAG_KEY));
       if (!flaggedAt || Date.now() - flaggedAt > ENTRY_SUBMIT_TTL_MS || !stash) {
         window.sessionStorage.removeItem(ENTRY_SUBMIT_FLAG_KEY);
         window.sessionStorage.removeItem(ENTRY_EMAIL_STASH_KEY);
@@ -736,8 +739,8 @@ function AuthCardForm({
       // The mobile handoff owns this page's address and its own submit; a
       // stale intent from an earlier visit must not double-fire under it.
       if (step !== 'entry' || !emailRef.current || mobileSsoEmail) return;
-      window.sessionStorage.removeItem(ENTRY_SUBMIT_FLAG_KEY);
-      window.sessionStorage.removeItem(ENTRY_EMAIL_STASH_KEY);
+      safeSessionRemoveItem(ENTRY_SUBMIT_FLAG_KEY);
+      safeSessionRemoveItem(ENTRY_EMAIL_STASH_KEY);
       const domValue = emailRef.current.value;
       const value = domValue || stash;
       if (value && !domValue) emailRef.current.value = value;

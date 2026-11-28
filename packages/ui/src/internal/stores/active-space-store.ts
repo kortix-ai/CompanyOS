@@ -1,4 +1,6 @@
 'use client';
+import { onManagedStorageAdoption } from '@kortix/sdk/internal/managed-storage'; // eslint-disable-line no-restricted-imports
+
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
@@ -54,3 +56,5 @@ export function useActiveSpace(projectId: string): [string | null, (space: strin
   const setSpace = useActiveSpaceStore((state) => state.setSpace);
   return [spacesOn ? space : null, (next) => setSpace(projectId, next)];
 }
+
+onManagedStorageAdoption(() => { void useActiveSpaceStore.persist.rehydrate(); });

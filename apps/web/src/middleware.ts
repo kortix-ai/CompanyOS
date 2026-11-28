@@ -1,34 +1,26 @@
 import { defaultLocale, locales } from '@/i18n/catalog.mjs';
 import { isNonPagePath, localizedPathname, unverifiedSessionLocale } from '@/i18n/routing';
-import {
-  authorizeEnvironment,
-  deriveEnvironmentAccessCookie,
-  ENVIRONMENT_ACCESS_COOKIE,
-} from '@/lib/environment-protection';
-import { legalShortPathRedirectUrl, legalTermsRedirectUrl } from '@/lib/legal-terms-redirect';
+import { savedSlotForLegacyUser } from '@/lib/auth/browser-login-adoption';
+import { resolveVerifiedBrowserRequest } from '@/lib/auth/browser-request';
+import { parseBrowserRoute, stripBrowserIdentityHeaders, stripBrowserSelector } from '@/lib/auth/browser-route';
 import { canonicalPublicPath } from '@/lib/canonical-public-path';
+import { authorizeEnvironment, deriveEnvironmentAccessCookie, ENVIRONMENT_ACCESS_COOKIE } from '@/lib/environment-protection';
+import { legalShortPathRedirectUrl, legalTermsRedirectUrl } from '@/lib/legal-terms-redirect';
 import { MAINTENANCE_BYPASS_COOKIE, verifyBypassToken } from '@/lib/maintenance-bypass';
 import { getMaintenanceConfig } from '@/lib/maintenance-store';
-import {
-  AUTH_BOUNCE_COOKIE,
-  AUTH_BOUNCE_MAX_AGE,
-  LAST_PROJECT_COOKIE,
-  parseLastProjectOwner,
-  PROJECT_LANDING_PATH,
-  resolveDefaultLandingPath,
-  serializeAuthBounce,
-} from '@kortix/ui/internal/lib/onboarding/landing-destination';
 import { KORTIX_SUPABASE_AUTH_COOKIE } from '@/lib/supabase/constants';
-import {
-  cookieIdentityPlan,
-  isDeadSessionAuthError,
-  resolveMiddlewareIdentity,
-  type MiddlewareUser,
-} from '@/lib/supabase/middleware-identity';
-import { SESSION_ENDED_COOKIE, SESSION_ENDED_REASON } from '@/lib/auth/session-expiry';
-import { readUnverifiedSession } from '@/lib/supabase/session-cookie';
+import { cookieIdentityPlan, isDeadSessionAuthError, resolveMiddlewareIdentity, type MiddlewareUser } from '@/lib/supabase/middleware-identity';
 import { authCookieOptions, hasPanelMarker, panelAuthUrl } from '@/lib/supabase/panel-cookies';
 import { redirectPreservingCookies } from '@/lib/supabase/redirect-preserving-session';
+import { readUnverifiedSession } from '@/lib/supabase/session-cookie';
+import { browserLogins } from '@kortix/sdk';
+import { AUTH_BOUNCE_COOKIE, AUTH_BOUNCE_MAX_AGE, LAST_PROJECT_COOKIE, parseLastProjectOwner, PROJECT_LANDING_PATH, resolveDefaultLandingPath, serializeAuthBounce } from '@kortix/ui/internal/lib/onboarding/landing-destination';
+
+
+import { SESSION_ENDED_COOKIE, SESSION_ENDED_REASON } from '@/lib/auth/session-expiry';
+
+
+
 import { createServerClient } from '@supabase/ssr';
 import type { NextRequest } from 'next/server';
 import { desktopShellPath, isDesktopShell, workspacePathOfDesktopLegacy } from './lib/workspace-redirects';
@@ -298,6 +290,7 @@ function isDecodablePath(pathname: string): boolean {
 }
 
 export async function middleware(request: NextRequest) {
+  stripBrowserIdentityHeaders(request.headers);
   // Every flow below (auth, cookies marked Secure) assumes the secure origin:
   // move a plain-HTTP visitor there before any content or auth decision.
   const httpsRedirect = httpsRedirectTarget(request);
@@ -349,11 +342,9 @@ export async function middleware(request: NextRequest) {
   // dynamic keys so the standalone container uses ECS runtime values instead of
   // build-time replacements. The gate fails closed when enabled without a secret.
   const protectionEnabled = Reflect.get(process.env, 'WEB_PROTECTION_ENABLED') as
-    | string
-    | undefined;
+    string | undefined;
   const protectionPassword = Reflect.get(process.env, 'WEB_PROTECTION_PASSWORD') as
-    | string
-    | undefined;
+    string | undefined;
   const authorization = request.headers.get('authorization');
   const accessCookie = request.cookies.get(ENVIRONMENT_ACCESS_COOKIE)?.value;
   const expectedAccessCookie =
@@ -400,7 +391,26 @@ export async function middleware(request: NextRequest) {
   // Renewing whenever the request is authorized makes it a sliding session. The
   // gate is unchanged: the value is still SHA-256 of the CURRENT password, so a
   // rotation still invalidates every outstanding cookie.
+  const browserFrontend = new URL(
+    process.env.FRONTEND_URL ||
+      process.env.KORTIX_PUBLIC_APP_URL ||
+      process.env.NEXT_PUBLIC_APP_URL ||
+      'https://kortix.com',
+  );
+  const vaultCookieName =
+    browserFrontend.protocol === 'https:'
+      ? '__Host-kortix-vault'
+      : `kortix-vault-local-${browserFrontend.port || '80'}`;
+  let expiredVaultCookie: string | null = null;
   const finalizeEnvironmentAccess = (response: NextResponse) => {
+    if (expiredVaultCookie)
+      response.cookies.set(expiredVaultCookie, '', {
+        path: '/',
+        maxAge: 0,
+        secure: expiredVaultCookie.startsWith('__Host-'),
+        httpOnly: true,
+        sameSite: 'lax',
+      });
     if (
       protectionEnabled === 'true' &&
       (protection.source === 'basic' || protection.source === 'cookie') &&
@@ -422,6 +432,93 @@ export async function middleware(request: NextRequest) {
     }
     return response;
   };
+
+  // Explicit selectors never consult or mutate the legacy session cookie.
+  try {
+    const selected = parseBrowserRoute(pathname);
+    if (selected) {
+      if (!isProtectedAppPath(selected.pathname))
+        return new NextResponse('Browser identity unavailable', {
+          status: 404,
+          headers: { 'cache-control': 'private, no-store' },
+        });
+      const identity = await resolveVerifiedBrowserRequest(request, selected.slot, {
+        frontendOrigin:
+          process.env.FRONTEND_URL ||
+          process.env.KORTIX_PUBLIC_APP_URL ||
+          process.env.NEXT_PUBLIC_APP_URL ||
+          'https://kortix.com',
+        backendOrigin:
+          process.env.BACKEND_URL ||
+          process.env.KORTIX_PUBLIC_BACKEND_URL ||
+          process.env.NEXT_PUBLIC_BACKEND_URL ||
+          'https://api.kortix.com',
+      });
+      const requestHeaders = new Headers(request.headers);
+      requestHeaders.set('x-kortix-browser-slot', selected.slot);
+      requestHeaders.set('x-kortix-browser-token', identity.access_token);
+      const locale = (selected.locale ?? defaultLocale) as Locale;
+      requestHeaders.set(NEXT_INTL_LOCALE_HEADER, locale);
+      requestHeaders.set('x-locale', locale);
+      const target = request.nextUrl.clone();
+      target.pathname = localizedPathname(locale, selected.pathname);
+      const response = NextResponse.rewrite(target, { request: { headers: requestHeaders } });
+      response.headers.set('cache-control', 'private, no-store, max-age=0');
+      return finalizeEnvironmentAccess(response);
+    }
+  } catch {
+    const chooser = new URL('/auth/browser-logins', request.url);
+    chooser.searchParams.set('returnTo', stripBrowserSelector(pathname) + request.nextUrl.search);
+    return NextResponse.redirect(chooser);
+  }
+
+  // A legacy tab can follow only its own saved identity. Never select a different user.
+  if ((isProtectedAppPath(pathname) || pathname === '/') && request.method === 'GET') {
+    const cookie = request.headers.get('cookie') ?? '';
+    if (request.cookies.has(vaultCookieName)) {
+      try {
+        const roster = await browserLogins.roster({
+          fetch: (input, init) =>
+            fetch(
+              new URL(
+                String(input),
+                process.env.BACKEND_URL ||
+                  process.env.NEXT_PUBLIC_BACKEND_URL ||
+                  'https://api.kortix.com',
+              ).toString(),
+              {
+                ...init,
+                headers: { ...Object.fromEntries(new Headers(init?.headers)), cookie },
+                signal: AbortSignal.timeout(5000),
+              },
+            ),
+        });
+        const destination = (pathname === '/' ? '/projects' : pathname) + request.nextUrl.search;
+        const legacy = readUnverifiedSession(request.cookies.getAll(), KORTIX_SUPABASE_AUTH_COOKIE);
+        const legacyUser = legacy?.user as { id?: unknown } | undefined;
+        const legacyUserId = typeof legacyUser?.id === 'string' ? legacyUser.id : null;
+        const savedSlot = savedSlotForLegacyUser(roster.slots, legacyUserId);
+        if (savedSlot)
+          return NextResponse.redirect(
+            new URL(`/u/${encodeURIComponent(savedSlot)}${destination}`, request.url),
+          );
+        if (!legacyUserId && roster.slots.length > 1) {
+          const chooser = new URL('/auth/browser-logins', request.url);
+          chooser.searchParams.set('returnTo', destination);
+          return NextResponse.redirect(chooser);
+        }
+      } catch (error) {
+        if ((error as { status?: number }).status === 401) {
+          expiredVaultCookie = vaultCookieName;
+          if (expiredVaultCookie) request.cookies.delete(expiredVaultCookie);
+        } else {
+          const chooser = new URL('/auth/browser-logins', request.url);
+          chooser.searchParams.set('returnTo', pathname + request.nextUrl.search);
+          return finalizeEnvironmentAccess(NextResponse.redirect(chooser));
+        }
+      }
+    }
+  }
 
   // Public HTML pages have canonical Markdown representations. Rewrite only
   // explicit Markdown requests. Browsers keep the normal HTML representation.
@@ -511,7 +608,11 @@ export async function middleware(request: NextRequest) {
   }
   // /privacy, /terms, /imprint, /subprocessors (and each locale prefix) were
   // 200 "Page not found" pages; each is a real legal page (KRTX-3256).
-  const legalDestination = legalShortPathRedirectUrl(pathname, request.nextUrl.searchParams, request.nextUrl);
+  const legalDestination = legalShortPathRedirectUrl(
+    pathname,
+    request.nextUrl.searchParams,
+    request.nextUrl,
+  );
   if (legalDestination) {
     return finalizeEnvironmentAccess(NextResponse.redirect(legalDestination, 308));
   }
@@ -538,7 +639,8 @@ export async function middleware(request: NextRequest) {
   const isRemainingPathMarketing =
     EXACT_MARKETING_ROUTES.includes(remainingPath) ||
     MARKETING_ROUTES.some(
-      (route) => remainingPath === route || (route !== '/' && remainingPath.startsWith(route + '/')),
+      (route) =>
+        remainingPath === route || (route !== '/' && remainingPath.startsWith(route + '/')),
     );
   if (explicitLocale && !isRemainingPathMarketing) pathname = remainingPath;
 
@@ -722,10 +824,7 @@ export async function middleware(request: NextRequest) {
   // asks the extension for a session.
   const panelRequest = hasPanelMarker(request.cookies);
   if (panelRequest && pathname === '/auth') {
-    const target = new URL(
-      panelAuthUrl(request.nextUrl.searchParams.get('redirect')),
-      request.url,
-    );
+    const target = new URL(panelAuthUrl(request.nextUrl.searchParams.get('redirect')), request.url);
     return finalizeEnvironmentAccess(NextResponse.redirect(target));
   }
 

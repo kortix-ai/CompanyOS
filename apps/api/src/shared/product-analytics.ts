@@ -35,6 +35,7 @@ import { isUuid } from './validate';
  * infra/posthog/dashboards.tf: change an event here, change the insight there.
  */
 export type ProductEvent =
+  | 'auth_identity_operation'
   // Acquisition and activation
   /**
    * A new person reached Kortix for the first time (accounts/core/signup-event.ts). `method`: auth provider,

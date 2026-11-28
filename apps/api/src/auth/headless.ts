@@ -287,23 +287,7 @@ headlessAuthRouter.openapi(
     request: { body: { required: true, content: { 'application/json': { schema: z.object({ email: Email, password: z.string().min(1).max(256) }) } } } },
     responses: { 200: json(SessionResponse, 'The session'), ...errors(400, 403, 429) },
   }),
-  async (c: any): Promise<any> => {
-    const limited = throttled(c);
-    if (limited) return limited;
-    const body = c.req.valid('json');
-    const denied = await ssoRequired(c, body.email);
-    if (denied) return denied;
-    const result = await gotrue<Record<string, unknown>>('/token', {
-      body: { email: body.email.trim().toLowerCase(), password: body.password },
-      clientIp: requestClientIp(c),
-      query: { grant_type: 'password' },
-    });
-    if (!result.ok) {
-      auditLoginFail({ c, reason: `password_rejected:${result.body.error ?? result.status}`, authType: 'supabase' });
-      return upstreamError(c, result);
-    }
-    return sessionResponse(c, result.body, 200, 'password');
-  },
+  async (c: any): Promise<any> => browserPassword(c, c.req.valid('json')),
 );
 
 // ─── POST /sign-in/magic-link ───────────────────────────────────────────────
@@ -331,22 +315,7 @@ headlessAuthRouter.openapi(
     },
     responses: { 200: json(z.object({ sent: z.literal(true) }), 'Email sent'), ...errors(400, 403, 422, 429) },
   }),
-  async (c: any): Promise<any> => {
-    const limited = throttled(c);
-    if (limited) return limited;
-    const body = c.req.valid('json');
-    const denied = await ssoRequired(c, body.email);
-    if (denied) return denied;
-    const coolingDown = await emailCoolingDown(c, body.email);
-    if (coolingDown) return coolingDown;
-    const result = await gotrue('/otp', {
-      body: { email: body.email.trim().toLowerCase(), create_user: body.create_user ?? true, data: body.data ?? {} },
-      clientIp: requestClientIp(c),
-      query: { redirect_to: safeRedirect(body.redirect_to) },
-    });
-    if (!result.ok) return upstreamError(c, result);
-    return c.json({ sent: true as const });
-  },
+  async (c: any): Promise<any> => browserEmail(c, c.req.valid('json')),
 );
 
 // ─── POST /verify-otp ───────────────────────────────────────────────────────
@@ -369,23 +338,7 @@ headlessAuthRouter.openapi(
     },
     responses: { 200: json(SessionResponse, 'The session'), ...errors(400, 403, 429) },
   }),
-  async (c: any): Promise<any> => {
-    const limited = throttled(c);
-    if (limited) return limited;
-    const body = c.req.valid('json');
-    // Every OTP type answers with a session, recovery included.
-    const denied = await ssoRequired(c, body.email);
-    if (denied) return denied;
-    const result = await gotrue<Record<string, unknown>>('/verify', {
-      body: { email: body.email.trim().toLowerCase(), token: body.token.trim(), type: body.type },
-      clientIp: requestClientIp(c),
-    });
-    if (!result.ok) {
-      auditLoginFail({ c, reason: `otp_rejected:${result.body.error ?? result.status}`, authType: 'supabase' });
-      return upstreamError(c, result);
-    }
-    return sessionResponse(c, result.body, 200, 'otp');
-  },
+  async (c: any): Promise<any> => browserOtp(c, c.req.valid('json')),
 );
 
 // ─── POST /sign-in/oauth  (social, PKCE) ────────────────────────────────────
@@ -585,3 +538,94 @@ headlessAuthRouter.openapi(
     return c.json({ sent: true as const });
   },
 );
+
+export async function browserPassword(
+  c: Context,
+  body: { email: string; password: string },
+  candidate = false,
+): Promise<Response> {
+  const limited = throttled(c);
+  if (limited) return limited;
+
+  const denied = await ssoRequired(c, body.email);
+  if (denied) return denied;
+  const result = await gotrue<Record<string, unknown>>("/token", {
+    body: { email: body.email.trim().toLowerCase(), password: body.password },
+    clientIp: requestClientIp(c),
+    query: { grant_type: "password" },
+  });
+  if (!result.ok) {
+    auditLoginFail({
+      c,
+      reason: `password_rejected:${result.body.error ?? result.status}`,
+      authType: "supabase",
+    });
+    return upstreamError(c, result);
+  }
+  return sessionResponse(
+    c,
+    result.body,
+    200,
+    candidate ? undefined : "password",
+  );
+}
+
+export async function browserEmail(
+  c: Context,
+  body: {
+    email: string;
+    create_user?: boolean;
+    data?: Record<string, unknown>;
+    redirect_to?: string;
+  },
+  candidate = false,
+): Promise<Response> {
+  const limited = throttled(c);
+  if (limited) return limited;
+
+  const denied = await ssoRequired(c, body.email);
+  if (denied) return denied;
+  const coolingDown = await emailCoolingDown(c, body.email);
+  if (coolingDown) return coolingDown;
+  const result = await gotrue("/otp", {
+    body: {
+      email: body.email.trim().toLowerCase(),
+      create_user: body.create_user ?? true,
+      data: body.data ?? {},
+    },
+    clientIp: requestClientIp(c),
+    query: { redirect_to: safeRedirect(body.redirect_to) },
+  });
+  if (!result.ok) return upstreamError(c, result);
+  return c.json({ sent: true as const });
+}
+
+export async function browserOtp(
+  c: Context,
+  body: { email: string; token: string; type: (typeof OTP_TYPES)[number] },
+  candidate = false,
+): Promise<Response> {
+  const limited = throttled(c);
+  if (limited) return limited;
+
+  // Every OTP type answers with a session, recovery included.
+  const denied = await ssoRequired(c, body.email);
+  if (denied) return denied;
+  const result = await gotrue<Record<string, unknown>>("/verify", {
+    body: {
+      email: body.email.trim().toLowerCase(),
+      token: body.token.trim(),
+      type: body.type,
+    },
+    clientIp: requestClientIp(c),
+  });
+  if (!result.ok) {
+    auditLoginFail({
+      c,
+      reason: `otp_rejected:${result.body.error ?? result.status}`,
+      authType: "supabase",
+    });
+    return upstreamError(c, result);
+  }
+  return sessionResponse(c, result.body, 200, candidate ? undefined : "otp");
+}

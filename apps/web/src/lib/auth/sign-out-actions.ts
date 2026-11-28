@@ -118,6 +118,7 @@ export async function finalizeServerSignOut(): Promise<void> {
       await recordPlatformLogout({
         backendUrl,
         accessToken: session.access_token,
+        headers: { cookie: (await cookies()).toString() },
         signal: AbortSignal.timeout(3_000),
       });
     }

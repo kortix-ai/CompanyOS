@@ -10,7 +10,7 @@
  * asking to sign in; that page sends the person here with `?to=<preview url>`.
  *
  * Here we are on the Kortix origin, so we have the session. We take the access
- * token and bounce back with a ONE-SHOT `?token=`, which the proxy exchanges
+ * token through the SDK and bounce back with a preview ticket, which the proxy exchanges
  * for a host-scoped cookie and strips from the address bar.
  *
  * `to` is attacker-controllable, so it is validated against the preview
@@ -19,18 +19,18 @@
  * bearer token.
  */
 
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
+import { useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 
-import { AuthPendingScreen } from '@kortix/ui/internal/auth/auth-consent';
 import {
   PreviewAuthorizeView,
   type PreviewAuthorizeState,
 } from '@/features/auth/preview-authorize-view';
 import { useAuth } from '@/features/providers/auth-provider';
 import { getEnv } from '@/lib/env-config';
-import { createClient } from '@/lib/supabase/client';
-import { loadPreviewUrlTemplate } from '@kortix/sdk';
+import { authorizePreviewUrl, loadPreviewUrlTemplate } from '@kortix/sdk';
+import { AuthPendingScreen } from '@kortix/ui/internal/auth/auth-consent';
 
 import { isServablePreviewUrl } from './preview-url';
 
@@ -66,7 +66,15 @@ function PreviewAuthorize() {
     let cancelled = false;
     (async () => {
       const backendUrl = getEnv().BACKEND_URL || '';
-      const template = await loadPreviewUrlTemplate(backendUrl);
+      let template = await loadPreviewUrlTemplate(backendUrl);
+      const backend = new URL(backendUrl, window.location.origin);
+      if (
+        !template &&
+        backend.protocol === 'http:' &&
+        ['localhost', '127.0.0.1', '[::1]'].includes(backend.hostname)
+      ) {
+        template = `http://p{port}-{sandbox}.localhost:${backend.port || '80'}`;
+      }
       if (cancelled) return;
 
       if (!isServablePreviewUrl(to, template)) {
@@ -74,20 +82,11 @@ function PreviewAuthorize() {
         return;
       }
 
-      const supabase = createClient();
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (cancelled) return;
-      if (!session?.access_token) {
-        setFailure('expired');
-        return;
-      }
-
-      const target = new URL(to);
-      target.searchParams.set('token', session.access_token);
-      window.location.replace(target.toString());
-    })();
+      const target = await authorizePreviewUrl(to, { serverUrl: backendUrl });
+      if (!cancelled) window.location.replace(target);
+    })().catch(() => {
+      if (!cancelled) setFailure('expired');
+    });
 
     return () => {
       cancelled = true;

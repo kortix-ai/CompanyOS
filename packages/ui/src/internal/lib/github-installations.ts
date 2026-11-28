@@ -1,3 +1,4 @@
+import { safeSetItem } from '@kortix/ui/internal/lib/storage/managed-storage';
 /**
  * How one GitHub connection is named in the UI.
  *
@@ -22,7 +23,7 @@ export function githubInstallationLabel(ownerLogin: string | null): string {
  */
 export function rememberGitHubSetupReturn(path: string): void {
   try {
-    window.localStorage.setItem('kortix:github_setup_return', path);
+    safeSetItem('kortix:github_setup_return', path);
   } catch {
     // Non-critical: the setup page falls back to the project import flow.
   }

@@ -5190,6 +5190,16 @@ next call.
 
 #### Errors and limits
 
+The experimental `kortix.auth.browserLogins` uses the same-origin cookie broker.
+It supports initialize, roster, begin, sendEmail, complete, confirm, cancel, token,
+remove, removeAll, mfaFactors, challengeMfa, and verifyMfa. Completion creates a provisional
+candidate. Confirmation returns a saved slot after assurance checks.
+`createBrowserIdentity({ fetch, saveSlot })` provides `getToken` and `getUserId`
+for the existing client. Access tokens remain in memory. Persist only the slot
+in tab-scoped storage. Call `select(slot)` when the user changes identity and
+`invalidateRoster()` on token-free roster notifications. Never synchronize the
+active slot between tabs. This feature remains disabled pending web acceptance.
+
 Every `kortix.auth.*` call throws `HeadlessAuthError` with `code`, `message` and
 `status`.
 
@@ -9496,6 +9506,39 @@ and `switch [session-id] <model> --prompt "Continue verification" --idempotency-
 The new verbs default to `KORTIX_SESSION_ID`. The existing `sessions model <session-id> <model>` remains supported.
 Never send a peer message to yourself to continue a model switch.
 
+Saved browser sign-ins discover add availability through `browserLogins.capabilities()`.
+Its `{ enabled }` response contains no key material. Disabling additions leaves roster,
+verification, selection, and removal available. The web account menu opens
+`/auth/browser-logins`. Selection loads a `/u/<slot>/…` document for this tab.
+The browser stores no password or refresh token. Google uses server-owned PKCE;
+the initiating tab confirms the verified identity before selecting it.
+
+Selected browser documents pass preview URL candidates through SDK `authorizePreviewUrl` before navigation.
+The SDK creates a separate origin per user and exchanges the bearer for a short-lived preview ticket.
+Selected preview cookies bind the user, sandbox, port, and live login session.
+Public-share links remain separate capabilities; they do not establish a private principal on a selected origin.
+
+
+### Saved browser sign-ins: initial limitations
+
+The API flag `KORTIX_BROWSER_LOGINS_ENABLED` defaults to `false`. Restart API replicas after changing configuration.
+Up to five sign-ins share one browser cookie partition; each tab selects its own account.
+When adding from an ordinary browser sign-in, authenticate the current account once to save it first.
+The host retires the old browser session without sharing its rotating credential or signing out other devices.
+Then authenticate the additional account. Failed or cancelled authentication preserves the current account.
+Browser logout leaves other devices signed in. Billing and permissions remain separate.
+Selected sign-ins gate profile/password changes and authenticator enrollment with an explicit notice.
+Use the ordinary sign-in page and explicitly authenticate the intended account for those settings.
+Existing authenticator verification is available in Manage browser sign-ins.
+Browser push notifications are unavailable for selected sign-ins. Native clients are outside the initial feature.
+Legacy desktop and extension authentication remain unchanged.
+Handles expire after 30 idle days or 90 absolute days; add attempts expire after five minutes.
+Disabling additions preserves recovery and removal. Keep old encryption keys during rotation and rollback.
+The server event `auth_identity_operation` records candidate authentication success, not switches or confirmed additions.
+
+The optional `has_handle` capability lets hosts omit roster requests when no browser vault exists.
+Roster `needs_sign_in` reports uncertain or owned refresh credentials. Access-token expiry alone does not require signing in again.
+A stalled refresh is recovered through verified reauthentication; hosts must never retry its rotating refresh token.
 
 ### Session inventory permission
 

@@ -1,4 +1,6 @@
 'use client';
+import { safeGetItem, safeSetItem } from '@kortix/ui/internal/lib/storage/managed-storage';
+
 
 import type { ProjectMemoryPageSummary, ProjectMemoryPageType } from '@kortix/sdk';
 import { useProjectMemoryPages, useProjectMemorySearch } from '@kortix/sdk/react';
@@ -49,7 +51,7 @@ export function groupMemoryPages(
 /** The collapsed groups of one layer, per viewer. Storage can be absent or throw: then every group starts open. */
 function readCollapsed(key: string): ProjectMemoryPageType[] {
   try {
-    const value: unknown = JSON.parse(window.localStorage.getItem(key) ?? '[]');
+    const value: unknown = JSON.parse(safeGetItem(key) ?? '[]');
     return Array.isArray(value) ? value.filter((type): type is ProjectMemoryPageType => typeof type === 'string') : [];
   } catch {
     return [];
@@ -58,7 +60,7 @@ function readCollapsed(key: string): ProjectMemoryPageType[] {
 
 function writeCollapsed(key: string, collapsed: readonly ProjectMemoryPageType[]) {
   try {
-    window.localStorage.setItem(key, JSON.stringify(collapsed));
+    safeSetItem(key, JSON.stringify(collapsed));
   } catch {
     // Private mode or blocked storage: the state lasts until reload.
   }

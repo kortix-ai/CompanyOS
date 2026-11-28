@@ -1,3 +1,4 @@
+import { browserLogins } from '../rest/platform-client/browser-logins';
 import { createKortixSession } from '../auth/session';
 import * as A from '../rest/platform-client/auth';
 import type { HeadlessAuthApi } from '../rest/platform-client/auth';
@@ -18,6 +19,7 @@ export function bindIdentity() {
     updateUserMetadata: A.updateUserMetadata,
     signInWithSso: A.signInWithSso,
     mfa: A.authMfa,
+    browserLogins,
     user: A.authUser,
     signOut: A.signOut,
     session: createKortixSession,

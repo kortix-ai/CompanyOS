@@ -1,4 +1,6 @@
 'use client';
+import { safeSessionGetItem, safeSessionRemoveItem, safeSessionSetItem } from '@kortix/ui/internal/lib/storage/managed-storage';
+
 
 import { KORTIX_SUPABASE_AUTH_COOKIE } from '@/lib/supabase/constants';
 
@@ -81,7 +83,7 @@ export function stashBrowserPkceVerifier(): void {
   const verifier = readBrowserPkceVerifier();
   if (!verifier) return;
   try {
-    window.sessionStorage.setItem(
+    safeSessionSetItem(
       STASH_KEY,
       JSON.stringify({ verifier, stashedAt: Date.now() } satisfies StashedVerifier),
     );
@@ -94,12 +96,12 @@ export function stashBrowserPkceVerifier(): void {
 function loadStashedVerifier(): string | null {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = window.sessionStorage.getItem(STASH_KEY);
+    const raw = safeSessionGetItem(STASH_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as StashedVerifier;
     if (typeof parsed?.verifier !== 'string' || typeof parsed?.stashedAt !== 'number') return null;
     if (Date.now() - parsed.stashedAt > STASH_TTL_MS) {
-      window.sessionStorage.removeItem(STASH_KEY);
+      safeSessionRemoveItem(STASH_KEY);
       return null;
     }
     return parsed.verifier;
@@ -175,7 +177,7 @@ export function seedPkceVerifierForResume(): boolean {
 export function armPkceResumeGuard(authCode: string): void {
   if (typeof window === 'undefined') return;
   try {
-    window.sessionStorage.setItem(RESUME_GUARD_PREFIX + authCode, '1');
+    safeSessionSetItem(RESUME_GUARD_PREFIX + authCode, '1');
   } catch {
     // Without the guard a failed re-entry could loop; the callback's own
     // bounce then runs one extra time and the visitor retries by hand.
@@ -187,8 +189,8 @@ export function consumePkceResumeGuard(authCode: string): boolean {
   if (typeof window === 'undefined') return false;
   try {
     const key = RESUME_GUARD_PREFIX + authCode;
-    const armed = window.sessionStorage.getItem(key) === '1';
-    if (armed) window.sessionStorage.removeItem(key);
+    const armed = safeSessionGetItem(key) === '1';
+    if (armed) safeSessionRemoveItem(key);
     return armed;
   } catch {
     return false;

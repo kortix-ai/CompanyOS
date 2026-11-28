@@ -1,4 +1,6 @@
 'use client';
+import { safeGetItem, safeSetItem } from '@kortix/ui/internal/lib/storage/managed-storage';
+
 
 /**
  * "This workspace started from the project's previous repository."
@@ -81,7 +83,7 @@ const DISMISS_KEY_PREFIX = 'kortix:previous-repository-notice-dismissed:';
 
 function readDismissed(projectSessionId: string): boolean {
   try {
-    return window.localStorage.getItem(DISMISS_KEY_PREFIX + projectSessionId) === '1';
+    return safeGetItem(DISMISS_KEY_PREFIX + projectSessionId) === '1';
   } catch {
     return false;
   }
@@ -89,7 +91,7 @@ function readDismissed(projectSessionId: string): boolean {
 
 function writeDismissed(projectSessionId: string): void {
   try {
-    window.localStorage.setItem(DISMISS_KEY_PREFIX + projectSessionId, '1');
+    safeSetItem(DISMISS_KEY_PREFIX + projectSessionId, '1');
   } catch {
     // Storage blocked: the notice stays hidden for this mount only.
   }

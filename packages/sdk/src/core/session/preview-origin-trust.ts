@@ -27,6 +27,7 @@ function escapeRegExp(value: string): string {
  * `{sandbox}` one hostname label.
  */
 function originMatchesTemplate(origin: string, template: string): boolean {
+  origin = origin.replace(/:\/\/(d|s|p|r)-/, (_, env: string) => '://' + ({d:'dev',s:'staging',p:'prod',r:'preview'})[env] + '-');
   if (!template.includes('{port}') || !template.includes('{sandbox}')) return false;
   const schemeEnd = template.indexOf('://');
   if (schemeEnd <= 0) return false;

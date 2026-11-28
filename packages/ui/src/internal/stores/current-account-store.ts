@@ -1,3 +1,4 @@
+import { onManagedStorageAdoption } from '@kortix/sdk/internal/managed-storage'; // eslint-disable-line no-restricted-imports
 import { createSafeJSONStorage } from '../lib/storage/managed-storage';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
@@ -30,3 +31,5 @@ export const useCurrentAccountStore = create<CurrentAccountState>()(
     },
   ),
 );
+
+onManagedStorageAdoption(() => { void useCurrentAccountStore.persist.rehydrate(); });

@@ -1,3 +1,4 @@
+import { onManagedStorageAdoption } from '@kortix/sdk/internal/managed-storage'; // eslint-disable-line no-restricted-imports
 import { uiRoutes } from '../../lib/routes';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
@@ -79,3 +80,5 @@ export function isFirstChatRequested(
 ): boolean {
   return params?.get(FIRST_CHAT_PARAM) === FIRST_CHAT_VALUE;
 }
+
+onManagedStorageAdoption(() => { void useFirstChatStore.persist.rehydrate(); });

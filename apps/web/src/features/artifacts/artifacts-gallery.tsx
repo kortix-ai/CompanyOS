@@ -23,7 +23,8 @@ import {
   useSpacesEnabled,
 } from '@kortix/ui/workspace';
 import { CaretRightIcon, FolderPlusIcon, MagnifyingGlassIcon, PlusIcon } from '@phosphor-icons/react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { useRef, useState } from 'react';
 
 import { useAuth } from '@/features/providers/auth-provider';

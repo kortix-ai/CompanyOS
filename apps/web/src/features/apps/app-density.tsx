@@ -1,4 +1,6 @@
 'use client';
+import { safeGetItem, safeSetItem } from '@kortix/ui/internal/lib/storage/managed-storage';
+
 
 import { Button } from '@kortix/ui/button';
 import { ButtonGroup } from '@kortix/ui/button-group';
@@ -141,7 +143,7 @@ export function readAppGridColumns(): AppGridColumns {
   if (blockedStorageColumns) return blockedStorageColumns;
   try {
     return (
-      parseAppGridColumns(window.localStorage.getItem(APP_GRID_COLUMNS_STORAGE_KEY)) ??
+      parseAppGridColumns(safeGetItem(APP_GRID_COLUMNS_STORAGE_KEY)) ??
       APP_GRID_DEFAULT_COLUMNS
     );
   } catch {
@@ -152,7 +154,7 @@ export function readAppGridColumns(): AppGridColumns {
 export function writeAppGridColumns(next: AppGridColumns) {
   blockedStorageColumns = next;
   try {
-    window.localStorage.setItem(APP_GRID_COLUMNS_STORAGE_KEY, String(next));
+    safeSetItem(APP_GRID_COLUMNS_STORAGE_KEY, String(next));
   } catch {
     // Site data blocked. `blockedStorageColumns` already holds the choice for
     // this tab's lifetime, which is the whole guarantee we can make.

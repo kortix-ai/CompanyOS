@@ -19,7 +19,7 @@ import { createFilesStore, useFilesStore } from '@kortix/ui/internal/stores/file
 import { type SpaceFolder } from '@kortix/ui/workspace';
 import { BrainIcon, FolderSimpleIcon } from '@phosphor-icons/react';
 import { useMutation } from '@tanstack/react-query';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { type ReactNode, useEffect, useMemo } from 'react';
 
 import { useAuth } from '@/features/providers/auth-provider';

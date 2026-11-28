@@ -3,7 +3,7 @@
 import { getCaptureWorkspace } from '@kortix/sdk';
 import { contract, qk } from '@kortix/sdk/react';
 import { useQueries } from '@tanstack/react-query';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { useEffect } from 'react';
 
 import { ProjectPendingScreen } from '@/components/projects/project-pending-screen';

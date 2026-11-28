@@ -1,29 +1,32 @@
 'use client';
+import { useTranslations } from '@/i18n/use-translations';
+import { browserDocumentIdentity, selectedDocumentSession } from '@/lib/auth/browser-document';
+import { createBrowserLifecycle } from '@/lib/auth/browser-lifecycle';
+import { parseBrowserRoute, stripBrowserSelector } from '@/lib/auth/browser-route';
+import { Button } from '@kortix/ui/button';
+import { AuthFrame } from '@kortix/ui/internal/auth/auth-card-shell';
+import { KortixLogo } from '@kortix/ui/kortix-logo';
+import Loading from '@kortix/ui/loading';
 
 import { setBootstrapAuthToken, setCachedAuthToken } from '@/lib/auth-token';
 import { IDENTITY_MARKER_KEY, shouldResetClientState } from '@/lib/auth/identity-marker';
 import { performSignOut } from '@/lib/auth/perform-sign-out';
 import { isDefinitiveSessionRejection } from '@/lib/auth/session-rejection';
-import { adoptDeviceCaches } from '@/lib/device-caches';
-import { safeGetItem, safeSetItem } from '@kortix/ui/internal/lib/storage/managed-storage';
+import { adoptDeviceCaches, detachDeviceCaches } from '@/lib/device-caches';
 import { createClient } from '@/lib/supabase/client';
 import { rememberValidatedUser } from '@/lib/supabase/mfa';
 import { resetClientState } from '@/lib/utils/reset-client-state';
-import { Session, SupabaseClient, User, type UserResponse } from '@supabase/supabase-js';
-import {
-  createContext,
-  ReactNode,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { resetIdentityState } from '@kortix/sdk/react';
+import { getSharedQueryClient } from '@kortix/ui/internal/lib/query-client-singleton';
+import { adoptManagedStorage, detachManagedStorage, safeGetItem, safeSetItem } from '@kortix/ui/internal/lib/storage/managed-storage';
+import { Session, SupabaseClient, User } from '@supabase/supabase-js';
+import { type UserResponse } from '@supabase/supabase-js';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { withAuthBootstrapTimeout } from './auth-bootstrap';
 // Auth tracking moved to AuthEventTracker component (handles OAuth redirects)
 
 type AuthContextType = {
+  selectedDocument: boolean;
   supabase: SupabaseClient;
   session: Session | null;
   user: User | null;
@@ -75,7 +78,8 @@ function takeInitialSessionRead(supabase: SupabaseClient): InitialSessionRead | 
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const supabase = useMemo(() => createClient(), []);
-  startInitialSessionRead(supabase);
+  const [selectedDocument, setSelectedDocument] = useState(false);
+  if (typeof window === 'undefined' || !parseBrowserRoute(window.location.pathname)) startInitialSessionRead(supabase);
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -96,6 +100,85 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     let active = true;
+    const selected = browserDocumentIdentity();
+    if (selected) {
+      setSelectedDocument(true);
+      let validating = false;
+      const lifecycle = createBrowserLifecycle({
+        validate: async () => {
+          validating = true;
+          try {
+            selected.getToken.invalidate();
+            return await withAuthBootstrapTimeout(
+              selectedDocumentSession(),
+              AUTH_BOOTSTRAP_TIMEOUT_MS,
+            );
+          } finally {
+            validating = false;
+          }
+        },
+        clear: () => {
+          detachManagedStorage();
+          detachDeviceCaches();
+          getSharedQueryClient()?.clear();
+          resetIdentityState();
+          setSession(null);
+          setUser(null);
+          setIsLoading(true);
+        },
+        publish: (verified) => {
+          adoptManagedStorage(verified.user.id);
+          adoptDeviceCaches(verified.user.id);
+          setSession(verified);
+          setUser(verified.user);
+          setBootstrapError(null);
+          setIsLoading(false);
+        },
+        error: (error) => {
+          if ([401, 404].includes((error as { status?: number })?.status ?? 0))
+            selected.select(null);
+          setBootstrapError(
+            error instanceof Error ? error : new Error('Browser identity unavailable'),
+          );
+          setIsLoading(false);
+        },
+      });
+      // Self-initiated cache invalidation is not another validation request.
+      const revalidate = () => lifecycle.revalidate();
+      const backgroundRevalidate = () => lifecycle.revalidate(false);
+      const pageshow = (event: PageTransitionEvent) => lifecycle.revalidate(event.persisted);
+      let identityKey = selected.getToken.identityKey();
+      const unsubscribe = selected.subscribe(() => {
+        const nextKey = selected.getToken.identityKey();
+        const changed = nextKey !== identityKey;
+        identityKey = nextKey;
+        if (!validating) lifecycle.revalidate(changed);
+      });
+      const channel =
+        typeof BroadcastChannel === 'undefined'
+          ? null
+          : new BroadcastChannel('kortix-browser-roster');
+      if (channel)
+        channel.onmessage = (event) => {
+          if (event.data?.slot === selected.getSlot()) revalidate();
+        };
+      window.addEventListener('focus', backgroundRevalidate);
+      window.addEventListener('pageshow', pageshow);
+      window.addEventListener('online', backgroundRevalidate);
+      const heartbeat = window.setInterval(() => lifecycle.revalidate(false), 30_000);
+      revalidate();
+      return () => {
+        active = false;
+        lifecycle.dispose();
+        unsubscribe();
+        channel?.close();
+        window.clearInterval(heartbeat);
+        window.removeEventListener('focus', backgroundRevalidate);
+        window.removeEventListener('pageshow', pageshow);
+        window.removeEventListener('online', backgroundRevalidate);
+      };
+    }
+
     /**
      * Make the client state safe to hand to `nextUserId`, then record that it
      * belongs to them. Resolves only once any wipe has finished, so callers can
@@ -166,7 +249,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           // (dev, 2026-09-17). See `lib/auth/session-rejection.ts`.
           if (userError && isDefinitiveSessionRejection(userError)) {
             console.warn('[AuthProvider] Stale session detected, signing out:', userError.message);
-            await supabase.auth.signOut();
+            await supabase.auth.signOut({ scope: 'local' });
             if (!active) return;
             setBootstrapAuthToken(null);
             setCachedAuthToken(null);
@@ -291,6 +374,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // one sign-out path instead of hand-rolling a fifth cleanup.
   const value = useMemo<AuthContextType>(
     () => ({
+      selectedDocument,
       supabase,
       session,
       user,
@@ -299,11 +383,52 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       retryAuth,
       signOut: performSignOut,
     }),
-    [supabase, session, user, isLoading, bootstrapError, retryAuth],
+    [selectedDocument, supabase, session, user, isLoading, bootstrapError, retryAuth],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
+
+/** Mount inside I18nProvider so validation screens use the same catalog and UI providers. */
+export function BrowserIdentityGate({ children }: { children: ReactNode }) {
+  const { selectedDocument, user, isLoading, bootstrapError, retryAuth } = useAuth();
+  const tAccounts = useTranslations('browserLogins');
+  return selectedDocument && (!user || isLoading) ? (
+    <AuthFrame footerVariant="none">
+      <div role="status" className="space-y-4 text-center text-sm">
+        <KortixLogo variant="icon" size={22} className="text-foreground mx-auto hidden md:block" />
+        <h1 className="text-foreground text-2xl font-medium tracking-tight text-balance">
+          {tAccounts('text1')}
+        </h1>
+        {!bootstrapError && (
+          <div className="flex justify-center">
+            <Loading className="size-5" />
+          </div>
+        )}
+        <p>{bootstrapError ? tAccounts('identityUnavailable') : tAccounts('validatingIdentity')}</p>
+        {bootstrapError && (
+          <div className="flex flex-col gap-2">
+            <Button onClick={retryAuth}>{tAccounts('retryIdentity')}</Button>
+            <Button variant="outline" asChild>
+              <a
+                href={
+                  '/auth/browser-logins?returnTo=' +
+                  encodeURIComponent(
+                    stripBrowserSelector(window.location.pathname + window.location.search),
+                  )
+                }
+              >
+                {tAccounts('text10')}
+              </a>
+            </Button>
+          </div>
+        )}
+      </div>
+    </AuthFrame>
+  ) : (
+    children
+  );
+}
 
 export const useAuth = () => {
   const context = useContext(AuthContext);

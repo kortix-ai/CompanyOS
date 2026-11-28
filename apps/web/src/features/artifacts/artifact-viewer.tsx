@@ -54,8 +54,8 @@ import {
   XCircleIcon,
   XIcon,
 } from '@phosphor-icons/react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { IdentityLink as Link } from '@/components/identity-link';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { drivePathToParam } from '@kortix/ui/files';

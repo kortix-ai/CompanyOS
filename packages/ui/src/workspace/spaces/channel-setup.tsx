@@ -1,4 +1,6 @@
 'use client';
+import { safeGetItem, safeSetItem } from '@kortix/ui/internal/lib/storage/managed-storage';
+
 
 import type { ProjectSpace } from '@kortix/sdk';
 import {
@@ -25,7 +27,7 @@ const dismissKey = (spaceId: string) => `kortix:channel-setup-dismissed:${spaceI
 
 function readDismissed(spaceId: string): boolean {
   try {
-    return window.localStorage.getItem(dismissKey(spaceId)) === '1';
+    return safeGetItem(dismissKey(spaceId)) === '1';
   } catch {
     return false;
   }
@@ -113,7 +115,7 @@ export function ChannelSetup({
       return;
     }
     try {
-      window.localStorage.setItem(dismissKey(space.space_id), '1');
+      safeSetItem(dismissKey(space.space_id), '1');
     } catch {
       // Storage blocked: dismissed for this visit only.
     }

@@ -201,7 +201,7 @@ const scriptLiteral = (value: unknown): string =>
 // file feeds the server-rendered root layout. The type pins the two copies.
 const REDUCE_MOTION_ATTRIBUTE = 'data-reduce-motion' satisfies typeof ReduceMotionAttribute;
 
-export const INTERFACE_THEME_INIT_SCRIPT = `(function(){try{var d=document.documentElement,s={};try{var r=localStorage.getItem('${USER_PREFERENCES_STORAGE_KEY}'),p=r?JSON.parse(r):null;s=(p&&p.state&&p.state.preferences)||{};}catch(e){}if(!new RegExp(${scriptLiteral(
+export const INTERFACE_THEME_INIT_SCRIPT = `(function(){try{var d=document.documentElement,s={};try{var r=new RegExp('(?:^|/)u/[^/]+(?:/|$)').test(location.pathname)?null:localStorage.getItem('${USER_PREFERENCES_STORAGE_KEY}'),p=r?JSON.parse(r):null;s=(p&&p.state&&p.state.preferences)||{};}catch(e){}if(!new RegExp(${scriptLiteral(
   THEMED_ROUTE_SOURCE,
 )}).test(location.pathname))return;if(s.reduceMotion===true)d.setAttribute('${REDUCE_MOTION_ATTRIBUTE}','');var L=${scriptLiteral(LIGHT_THEME_IDS)},D=${scriptLiteral(
   DARK_THEME_IDS,

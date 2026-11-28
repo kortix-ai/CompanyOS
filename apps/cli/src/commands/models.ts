@@ -28,6 +28,10 @@ import {
   takeFlagValue,
 } from '../command-helpers.ts';
 import { C, help, pad, status } from '../style.ts';
+import {
+  type SubscriptionPickerModel,
+  connectedSubscriptionModels,
+} from './session-model-access.ts';
 
 /** One entry of GET /projects/:id/model-picker `models` (GatewayCatalogModel). */
 interface PickerModel {
@@ -58,6 +62,11 @@ interface ModelPicker {
   modelOverrides?: Record<string, boolean>;
   usingDefaults?: boolean;
   defaultModel?: string;
+  /** Claude subscription models, listed apart from `models` (routes/models.ts). */
+  claudeSubscription?: {
+    connected?: boolean;
+    models?: SubscriptionPickerModel[];
+  };
 }
 
 const HELP = help`Usage: kortix models <subcommand> [options]
@@ -248,7 +257,12 @@ async function modelsToggle(
   if (ids.length === 0) return missing(`at least one model id to ${verb}`);
 
   const picker = await client.get<ModelPicker>(`${base}/model-picker`);
-  const known = new Set(Object.keys(picker.models ?? {}));
+  // A subscription model is served when its Claude account is connected,
+  // even though it is never in `models` (routes/models.ts).
+  const known = new Set([
+    ...Object.keys(picker.models ?? {}),
+    ...connectedSubscriptionModels(picker).map((model) => model.id),
+  ]);
   const unknown = ids.filter((id) => !known.has(id));
   if (unknown.length > 0) {
     // With nothing served, "list the ids with models ls" points at an empty

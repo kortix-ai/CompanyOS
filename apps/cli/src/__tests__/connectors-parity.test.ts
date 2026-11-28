@@ -100,6 +100,9 @@ function startServer(): string {
         return Response.json({ status: 'active', scopes: [] });
       }
 
+      if (req.method === 'PUT' && (url.pathname === `${ex}/connectors/gmail/credential` || url.pathname === `/v1/workspaces/${PROJECT}/connections/conn_1/credential`)) {
+        return Response.json({ ok: true });
+      }
       if (url.pathname === `${ex}/policies` && req.method === 'GET') {
         return Response.json({ policies: projectPolicies, defaultMode });
       }
@@ -268,7 +271,7 @@ function startServer(): string {
   return `http://127.0.0.1:${server.port}`;
 }
 
-async function runCli(args: string[], configFile?: string) {
+async function runCli(args: string[], configFile?: string, stdin = '') {
   const env: Record<string, string | undefined> = {
     ...process.env,
     KORTIX_NO_UPDATE_CHECK: '1',
@@ -284,6 +287,7 @@ async function runCli(args: string[], configFile?: string) {
     cmd: [process.execPath, CLI_ENTRY, ...args],
     cwd: tmp,
     env,
+    stdin: new Blob([stdin]),
     stdout: 'pipe',
     stderr: 'pipe',
   });
@@ -495,6 +499,7 @@ describe('kortix connectors — capability-page parity', () => {
     const config = writeConfig(startServer());
     const r = await runCli(['connectors', 'accounts', 'gmail', '--project', PROJECT], config);
     expect(r.code).toBe(0);
+    expect(calls).toHaveLength(1);
     expect(calls.at(-1)).toEqual({
       method: 'GET',
       path: `/v1/connectors/workspaces/${PROJECT}/connectors/gmail/accounts`,
@@ -555,6 +560,7 @@ describe('kortix connectors — capability-page parity', () => {
       config,
     );
     expect(r.code).toBe(0);
+    expect(calls.map((c) => c.method)).toEqual(['GET', 'PUT']);
     expect(r.stdout).toContain('Pinned');
     expect(r.stdout).toContain('user@example.test');
     expect(calls.at(-1)).toEqual({
@@ -574,7 +580,7 @@ describe('kortix connectors — capability-page parity', () => {
     expect(r.code).toBe(1);
     expect(r.stderr).toContain('No account "nope@example.test"');
     // Only the accounts GET happened — no PUT default was attempted.
-    expect(calls.slice(before).every((c) => c.method === 'GET')).toBe(true);
+    expect(calls.slice(before).map((c) => c.method)).toEqual(['GET']);
   });
 
   test('accounts --json emits the payload agents parse', async () => {
@@ -790,6 +796,45 @@ describe('kortix connectors — capability-page parity', () => {
       expect(calls).toEqual([]);
     });
   }
+
+  for (const command of [['credential', 'gmail'], ['connections', 'credential', 'conn_1']]) {
+    for (const input of [{ value: '  synthetic argv  ', stdin: false }, { value: '  synthetic stdin\n\n', stdin: true }]) {
+      test(`${command.join(' ')} preserves credential bytes from ${input.stdin ? 'stdin' : 'argv'}`, async () => {
+        const config = writeConfig(startServer());
+        const r = await runCli(['connectors', ...command, input.stdin ? '-' : input.value, '--project', PROJECT], config, input.stdin ? input.value : '');
+        expect(r.code).toBe(0);
+        expect(r.stderr).not.toContain('synthetic');
+        expect(r.stdout).not.toContain('synthetic');
+        expect(calls.filter((c) => c.method === 'PUT').map((c) => c.body)).toEqual([{ value: input.stdin ? input.value.slice(0, -1) : input.value }]);
+      });
+    }
+    test(`${command.join(' ')} empty stdin preserves exit 2`, async () => {
+      const config = writeConfig(startServer());
+      const r = await runCli(['connectors', ...command, '-', '--project', PROJECT], config, '\n');
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain('No value provided.');
+      expect(r.stdout).toBe('');
+      expect(calls.filter((c) => c.method !== 'GET')).toEqual([]);
+    });
+  }
+
+  test('workspace replacement removes every duplicate, keeps unrelated conditions and omits empty conditions', async () => {
+    const config = writeConfig(startServer());
+    const retained = { match: 'read_*', action: 'always_run', conditions: [{ arg: 'scope', match: 'synthetic' }] };
+    projectPolicies = [{ match: 'send_*', action: 'block' }, retained, { match: 'send_*', action: 'always_run' }];
+    const r = await runCli(['connectors', 'policy', 'add', 'send_*', 'ask', '--project', PROJECT], config);
+    expect(r.code).toBe(0);
+    expect(calls.find((c) => c.method === 'PUT')?.body).toEqual({ policies: [retained, { match: 'send_*', action: 'require_approval' }], defaultMode: 'risk' });
+  });
+
+  test('ambiguous account selector reads once and never pins', async () => {
+    const config = writeConfig(startServer());
+    connectorAccounts = [{ connection_id: 'one', label: 'Synthetic' }, { connection_id: 'two', label: 'synthetic' }];
+    const r = await runCli(['connectors', 'accounts', 'gmail', '--default', ' SYNTHETIC ', '--project', PROJECT], config);
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain('matches more than one account');
+    expect(calls.map((c) => c.method)).toEqual(['GET']);
+  });
 
   test('policy show prints the default mode and every rule with its conditions', async () => {
     const config = writeConfig(startServer());

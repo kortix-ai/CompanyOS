@@ -1,9 +1,4 @@
-/**
- * useProjectSessionStats — token and cost totals of a project's sessions, for
- * the project detail page. The SDK reads and sums each session's transcript
- * (`useSessionStatsTotals`); this hook only names the runtime: the bound
- * session's.
- */
+/** useProjectSessionStats — the project detail page's session totals (`useSessionStatsTotals`) on the bound session's runtime. */
 
 import { useSessionStatsTotals } from '@kortix/sdk/react';
 import { useSessionRuntime } from '@/components/session/SessionRuntime';

@@ -5,11 +5,7 @@ import { useMemo } from 'react';
 import { loadSessionExportMessages } from '../browser/session-sync/session-sync-registry';
 import { getSessionStats, sumSessionStats, type SessionStats } from '../core/turns/session-stats';
 
-/**
- * One session's statistics query. Its whole transcript is read from the current runtime
- * (`loadSessionExportMessages` with no Kortix session scope: the runtime only, and a failed read
- * throws). The runtime id keys the cache, so one computer's totals never show under another.
- */
+/** One session's statistics: its transcript from the runtime only (a failed read throws), cached per runtime id. */
 export function sessionStatsQueryOptions(runtimeId: string | null, sessionId: string, enabled: boolean) {
   return {
     queryKey: ['kortix-session-stats', runtimeId, sessionId],
@@ -27,13 +23,8 @@ export function sessionStatsTotals(queries: ReadonlyArray<{ data: SessionStats |
   return { totals: sumSessionStats(items), loading: queries.some((q) => q.isLoading) };
 }
 
-/**
- * Token and cost totals of many sessions on one runtime. `runtimeId` is the runtime the sessions
- * live on; without it nothing is read. The host resolves it (for example from its bound session).
- */
+/** Token and cost totals of many sessions on one runtime; without a `runtimeId` nothing is read. */
 export function useSessionStatsTotals(runtimeId: string | null, sessionIds: string[], enabled: boolean = true) {
-  const queries = useQueries({
-    queries: sessionIds.map((id) => sessionStatsQueryOptions(runtimeId, id, enabled)),
-  });
+  const queries = useQueries({ queries: sessionIds.map((id) => sessionStatsQueryOptions(runtimeId, id, enabled)) });
   return useMemo(() => sessionStatsTotals(queries), [queries]);
 }

@@ -1,8 +1,3 @@
-/**
- * Token and cost statistics of a session transcript, and their sum over many sessions: the
- * numbers a project page shows for its sessions. Pure data, no fetching.
- */
-
 import type { SessionSyncMessage } from '../session-sync/session-sync-controller';
 import { getSessionCost } from './state';
 

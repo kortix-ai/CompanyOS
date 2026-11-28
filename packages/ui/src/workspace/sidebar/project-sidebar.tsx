@@ -27,6 +27,7 @@ import { NewAgentModalProvider } from './new-agent-modal-provider';
 import { ProjectNavItems } from './project-nav-items';
 import { ProjectSessionList } from './project-session-list';
 import { ProjectSpacesNav } from './project-spaces-nav';
+import { createPeekController } from '../../primitives/sidebar-peek';
 import { isRailPanelPage, RailPageActions, RailPagePanel, railPanelPageOf, type RailPanelPage } from './rail-page-panel';
 import { SidebarMoreGroup } from './sidebar-more-group';
 import { useIsCreatingProjectSession } from '../../internal/hooks/projects/new-session-guard';
@@ -53,7 +54,7 @@ import { WorkspaceSettingsRailPublisher, type WorkspaceSettingsRailHost } from '
 import { ProjectRail } from './project-rail';
 import { SpaceFormModal } from '../session-spaces/space-form-modal';
 import { isProjectAdminPath } from '../../internal/layout/project-capability-nav';
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { SidebarBalanceWarning } from './footer/project-balance-warning';
 import { SidebarUpgradeButton } from './footer/project-upgrade-button';
 import { SidebarGlyph as PanelLeft } from '../../icons/sidebar-toggle';
@@ -121,9 +122,12 @@ export function ProjectSidebar({
   const railed = !isMobile && railFlag;
   // With the rail, the panel shows the sessions, or workspace settings by the route.
   const settingsOpen = isProjectAdminPath(pathname);
-  // Collapsed and hovered on the rail: the hovered item picks the list, not the route.
+  // Hovered on the rail: the hovered item picks the list, not the route. Collapsed, the
+  // hover peeks the panel; docked open, it swaps the panel's list until the pointer
+  // leaves the rail and the panel.
   const [peekSection, setPeekSection] = useState<'home' | 'spaces' | 'customize' | RailPanelPage>('home');
-  const peeking = railed && !isExpanded && peek;
+  const preview = useRailPreview(railed && isExpanded);
+  const peeking = railed && (isExpanded ? preview.on : peek);
   const peekOverride = peeking ? peekSection === 'customize' : undefined;
   const showingSettings = peekOverride ?? settingsOpen;
   // The rail's Spaces (`session_groups`): the panel lists the spaces on a spaces page, or while Spaces is hovered.
@@ -270,6 +274,8 @@ export function ProjectSidebar({
             help={help}
             settingsOpen={settingsOpen}
             onPeek={setPeekSection}
+            onPreviewEnter={preview.enter}
+            onPreviewLeave={preview.leave}
           />
         ) : undefined
       }
@@ -278,6 +284,9 @@ export function ProjectSidebar({
       // inner box, which already carries `bg-sidebar`. Painting it twice put a
       // square fill behind the flyout card and it showed at all four corners.
       className="[scrollbar-width:'none'] [-ms-overflow-style:'none'] [&::-webkit-scrollbar]:hidden"
+      // Docked open: the pointer on the panel keeps a rail preview up. Only then:
+      // these props replace the collapsed panel's own peek handlers.
+      {...(railed && isExpanded ? { onPointerEnter: preview.keep, onPointerLeave: preview.leave } : {})}
     >
       <SidebarHeader
         className="kx-project-sidebar-header space-y-2"
@@ -626,4 +635,28 @@ export function ProjectSidebar({
     <ConnectMcpModal open={connectMcpOpen} onOpenChange={setConnectMcpOpen} />
     </NewAgentModalProvider>
   );
+}
+
+/**
+ * Docked open, with the rail: a hover on a rail item shows that item's list in
+ * the panel. The same hover intent as the collapsed peek: 100 ms to show, so
+ * a pointer crossing the rail does not flash lists, and 250 ms to go back to
+ * the route's list after the pointer leaves the rail and the panel.
+ */
+function useRailPreview(active: boolean) {
+  const [on, setOn] = useState(false);
+  const controller = useMemo(() => createPeekController(setOn), []);
+  useEffect(() => () => controller.cancel(), [controller]);
+  useEffect(() => {
+    if (!active) controller.cancel();
+  }, [active, controller]);
+  return {
+    on: active && on,
+    enter: controller.enter,
+    leave: controller.leave,
+    // Entering the panel keeps a preview that is up; it never starts one.
+    keep: () => {
+      if (on) controller.enter();
+    },
+  };
 }

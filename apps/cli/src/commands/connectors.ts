@@ -932,12 +932,7 @@ export async function runConnectors(argv: string[]): Promise<number> {
         // A bare `-` reads the value from stdin. It starts with '-', so it's
         // not in `positional` — detect it on the raw arg list.
         const wantStdin = asStdin || rest.includes('-');
-        let value = positional[1];
-        if (wantStdin) {
-          value = (await readStdin()).replace(/\n$/, '');
-        } else if (!value) {
-          value = await promptSecret(`  value for ${C.bold}${slug}${C.reset}`);
-        }
+        const value = await resolveCredentialInput(positional[1], wantStdin, `  value for ${C.bold}${slug}${C.reset}`);
         if (!value) {
           process.stderr.write(`${status.err('No value provided.')}\n`);
           return 2;
@@ -1203,12 +1198,13 @@ export async function runConnectors(argv: string[]): Promise<number> {
         const slug = positional[0];
         if (!slug) return missing('a connector slug');
 
+        const response = await ctx.client.get<{
+          connector: string;
+          accounts: ConnectorAccountRow[];
+        }>(`${ex}/connectors/${encodeURIComponent(slug)}/accounts`);
+        const accounts = response.accounts ?? [];
+
         if (f.default !== undefined) {
-          const response = await ctx.client.get<{
-            connector: string;
-            accounts: ConnectorAccountRow[];
-          }>(`${ex}/connectors/${encodeURIComponent(slug)}/accounts`);
-          const accounts = response.accounts ?? [];
           const wanted = f.default.trim().toLowerCase();
           const matches = accounts.filter(
             (a) =>
@@ -1247,11 +1243,6 @@ export async function runConnectors(argv: string[]): Promise<number> {
           return 0;
         }
 
-        const response = await ctx.client.get<{
-          connector: string;
-          accounts: ConnectorAccountRow[];
-        }>(`${ex}/connectors/${encodeURIComponent(slug)}/accounts`);
-        const accounts = response.accounts ?? [];
         // A computer is paired on the machine itself, never through `connect`.
         const isComputer = slug === 'computer';
         const note = isComputer
@@ -1778,16 +1769,7 @@ export async function runConnectors(argv: string[]): Promise<number> {
           const parsedConditions = parsePolicyConditions(conditions);
           if ('error' in parsedConditions) return fail(parsedConditions.error);
           const currentProject = await loadProject();
-          const next = [
-            ...currentProject.policies.filter((p) => p.match !== match),
-            {
-              match,
-              action,
-              ...(parsedConditions.conditions.length
-                ? { conditions: parsedConditions.conditions }
-                : {}),
-            },
-          ];
+          const next = replacePolicyRule(currentProject.policies, match, action, parsedConditions);
           await ctx.client.put(projectPolicies, {
             policies: next,
             defaultMode: currentProject.defaultMode,
@@ -1914,15 +1896,7 @@ export async function runConnectors(argv: string[]): Promise<number> {
           } catch (err) {
             return surfacePolicySetError(err, { slug });
           }
-          // Read-merge-write: every other rule goes back with its conditions.
-          const next = [
-            ...current.filter((p) => p.match !== match),
-            {
-              match,
-              action,
-              ...(parsedConditions.conditions.length ? { conditions: parsedConditions.conditions } : {}),
-            },
-          ];
+          const next = replacePolicyRule(current, match, action, parsedConditions);
           const failed = await write(next);
           if (failed !== null) return failed;
           if (json) {
@@ -2281,12 +2255,7 @@ async function runConnections(input: {
       const connectionId = positional[0];
       if (!connectionId) return missing('a connection id');
       const wantStdin = asStdin || rawArgs.includes('-');
-      let value = positional[1];
-      if (wantStdin) {
-        value = (await readStdin()).replace(/\n$/, '');
-      } else if (!value) {
-        value = await promptSecret(`  value for connection ${C.bold}${connectionId}${C.reset}`);
-      }
+      const value = await resolveCredentialInput(positional[1], wantStdin, `  value for connection ${C.bold}${connectionId}${C.reset}`);
       if (!value) return fail('No value provided.');
       const response = await ctx.client.put<{ ok: true }>(
         `${base}/${encodeURIComponent(connectionId)}/credential`,
@@ -3055,6 +3024,27 @@ function normalizePolicyAction(
     default:
       return null;
   }
+}
+
+function replacePolicyRule(current: PolicyRule[], match: string, action: string, parsedConditions: { conditions: PolicyCondition[] }): PolicyRule[] {
+  // Read-merge-write: every other rule goes back with its conditions.
+  return [
+    ...current.filter((p) => p.match !== match),
+    {
+      match,
+      action,
+      ...(parsedConditions.conditions.length ? { conditions: parsedConditions.conditions } : {}),
+    },
+  ];
+}
+
+async function resolveCredentialInput(value: string | undefined, wantStdin: boolean, label: string): Promise<string | undefined> {
+  if (wantStdin) {
+    value = (await readStdin()).replace(/\n$/, '');
+  } else if (!value) {
+    value = await promptSecret(label);
+  }
+  return value;
 }
 
 async function readStdin(): Promise<string> {

@@ -92,7 +92,7 @@ export function RailPagePanel({ projectId, page }: { projectId: string; page: Ra
 
 /**
  * The panel title row's actions for a page: the page itself (↗), then create
- * one (+, the default button). Apps opens New app, Artifacts creates a doc and
+ * one (+, a ghost button like the page link). Apps opens New app, Artifacts creates a doc and
  * opens it, Goals opens New goal on the Goals page. Each create shows only to
  * a caller who may create there.
  */
@@ -129,13 +129,13 @@ export function RailPageActions({ projectId, page, label }: { projectId: string;
       </Hint>
       {page === 'artifacts' ? (
         <Hint label={createLabel} side="bottom">
-          <Button size="icon-base" aria-label={createLabel} disabled={create.isPending} aria-busy={create.isPending || undefined} onClick={() => void newDoc()}>
+          <Button variant="ghost" className="text-muted-foreground hover:text-foreground" size="icon-base" aria-label={createLabel} disabled={create.isPending} aria-busy={create.isPending || undefined} onClick={() => void newDoc()}>
             {create.isPending ? <Loading className="size-4 shrink-0" /> : <PlusIcon className="size-4" />}
           </Button>
         </Hint>
       ) : createHref ? (
         <Hint label={createLabel} side="bottom">
-          <Button asChild size="icon-base">
+          <Button asChild variant="ghost" className="text-muted-foreground hover:text-foreground" size="icon-base">
             <Link href={createHref} prefetch={false} aria-label={createLabel}>
               <PlusIcon className="size-4" />
             </Link>

@@ -61,6 +61,8 @@ let threadTs: string;
 // ─── Slack, as the network sees it ───────────────────────────────────────────
 type SlackCall = { method: string; body: Record<string, unknown> };
 let slackCalls: SlackCall[] = [];
+/** Slack refuses every post while this is set (both the block post and its plain fallback). */
+let slackRefusesPosts = false;
 const realFetch = globalThis.fetch;
 beforeAll(() => {
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -70,7 +72,10 @@ beforeAll(() => {
     const raw = typeof init?.body === 'string' ? init.body : '';
     const body = raw.startsWith('{') ? (JSON.parse(raw) as Record<string, unknown>) : Object.fromEntries(new URLSearchParams(raw));
     slackCalls.push({ method, body });
-    return new Response(JSON.stringify({ ok: true, ts: '1795884999.000100' }), { headers: { 'content-type': 'application/json' } });
+    const refused = slackRefusesPosts && method === 'chat.postMessage';
+    return new Response(JSON.stringify(refused ? { ok: false, error: 'channel_not_found' } : { ok: true, ts: '1795884999.000100' }), {
+      headers: { 'content-type': 'application/json' },
+    });
   }) as typeof fetch;
 });
 afterAll(() => {
@@ -171,6 +176,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   detached = [];
   slackCalls = [];
+  slackRefusesPosts = false;
   sessionId = crypto.randomUUID();
   threadTs = `1795882847.${Math.floor(Math.random() * 1e6)}`;
   await seedSlackSession(sessionId, threadTs);
@@ -225,6 +231,19 @@ describe('a turn no Slack message started answers its Slack thread', () => {
     await endTurn(messageId, { text: 'I posted the result in the thread.' });
     expect(posts()).toHaveLength(1);
     expect(posts()[0]!.body.text).toBe('Engineering finished the fix.');
+  });
+
+  test('a `slack send` Slack refused leaves the reply to the turn end', async () => {
+    const messageId = await colleagueReport();
+    await runTurn(messageId);
+    slackRefusesPosts = true;
+    const sent = await relayContent(responder, { kind: 'answer', text: 'Engineering finished the fix.' }, sessionId);
+    expect(await sent.json()).toEqual({ ok: false, reason: 'post_failed' });
+    slackRefusesPosts = false;
+    const before = posts().length;
+    await endTurn(messageId, { text: 'Engineering finished the fix: 19 of 19 tests pass.' });
+    expect(posts()).toHaveLength(before + 1);
+    expect(posts().at(-1)!.body.text).toBe('Engineering finished the fix: 19 of 19 tests pass.');
   });
 
   test('a turn the person started on the web stays off the thread', async () => {

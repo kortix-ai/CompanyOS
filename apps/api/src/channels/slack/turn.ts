@@ -760,8 +760,13 @@ export async function postAnswerWithoutTurnDetailed(
   if (!thread) return { ok: false, reason: 'no_slack_thread' };
   if (!(await claimAnswerRescue(sessionId, text))) return { ok: false, reason: 'answer_already_posted' };
   // This turn answers now: its end must not post its last message again.
-  if (!(await claimRunningTurnReply(sessionId))) return { ok: false, reason: 'answer_already_posted' };
-  if (!(await postInSessionThread(sessionId, thread, markdownToMrkdwn(text), blocks))) return { ok: false, reason: 'post_failed' };
+  const turnClaim = await claimRunningTurnReply(sessionId);
+  if (turnClaim === false) return { ok: false, reason: 'answer_already_posted' };
+  if (!(await postInSessionThread(sessionId, thread, markdownToMrkdwn(text), blocks))) {
+    // Nothing reached the thread: the turn's end may still post its reply.
+    if (turnClaim) await db.delete(chatEventDedup).where(eq(chatEventDedup.eventId, turnClaim)).catch(() => {});
+    return { ok: false, reason: 'post_failed' };
+  }
   return { ok: true };
 }
 
@@ -853,9 +858,13 @@ export interface TurnFollowUp {
 /** A turn can run for hours: the claim outlives any turn. */
 const TURN_REPLY_TTL_MS = 24 * 60 * 60 * 1000;
 
+function turnReplyKey(sessionId: string, messageId: string): string {
+  return `slack:turnreply:${sessionId}:${messageId}`;
+}
+
 /** One reply per turn reaches the thread: a `slack send` of the turn, or its end. True when this call won it. */
 function claimTurnReply(sessionId: string, messageId: string): Promise<boolean> {
-  return claimExpiringKey(`slack:turnreply:${sessionId}:${messageId}`, TURN_REPLY_TTL_MS, {
+  return claimExpiringKey(turnReplyKey(sessionId, messageId), TURN_REPLY_TTL_MS, {
     onDbError: false,
     log: 'turn-reply claim failed (suppressing)',
   });
@@ -863,11 +872,11 @@ function claimTurnReply(sessionId: string, messageId: string): Promise<boolean> 
 
 /**
  * A `slack send` with no turn row answers the session's running turn: claim
- * that turn's reply before posting, so its end posts nothing more. False only
- * when the turn's reply already went out. No running turn, or a failed read,
- * lets the send through: the answer must not be lost.
+ * that turn's reply before posting, so its end posts nothing more. The claim's
+ * key when won; false when the turn's reply already went out; null when no
+ * running turn was read, which lets the send through: the answer must not be lost.
  */
-async function claimRunningTurnReply(sessionId: string): Promise<boolean> {
+async function claimRunningTurnReply(sessionId: string): Promise<string | false | null> {
   try {
     const [running] = await db
       .select({ messageId: sessionTurns.messageId })
@@ -875,10 +884,11 @@ async function claimRunningTurnReply(sessionId: string): Promise<boolean> {
       .where(and(eq(sessionTurns.sessionId, sessionId), eq(sessionTurns.state, 'active'), isNotNull(sessionTurns.messageId)))
       .orderBy(desc(sessionTurns.startedAt))
       .limit(1);
-    return running?.messageId ? await claimTurnReply(sessionId, running.messageId) : true;
+    if (!running?.messageId) return null;
+    return (await claimTurnReply(sessionId, running.messageId)) ? turnReplyKey(sessionId, running.messageId) : false;
   } catch (err) {
     logger.warn('[slack-webhook] running turn not read for its reply claim', { sessionId, err: err instanceof Error ? err.message : String(err) });
-    return true;
+    return null;
   }
 }
 

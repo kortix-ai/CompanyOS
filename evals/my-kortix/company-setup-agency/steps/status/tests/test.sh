@@ -26,13 +26,16 @@ facts = [
     'Monday 09:00 report: ' + ('none' if not found else ', '.join(f"{'live' if live(t) else 'paused'}, {'has run' if ran(t) else 'never ran'}, timezone {t.get('timezone') or (t.get('source') or {}).get('timezone')}" for t in found)),
     'ana@example.test: ' + ('no invitation' if not a else ', '.join(f"open invitation as {i.get('project_role') or i.get('role')}, not accepted" for i in a)),
 ]
+# Loops and check-ins on the chat count too: a report moved to a chat loop is set up, not invented.
+loops = rows(kj(f'loops ls --session {SESSION}'), 'loops')
+facts.append('loops on this chat: ' + ('none' if not loops else '; '.join(f"{str(l.get('schedule') or l.get('cron') or l.get('every') or l.get('at') or l.get('when') or '')} {str(l.get('text') or l.get('prompt') or '')[:80]}".strip() for l in loops)))
 open(f'{V}/judge-input.md', 'w').write(reply() + '\n\n---\nWorkspace state, read by the grader:\n- ' + '\n- '.join(facts) + '\n')
 print('\n'.join(facts))
 save({})
 PY
 [ $? = 0 ] || { echo "the grader crashed: no reward, so the trial counts as an error, not a 0"; rm -f /logs/verifier/reward.json; exit 1; }
 judge \
-  --criterion consistent="Compare the reply (above the line) with the workspace state below it. The reply says the content-writer agent exists; says whether the Monday report is live or paused, matching the state; says Ana has an open invitation she has not accepted yet; and claims nothing that contradicts the state. Saying what happens next (a test, a resume, Ana accepting) is fine." \
+  --criterion consistent="Compare the reply (above the line) with the workspace state below it. The reply says the content-writer agent exists; says whether the Monday report is live or paused, matching the state (a report moved to a loop on this chat, listed in the state, is set up); says Ana has an open invitation she has not accepted yet; and claims nothing that contradicts the state. Saying what happens next (a test, a resume, Ana accepting) is fine." \
   --input /logs/verifier/judge-input.md
 python3 -c 'import sys; sys.path.insert(0, "/tests"); import kx; kx.finalize()'
 exit 0

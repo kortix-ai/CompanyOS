@@ -345,19 +345,27 @@ variable "worker" {
     command                 Container command. Default ["bun","run","src/worker.ts"].
     alarm_topic_arn         SNS topic for the worker alarms. null = no alarms.
     metric_environment      Environment dimension of Kortix/Worker StaleJobs
-                            (the environment's INTERNAL_KORTIX_ENV). Required
-                            when alarm_topic_arn is set.
+                            and Kortix/Sessions UnreachableActiveBoxes (the
+                            environment's INTERNAL_KORTIX_ENV). Required when
+                            alarm_topic_arn is set.
+    prompt_delivery_alarm_threshold
+                            Running boxes holding a prompt Kortix could not
+                            deliver (Kortix/Sessions UnreachableActiveBoxes) at
+                            or above which <name>-worker-prompt-delivery fires,
+                            for 3 of 3 minutes. null = the metric only, no
+                            alarm. Needs alarm_topic_arn.
 
     Terraform creates the service at desired_count 0. infra/scripts/ecs-deploy.sh
     --service worker raises it to 1 after the database migrations, with the API's
     live environment.
   EOT
   type = object({
-    task_cpu           = number
-    task_memory        = number
-    command            = optional(list(string), ["bun", "run", "src/worker.ts"])
-    alarm_topic_arn    = optional(string)
-    metric_environment = optional(string)
+    task_cpu                        = number
+    task_memory                     = number
+    command                         = optional(list(string), ["bun", "run", "src/worker.ts"])
+    alarm_topic_arn                 = optional(string)
+    metric_environment              = optional(string)
+    prompt_delivery_alarm_threshold = optional(number)
   })
   default = null
 
@@ -367,5 +375,13 @@ variable "worker" {
       || contains(["dev", "staging", "prod", "preview"], coalesce(var.worker.metric_environment, "unset"))
     )
     error_message = "worker.metric_environment must be dev, staging, prod or preview when worker.alarm_topic_arn is set: the StaleJobs alarm filters on that Environment dimension."
+  }
+
+  validation {
+    condition = var.worker == null ? true : (
+      try(var.worker.prompt_delivery_alarm_threshold, null) == null
+      || (var.worker.alarm_topic_arn != null && try(var.worker.prompt_delivery_alarm_threshold, 0) >= 1)
+    )
+    error_message = "worker.prompt_delivery_alarm_threshold needs worker.alarm_topic_arn (the alarm has nowhere to send without it) and must be at least 1."
   }
 }

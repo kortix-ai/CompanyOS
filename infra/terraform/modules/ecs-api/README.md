@@ -50,6 +50,7 @@ worker = {
   task_memory        = 4096
   metric_environment = "prod"                         # StaleJobs dimension
   alarm_topic_arn    = data.aws_sns_topic.alerts.arn  # null = no alarms
+  prompt_delivery_alarm_threshold = 3                 # null = metric only
   # command          = ["bun", "run", "src/worker.ts"] (default)
 }
 ```
@@ -61,11 +62,13 @@ It creates, in the API's cluster:
 | Task definition | family `<name>-worker`, container `worker` | Same image, roles, secrets blob, log group (`awslogs-stream-prefix = "worker"`) and `stop_timeout` as the API. Environment = the module environment without `KORTIX_PROCESS_ROLE` and without `KORTIX_WORKER_ENV_FROM`. Container health check: `bun -e fetch(…/health/ready)` every 30 s, timeout 5 s, 3 retries, start period 120 s. `container_definitions` is ignored after create. |
 | ECS service | `<name>-worker` | `desired_count = 0` at create. On-demand `FARGATE` (base 1, weight 1) whatever `use_fargate_spot` says. Private subnets, the module's service security group only. No load balancer, no Cloud Map record, no autoscaling. Rolling 100 % / 200 % with the circuit breaker. `task_definition` and `desired_count` are ignored after create. |
 | Log metric filter | `<name>-worker-stale-jobs` | `Kortix/Worker` `StaleJobs` = `$.stale_jobs` of the `{"kortix_metric":"worker_jobs",…}` line, dimension `Environment` = `$.environment`. Created without an alarm topic too. |
+| Log metric filters | `<name>-worker-unreachable-active-boxes`, `<name>-worker-parked-prompts` | `Kortix/Sessions` `UnreachableActiveBoxes` = `$.unreachable_active_boxes` and `ParkedPrompts` = `$.parked_prompts` of the `{"kortix_metric":"prompt_delivery",…}` line the lease holder writes every 60 s (`apps/api/src/worker/jobs/prompt-delivery-metric.ts`), dimension `Environment` = `$.environment`. `UnreachableActiveBoxes` counts boxes whose `session_sandboxes` row is `active` and that hold a prompt parked `runtime_unreachable`; a hibernated box is not counted. Created without an alarm topic too. |
+| Alarm | `<name>-worker-prompt-delivery` | `Kortix/Sessions` `UnreachableActiveBoxes` (Maximum) >= `prompt_delivery_alarm_threshold` for 3 of 3 one-minute periods, `Environment = metric_environment`. Only with `alarm_topic_arn` and a threshold. |
 | Alarm | `<name>-worker-not-running` | `ECS/ContainerInsights` `RunningTaskCount` (Maximum) < 1 for 5 of 5 one-minute periods. Only with `alarm_topic_arn`. |
 | Alarm | `<name>-worker-stale-jobs` | `Kortix/Worker` `StaleJobs` (Maximum) >= 1 for 5 of 5 one-minute periods, `Environment = metric_environment`. Only with `alarm_topic_arn`. |
 | Alarm | `<name>-worker-cpu-high` | `AWS/ECS` `CPUUtilization` (Average) > 80% for two five-minute periods, scoped to the worker service and cluster. Only with `alarm_topic_arn`. |
 
-All three alarms treat missing data as not breaching and send ALARM and OK to
+Every worker alarm treats missing data as not breaching and sends ALARM and OK to
 `alarm_topic_arn`.
 
 **Lifecycle.** Terraform applies before the database migrations in every

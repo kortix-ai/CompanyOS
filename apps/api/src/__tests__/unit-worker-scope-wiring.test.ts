@@ -51,6 +51,7 @@ const WORKERS: Record<string, string> = {
   'audit-archive': 'worker/jobs/audit-archive.ts',
   'project-snapshots': 'worker/jobs/project-snapshot.ts',
   'iam-grant-expiry': 'worker/jobs/grant-expiry.ts',
+  'prompt-delivery-metric': 'worker/jobs/prompt-delivery-metric.ts',
   'approval-expiry': 'worker/jobs/approval-expiry.ts',
   'oauth-sweep': 'worker/jobs/oauth-sweep.ts',
   'gateway-replay-sweep': 'worker/jobs/replay-sweep.ts',

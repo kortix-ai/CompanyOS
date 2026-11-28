@@ -921,12 +921,36 @@ export async function loadProjectSessionInventory(input: {
     }
 
     const selected = await foldRows(chunk);
+    // Root filtering may match a child. Check that child's content authority,
+    // not only the root's: an accessible root can have private children.
+    const contentParents = new Set<string>();
+    if ((filter.labels?.length || filter.q) && filter.parent === 'root') {
+      const children = await db.select().from(projectSessions).where(and(
+        eq(projectSessions.projectId, input.projectId),
+        eq(projectSessions.accountId, input.accountId),
+        inArray(projectSessions.parentSessionId, chunk.map((row) => row.sessionId)),
+        filter.labels?.length ? sql`${projectSessions.labels} @> ${JSON.stringify(filter.labels)}::jsonb` : undefined,
+        filter.q ? searchMatchSql(projectSessions, filter.q) : undefined,
+        liveSessionSql,
+      ));
+      for (const child of (await foldRows(children)).items) {
+        if (child.canAccess && child.row.parentSessionId) contentParents.add(child.row.parentSessionId);
+      }
+    }
 
     let pageFull = false;
     for (const item of selected.items) {
       // A manager's inventory lists sessions it may not open, with the title
       // redacted. Search must not match on that hidden title.
-      if (filter.q && !item.canAccess) continue;
+      if ((filter.q || filter.labels?.length) && !item.canAccess) continue;
+      if (filter.labels?.length &&
+          !filter.labels.every((label) => item.row.labels?.includes(label)) &&
+          !contentParents.has(item.row.sessionId)) continue;
+      if (filter.q) {
+        const owner = item.row.createdBy ? ownerIdentities.get(item.row.createdBy) : null;
+        if (!sessionRowMatchesSearch(item.row, filter.q, [owner?.email, owner?.name].filter((value): value is string => Boolean(value))) &&
+            !contentParents.has(item.row.sessionId)) continue;
+      }
       // Stop exactly at the page boundary, and remember the row we stopped on
       // so the next page resumes from it rather than re-serving it.
       if (items.length >= limit) {

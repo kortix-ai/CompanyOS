@@ -979,3 +979,14 @@ test('PR and long demo labels render inside prose without leaking Slack delimite
     expect(html).not.toContain('&lt;https:');
   }
 });
+
+test('internal Kortix session Slack labels preserve curly apostrophe and all label words', () => {
+  const href = 'https://kortix.com/workspaces/00000000-0000-4000-8000-000000000000/sessions/11111111-1111-4111-8111-111111111111';
+  for (const isStreaming of [false, true]) {
+    const html = renderToStaticMarkup(withIntl(<UnifiedMarkdown trust="agent" content={`<${href}|Engineering’s report and evidence>`} isStreaming={isStreaming} />));
+    expect(html).toContain(`href="${href}"`);
+    expect(html.replace(/<[^>]*>/g, '')).toContain('Engineering’s report and evidence');
+    expect(html).not.toContain('|Engineering');
+    expect(html).not.toContain('&lt;https:');
+  }
+});

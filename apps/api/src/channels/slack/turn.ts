@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { slackAgentPersona } from './persona';
-import { and, asc, desc, eq, inArray, isNotNull, isNull, lt } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull, isNull, lt } from 'drizzle-orm';
 import { chatEventDedup, chatTurnStreams, projectSessions, sessionTurns } from '@kortix/db';
 import { db } from '../../shared/db';
 import { registerSessionFailureNotifier } from '../../shared/session-failure-notifier';
@@ -759,9 +759,9 @@ export async function postAnswerWithoutTurnDetailed(
   const thread = await sessionSlackThread(sessionId);
   if (!thread) return { ok: false, reason: 'no_slack_thread' };
   if (!(await claimAnswerRescue(sessionId, text))) return { ok: false, reason: 'answer_already_posted' };
+  // This turn answers now: its end must not post its last message again.
+  if (!(await claimRunningTurnReply(sessionId))) return { ok: false, reason: 'answer_already_posted' };
   if (!(await postInSessionThread(sessionId, thread, markdownToMrkdwn(text), blocks))) return { ok: false, reason: 'post_failed' };
-  // This turn has answered: its end must not post its last message again.
-  await markOpenTurnAnswered(sessionId);
   return { ok: true };
 }
 
@@ -823,7 +823,7 @@ async function postInSessionThread(
 // ── The reply of a turn no Slack message started ─────────────────────────────
 // Only a Slack message opens a turn row (`startTurn`). A turn the platform
 // starts in the same session has none: a colleague's report, another session's
-// message, a held call the person approved. Its end found no handle, and its
+// message, a sign-in the person finished. Its end found no handle, and its
 // reply was dropped. Prod, 2026-11-28: a Slack session handed a fix to a
 // colleague and answered once; its four relays of the colleague's reports
 // reached only the session page, and the thread stayed silent for 26 minutes.
@@ -839,9 +839,7 @@ async function postInSessionThread(
 const THREAD_FOLLOW_UP_SOURCES: ReadonlySet<string> = new Set([
   'system:subagent-finished',
   'system:peer-message',
-  'system:approval-resume',
   'system:connector-connected',
-  'system:secret-submitted',
   'system:auto-recovery',
 ]);
 
@@ -864,20 +862,23 @@ function claimTurnReply(sessionId: string, messageId: string): Promise<boolean> 
 }
 
 /**
- * The session's running turn answered with `slack send`: claim its reply, so
- * its end posts nothing more. Best-effort: the answer already posted.
+ * A `slack send` with no turn row answers the session's running turn: claim
+ * that turn's reply before posting, so its end posts nothing more. False only
+ * when the turn's reply already went out. No running turn, or a failed read,
+ * lets the send through: the answer must not be lost.
  */
-async function markOpenTurnAnswered(sessionId: string): Promise<void> {
+async function claimRunningTurnReply(sessionId: string): Promise<boolean> {
   try {
-    const [open] = await db
+    const [running] = await db
       .select({ messageId: sessionTurns.messageId })
       .from(sessionTurns)
-      .where(and(eq(sessionTurns.sessionId, sessionId), inArray(sessionTurns.state, ['delivering', 'active']), isNotNull(sessionTurns.messageId)))
+      .where(and(eq(sessionTurns.sessionId, sessionId), eq(sessionTurns.state, 'active'), isNotNull(sessionTurns.messageId)))
       .orderBy(desc(sessionTurns.startedAt))
       .limit(1);
-    if (open?.messageId) await claimTurnReply(sessionId, open.messageId);
+    return running?.messageId ? await claimTurnReply(sessionId, running.messageId) : true;
   } catch (err) {
-    logger.warn('[slack-webhook] answered turn not marked', { sessionId, err: err instanceof Error ? err.message : String(err) });
+    logger.warn('[slack-webhook] running turn not read for its reply claim', { sessionId, err: err instanceof Error ? err.message : String(err) });
+    return true;
   }
 }
 
@@ -966,7 +967,7 @@ export async function relayTurnEnd(
       deferred: opts.deferred === true,
     });
     setTimeout(() => {
-      void relayTurnEnd(sessionId, status, errorInfo, { deferred: true, finalText: opts.finalText, followUp: opts.followUp }).catch((err) =>
+      void relayTurnEnd(sessionId, status, errorInfo, { deferred: true, finalText: opts.finalText }).catch((err) =>
         console.warn('[slack-webhook] deferred turn-end failed', { sessionId, err }),
       );
     }, IDLE_END_GRACE_MS - sinceActivity + 250).unref();

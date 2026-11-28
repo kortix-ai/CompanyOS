@@ -10,13 +10,14 @@ import { PROJECT_ACTIONS } from '../../internal/lib/project-actions';
 import { useProjectCan } from '../../internal/lib/use-project-can';
 import { gridApps } from '../../apps/app-shared';
 import { cn } from '../../lib/utils';
+import { FadedScrollArea } from '../../primitives/faded-scroll-area';
 import { menuRow } from '../../primitives/menu-recipe';
 import { Popover, PopoverAnchor } from '../../primitives/popover';
 import { AppRow } from './footer/project-apps-nav';
 import { ArtifactRow } from './footer/project-artifacts-nav';
 
-/** Rows a rail card lists before "View all": the card is a shortcut, the page is the list. */
-const CARD_ROWS = 8;
+/** Rows a rail card lists before "View all": the card is a shortcut, the page is the list. It scrolls past `max-h-72`. */
+const CARD_ROWS = 20;
 /** The rail card opens sooner than the sidebar row's: it also names the icon, the tooltip's job. */
 const RAIL_CARD_OPEN_DELAY_MS = 200;
 
@@ -55,16 +56,22 @@ export function RailHoverCard({
       <PopoverAnchor virtualRef={card.anchorRef} />
       {children(card.rowProps)}
       <NavHoverCardContent {...card.contentProps} className={page === 'artifacts' ? 'w-72' : 'w-60'}>
-        <HoverPrefetchLink
-          href={href}
-          onClick={close}
-          className={cn(menuRow('sm', 'default', 'cursor-pointer'), 'text-foreground mx-1 mt-1 font-medium')}
-        >
-          <span className="min-w-0 flex-1 truncate">{label}</span>
-        </HoverPrefetchLink>
-        <NavHoverCardList className="max-h-80 overflow-x-hidden overflow-y-auto overscroll-contain pt-0">
-          {page === 'apps' ? <AppsRows projectId={projectId} href={href} onOpen={close} /> : <ArtifactsRows projectId={projectId} href={href} onOpen={close} />}
-        </NavHoverCardList>
+        {/* The padding is on the wrapper, not the row: a row with its own margin
+            is wider than the card by that margin and its hover fill spills out. */}
+        <div className="p-1 pb-0">
+          <HoverPrefetchLink
+            href={href}
+            onClick={close}
+            className={cn(menuRow('sm', 'default', 'cursor-pointer'), 'text-foreground font-medium')}
+          >
+            <span className="min-w-0 flex-1 truncate">{label}</span>
+          </HoverPrefetchLink>
+        </div>
+        <FadedScrollArea fadeColor="from-popover" fadeSize="6" className="max-h-72 overflow-x-hidden overscroll-contain">
+          <NavHoverCardList>
+            {page === 'apps' ? <AppsRows projectId={projectId} href={href} onOpen={close} /> : <ArtifactsRows projectId={projectId} href={href} onOpen={close} />}
+          </NavHoverCardList>
+        </FadedScrollArea>
         <div className="border-border border-t p-1">
           <HoverPrefetchLink href={href} onClick={close} className={menuRow('sm', 'default', 'text-muted-foreground cursor-pointer')}>
             {t('viewAll')}

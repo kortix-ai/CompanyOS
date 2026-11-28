@@ -1,6 +1,6 @@
 /**
- * TurnActions — the action bar under a finished assistant turn: Copy and the
- * ⋯ turn details.
+ * TurnActions — the action bar under a finished assistant turn: Copy, the
+ * pages the response read (`TurnSources`) and the ⋯ turn details.
  *
  * Mirrors apps/web `session-chat.tsx` (the `!working` action bar):
  * - `flex items-center gap-0.5`, always visible on a phone (web
@@ -23,12 +23,15 @@ import { genuiToMarkdown } from '@kortix/sdk/genui';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { CheckIcon, CopyIcon } from '@/lib/icons';
-import type { SessionLogTurn } from '@kortix/sdk';
+import type { SessionLogTurn, TurnSource } from '@kortix/sdk';
 import { turnDurationMs, turnEndedAt, type TurnMetaCost } from '@/lib/session/turn-meta';
 import { THEME } from '@/lib/utils/theme';
 import { useTone } from '@/lib/utils/tone';
 
 import { SessionTurnMeta, TURN_ACTION_HIT_SLOP, TURN_ACTION_ICON_SIZE } from './session-turn-meta';
+import { TurnSources } from './turn-sources';
+
+const NO_SOURCES: readonly TurnSource[] = [];
 
 /** How long the check stays before it swaps back to Copy (web: 2000ms). */
 const COPIED_MS = 2000;
@@ -44,15 +47,18 @@ interface TurnActionsProps {
    * web (`sessionTurnEndedAt` / `sessionTurnDurationMs`). */
   turn: SessionLogTurn;
   costInfo?: TurnMetaCost;
+  /** The web pages this response read (`deriveTurnSources`). None → no button. */
+  sources?: readonly TurnSource[];
 }
 
-export function TurnActions({ response, turn, costInfo }: TurnActionsProps) {
+export function TurnActions({ response, turn, costInfo, sources = NO_SOURCES }: TurnActionsProps) {
   return (
     // `icon-sm` buttons: a 28pt box (web: 26px), so the pressed highlight and
     // the spacing between glyphs match web. `-ml-0.5` puts the first glyph
     // ≈4pt in from the text edge, like web. Hit slop keeps a 44pt-tall target.
     <View className="-ml-0.5 flex-row items-center gap-0.5" testID="session-turn-actions">
       {response ? <CopyResponseButton response={response} /> : null}
+      <TurnSources sources={sources} />
       <SessionTurnMeta endedAt={turnEndedAt(turn)} durationMs={turnDurationMs(turn)} cost={costInfo} />
     </View>
   );

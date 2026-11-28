@@ -1200,7 +1200,9 @@
     "archivedView": "Archivadas",
     "archivedEmpty": "Las sesiones que archives aparecerán aquí.",
     "stoppedBy": "Detenido por {{name}}",
-    "stopNotAllowed": "Solo el miembro que inició esta ejecución, el propietario de la sesión o un gestor del espacio de trabajo puede detenerla."
+    "stopNotAllowed": "Solo el miembro que inició esta ejecución, el propietario de la sesión o un gestor del espacio de trabajo puede detenerla.",
+    "turnSources_one": "{{count}} fuente",
+    "turnSources_other": "{{count}} fuentes"
   },
   "genui": {
     "call": "Llamar",

@@ -1200,7 +1200,9 @@
     "archivedView": "Archiviert",
     "archivedEmpty": "Sitzungen, die du archivierst, erscheinen hier.",
     "stoppedBy": "Gestoppt von {{name}}",
-    "stopNotAllowed": "Nur das Mitglied, das diesen Lauf gestartet hat, der Inhaber der Sitzung oder ein Manager des Workspace kann ihn stoppen."
+    "stopNotAllowed": "Nur das Mitglied, das diesen Lauf gestartet hat, der Inhaber der Sitzung oder ein Manager des Workspace kann ihn stoppen.",
+    "turnSources_one": "{{count}} Quelle",
+    "turnSources_other": "{{count}} Quellen"
   },
   "genui": {
     "call": "Anrufen",

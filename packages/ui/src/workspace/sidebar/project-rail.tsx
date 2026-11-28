@@ -41,10 +41,11 @@ const RAIL_CONTROL = 'shrink-0 rounded-md [&_svg]:size-4.5!';
  * Bottom: Help, Customize (workspace settings), and the panel toggle. The
  * toggle hides the panel, never the rail.
  *
- * With the panel collapsed, hovering Home shows the panel on the sessions,
- * hovering Spaces on the spaces, Apps, Artifacts or Goals on that page's
- * items, and Customize on the workspace settings list, wherever the page is (the sidebar's peek, the same hover
- * intent as the edge strip it replaces).
+ * Hovering Home shows the panel on the sessions, hovering Spaces on the
+ * spaces, Apps, Artifacts or Goals on that page's items, and Customize on the
+ * workspace settings list, wherever the page is. Collapsed, the hover peeks
+ * the panel (the same hover intent as the edge strip it replaces); docked
+ * open, it swaps the panel's list until the pointer leaves the rail and the panel.
  */
 export function ProjectRail({
   projectId,
@@ -52,10 +53,16 @@ export function ProjectRail({
   help,
   settingsOpen,
   onPeek,
+  onPreviewEnter,
+  onPreviewLeave,
 }: {
   projectId: string;
-  /** With the panel collapsed, a hover on Home, Spaces or Customize shows the panel on that list. */
+  /** A hover on Home, Spaces, Customize, Apps, Artifacts or Goals: the panel shows that list. */
   onPeek: (section: 'home' | 'spaces' | 'customize' | RailPanelPage) => void;
+  /** Docked open: a hover on one of those items starts the panel's list preview. */
+  onPreviewEnter: () => void;
+  /** Docked open: the pointer left the item; the preview ends unless it reaches the panel. */
+  onPreviewLeave: () => void;
   onOpenSearch?: () => void;
   /** The help menu's own icon trigger (apps/web passes `HelpMenu`). */
   help?: ReactNode;
@@ -70,6 +77,14 @@ export function ProjectRail({
   const collapsed = state === 'collapsed';
   const [moreOpen, setMoreOpen] = useState(false);
   const railPins = useRailPins(projectId);
+  /** The pointer handlers that show the panel on one list: peek when collapsed, preview when docked open. */
+  const hoverShows = (section: 'home' | 'spaces' | 'customize' | RailPanelPage) => ({
+    onPointerEnter: () => {
+      onPeek(section);
+      (collapsed ? peekEnter : onPreviewEnter)();
+    },
+    onPointerLeave: collapsed ? peekLeave : onPreviewLeave,
+  });
 
   const groupsOn = useFeatureFlag(projectId, 'session_groups').enabled;
   const spacesHref = groupsOn ? (uiRoutes().sessionSpaces?.(projectId) ?? null) : null;
@@ -103,13 +118,12 @@ export function ProjectRail({
                 }}
               >
                 <span className="flex">
-                  {/* Apps, Artifacts, Goals: with the panel collapsed, a hover shows the panel on the page's list, as Home and Spaces do. */}
+                  {/* Apps, Artifacts, Goals: a hover shows the panel on the page's list, as Home and Spaces do. */}
                   <RailButton
                     label={page.label}
                     href={page.href}
                     current={current}
-                    onPointerEnter={collapsed && isRailPanelPage(id) ? () => { onPeek(id); peekEnter(); } : undefined}
-                    onPointerLeave={collapsed && isRailPanelPage(id) ? peekLeave : undefined}
+                    {...(isRailPanelPage(id) ? hoverShows(id) : {})}
                   >
                     {page.icon}
                   </RailButton>
@@ -134,8 +148,7 @@ export function ProjectRail({
         label={tRail('home')}
         href={uiRoutes().project(projectId)}
         current={!settingsOpen && !onSpaces}
-        onPointerEnter={collapsed ? () => { onPeek('home'); peekEnter(); } : undefined}
-        onPointerLeave={collapsed ? peekLeave : undefined}
+        {...hoverShows('home')}
       >
         <Home />
       </RailButton>
@@ -163,8 +176,7 @@ export function ProjectRail({
           label={tGroups('heading')}
           href={spacesHref}
           current={onSpaces}
-          onPointerEnter={collapsed ? () => { onPeek('spaces'); peekEnter(); } : undefined}
-          onPointerLeave={collapsed ? peekLeave : undefined}
+          {...hoverShows('spaces')}
         >
           <CirclesThreePlusIcon />
         </RailButton>
@@ -203,8 +215,7 @@ export function ProjectRail({
             label={t('customize')}
             href={customizeHref}
             current={settingsOpen}
-            onPointerEnter={collapsed ? () => { onPeek('customize'); peekEnter(); } : undefined}
-            onPointerLeave={collapsed ? peekLeave : undefined}
+            {...hoverShows('customize')}
           >
             <CustomizeGlyph />
           </RailButton>

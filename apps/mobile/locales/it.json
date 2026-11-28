@@ -1200,7 +1200,9 @@
     "archivedView": "Archiviate",
     "archivedEmpty": "Le sessioni che archivi verranno mostrate qui.",
     "stoppedBy": "Interrotto da {{name}}",
-    "stopNotAllowed": "Solo il membro che ha avviato questa esecuzione, il proprietario della sessione o un gestore del workspace può interromperla."
+    "stopNotAllowed": "Solo il membro che ha avviato questa esecuzione, il proprietario della sessione o un gestore del workspace può interromperla.",
+    "turnSources_one": "{{count}} fonte",
+    "turnSources_other": "{{count}} fonti"
   },
   "genui": {
     "call": "Chiama",

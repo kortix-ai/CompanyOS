@@ -10,7 +10,12 @@ def drafts():
     rules = kj('connectors policy gmail ls') or {}
     open(f'{V}/support-drafts.json', 'w').write(json.dumps({'agent': cfg, 'gmail_rules': rules}, indent=1))
     block = cfg.get('block') or {}
-    held = [r for r in rows(rules, 'policies') if 'send' in str(r.get('match', '')).lower() and r.get('action') in ('require_approval', 'block')]
+    # The agent's own rule set on Gmail counts too (a per-agent policy set, not only the base rules).
+    sets = block.get('policy_sets') or {}
+    name = sets.get('gmail') if isinstance(sets, dict) else None
+    own = kj(f'connectors policy gmail --policy-set {name} ls') or {} if name else {}
+    open(f'{V}/gmail-policy-set.json', 'w').write(json.dumps({'set': name, 'rules': own}, indent=1))
+    held = [r for r in rows(rules, 'policies') + rows(own, 'policies') if 'send' in str(r.get('match', '')).lower() and r.get('action') in ('require_approval', 'block')]
     return block, held
 def has_gmail(block):
     c = block.get('connectors')

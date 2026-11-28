@@ -10,14 +10,19 @@ def drafts():
     rules = kj('connectors policy gmail ls') or {}
     open(f'{V}/support-drafts.json', 'w').write(json.dumps({'agent': cfg, 'gmail_rules': rules}, indent=1))
     block = cfg.get('block') or {}
-    held = [r for r in rows(rules, 'policies') if 'send' in str(r.get('match', '')).lower() and r.get('action') in ('require_approval', 'block')]
+    # The agent's own rule set on Gmail counts too (a per-agent policy set, not only the base rules).
+    sets = block.get('policy_sets') or {}
+    name = sets.get('gmail') if isinstance(sets, dict) else None
+    own = kj(f'connectors policy gmail --policy-set {name} ls') or {} if name else {}
+    open(f'{V}/gmail-policy-set.json', 'w').write(json.dumps({'set': name, 'rules': own}, indent=1))
+    held = [r for r in rows(rules, 'policies') + rows(own, 'policies') if 'send' in str(r.get('match', '')).lower() and r.get('action') in ('require_approval', 'block')]
     return block, held
 def has_gmail(block):
     c = block.get('connectors')
     return c == 'all' or (isinstance(c, list) and any('gmail' in str(x).lower() for x in c))
 block, held = drafts()
 save({'exists': 1 if block and has_gmail(block) else 0})
-open(f'{V}/judge-input.md', 'w').write(open('/logs/agent/response.md').read() + ('\n\n[Facts read from the workspace: a Gmail rule holds or blocks send_* for approval.]' if held else '\n\n[Facts read from the workspace: no Gmail rule holds or blocks sends; the agent holds Gmail.]'))
+open(f'{V}/judge-input.md', 'w').write(open('/logs/agent/response.md').read() + ('\n\n[Facts read from the workspace: a Gmail rule (the base rules or the rule set of this agent) holds or blocks send_*.]' if held else '\n\n[Facts read from the workspace: no Gmail rule holds or blocks sends; the agent holds Gmail.]'))
 PY
 [ $? = 0 ] || { echo "the grader crashed: no reward, so the trial counts as an error, not a 0"; rm -f /logs/verifier/reward.json; exit 1; }
 judge \

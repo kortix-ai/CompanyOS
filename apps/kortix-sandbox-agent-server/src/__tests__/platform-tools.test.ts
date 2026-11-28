@@ -555,6 +555,20 @@ describe('kortix_schedules follow-through', () => {
   })
 })
 
+describe('a call a workspace rule holds for a person', () => {
+  test('exit 3 with a pending_approval line → a needs-you card with the approval link; the model is told not to call again', async () => {
+    fakeKortix(`${ROSTER}
+  'access grant u_ada --role member') echo '{"kortix_error":{"kind":"pending_approval","status":202,"message":"Held","execution_id":"ex_1","approval_url":"https://kortix.example.test/approve/ksl_1"}}' >&2; exit 3 ;;`)
+    const result = await run('kortix_people', { action: 'set_role', who: 'ada@example.com', role: 'member' })
+    expect(result.ok).toBe(false)
+    expect(result.card.status).toBe('needs_you')
+    expect(result.card.title.startsWith('Waiting for approval')).toBe(true)
+    expect(result.card.links).toEqual([{ label: 'Review and approve', href: 'https://kortix.example.test/approve/ksl_1' }])
+    expect(result.data).toEqual({ status: 'pending_approval', execution_id: 'ex_1', approval_url: 'https://kortix.example.test/approve/ksl_1' })
+    expect(result.error?.message).toContain('do not call it again')
+  })
+})
+
 describe('kortix_people and kortix_access', () => {
   test('set_role resolves a person by email and shows the role change', async () => {
     fakeKortix(`${ROSTER}

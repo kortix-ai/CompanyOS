@@ -112,13 +112,21 @@ has is a connector behind one gateway.
     agent; `acts_as: me` refused at the run), `WS-AUTH-5/8`, `SCOPE-5`,
     `AGP-5`. **Not done:** revoking the minter does not revoke its keys yet
     (needs a `minted_by_token_id` column).
-11. **7b, not built.** The nine `kortix_*` sandbox tools
-    (`apps/kortix-sandbox-agent-server/src/services/tools/platform/`, 3,125
-    lines) render chat cards from curated CLI calls. Each becomes a
-    featured action: an operation id with a card renderer, called through
-    the SDK, never the CLI. Done when every card renders the same in the web
-    session view (checked with agent-browser) and the old tool and its
-    `cliRun` helper are deleted.
+11. **7b, built (held calls everywhere).** Every write the CLI makes
+    through its one API client (`apps/cli/src/api/client.ts`) turns a 202
+    `pending_approval` into `PendingApprovalError`: the command prints the
+    approval link (or a `{"kortix_error":{"kind":"pending_approval",…}}`
+    line) and the process exits 3 when held calls were its only trouble
+    (`exitCodeFor`). The nine `kortix_*` sandbox tools render that as a
+    `needs_you` card with the approval link, and tell the model not to
+    repeat the call (`platform.ts` `cliError` / `fail`). Flow `WS-AUTH-18`,
+    test `platform-tools.test.ts`.
+    **Kept, on purpose:** the tools still drive the `kortix` CLI. The CLI is
+    the sandbox's SDK host and carries client logic (`triggers add`,
+    `connectors connect`, `sessions chat`); a tool rewritten onto raw
+    operations would duplicate that logic in a host. A tool command that is
+    one API call can move to its operation command (`kortix <id>`) when its
+    card is checked in the browser.
 
 ## Phase 2: agent rules on the Kortix API
 

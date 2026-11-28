@@ -81,7 +81,18 @@ interface MachineError {
   status?: number
   code?: string
   action?: string
+  execution_id?: string | null
+  approval_url?: string | null
 }
+
+/** A call a workspace rule held for a person's approval: Kortix runs it once after approval. */
+interface HeldCall {
+  executionId: string | null
+  approvalUrl: string | null
+}
+
+// Which tool errors are a held call, not a failure. Keyed by the error object, so the card contract stays the same.
+const heldCalls = new WeakMap<KortixToolError, HeldCall>()
 
 /** The last `{"kortix_error":…}` line of a run's stderr. */
 function machineError(stderr: string): MachineError | null {
@@ -109,6 +120,17 @@ function lastHumanLine(stderr: string): string {
 /** A failed run as the tool error the model and the card read. */
 export function cliError(run: CliRun): KortixToolError {
   const parsed = machineError(run.stderr)
+  // Exit 3: a workspace rule held the call for a person (apps/cli EXIT_PENDING_APPROVAL).
+  if (run.code === 3 || parsed?.kind === 'pending_approval') {
+    const held: HeldCall = { executionId: parsed?.execution_id ?? null, approvalUrl: parsed?.approval_url ?? null }
+    const error: KortixToolError = {
+      kind: 'failed',
+      message: `A workspace rule holds this for a person's approval${held.approvalUrl ? ` (${held.approvalUrl})` : ''}. Kortix runs it once they approve and resumes this session: do not call it again. Tell the person what it does and where to approve.`,
+      note: 'A person approves it; Kortix then runs it once.',
+    }
+    heldCalls.set(error, held)
+    return error
+  }
   const status = parsed?.status
   const message = parsed?.message || lastHumanLine(run.stderr) || `The command exited ${run.code}.`
   if (parsed?.kind === 'denied' || status === 401 || status === 403) {
@@ -176,6 +198,22 @@ export async function fail(
   error: KortixToolError,
   context: PlatformToolContext,
 ): Promise<KortixToolResult> {
+  const held = heldCalls.get(error)
+  if (held) {
+    return {
+      ok: false,
+      tool,
+      action,
+      card: {
+        title: `Waiting for approval: ${title.replace(/^Could not /, '')}`,
+        subtitle: error.note ?? 'A person approves it; Kortix then runs it once.',
+        status: 'needs_you',
+        ...(held.approvalUrl ? { links: [{ label: 'Review and approve', href: held.approvalUrl }] } : {}),
+      },
+      error,
+      data: { status: 'pending_approval', execution_id: held.executionId, approval_url: held.approvalUrl },
+    }
+  }
   const grantors = error.kind === 'denied' ? await projectManagers(context) : []
   const withGrantors: KortixToolError = grantors.length > 0 ? { ...error, grantors } : error
   const status: KortixToolCard['status'] = error.kind === 'denied' ? 'denied' : 'error'

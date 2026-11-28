@@ -268,7 +268,15 @@ export function machineErrors(): boolean {
 }
 
 /** Write one machine-readable error line to stderr. */
-export function writeMachineError(error: { kind: 'denied' | 'failed'; message?: string; status?: number; code?: string; action?: string }): void {
+export function writeMachineError(error: {
+  kind: 'denied' | 'failed' | 'pending_approval';
+  message?: string;
+  status?: number;
+  code?: string;
+  action?: string;
+  execution_id?: string | null;
+  approval_url?: string | null;
+}): void {
   process.stderr.write(`${JSON.stringify({ kortix_error: error })}\n`);
 }
 

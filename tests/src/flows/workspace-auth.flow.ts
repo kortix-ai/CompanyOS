@@ -1298,6 +1298,15 @@ flow(
         if ((await secretNames()).includes('"WSA18_KEY"')) throw new Error('the secret was written before approval');
       });
 
+      await ctx.step('a hand-written CLI command held by the rule: `kortix secrets set` → exit 3, the approval line, nothing written', async () => {
+        const r = await sandbox.run(['secrets', 'set', 'WSA18_CLI=v1', '--project', w], {
+          env: { KORTIX_TOKEN: steward.secret, KORTIX_PROJECT_ID: w, KORTIX_API_URL: ctx.env.apiUrl, KORTIX_ERROR_FORMAT: 'json' },
+        });
+        if (r.exitCode !== 3) throw new Error(`kortix secrets set: exit ${r.exitCode}: out=${r.stdout.slice(0, 400).replace(/\n/g, " | ")} err=${r.stderr.slice(0, 600).replace(/\n/g, " | ")}`);
+        if (!r.stderr.includes('"kind":"pending_approval"') || !r.stderr.includes('"execution_id"')) throw new Error(`no pending line: ${r.stderr.slice(0, 600)}`);
+        if ((await secretNames()).includes('"WSA18_CLI"')) throw new Error('the CLI write ran without approval');
+      });
+
       await ctx.step('the same call again gets the same held call back (one decision runs at most one call)', async () => {
         const again = (await steward.client.post(`/v1/workspaces/${w}/secrets`, { name: 'WSA18_KEY', value: 'v1' })).status(202);
         again.body().has('$.execution_id', executionId);

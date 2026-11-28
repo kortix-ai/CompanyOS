@@ -10,7 +10,24 @@ import {
   listHosts,
   markerActive,
 } from './api/config.ts';
-import { ApiError, clientFromAuth, type ApiClient } from './api/client.ts';
+import { ApiError, PendingApprovalError, clientFromAuth, type ApiClient } from './api/client.ts';
+
+/** Exit code of a call held for a person's approval. */
+export const EXIT_PENDING_APPROVAL = 3;
+
+// What this process's API calls ended in, for its exit code (`exitCodeFor`):
+// a command that loops over items folds each item's answer into one code.
+let heldCalls = 0;
+let failedCalls = 0;
+
+/**
+ * The process exit code for a command's own `code`: a 1 whose only trouble was
+ * calls held for a person's approval is 3, so a script tells "held, do not
+ * repeat" from "failed".
+ */
+export function exitCodeFor(code: number): number {
+  return code === 1 && heldCalls > 0 && failedCalls === 0 ? EXIT_PENDING_APPROVAL : code;
+}
 import { LINK_LOCATION, loadLink, resolveProjectId, resolveProjectRef } from './project-link.ts';
 import { ensureDefaultProjectBinding } from './project-bind.ts';
 import { NO_WORKSPACE_CODE, NO_WORKSPACE_LINE } from './api/no-workspace.ts';
@@ -804,6 +821,18 @@ export function noWorkspace(): number {
 }
 
 export function surfaceApiError(err: unknown): number {
+  // A write a rule held for a person: not a failure. Kortix runs it once after
+  // approval, so the caller must not run it again.
+  if (err instanceof PendingApprovalError) {
+    heldCalls += 1;
+    if (machineErrors()) {
+      writeMachineError({ kind: 'pending_approval', status: 202, message: err.message, execution_id: err.executionId, approval_url: err.approvalUrl });
+    } else {
+      process.stderr.write(`${status.warn(err.message)} Kortix runs it once a person approves${err.approvalUrl ? `: ${err.approvalUrl}` : ''}. Do not run it again.\n`);
+    }
+    return EXIT_PENDING_APPROVAL;
+  }
+  failedCalls += 1;
   // The person belongs to no workspace yet: name the two ways in.
   if (isNoWorkspaceError(err)) return noWorkspace();
   // The project's GitHub repository cannot be reached (KRTX-2955). The

@@ -18,11 +18,8 @@ import { ApiError as SdkApiError, callOperation, listOperations, type OperationD
 
 import { ApiError } from '../api/client.ts';
 import { withKortixScope } from '../api/sdk.ts';
-import { emitJson, resolveProjectAuth, resolveProjectContext, surfaceApiError } from '../command-helpers.ts';
+import { EXIT_PENDING_APPROVAL, emitJson, resolveProjectAuth, resolveProjectContext, surfaceApiError } from '../command-helpers.ts';
 import { C, status } from '../style.ts';
-
-/** Exit code of a call held for a person's approval. */
-export const EXIT_PENDING_APPROVAL = 3;
 
 const WORKSPACE_PARAMS = new Set(['workspaceId', 'projectId']);
 const kebab = (name: string) => name.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);

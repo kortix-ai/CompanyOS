@@ -47,6 +47,7 @@ import { runSchema } from './commands/schema.ts';
 import { runTemplates } from './commands/templates.ts';
 import { runSecrets } from './commands/secrets.ts';
 import { operationNamed, runOperation, runOps } from './commands/operations.ts';
+import { exitCodeFor } from './command-helpers.ts';
 import { runSelfHost } from './commands/self-host.ts';
 import { runSessionsChat } from './commands/sessions-chat.ts';
 import { runSessions } from './commands/sessions.ts';
@@ -559,7 +560,7 @@ main(argvForInvocation(process.argv0 ?? '', process.argv.slice(2)))
   // once, after the command's own output, and only when something was refused.
   .then(async (code) => {
     await printPermissionDenialIdentity();
-    return code;
+    return exitCodeFor(code);
   })
   .then((code) => finish(code))
   .catch(async (err: unknown) => {

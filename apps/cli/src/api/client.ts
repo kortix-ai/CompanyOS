@@ -35,6 +35,31 @@ export class ApiError extends SdkApiError {
   }
 }
 
+/**
+ * A write a workspace rule holds for a person's approval: the API answered
+ * 202 `pending_approval`. Kortix runs the call once after approval, so it is
+ * neither a success nor a failure to retry. `surfaceApiError` prints the link
+ * and exits 3 (EXIT_PENDING_APPROVAL).
+ */
+export class PendingApprovalError extends ApiError {
+  executionId: string | null;
+  approvalUrl: string | null;
+  constructor(body: { execution_id?: unknown; approval_url?: unknown; operation?: unknown }) {
+    super(202, `Held for a person's approval${typeof body.operation === 'string' ? ` (${body.operation})` : ''}.`, body);
+    this.executionId = typeof body.execution_id === 'string' ? body.execution_id : null;
+    this.approvalUrl = typeof body.approval_url === 'string' ? body.approval_url : null;
+  }
+}
+
+/** A write's answer, or PendingApprovalError when a rule held it. */
+function heldOr<T>(data: T): T {
+  const body = data as { status?: unknown; execution_id?: unknown } | null;
+  if (body && typeof body === 'object' && body.status === 'pending_approval' && typeof body.execution_id === 'string') {
+    throw new PendingApprovalError(body);
+  }
+  return data;
+}
+
 export interface ApiClient {
   apiBase: string;
   get<T>(path: string): Promise<T>;
@@ -258,20 +283,22 @@ async function requestOnce<T>(
           return data;
         }
         case 'POST':
-          return unwrap<T>(await backendApi.post<T>(endpoint, body, options));
+          return heldOr(unwrap<T>(await backendApi.post<T>(endpoint, body, options)));
         case 'PUT':
-          return unwrap<T>(await backendApi.put<T>(endpoint, body, options));
+          return heldOr(unwrap<T>(await backendApi.put<T>(endpoint, body, options)));
         case 'PATCH':
-          return unwrap<T>(await backendApi.patch<T>(endpoint, body, options));
+          return heldOr(unwrap<T>(await backendApi.patch<T>(endpoint, body, options)));
         case 'DELETE':
           // Bounded per-attempt deadline (not the 600s ceiling) so a stalled
           // delete aborts inside the caller's contract window and the SDK replays
           // it. See CLI_DELETE_TIMEOUT_MS.
-          return unwrap<T>(
-            await backendApi.delete<T>(endpoint, {
-              ...options,
-              timeout: CLI_DELETE_TIMEOUT_MS,
-            }),
+          return heldOr(
+            unwrap<T>(
+              await backendApi.delete<T>(endpoint, {
+                ...options,
+                timeout: CLI_DELETE_TIMEOUT_MS,
+              }),
+            ),
           );
       }
     });

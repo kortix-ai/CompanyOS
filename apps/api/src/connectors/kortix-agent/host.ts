@@ -1,6 +1,7 @@
 /**
  * Kortix's own MCP servers: the authenticator, the browser and the phone an
- * agent uses as its own, and Kortix Toolbox (paid tools, no sign-in). Served by this API in-process, like the
+ * agent uses as its own, Kortix Toolbox (paid tools, no sign-in), and `kortix`
+ * (the Kortix API itself, acting as the caller). Served by this API in-process, like the
  * Google servers (../google/host.ts): `../egress.ts` hands every request for
  * {@link KORTIX_AGENT_MCP_ORIGIN} to `dispatchKortixAgentMcp`, and the name
  * does not resolve in DNS, so a request that bypassed the egress fails closed.
@@ -15,7 +16,7 @@ export const KORTIX_AGENT_MCP_ORIGIN = 'https://agent.mcp.kortix.com';
 /** The calling session, which the gateway sets on every request to these servers; empty outside a session. */
 export const KORTIX_SESSION_HEADER = 'x-kortix-session';
 
-export const KORTIX_AGENT_SERVICES = ['authenticator', 'browser', 'phone', 'toolbox'] as const;
+export const KORTIX_AGENT_SERVICES = ['authenticator', 'browser', 'kortix', 'phone', 'toolbox'] as const;
 export type KortixAgentService = (typeof KORTIX_AGENT_SERVICES)[number];
 
 const SERVICE_SET: ReadonlySet<string> = new Set(KORTIX_AGENT_SERVICES);
@@ -24,6 +25,7 @@ const SERVICE_SET: ReadonlySet<string> = new Set(KORTIX_AGENT_SERVICES);
 export const KORTIX_AGENT_SLUGS: Record<KortixAgentService, string> = {
   authenticator: 'kortix_agent_authenticator',
   browser: 'kortix_browser',
+  kortix: 'kortix',
   phone: 'kortix_phone',
   toolbox: 'kortix_toolbox',
 };

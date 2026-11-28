@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { kortixAgentServiceForUrl } from './kortix-agent/host';
+import { kortixAgentMcpUrl, kortixAgentServiceForUrl } from './kortix-agent/host';
+import { KORTIX_CONNECTOR_SLUG } from '../iam/kortix-rules';
 import { connectorConnections, connectorActions, connectorPolicies, connectorPolicySets, connectors, connectorProjectPolicies, connectorProjectSettings, connectorSyncFences, projectSessionConnectorBindings, tunnelConnections } from '@kortix/db';
 /**
  * Connector materialization sweep — read `connectors:` from kortix.yaml,
@@ -596,6 +597,8 @@ async function syncProjectConnectorsFenced(
   // (the parser rejects `provider="computer"`). Every existing one stays
   // materialized, which also keeps its native catalog current after a code change.
   const computerSpecs = await existingComputerConnectorSpecs(projectId, declaredSpecs);
+  // The Kortix API is a connector in every project (`kortix`), declared or not.
+  declaredSpecs = withKortixConnector(declaredSpecs);
   const specs = [...declaredSpecs, ...channelSpecs, ...computerSpecs];
   // The summary must agree with `connectors ls` (KRTX-2669): the list applies
   // two hiding predicates (`hideMachinelessComputers` and `hideSupersededSlack`,
@@ -644,13 +647,11 @@ async function syncProjectConnectorsFenced(
       .map((identifier) => confineSharedProjectSecretToConnector(projectId, identifier)),
   );
 
-  // No readable manifest AND nothing installed → bail WITHOUT deleting (a
-  // transient git error must never wipe a project's connectors).
+  // No readable manifest AND nothing installed: say so, and materialize only
+  // `kortix`. Deletions below need a readable manifest, so a transient git
+  // error never wipes a project's connectors.
   if (!manifest && channelSpecs.length === 0 && computerSpecs.length === 0) {
-    return {
-      synced: 0,
-      errors: [{ slug: '(manifest)', error: 'kortix.yaml not found or unreadable' }],
-    };
+    errors.push({ slug: '(manifest)', error: 'kortix.yaml not found or unreadable' });
   }
 
   const existing = await db
@@ -1178,6 +1179,39 @@ const LEGACY_EMPTY_COMPUTER_PROFILE = {
   computer_accounts_backfilled: true,
 } as const;
 
+/**
+ * `kortix`, the Kortix API as a connector (kortix-agent/kortix.ts), in every
+ * project. A kortix.yaml entry with slug `kortix` keeps its rules and policy
+ * sets; the server, provider and auth are always Kortix's own.
+ */
+export function withKortixConnector(declared: ConnectorSpec[]): ConnectorSpec[] {
+  const own = declared.find((spec) => spec.slug === KORTIX_CONNECTOR_SLUG);
+  const kortix: ConnectorSpec = {
+    slug: KORTIX_CONNECTOR_SLUG,
+    path: own?.path ?? 'platform: kortix',
+    name: 'Kortix',
+    enabled: true,
+    provider: 'mcp',
+    credentialMode: 'shared',
+    authorizationStrategy: 'project',
+    sensitive: false,
+    app: null,
+    account: null,
+    url: kortixAgentMcpUrl('kortix'),
+    transport: 'http',
+    endpoint: null,
+    baseUrl: null,
+    platform: null,
+    spec: null,
+    // The account's minted credential (kortix-agent/state.ts), as every Kortix-built server takes it.
+    auth: { type: 'bearer', in: 'header', name: 'Authorization', prefix: 'Bearer', secret: null },
+    headers: {},
+    policies: own?.policies ?? [],
+    ...(own?.policySets ? { policySets: own.policySets } : {}),
+  };
+  return [...declared.filter((spec) => spec.slug !== KORTIX_CONNECTOR_SLUG), kortix];
+}
+
 function computerConnectorSpec(input: {
   slug: string;
   name: string;
@@ -1478,7 +1512,7 @@ export async function resolveCatalog(
         const agentService = kortixAgentServiceForUrl(spec.url!);
         if (agentService) {
           const { kortixAgentTools, toolListing } = await import('./kortix-agent/server');
-          return { actions: normalizeMcp(kortixAgentTools(agentService).map(toolListing) as any[]), server: spec.url };
+          return { actions: normalizeMcp(kortixAgentTools(agentService).map(toolListing) as any[], { dotted: agentService === 'kortix' }), server: spec.url };
         }
         assertAllowedEndpointUrl(spec.url!);
         let tools: unknown[];

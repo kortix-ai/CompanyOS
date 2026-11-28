@@ -1,4 +1,5 @@
 import { logger } from '../lib/logger';
+import { KORTIX_CONNECTOR_SLUG, isKortixPolicy } from '../iam/kortix-rules';
 import { APPROVAL_RERUN_RULE, heldCallRepeatInstructions, heldRunRule } from './approval-expiry';
 import {
   APPROVAL_ENRICHERS,
@@ -1186,6 +1187,10 @@ async function enforceCallPolicies(
       : Promise.resolve(undefined),
   ]);
   const setMissing = policySet !== null && setPolicies === null;
+  // `kortix` is the Kortix API: only project rules that name it apply, and it
+  // defaults to allow (the caller's IAM role decides in the handler), exactly
+  // as the agent rule gate decides a direct API call (iam/kortix-rules.ts).
+  const isKortix = input.connectorSlug === KORTIX_CONNECTOR_SLUG;
   // Built once per gated call: the redacted preview goes in the audit row and
   // the one-liner rides alongside the link, so an out-of-band relay ("approve
   // this: <url>") is still specific about what is being approved.
@@ -1227,12 +1232,12 @@ async function enforceCallPolicies(
   const decision = resolveEffectiveAction({
     fullPath,
     relPath: input.actionPath,
-    projectPolicies,
+    projectPolicies: isKortix ? projectPolicies.filter(isKortixPolicy) : projectPolicies,
     connectorPolicies,
     setPolicies: setPolicies ?? undefined,
     setMissing,
     risk: action.risk,
-    defaultMode,
+    defaultMode: isKortix ? 'allow_all' : defaultMode,
     sensitive: connector.sensitive,
     // Rules may also condition on the ARGUMENTS ("only to these addresses"),
     // so the engine needs the real payload. This is the post-context-injection

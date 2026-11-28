@@ -12,8 +12,7 @@
  */
 import type { Context } from 'hono';
 import { PROJECT_ACTIONS } from '../../iam';
-import { getAgentGrant } from '../../iam/agent-scope';
-import { agentListAllows } from '../../iam/kortix-rules';
+import { agentListAllows, getAgentGrant } from '../../iam/agent-scope';
 import { callerKortixSessionId } from '../../middleware/caller-session';
 import { privateChannelFoldersFor, sessionPrivateChannelFolder } from '../../drives/service';
 import { driveStorageAvailable } from '../../drives/volumes';

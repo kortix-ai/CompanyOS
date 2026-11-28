@@ -1,8 +1,7 @@
 import type { AgentGrant } from '@kortix/db';
 import { isMyKortixAgentName } from '@kortix/shared';
 import { PROJECT_ACTIONS } from '../../iam/actions';
-import { canonicalizeGrantActions, canonicalizeGrantConnectors } from '../../iam/agent-scope';
-import { agentListAllows } from '../../iam/kortix-rules';
+import { agentListAllows, canonicalizeGrantActions, canonicalizeGrantConnectors } from '../../iam/agent-scope';
 import type { GitBackedProject } from '../git';
 import { disabledMyKortixAgentGrant, myKortixAgentGrant } from '../lib/my-kortix-agent';
 import { RUNTIME_BUILTIN_AGENTS } from '@kortix/manifest-schema';

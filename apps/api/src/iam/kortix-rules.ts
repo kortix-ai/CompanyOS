@@ -19,37 +19,11 @@
 import type { AgentGrant } from '@kortix/db';
 import { type Policy, type PolicyAction, resolveEffectiveRule } from '../connectors/policy';
 import type { Operation } from '../shared/operation-registry';
-import { toLegacyAction } from '@kortix/shared/workspace-actions';
+import { agentListAllows } from './agent-scope';
+
+export { agentListAllows };
 
 export const KORTIX_CONNECTOR_SLUG = 'kortix';
-
-/**
- * Actions an old `kortix_permissions` list never had to name: the
- * membership tiers `loadProjectForUser` asks for, and `none` (an operation
- * with no IAM check: the caller's own profile, a public read).
- */
-const LIST_EXEMPT_ACTIONS: ReadonlySet<string> = new Set(['project.read', 'project.write', 'none']);
-
-/**
- * Operations whose old check asked a different action than the one the route
- * declares: an old list kept allowing them with that action. `sessions.stop`
- * asked `project.session.start` ("stopping is part of the session lifecycle").
- */
-const LIST_ALSO_ACCEPTS: Readonly<Record<string, string>> = { 'sessions.stop': 'project.session.start' };
-
-/**
- * An old `kortix_permissions` list read as rules: does it allow `action`?
- * No list, or `all`, allows. Both sides compare in the catalog's legacy
- * spelling (`canonicalizeGrantActions` rewrote manifest aliases on input).
- */
-export function agentListAllows(grant: AgentGrant | null | undefined, action: string, operationId?: string): boolean {
-  if (!grant || grant.permissions === 'all') return true;
-  if (LIST_EXEMPT_ACTIONS.has(action)) return true;
-  const wanted = new Set([toLegacyAction(action)]);
-  const also = operationId ? LIST_ALSO_ACCEPTS[operationId] : undefined;
-  if (also) wanted.add(toLegacyAction(also));
-  return grant.permissions.some((a) => wanted.has(toLegacyAction(a)));
-}
 
 export type KortixRuleSource = 'exposure' | 'project' | 'policy_set' | 'agent_permissions' | 'connector' | 'default';
 
@@ -103,7 +77,7 @@ export function decideKortixOperation(input: KortixRuleInput): KortixRuleDecisio
   }
 
   if (input.setPolicies === undefined && input.grant && input.grant.permissions !== 'all') {
-    const listed = agentListAllows(input.grant, operation.action, operation.id);
+    const listed = agentListAllows(input.grant, operation.action);
     return { action: listed ? 'always_run' : 'block', source: 'agent_permissions' };
   }
 

@@ -14,8 +14,7 @@ import {
   toWorkspaceAction,
 } from './actions';
 import { normalizeObj, tokenScopeAllows } from './authorize';
-import { canonicalizeGrantActions } from './agent-scope';
-import { agentListAllows as agentMayPerform } from './kortix-rules';
+import { agentListAllows as agentMayPerform, canonicalizeGrantActions } from './agent-scope';
 
 describe('the workspace alias map is the API catalog', () => {
   test('one workspace name for every catalog action, and nothing else', () => {

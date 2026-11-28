@@ -388,10 +388,10 @@ flow(
         if (r.exitCode !== 0) throw new Error(`kortix members ls: exit ${r.exitCode}: ${r.all.slice(0, 600)}`);
       });
 
-      await ctx.step('the same agent minting a key or deleting the workspace → 403 agent_human_only_action', async () => {
+      await ctx.step('the same agent minting a key or deleting the workspace → 403 operation_not_for_agents', async () => {
         const mint = await governed.client.post(`/v1/workspaces/${project.id}/tokens`, { name: 'wsa5-agent-key' });
-        mint.status(403).body().has('$.code', 'agent_human_only_action').has('$.workspace_action', 'workspace.token.create');
-        (await governed.client.del(`/v1/workspaces/${project.id}`)).status(403).body().has('$.code', 'agent_human_only_action');
+        mint.status(403).body().has('$.code', 'operation_not_for_agents').has('$.operation', 'tokens.create');
+        (await governed.client.del(`/v1/workspaces/${project.id}`)).status(403).body().has('$.code', 'operation_not_for_agents').has('$.operation', 'workspaces.delete');
       });
     } finally {
       sandbox.dispose();
@@ -542,12 +542,12 @@ flow(
         (await session.get(`/v1/workspaces/${w.id}/members`)).status(200);
       });
 
-      await ctx.step('minting a service account, configuring auto-topup and deleting the workspace → 403 agent_human_only_action', async () => {
+      await ctx.step('minting a service account, configuring auto-topup and deleting the workspace → 403 operation_not_for_agents', async () => {
         (await session.post(`/v1/workspaces/${w.id}/iam/service-accounts`, { name: 'wsa8-sa' }))
-          .status(403).body().has('$.code', 'agent_human_only_action');
+          .status(403).body().has('$.code', 'operation_not_for_agents');
         (await session.post('/v1/billing/auto-topup/configure', { account_id: team.id, enabled: true, threshold: 5, amount: 20 }))
-          .status(403).body().has('$.code', 'agent_human_only_action');
-        (await session.del(`/v1/workspaces/${w.id}`)).status(403).body().has('$.code', 'agent_human_only_action');
+          .status(403).body().has('$.code', 'operation_not_for_agents');
+        (await session.del(`/v1/workspaces/${w.id}`)).status(403).body().has('$.code', 'operation_not_for_agents');
       });
 
       await ctx.step('the owner in the browser keeps the same power: POST /iam/service-accounts → 201; the workspace still answers 200', async () => {
@@ -1156,6 +1156,168 @@ flow(
         });
       });
     } finally {
+      await world.close();
+    }
+  },
+);
+
+// ── WS-AUTH-17 — agent rules on the Kortix API: one gate per operation ─────────
+flow(
+  'WS-AUTH-17',
+  {
+    domain: 'workspaces',
+    requires: ['database'],
+    timeoutMs: 180_000,
+    routes: [
+      'GET /v1/workspaces/:workspaceId/sessions',
+      'GET /v1/workspaces/:workspaceId/secrets',
+      'POST /v1/workspaces/:workspaceId/secrets',
+      'POST /v1/workspaces/:workspaceId/spaces',
+      'PUT /v1/connectors/projects/:projectId/policies',
+    ],
+  },
+  async (ctx) => {
+    const team = await ctx.fixtures.team();
+    const project = await team.project({ managedGit: true });
+    const world = await AgentPrincipalsWorld.open(ctx, { accountId: team.id, projectId: project.id });
+    const sandbox = new CliSandbox('wsa17');
+    const w = project.id;
+    try {
+      const cliEnv = (secret: string) => ({ KORTIX_TOKEN: secret, KORTIX_PROJECT_ID: w, KORTIX_API_URL: ctx.env.apiUrl });
+      await ctx.step('the manifest declares `auditor` (session read only) and `steward` ("*")', async () => {
+        await world.writeManifest(
+          'project:\n  name: example-org-wsa17\ndefault_agent: steward\nagents:\n  steward:\n    kortix_permissions: "*"\n  auditor:\n    kortix_permissions: [project.session.read]\n',
+        );
+      });
+
+      const auditor = await world.mintAgentSession({ agent: 'auditor', launcher: ctx.P.OWNER });
+      const steward = await world.mintAgentSession({ agent: 'steward', launcher: ctx.P.OWNER });
+
+      await ctx.step('the list reads as rules: auditor lists sessions → 200; lists or sets secrets → 403 agent_scope_insufficient naming the operation', async () => {
+        (await auditor.client.get(`/v1/workspaces/${w}/sessions`)).status(200);
+        (await auditor.client.get(`/v1/workspaces/${w}/secrets`))
+          .status(403).body().has('$.code', 'agent_scope_insufficient').has('$.operation', 'secrets.list').has('$.source', 'agent_permissions');
+        (await auditor.client.post(`/v1/workspaces/${w}/secrets`, { name: 'WSA17_KEY', value: 'v1' }))
+          .status(403).body().has('$.code', 'agent_scope_insufficient').has('$.operation', 'secrets.set').has('$.action', 'project.secret.write');
+      });
+
+      await ctx.step('the real CLI of the auditor: `kortix secrets ls` → non-zero exit naming the operation', async () => {
+        const r = await sandbox.run(['secrets', 'ls', '--json'], { env: cliEnv(auditor.secret) });
+        if (r.exitCode === 0) throw new Error(`kortix secrets ls exited 0: ${r.all.slice(0, 400)}`);
+        if (!r.all.includes('secrets.list')) throw new Error(`the CLI error does not name secrets.list: ${r.all.slice(0, 600)}`);
+      });
+
+      await ctx.step('steward ("*") sets a secret → 200; an operation for people only (spaces.create) → 403 operation_not_for_agents', async () => {
+        (await steward.client.post(`/v1/workspaces/${w}/secrets`, { name: 'WSA17_KEY', value: 'v1' })).status(200);
+        (await steward.client.post(`/v1/workspaces/${w}/spaces`, { name: 'wsa17' }))
+          .status(403).body().has('$.code', 'operation_not_for_agents').has('$.operation', 'spaces.create');
+      });
+
+      await ctx.step('a project rule `kortix.secrets.set` block (with a condition) stops steward for PROD_* names only; `*` block leaves the Kortix API alone', async () => {
+        const policies = [
+          { match: 'kortix.secrets.set', action: 'block', conditions: [{ arg: 'name', match: 'PROD_*' }] },
+          { match: '*', action: 'block' },
+        ];
+        (await ctx.client.as(ctx.P.OWNER).put('/v1/connectors/projects/:projectId/policies', { policies, defaultMode: 'allow_all' }, { params: { projectId: w }, timeoutMs: 60_000 }))
+          .status(200);
+
+        (await steward.client.post(`/v1/workspaces/${w}/secrets`, { name: 'PROD_DB', value: 'v1' }))
+          .status(403).body().has('$.code', 'policy_block').has('$.source', 'project').has('$.operation', 'secrets.set');
+        (await steward.client.post(`/v1/workspaces/${w}/secrets`, { name: 'DEV_DB', value: 'v1' })).status(200);
+        (await steward.client.get(`/v1/workspaces/${w}/sessions`)).status(200);
+      });
+
+      await ctx.step('people are not gated: the owner sets PROD_DB → 200', async () => {
+        (await ctx.client.as(ctx.P.OWNER).post(`/v1/workspaces/${w}/secrets`, { name: 'PROD_DB', value: 'v1' })).status(200);
+      });
+    } finally {
+      sandbox.dispose();
+      await world.close();
+    }
+  },
+);
+
+// ── WS-AUTH-18 — the `kortix` connector and "ask" on the Kortix API ─────────────
+flow(
+  'WS-AUTH-18',
+  {
+    domain: 'workspaces',
+    requires: ['database'],
+    timeoutMs: 240_000,
+    routes: [
+      'POST /v1/connectors/workspaces/:workspaceId/call',
+      'POST /v1/workspaces/:workspaceId/secrets',
+      'GET /v1/workspaces/:workspaceId/secrets',
+      'POST /v1/workspaces/:workspaceId/approvals/:executionId',
+      'PUT /v1/connectors/projects/:projectId/policies',
+    ],
+  },
+  async (ctx) => {
+    const team = await ctx.fixtures.team();
+    const project = await team.project({ managedGit: true });
+    const world = await AgentPrincipalsWorld.open(ctx, { accountId: team.id, projectId: project.id });
+    const sandbox = new CliSandbox('wsa18');
+    const w = project.id;
+    const owner = ctx.client.as(ctx.P.OWNER);
+    const secretNames = async () => (await owner.get(`/v1/workspaces/${w}/secrets`)).status(200).text();
+    try {
+      await ctx.step('the manifest declares `steward` ("*") with no connector list', async () => {
+        await world.writeManifest('project:\n  name: example-org-wsa18\ndefault_agent: steward\nagents:\n  steward:\n    kortix_permissions: "*"\n    connectors: []\n');
+      });
+      const steward = await world.mintAgentSession({ agent: 'steward', launcher: ctx.P.OWNER });
+
+      await ctx.step('`kortix` is a connector of every workspace: steward lists sessions through it → ok, the route answered 200', async () => {
+        const r = (await steward.client.post(`/v1/connectors/workspaces/${w}/call`, { connector: 'kortix', action: 'sessions.list', args: { workspaceId: w } })).status(200);
+        r.body().has('$.ok', true);
+        const body = r.json<any>();
+        const ran = body.output ?? body.data?.structuredContent ?? body.data;
+        if (ran?.status !== 200 || !Array.isArray(ran?.data?.sessions ?? ran?.data)) throw new Error(`the route did not answer 200 with sessions: ${r.text().slice(0, 600)}`);
+      });
+
+      await ctx.step('a people-only operation is no kortix tool: spaces.create → action_not_found', async () => {
+        const r = await steward.client.post(`/v1/connectors/workspaces/${w}/call`, { connector: 'kortix', action: 'spaces.create', args: { workspaceId: w, body: { name: 'x' } } });
+        if (!JSON.stringify(r.json<any>()).includes('action_not_found')) throw new Error(`expected action_not_found: ${r.text().slice(0, 400)}`);
+      });
+
+      await ctx.step('the real CLI calls the kortix connector: `kortix connectors call kortix sessions.list` → exit 0', async () => {
+        const r = await sandbox.run(['connectors', 'call', 'kortix', 'sessions.list', JSON.stringify({ workspaceId: w })], {
+          env: { KORTIX_TOKEN: steward.secret, KORTIX_PROJECT_ID: w, KORTIX_API_URL: ctx.env.apiUrl },
+        });
+        if (r.exitCode !== 0) throw new Error(`kortix connectors call: exit ${r.exitCode}: ${r.all.slice(0, 600)}`);
+      });
+
+      let executionId = '';
+      await ctx.step('a rule asks for kortix.secrets.set: steward\'s direct POST /secrets → 202 pending_approval with an execution id; nothing is written yet', async () => {
+        (await owner.put('/v1/connectors/projects/:projectId/policies', { policies: [{ match: 'kortix.secrets.set', action: 'require_approval' }], defaultMode: 'allow_all' }, { params: { projectId: w }, timeoutMs: 60_000 }))
+          .status(200);
+        const r = (await steward.client.post(`/v1/workspaces/${w}/secrets`, { name: 'WSA18_KEY', value: 'v1' })).status(202);
+        r.body().has('$.status', 'pending_approval').has('$.operation', 'secrets.set').has('$.runs_on_approval', true);
+        executionId = r.json<{ execution_id: string }>().execution_id;
+        if (!executionId) throw new Error(`no execution_id: ${r.text().slice(0, 400)}`);
+        if ((await secretNames()).includes('"WSA18_KEY"')) throw new Error('the secret was written before approval');
+      });
+
+      await ctx.step('the same call again gets the same held call back (one decision runs at most one call)', async () => {
+        const again = (await steward.client.post(`/v1/workspaces/${w}/secrets`, { name: 'WSA18_KEY', value: 'v1' })).status(202);
+        again.body().has('$.execution_id', executionId);
+      });
+
+      await ctx.step('the owner approves → Kortix runs it once, as steward: the secret exists', async () => {
+        (await owner.post(`/v1/workspaces/${w}/approvals/${executionId}`, { decision: 'approve' })).status([200, 201]);
+        await waitFor(async () => (await secretNames()).includes('"WSA18_KEY"'), {
+          until: (present) => present,
+          timeoutMs: 60_000,
+          intervalMs: 1_000,
+          description: 'the approved held call wrote WSA18_KEY',
+        });
+      });
+
+      await ctx.step('through the connector the same rule asks too → 202 pending_approval', async () => {
+        const r = (await steward.client.post(`/v1/connectors/workspaces/${w}/call`, { connector: 'kortix', action: 'secrets.set', args: { workspaceId: w, body: { name: 'WSA18_TWO', value: 'v2' } } })).status(202);
+        r.body().has('$.status', 'pending_approval');
+      });
+    } finally {
+      sandbox.dispose();
       await world.close();
     }
   },

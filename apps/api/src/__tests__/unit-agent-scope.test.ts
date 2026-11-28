@@ -7,14 +7,8 @@
  */
 import { describe, expect, test } from 'bun:test';
 import { extractAgents, grantFromLoadedAgents } from '../projects/agents';
-import {
-  canonicalizeGrantActions,
-  agentMayUseConnector,
-  agentMayUseEnv,
-  isProjectSessionPrincipal,
-} from '../iam/agent-scope';
+import { agentListAllows as agentMayPerform, agentMayUseConnector, agentMayUseEnv, canonicalizeGrantActions, isProjectSessionPrincipal } from '../iam/agent-scope';
 import { parseManifestString } from '../projects/triggers';
-import { agentListAllows as agentMayPerform } from '../iam/kortix-rules';
 
 /** `agentsBody` is the indented body of an `agents:` map; empty declares none. */
 function loadAgents(agentsBody: string) {

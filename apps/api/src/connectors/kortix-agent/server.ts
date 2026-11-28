@@ -15,6 +15,8 @@ import { AUTHENTICATOR_TOOLS } from './authenticator';
 import { BROWSER_TOOLS } from './browser';
 import { PHONE_TOOLS } from './phone';
 import { TOOLBOX_TOOLS } from './toolbox';
+import { kortixOperationTools } from './kortix';
+import { KORTIX_CALLER_HEADER, verifyCaller } from '../../shared/in-process-caller';
 import { KORTIX_SESSION_HEADER, kortixAgentServiceForUrl, type KortixAgentService } from './host';
 import { type AccountState, decodeAccountState, InvalidAccountToken, updateAccountState } from './state';
 import { type AgentTool, ToolInputError } from './tool';
@@ -24,19 +26,22 @@ const SUPPORTED_PROTOCOL_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26'];
 const SERVICE_TITLES: Record<KortixAgentService, string> = {
   authenticator: 'Kortix Agent Authenticator',
   browser: 'Kortix Browser',
+  kortix: 'Kortix',
   phone: 'Kortix Phone',
   toolbox: 'Kortix Toolbox',
 };
 
-const TOOLS: Record<KortixAgentService, readonly AgentTool<never>[]> = {
-  authenticator: AUTHENTICATOR_TOOLS as readonly AgentTool<never>[],
-  browser: BROWSER_TOOLS as readonly AgentTool<never>[],
-  phone: PHONE_TOOLS as readonly AgentTool<never>[],
-  toolbox: TOOLBOX_TOOLS as readonly AgentTool<never>[],
+const TOOLS: Record<KortixAgentService, () => readonly AgentTool<never>[]> = {
+  authenticator: () => AUTHENTICATOR_TOOLS as readonly AgentTool<never>[],
+  browser: () => BROWSER_TOOLS as readonly AgentTool<never>[],
+  // Read from the route registry, which app.ts fills at boot.
+  kortix: kortixOperationTools,
+  phone: () => PHONE_TOOLS as readonly AgentTool<never>[],
+  toolbox: () => TOOLBOX_TOOLS as readonly AgentTool<never>[],
 };
 
 export function kortixAgentTools(service: KortixAgentService): readonly AgentTool<never>[] {
-  return TOOLS[service];
+  return TOOLS[service]();
 }
 
 type Answer = { status: number; body: unknown; headers?: Record<string, string> };
@@ -70,10 +75,10 @@ export function setKortixAgentClockForTests(fn: (() => number) | null): void {
   clock = fn ?? (() => Date.now());
 }
 
-async function callTool(service: KortixAgentService, rpc: Rpc, state: AccountState, sessionId: string | null): Promise<Answer> {
+async function callTool(service: KortixAgentService, rpc: Rpc, state: AccountState, sessionId: string | null, request: Request): Promise<Answer> {
   const name = rpc.params.name;
   if (typeof name !== 'string') return rpcError(rpc.id, -32602, 'Invalid params: name must be a tool name');
-  const tool = TOOLS[service].find((t) => t.name === name) as AgentTool<Record<string, unknown>> | undefined;
+  const tool = TOOLS[service]().find((t) => t.name === name) as AgentTool<Record<string, unknown>> | undefined;
   if (!tool) return rpcError(rpc.id, -32602, `Unknown tool: ${name}. tools/list names the ${SERVICE_TITLES[service]} tools.`);
   const args = rpc.params.arguments && typeof rpc.params.arguments === 'object' ? (rpc.params.arguments as Record<string, unknown>) : {};
   let current = state;
@@ -85,6 +90,7 @@ async function callTool(service: KortixAgentService, rpc: Rpc, state: AccountSta
     },
     now: () => clock(),
     sessionId,
+    caller: verifyCaller(request.headers.get(KORTIX_CALLER_HEADER)),
   };
   try {
     const output = await tool.run(args, ctx);
@@ -146,9 +152,9 @@ async function answer(service: KortixAgentService, request: Request): Promise<An
     case 'ping':
       return { status: 200, body: { jsonrpc: '2.0', id: rpc.id, result: {} } };
     case 'tools/list':
-      return { status: 200, body: { jsonrpc: '2.0', id: rpc.id, result: { tools: TOOLS[service].map(toolListing) } } };
+      return { status: 200, body: { jsonrpc: '2.0', id: rpc.id, result: { tools: TOOLS[service]().map(toolListing) } } };
     case 'tools/call':
-      return callTool(service, rpc, state, request.headers.get(KORTIX_SESSION_HEADER) || null);
+      return callTool(service, rpc, state, request.headers.get(KORTIX_SESSION_HEADER) || null, request);
     default:
       return rpcError(rpc.id, -32601, `Method not found: ${rpc.method}`);
   }

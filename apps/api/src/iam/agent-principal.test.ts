@@ -43,8 +43,8 @@ describe('agentPrincipalDecision', () => {
     expect(decide('project.file.read')).toEqual({ allowed: true, reason: 'role' });
   });
 
-  test('the grant does not decide here: the agent rule gate applied it before the handler', () => {
-    expect(decide('project.secret.read')).toEqual({ allowed: true, reason: 'role' });
+  test('an action outside the grant is agent_scope_insufficient', () => {
+    expect(decide('project.secret.read')).toEqual({ allowed: false, reason: 'agent_scope_insufficient' });
   });
 
   test('an action in the grant but outside a bound ceiling is agent_ceiling_insufficient', () => {
@@ -100,9 +100,13 @@ describe('agentPrincipalDecision', () => {
       ceilingAllows: (a) => (opts.ceiling ?? AGENT_DEFAULT_CEILING).has(a),
     });
 
-  test('an account-scope action of the own workspace is decided by the ceiling', () => {
+  test('an account-scope action of the own workspace is decided by grant ∩ ceiling', () => {
     expect(account('member.invite', { accountInScope: true })).toEqual({ allowed: true, reason: 'role' });
     expect(account('member.read', { accountInScope: true, grant: grant(['workspace.member.read']) }).allowed).toBe(true);
+    expect(account('member.invite', { accountInScope: true, grant: grant(['project.read']) })).toEqual({
+      allowed: false,
+      reason: 'agent_scope_insufficient',
+    });
     expect(account('member.invite', { accountInScope: true, ceiling: new Set(['member.read']) })).toEqual({
       allowed: false,
       reason: 'agent_ceiling_insufficient',

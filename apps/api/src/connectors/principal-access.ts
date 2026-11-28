@@ -24,6 +24,7 @@
  * server-side from `project_sessions.metadata.source` — never from the
  * request.
  */
+import { KORTIX_CONNECTOR_SLUG } from '../iam/kortix-rules';
 import type { AgentGrant } from '@kortix/db';
 import { isMyKortixAgentName } from '@kortix/shared';
 import { agentMayUseConnector, agentPolicySet } from '../iam/agent-scope';
@@ -44,6 +45,8 @@ export function principalMayUseConnector(
   principal: ConnectorAccessPrincipal,
   slug: string,
 ): boolean {
+  // The Kortix API itself: its own rules decide (iam/kortix-rules.ts), never the connector list.
+  if (slug === KORTIX_CONNECTOR_SLUG) return true;
   if (agentMayUseConnector(principal.agentGrant ?? null, slug)) return true;
   if (principal.channelConnectorSlugs?.includes(slug)) return true;
   // An ancestor entry that could not be read (its token was revoked or its

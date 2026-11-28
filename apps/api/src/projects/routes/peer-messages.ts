@@ -24,8 +24,7 @@ import {
 import type { Context } from 'hono';
 import { checkBillingAdmission } from '../../billing/services/billing-gate';
 import { PROJECT_ACTIONS } from '../../iam';
-import { getAgentGrant, isProjectSessionPrincipal } from '../../iam/agent-scope';
-import { agentListAllows } from '../../iam/kortix-rules';
+import { agentListAllows, getAgentGrant, isProjectSessionPrincipal } from '../../iam/agent-scope';
 import { callerKortixSessionId } from '../../middleware/caller-session';
 import { mayPromptSessions } from '../../notifications/access';
 import { auth, errors, json } from '../../openapi';

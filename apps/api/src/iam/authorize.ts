@@ -44,6 +44,7 @@ import { isHumanOnlyAction, toLegacyAction } from '@kortix/shared/workspace-acti
 import { ttlMemo } from '../shared/ttl-memo';
 import { keyScopeAllows } from './key-scope';
 import { AGENT_DEFAULT_CEILING, agentPrincipalDecision } from './agent-principal';
+import { agentListAllows } from './agent-scope';
 import {
   loadPermissionCatalog,
   loadSystemRoles,
@@ -396,6 +397,13 @@ async function authorizeDecision(actor: Actor, action: string, obj: EvalObj): Pr
       obj.resource.id,
     );
     if (!usable) return deny('resource_scope_insufficient');
+  }
+
+  // 10. role ∩ the agent's list, for a token that carries a grant but did not
+  // take step 5a (a session token with no service account). Kept as the
+  // backstop so a list is never ignored; a no-op for a null grant and `all`.
+  if (tokenId && !agentListAllows(binding?.agentGrant ?? null, action)) {
+    return deny('agent_scope_insufficient');
   }
 
   return allow('role');

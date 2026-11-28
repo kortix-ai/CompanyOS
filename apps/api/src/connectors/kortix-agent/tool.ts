@@ -3,6 +3,7 @@
  * argument readers are the Google servers' (../google/tool.ts).
  */
 import type { ToolAnnotations } from '../google/tool';
+import type { InProcessCaller } from '../../shared/in-process-caller';
 import type { AccountState } from './state';
 
 export { DESTRUCTIVE, READ, WRITE, ToolInputError, optInt, optStr, reqStr, s, i, schema } from '../google/tool';
@@ -20,6 +21,8 @@ export interface AgentToolContext<D> {
   now(): number;
   /** The calling session (set by the gateway), or null for a call outside a session. */
   sessionId: string | null;
+  /** The caller the gateway signed (`x-kortix-caller`), or null; the `kortix` connector acts as it. */
+  caller: InProcessCaller | null;
 }
 
 export interface AgentTool<D = Record<string, unknown>> {

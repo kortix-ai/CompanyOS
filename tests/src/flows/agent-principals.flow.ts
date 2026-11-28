@@ -421,14 +421,14 @@ flow(
         if (role !== 'member' && role !== 'user') throw new Error(`member role is ${role}, expected member`);
       });
 
-      await ctx.step('HUMAN_ONLY (minting credentials): `all` cannot mint a project token (403 agent_human_only_action)', async () => {
+      await ctx.step('people only (minting credentials): `all` cannot mint a project token (403 operation_not_for_agents)', async () => {
         const r = await root.client.post('/v1/workspaces/:projectId/cli-token', {}, { params: { projectId: project.id } });
-        assertDenial(r, 'agent_human_only_action', 'project.credentials.issue');
+        assertDenial(r, 'operation_not_for_agents', 'project.credentials.issue');
       });
 
-      await ctx.step('HUMAN_ONLY (moving money): `all` cannot delete the workspace (403 agent_human_only_action); it stays active', async () => {
+      await ctx.step('people only: `all` cannot delete the workspace (403 operation_not_for_agents); it stays active', async () => {
         const r = await root.client.del('/v1/workspaces/:projectId', { params: { projectId: project.id } });
-        assertDenial(r, 'agent_human_only_action', 'project.delete');
+        assertDenial(r, 'operation_not_for_agents', 'account.delete');
         const read = await world.owner.get('/v1/workspaces/:projectId', { params: { projectId: project.id } });
         read.status(200).body().has('$.status', 'active');
       });

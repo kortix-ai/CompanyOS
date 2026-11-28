@@ -32,6 +32,7 @@ import { presentedKortixToken, withTokenAttemptBudget } from './token-attempt-bu
 
 import { serviceAccountPrincipal, patPrincipal, jwtPrincipal } from './auth-principal';
 import { gateAgentOperation } from './agent-operation-gate';
+import { resolveInProcessCaller } from './auth-in-process';
 import { applyOAuthAccessTokenPrincipal } from './auth-oauth';
 import { enforceTokenProjectScope } from './auth-scope';
 import { bearerToken } from '../shared/bearer-token';
@@ -151,6 +152,7 @@ export async function supabaseAuth(c: Context, next: Next) {
 }
 
 async function resolveSupabaseAuth(c: Context, next: Next) {
+  if (await resolveInProcessCaller(c, next)) return;
   const authHeader = c.req.header('Authorization');
 
   // Same distinction as resolveApiKeyAuth (KRTX-2168).
@@ -224,7 +226,8 @@ async function resolvePat(c: Context, next: Next, token: string) {
       });
     }
     patPrincipal(c, result);
-    await gateAgentOperation(c);
+    const asked = await gateAgentOperation(c);
+    if (asked) return asked;
     await next();
     return;
   }

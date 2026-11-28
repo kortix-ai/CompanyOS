@@ -1,4 +1,5 @@
 import { wellKnownResponse } from '@kortix/shared/well-known';
+import { installOperationExecutor } from './shared/in-process-caller';
 import { installOperationRegistry } from './shared/operation-registry';
 import { createRoute, z } from '@hono/zod-openapi';
 import { config } from './config';
@@ -439,5 +440,6 @@ app.route('/v1/p', sandboxProxyApp);
 
 // Every route is mounted: the agent rule gate can name each request's operation.
 installOperationRegistry(app as never);
+installOperationExecutor((request, env) => Promise.resolve(app.fetch(request, env)));
 
 installHttpErrors(app);

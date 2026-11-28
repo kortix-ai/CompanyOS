@@ -22,6 +22,7 @@ import { presentedKortixToken, withTokenAttemptBudget } from './token-attempt-bu
 
 import { serviceAccountPrincipal, patPrincipal, jwtPrincipal } from './auth-principal';
 import { gateAgentOperation } from './agent-operation-gate';
+import { resolveInProcessCaller } from './auth-in-process';
 import { applyOAuthAccessTokenPrincipal } from './auth-oauth';
 import { deadCredential401 } from './auth';
 import {
@@ -68,6 +69,7 @@ async function resolveCombinedAuth(c: Context, next: Next) {
     await next();
     return;
   }
+  if (await resolveInProcessCaller(c, next)) return;
 
   const previewSandboxId = extractPreviewSandboxId(c.req.path);
   const token = extractToken(c, previewSandboxId);
@@ -178,7 +180,8 @@ async function resolvePat(c: Context, next: Next, token: string, isPreviewRoute:
       });
     }
     patPrincipal(c, patResult, { token, enabled: isPreviewRoute });
-    await gateAgentOperation(c);
+    const asked = await gateAgentOperation(c);
+    if (asked) return asked;
     await next();
     return;
   }

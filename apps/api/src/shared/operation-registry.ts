@@ -20,6 +20,26 @@ export interface Operation {
   tags: string[];
 }
 
+/** One path or query parameter of an operation. */
+export interface OperationParameter {
+  name: string;
+  in: 'path' | 'query';
+  required: boolean;
+  description?: string;
+  schema: Record<string, unknown>;
+}
+
+/** An operation by id, with the canonical route that serves it and its input. */
+export interface CatalogOperation {
+  operation: Operation;
+  method: string;
+  path: string;
+  parameters: OperationParameter[];
+  /** The JSON request body schema, or null when the operation takes none. */
+  body: Record<string, unknown> | null;
+  bodyRequired: boolean;
+}
+
 interface RouteRow {
   method: string;
   path: string;
@@ -86,7 +106,25 @@ export function operationOf(op: Record<string, unknown> | null): Operation | nul
 // replica-local: built once at boot from this process's own route table.
 const registry = new Map<string, Operation>();
 // replica-local: the same operations by id, for the `kortix` connector.
-const byId = new Map<string, { operation: Operation; method: string; path: string }>();
+const byId = new Map<string, CatalogOperation>();
+
+/** The path and query parameters and the JSON body an OpenAPI operation declares. */
+function operationInput(op: Record<string, unknown>): Pick<CatalogOperation, 'parameters' | 'body' | 'bodyRequired'> {
+  const parameters: OperationParameter[] = [];
+  for (const raw of Array.isArray(op.parameters) ? (op.parameters as Array<Record<string, unknown>>) : []) {
+    if ((raw.in !== 'path' && raw.in !== 'query') || typeof raw.name !== 'string') continue;
+    parameters.push({
+      name: raw.name,
+      in: raw.in,
+      required: raw.in === 'path' || raw.required === true,
+      ...(typeof raw.description === 'string' ? { description: raw.description } : {}),
+      schema: raw.schema && typeof raw.schema === 'object' ? (raw.schema as Record<string, unknown>) : { type: 'string' },
+    });
+  }
+  const requestBody = op.requestBody as { required?: boolean; content?: Record<string, { schema?: Record<string, unknown> }> } | undefined;
+  const body = requestBody?.content?.['application/json']?.schema ?? null;
+  return { parameters, body, bodyRequired: Boolean(body && requestBody?.required) };
+}
 
 /**
  * Build the registry from the app's routes. A legacy workspace name maps to
@@ -101,10 +139,11 @@ export function installOperationRegistry(source: OperationSource): void {
   const all = new Set(routes.map((r) => routeKey(r.method, r.path)));
   for (const r of routes) {
     const canonical = workspaceAliasOf(r.method, r.path, (m, p) => all.has(routeKey(m, p)));
-    const op = operationOf(operation(r.method, r.path)) ?? (canonical ? operationOf(operation(r.method, canonical)) : null);
-    if (!op) continue;
+    const raw = operation(r.method, r.path) ?? (canonical ? operation(r.method, canonical) : null);
+    const op = operationOf(raw);
+    if (!op || !raw) continue;
     registry.set(routeKey(r.method, r.path), op);
-    if (!canonical && !byId.has(op.id)) byId.set(op.id, { operation: op, method: r.method, path: r.path });
+    if (!canonical && !byId.has(op.id)) byId.set(op.id, { operation: op, method: r.method, path: r.path, ...operationInput(raw) });
   }
 }
 
@@ -114,12 +153,12 @@ export function operationForRoute(method: string, path: string): Operation | nul
 }
 
 /** An operation by id, with the canonical route that serves it. */
-export function operationById(id: string): { operation: Operation; method: string; path: string } | null {
+export function operationById(id: string): CatalogOperation | null {
   return byId.get(id) ?? null;
 }
 
 /** Every operation once, by id. */
-export function allOperations(): Array<{ operation: Operation; method: string; path: string }> {
+export function allOperations(): CatalogOperation[] {
   return [...byId.values()];
 }
 

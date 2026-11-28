@@ -11,8 +11,7 @@ import { describe, expect, test, beforeAll, afterAll } from 'bun:test';
 import { sql } from 'drizzle-orm';
 import { db } from '../shared/db';
 import { createAccountToken, validateAccountToken } from '../repositories/account-tokens';
-import { agentMayUseConnector } from '../iam/agent-scope';
-import { agentListAllows as agentMayPerform } from '../iam/kortix-rules';
+import { agentListAllows as agentMayPerform, agentMayUseConnector } from '../iam/agent-scope';
 
 let tokenId: string | null = null;
 

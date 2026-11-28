@@ -1,8 +1,7 @@
 /** Change request resolution: merge, close, and reopen. */
 import { createRoute, z } from '@hono/zod-openapi';
 import { PROJECT_ACTIONS } from '../../iam';
-import { getAgentGrant, isProjectSessionPrincipal } from '../../iam/agent-scope';
-import { agentListAllows } from '../../iam/kortix-rules';
+import { agentListAllows, getAgentGrant, isProjectSessionPrincipal } from '../../iam/agent-scope';
 import { logger } from '../../lib/logger';
 import { refusesSelfMerge, secretMergeRefusal } from '../change-request-policy';
 // Its own module, not the `../git` barrel: several route suites replace the

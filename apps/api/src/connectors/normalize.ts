@@ -321,12 +321,18 @@ function typeRefName(t: any): string {
 /* ─── MCP ────────────────────────────────────────────────────────────────── */
 
 /** Normalize an MCP `listTools` result. Honors readOnlyHint / destructiveHint. */
-export function normalizeMcp(tools: McpToolLike[]): NormalizedAction[] {
+/**
+ * Normalize an MCP server's tools. `dotted`: a dot in a tool name separates
+ * path segments (the `kortix` connector's operation ids, `secrets.set`), so a
+ * rule names the action as the API does; every other server's name is one
+ * segment.
+ */
+export function normalizeMcp(tools: McpToolLike[], opts: { dotted?: boolean } = {}): NormalizedAction[] {
   if (!Array.isArray(tools)) return [];
   const actions: NormalizedAction[] = tools
     .filter((t) => t && typeof t.name === 'string' && t.name)
     .map((t) => ({
-      path: seg(t.name),
+      path: opts.dotted ? t.name.split('.').map(seg).filter(Boolean).join('.') : seg(t.name),
       name: t.name,
       description: String(t.description || t.name),
       inputSchema: (t.inputSchema as Record<string, unknown>) ?? null,

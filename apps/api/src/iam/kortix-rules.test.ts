@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type { AgentGrant } from '@kortix/db';
 import type { Policy } from '../connectors/policy';
 import type { Operation } from '../shared/operation-registry';
-import { decideKortixOperation } from './kortix-rules';
+import { agentListAllows, decideKortixOperation } from './kortix-rules';
 
 const op = (id: string, action: string, exposure: Operation['exposure'] = 'agent'): Operation => ({
   id,
@@ -105,9 +105,10 @@ describe('decideKortixOperation', () => {
 });
 
 describe('agentListAllows', () => {
-  test('sessions.stop keeps the action its old check asked', () => {
+  test('sessions.stop needs project.session.stop: a list with only session.start is refused', () => {
     const g = grant(['project.session.start']);
-    expect(decideKortixOperation({ operation: op('sessions.stop', 'project.session.stop'), grant: g, projectPolicies: [] }).action).toBe('always_run');
-    expect(decideKortixOperation({ operation: op('sessions.delete', 'project.session.stop'), grant: g, projectPolicies: [] }).action).toBe('block');
+    expect(decideKortixOperation({ operation: op('sessions.stop', 'project.session.stop'), grant: g, projectPolicies: [] }).action).toBe('block');
+    expect(agentListAllows(grant(['project.session.stop']), 'project.session.stop')).toBe(true);
+    expect(agentListAllows(null, 'project.session.stop')).toBe(true);
   });
 });

@@ -53,12 +53,15 @@ has is a connector behind one gateway.
 
 1. **Done (9dc091f72e):** the operation catalog: 1,000 operations, 118
    exclusions, enforced by `unit-operation-catalog.test.ts`.
-2. **2a.** The API knows each request's operation and decides allow or block
-   for every agent-session token (design below).
-3. **3.** The `kortix` connector from the catalog (find, describe, call,
-   execute), in-process.
-4. **2b.** "Ask": a held call through the gateway's held-call system, run
-   once through the `kortix` connector after approval. Needs 3.
+2. **2a, built and verified.** The API knows each request's operation and
+   decides allow or block for every agent-session token (design below).
+   Flows `WS-AUTH-17` (new) and `WS-AUTH-5/8/15`, `SCOPE-5`, `CR-15`,
+   `AGP-1…14` pass.
+3. **3, built.** The `kortix` connector from the catalog, in-process
+   (`connectors/kortix-agent/kortix.ts`); find and describe are the gateway's
+   own. `execute` lands with MCP (phase 5). Flow `WS-AUTH-18`.
+4. **2b, built.** "Ask": the gate hands the request to the gateway as a
+   `kortix` call; held, approved, run once. Flow `WS-AUTH-18`.
 5. **2c.** Session trust (principal or untrusted), DMARC for email
    principals, taint passed to what an untrusted session creates.
 6. **2d.** Phone: outbound country allowlist and daily cap.
@@ -120,6 +123,36 @@ and the session resumes). No second engine.
   `middleware/agent-operation-gate.ts` (called by `auth.ts` and
   `auth-combined.ts` right after a session token is accepted),
   `connectors/project-policies.ts` (the one query the gate makes).
+
+## Phase 3 and 2b: the `kortix` connector, and "ask"
+
+- **One more Kortix-built server.** Service `kortix` at
+  `https://agent.mcp.kortix.com/kortix`, in-process like Toolbox. Sync
+  synthesizes it in every project (as it does channel and computer
+  connectors); it is never written to git. A kortix.yaml entry with slug
+  `kortix` adds base rules and policy sets; its URL cannot change.
+- **Tools are the operations.** `tools/list` answers every `agent`
+  operation of the registry: name = operation id, description = summary,
+  input = path and query parameters as properties plus `body` (the JSON
+  body schema). `GET` is read-only, `DELETE` destructive, the rest write.
+  The gateway's own search and describe find them; no special verbs.
+- **A call acts as its caller.** The gateway sends a signed
+  `x-kortix-caller` header (token id, session, expiry, HMAC): a static
+  header a kortix.yaml connector declares cannot forge it. The server runs
+  the route in-process (`app.fetch` with a symbol on `env`, which no HTTP
+  request can set); auth loads the token by id. The server refuses an
+  operation that is not `agent` or that the caller's list refuses; the
+  gateway decides the rules (project, policy set, base rules), holds,
+  approvals and the call log, and the in-process request skips the agent
+  gate (decided already).
+- **Default allow.** The gateway reads `allow_all` for `kortix` whatever the
+  project's `default_mode`: the IAM ceiling governs, and the direct API and
+  the connector must agree.
+- **Ask on the direct API (2b).** When the gate answers ask, it hands the
+  request to the gateway as a `kortix` call: the answer is the gateway's
+  `pending_approval` with `execution_id` and the approval link, status
+  `202`. After approval the held run executes it once through the server
+  and resumes the session. Every result names its `execution_id`.
 
 ### Trust (2c)
 

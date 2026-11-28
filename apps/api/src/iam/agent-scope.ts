@@ -57,6 +57,31 @@ export function canonicalizeGrantActions(grant: AgentGrant | null): AgentGrant |
 }
 
 /**
+ * Actions an old `kortix_permissions` list never had to name: the membership
+ * tiers `loadProjectForUser` asks for, and `none` (an operation with no IAM
+ * check: the caller's own profile, a public read).
+ */
+const LIST_EXEMPT_ACTIONS: ReadonlySet<string> = new Set(['project.read', 'project.write', 'none']);
+
+/**
+ * An agent's `kortix_permissions` list read as rules: does it allow `action`?
+ * No list, or `all`, allows. Both sides compare in the catalog's legacy
+ * spelling (`canonicalizeGrantActions` rewrote manifest aliases on input).
+ *
+ * The agent rule gate asks it for each request's operation
+ * (`iam/kortix-rules.ts`); `authorize` asks it for an action a handler derives
+ * from the request content (a merge that changes an agent's grant needs
+ * `project.agent.write`), so an agent never does through content what its
+ * rules refuse it directly.
+ */
+export function agentListAllows(grant: AgentGrant | null | undefined, action: string): boolean {
+  if (!grant || grant.permissions === 'all') return true;
+  if (LIST_EXEMPT_ACTIONS.has(action)) return true;
+  const wanted = toLegacyAction(action);
+  return grant.permissions.some((a) => toLegacyAction(a) === wanted);
+}
+
+/**
  * Normalize a grant's connector list to CANONICAL slugs.
  *
  * Three gates compare this grant, and they historically saw three different

@@ -629,9 +629,9 @@ flow(
         )
           .status(403)
           .body()
-          // HUMAN_ONLY (design.md §3.2 C8) refuses it first: no agent session mints a credential.
-          .has('$.code', 'agent_human_only_action')
-          .has('$.workspace_action', 'workspace.credentials.issue');
+          // The agent rule gate refuses it before the handler: minting a credential is for people only.
+          .has('$.code', 'operation_not_for_agents')
+          .has('$.operation', 'cli_tokens.create');
       });
 
       await ctx.step('the session-bound credential cannot revoke a project CLI token → 403', async () => {
@@ -649,7 +649,7 @@ flow(
         (await session.post('/v1/workspaces/:projectId/gateway/keys', { name: 'from-session' }, { params: { projectId: project.id } }))
           .status(403)
           .body()
-          .has('$.code', 'agent_human_only_action');
+          .has('$.code', 'operation_not_for_agents');
         const made = await owner.post('/v1/workspaces/:projectId/gateway/keys', { name: 'scope-5' }, { params: { projectId: project.id } });
         made.status(200).body().exists('$.secret_key');
         const keyId = made.json<{ key_id: string }>().key_id;

@@ -2,6 +2,7 @@
  * Gateway routes (sandbox-facing): the catalog, attachments and `/call`, on the
  * token-scoped face and the project-explicit face. One implementation, two faces.
  */
+import { withKortixConnector } from '../kortix-agent/ensure';
 import { type OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 import { SLUG_RE } from '@kortix/manifest-schema';
 import type { Context } from 'hono';
@@ -229,7 +230,7 @@ const callResponse = async (deps: ConnectorRouterDeps, c: any, p: ConnectorPrinc
     ...p,
     requestedConnectorAccount: requestedAccount,
   };
-  const result = await handleCall(deps.makeGatewayDeps(callPrincipal), {
+  const result = await withKortixConnector(p.projectId, p.accountId, connectorSlug, () => handleCall(deps.makeGatewayDeps(callPrincipal), {
     projectId: p.projectId,
     accountId: p.accountId,
     subject: p.subject,
@@ -241,7 +242,7 @@ const callResponse = async (deps: ConnectorRouterDeps, c: any, p: ConnectorPrinc
     approvalExecutionId,
     approvalContext: typeof body?.approval_context === 'string' ? body.approval_context : null,
     policySet: callPolicySetOf(p, connectorSlug),
-  });
+  }));
   switch (result.status) {
     case 'ok':
       // The tool ran and reported a failure inside a 2xx (MCP `isError`, a

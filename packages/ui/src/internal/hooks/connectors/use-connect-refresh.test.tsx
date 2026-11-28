@@ -1,3 +1,4 @@
+import type { Connection } from '@kortix/sdk';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
@@ -9,17 +10,22 @@ Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', { value: true, con
 // row exists by then: the list must show it without a reload.
 const POPUP_CLOSED = 'The connection popup closed before authorization completed.';
 
+let existing: Connection[] = [];
+const revoked: string[] = [];
 const sdk = await import('@kortix/sdk');
 mock.module('@kortix/sdk', () => ({
   ...sdk,
+  listConnections: async () => ({ connections: existing }),
+  revokeConnection: async (_projectId: string, id: string) => { revoked.push(id); return { ok: true }; },
   reconcileMemberConnection: async () => ({ connection_id: 'mine-1' }),
   pipedreamConnectConnection: async () => ({ connected: false, connect_link_url: 'https://provider.example.test' }),
   pipedreamFinalizeConnection: async () => ({ connected: false }),
   connectionSignInSteps: () => ({ start: async () => ({ connected: false }), finalize: async () => ({ connected: false }) }),
 }));
 mock.module('./use-connect-link', () => ({
-  runConnectLinkFlow: async (start: () => Promise<unknown>) => {
+  runConnectLinkFlow: async (start: () => Promise<unknown>, _finalize: unknown, options?: { abandon?: () => Promise<void> }) => {
     await start();
+    await options?.abandon?.();
     throw new Error(POPUP_CLOSED);
   },
 }));
@@ -88,4 +94,25 @@ describe('a closed sign-in window still refreshes the account list', () => {
     });
     expect(invalidated).toContainEqual(['connections', 'p1']);
   });
+});
+
+
+test('private account cancellation revokes the pending row but preserves a preexisting authorized account', async () => {
+  revoked.length = 0;
+  existing = [];
+  await invalidatedAfterClosedPopup((onConnected) => {
+    const hook = usePipedreamConnectMember('p1', 'gmail', onConnected);
+    return () => hook.mutateAsync({ label: 'Pending' });
+  });
+  expect(revoked).toEqual(['mine-1']);
+  revoked.length = 0;
+  existing = [{ connection_id: 'mine-1', connector_alias: 'gmail', owner_type: 'member',
+    owner_id: 'synthetic-member', label: 'Existing', status: 'active', is_default: false,
+    metadata: {}, authorized: true }];
+  await invalidatedAfterClosedPopup((onConnected) => {
+    const hook = usePipedreamConnectMember('p1', 'gmail', onConnected);
+    return () => hook.mutateAsync({ label: 'Existing' });
+  });
+  expect(revoked).toEqual([]);
+  existing = [];
 });

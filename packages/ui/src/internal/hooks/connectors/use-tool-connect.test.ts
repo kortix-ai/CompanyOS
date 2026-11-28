@@ -40,6 +40,7 @@ describe('toolConnectSteps', () => {
     return {
       calls,
       deps: {
+        list: async () => ({ connections: [] }),
         connectProject: async (projectId: string, slug: string, options?: unknown) => {
           calls.push({ verb: 'connect' as const, projectId, slug, options });
           return { connectUrl: 'https://connect.example/project', ...connectResult };

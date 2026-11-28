@@ -1074,11 +1074,15 @@ export async function getConnectionOAuth2Status(
   );
 }
 
-export async function revokeConnection(projectId: string, connectionId: string) {
+export async function revokeConnection(
+  projectId: string,
+  connectionId: string,
+  options?: { pendingOnly?: boolean },
+) {
   return unwrap(
     await backendApi.put<{ ok: true }>(
       `/workspaces/${projectId}/connections/${connectionId}/revoke`,
-      {},
+      options?.pendingOnly ? { pending_only: true } : {},
     ),
   );
 }

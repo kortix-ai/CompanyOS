@@ -328,7 +328,9 @@ export function registerConnectionActionsRoutes(): void {
                 schema:
                   operation === 'credential'
                     ? UpdateConnectionCredentialInputSchema
-                    : z.object({}).strict(),
+                    : operation === 'revoke'
+                      ? z.object({ pending_only: z.boolean().optional() }).strict()
+                      : z.object({}).strict(),
               },
             },
           },
@@ -470,8 +472,15 @@ export function registerConnectionActionsRoutes(): void {
           });
         } else {
           if (operation === 'revoke') {
-            await revokeConnectionOAuth2(connectionId);
-            await revokeConnections(eq(connectorConnections.connectionId, connectionId));
+            const body = await readJsonObject(c);
+            const parsed = z.object({ pending_only: z.boolean().optional() }).strict().safeParse(body);
+            if (!parsed.success) return c.json({ error: 'Invalid revoke options' }, 400);
+            // Abandoning consent must not disconnect an account whose callback won the race.
+            if (!parsed.data.pending_only) await revokeConnectionOAuth2(connectionId);
+            const revoked = await revokeConnections(eq(connectorConnections.connectionId, connectionId), {
+              pendingOnly: parsed.data.pending_only,
+            });
+            if (revoked.length === 0) return c.json({ ok: true });
           } else {
             // A deliberate turn-on: offboarding's revokedReason
             // (connectors/computers.ts) no longer holds. `loadMutableConnection`

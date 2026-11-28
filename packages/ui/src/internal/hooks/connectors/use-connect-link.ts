@@ -13,6 +13,7 @@ import {
 export { connectLinkUrl };
 
 export interface ConnectLinkFlowOptions {
+  abandon?: () => Promise<void>;
   openWindow?: () => Window | null;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
@@ -84,10 +85,31 @@ export async function runConnectLinkFlow(
     // fail-closed because its hosted authorization page cannot be shown.
     const response = await start();
     if (response.connected) return { connected: true };
+    await options.abandon?.();
     throw new Error('Your browser blocked the connection popup. Allow popups and try again.');
   }
 
   const watcher = watchPopupClosed(popup);
+  let connected = false;
+  let abandoned = false;
+  let startSettled = false;
+  let cleanupStarted = false;
+  const abandon = async () => {
+    if (connected || cleanupStarted) return;
+    cleanupStarted = true;
+    await options.abandon?.();
+  };
+  const started = Promise.resolve().then(start).then(async (response) => {
+    startSettled = true;
+    connected = response.connected === true;
+    // Popup closure can beat the request that creates the account.
+    if (abandoned) await abandon();
+    return response;
+  }, async (error: unknown) => {
+    startSettled = true;
+    if (abandoned) await abandon();
+    throw error;
+  });
   try {
     // The hosted page does not need access to the Kortix tab through window.opener.
     // Setting this on the same-origin blank page prevents reverse-tabnabbing after
@@ -98,7 +120,7 @@ export async function runConnectLinkFlow(
       // Some browser WindowProxy implementations expose opener as read-only.
     }
 
-    const response = await Promise.race([start(), watcher.closed]);
+    const response = await Promise.race([started, watcher.closed]);
     if (response.connected) return { connected: true };
     const url = connectLinkUrl(response);
     if (!url) throw new Error('The connector did not return a Connect Link. Try again.');
@@ -111,9 +133,13 @@ export async function runConnectLinkFlow(
     // The SDK's finalize poll (every 2 s, up to 10 min). A closed popup ends
     // it: a pending finalize loses the race against `watcher.closed`, and a
     // finished one that is not connected checks the popup before the next poll.
-    return await pollConnectLinkFinalize(
+    const result = await pollConnectLinkFinalize(
       async () => {
-        const result = await Promise.race([finalize(), watcher.closed]);
+        const pending = finalize().then((result) => {
+          if (result.connected) connected = true;
+          return result;
+        });
+        const result = await Promise.race([pending, watcher.closed]);
         if (!result.connected && popup.closed) throw new Error(POPUP_CLOSED_MESSAGE);
         return result;
       },
@@ -124,6 +150,12 @@ export async function runConnectLinkFlow(
         timeoutMs: options.timeoutMs ?? CONNECT_LINK_TIMEOUT_MS,
       },
     );
+    connected = true;
+    return result;
+  } catch (error) {
+    abandoned = true;
+    if (startSettled) await abandon();
+    throw error;
   } finally {
     watcher.stop();
     closePopupSafely(popup);

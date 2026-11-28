@@ -1,6 +1,8 @@
 'use client';
 
 import {
+  listConnections,
+  revokeConnection,
   type ConnectorConnectResult,
   type ConnectorFinalizeResult,
   type connectorConnect,
@@ -27,6 +29,7 @@ export function buildToolConnectorDraft(input: ToolConnectInput) {
 }
 
 export interface ToolConnectDeps {
+  list: typeof listConnections;
   connectProject: typeof connectorConnect;
   finalizeProject: typeof connectorFinalize;
 }
@@ -65,11 +68,18 @@ export function toolConnectSteps(
 ): {
   start: () => Promise<ConnectorConnectResult>;
   finalize: () => Promise<ConnectorFinalizeResult>;
+  abandon: () => Promise<void>;
 } {
   let connectionId: string | null = null;
+  let authorizedBefore: ReadonlySet<string> = new Set();
 
   return {
+    abandon: async () => {
+      if (connectionId && !authorizedBefore.has(connectionId)) await revokeConnection(projectId, connectionId, { pendingOnly: true });
+    },
     start: async () => {
+      const { connections } = await deps.list(projectId);
+      authorizedBefore = new Set(connections.filter((row) => row.authorized !== false).map((row) => row.connection_id));
       const result = await deps.connectProject(projectId, slug, { owner: 'project' });
       connectionId = result.connectionId ?? null;
       return result;

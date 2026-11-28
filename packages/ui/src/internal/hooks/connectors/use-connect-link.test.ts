@@ -234,3 +234,64 @@ describe('runConnectLinkFlow: a closed popup ends a pending request', () => {
     await expect(flow).rejects.toThrow('The connection popup closed before authorization completed.');
   });
 });
+
+
+describe('abandoned Connect Link cleanup', () => {
+  test('closing before consent cleans up exactly once', async () => {
+    const harness = popupHarness();
+    let abandoned = 0;
+    await expect(runConnectLinkFlow(
+      async () => ({ connectUrl: 'https://connect.example/link' }),
+      async () => { harness.setClosed(true); return { connected: false }; },
+      { openWindow: () => harness.popup, abandon: async () => { abandoned++; } },
+    )).rejects.toThrow('closed before authorization completed');
+    expect(abandoned).toBe(1);
+  });
+
+  test('timeout cleans up but successful authorization never does', async () => {
+    for (const connected of [false, true]) {
+      const harness = popupHarness();
+      let abandoned = 0;
+      let now = 0;
+      const flow = runConnectLinkFlow(
+        async () => ({ connectUrl: 'https://connect.example/link' }),
+        async () => ({ connected }),
+        { openWindow: () => harness.popup, now: () => now, timeoutMs: 1,
+          sleep: async () => { now++; }, abandon: async () => { abandoned++; } },
+      );
+      if (connected) await expect(flow).resolves.toEqual({ connected: true });
+      else await expect(flow).rejects.toThrow('Authorization timed out');
+      expect(abandoned).toBe(connected ? 0 : 1);
+    }
+  });
+
+  test('blocked popup cleans up a pending account, not a no-auth connection', async () => {
+    for (const connected of [false, true]) {
+      let abandoned = 0;
+      const flow = runConnectLinkFlow(async () => ({ connected }), async () => ({ connected }), {
+        openWindow: () => null, abandon: async () => { abandoned++; },
+      });
+      if (connected) await expect(flow).resolves.toEqual({ connected: true });
+      else await expect(flow).rejects.toThrow('blocked the connection popup');
+      expect(abandoned).toBe(connected ? 0 : 1);
+    }
+  });
+});
+
+
+test('a late start after popup closure still cleans up the account it created', async () => {
+  const harness = popupHarness();
+  const response = Promise.withResolvers<{ connected: boolean; connectUrl: string }>();
+  let abandoned = 0;
+  const flow = runConnectLinkFlow(() => response.promise, async () => ({ connected: false }), {
+    openWindow: () => harness.popup,
+    abandon: async () => { abandoned++; },
+  });
+  harness.setClosed(true);
+  await expect(flow).rejects.toThrow('closed before authorization completed');
+  expect(abandoned).toBe(0);
+  response.resolve({ connected: false, connectUrl: 'https://connect.example/late' });
+  await response.promise;
+  await Promise.resolve();
+  expect(abandoned).toBe(1);
+});

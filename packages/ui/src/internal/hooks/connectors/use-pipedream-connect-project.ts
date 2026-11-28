@@ -7,6 +7,8 @@ import { useTranslations } from '../../../i18n';
 import { errorToast, successToast } from '../../../primitives/toast';
 import { runConnectLinkFlow } from './use-connect-link';
 import {
+  listConnections,
+  revokeConnection,
   DEFAULT_PROJECT_CONNECTION_LABEL,
   isSharedDefaultConnectConflict,
   projectConnectionConnectRestDeps as sdkProjectConnectDeps,
@@ -47,7 +49,20 @@ export function usePipedreamConnectProject(
         sdkProjectConnectDeps,
         input?.beforeAuthorize,
       );
-      const result = await runConnectLinkFlow(steps.start, steps.finalize);
+      let authorizedBefore: ReadonlySet<string> = new Set();
+      const result = await runConnectLinkFlow(async () => {
+        const { connections } = await listConnections(projectId);
+        authorizedBefore = new Set(connections.filter((row) => row.authorized !== false).map((row) => row.connection_id));
+        return steps.start();
+      }, steps.finalize, {
+        abandon: async () => {
+          const connectionId = steps.connectionId();
+          if (connectionId && !authorizedBefore.has(connectionId)) {
+            await revokeConnection(projectId, connectionId, { pendingOnly: true });
+            await invalidateConnections(queryClient, projectId);
+          }
+        },
+      });
       return { ...result, connectionId: steps.connectionId() };
     },
     onSuccess: (result) => {
@@ -56,8 +71,7 @@ export function usePipedreamConnectProject(
       onConnected();
     },
     onError: (error: Error) => errorToast(error.message),
-    // Settled either way: a window closed before the provider answered still
-    // left the account row, and every list must show it without a reload.
+    // Refresh both a completed account and an abandoned account's cleanup.
     onSettled: () => invalidateConnections(queryClient, projectId),
   });
 }

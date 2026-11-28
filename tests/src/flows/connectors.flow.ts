@@ -995,6 +995,25 @@ flow(
       connectionId = r.json<any>().connection_id;
     });
 
+    await ctx.step('abandon a pending connection through the guarded revoke boundary → revoked', async () => {
+      const created = await ctx.client.as(ctx.P.OWNER).post('/v1/projects/:projectId/connections', {
+        connector_alias: slug, owner_type: 'project', label: 'Abandoned OAuth',
+      }, { params: { projectId: p.id } });
+      created.status(201);
+      const id = created.json<{ connection_id: string }>().connection_id;
+      const revoked = await ctx.client.as(ctx.P.OWNER).put(
+        '/v1/projects/:projectId/connections/:connectionId/revoke',
+        { pending_only: true }, { params: { projectId: p.id, connectionId: id } },
+      );
+      revoked.status(200).body().has('$.ok', true);
+      const listed = await ctx.client.as(ctx.P.OWNER).get('/v1/projects/:projectId/connections', {
+        params: { projectId: p.id },
+      });
+      const row = listed.json<{ connections: { connection_id: string; status: string }[] }>()
+        .connections.find((item) => item.connection_id === id);
+      if (row?.status !== 'revoked') throw new Error('Abandoned account was not revoked');
+    });
+
     await ctx.step('missing required fields → 400', async () => {
       const r = await ctx.client
         .as(ctx.P.OWNER)

@@ -20,7 +20,7 @@
  *     OAuth sessions, so their callbacks find no session to complete.
  */
 
-import { connectionOAuthSessions, connectorConnections } from '@kortix/db';
+import { connectionCredentials, connectionOAuthSessions, connectorConnections } from '@kortix/db';
 import { type SQL, and, eq, inArray, or, sql } from 'drizzle-orm';
 import type { PgUpdateSetSource } from 'drizzle-orm/pg-core';
 
@@ -149,7 +149,7 @@ export async function failConnection(connectionId: string, exec: StatusExecutor 
  */
 export async function revokeConnections(
   where: SQL | undefined,
-  options: { set?: ConnectionSet; metadata?: Record<string, unknown> } = {},
+  options: { set?: ConnectionSet; metadata?: Record<string, unknown>; pendingOnly?: boolean } = {},
   exec: Pick<typeof db, 'update'> = db,
 ): Promise<ConnectionRow[]> {
   const merge = { ...(options.metadata ?? {}), revokedAt: new Date().toISOString() };
@@ -159,6 +159,12 @@ export async function revokeConnections(
     CONNECTION_TRANSITIONS.revoke,
     {
       where,
+      ...(options.pendingOnly ? { guard: sql`
+        ${connectorConnections.metadata}->>'connected_account_id' IS NULL
+        AND coalesce(${connectorConnections.metadata}->>'is_no_auth', 'false') <> 'true'
+        AND NOT EXISTS (SELECT 1 FROM ${connectionCredentials}
+          WHERE ${connectionCredentials.connectionId} = ${connectorConnections.connectionId})
+      ` } : {}),
       set: {
         ...options.set,
         metadata: sql`coalesce(${connectorConnections.metadata}, '{}'::jsonb) || ${JSON.stringify(merge)}::jsonb`,

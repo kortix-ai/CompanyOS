@@ -1013,6 +1013,9 @@
     "OnboardingUseCase",
     "OpenEventStreamOptions",
     "OpenTurnMessageLike",
+    "OperationCallArgs",
+    "OperationDescriptor",
+    "OperationId",
     "OutputFormat",
     "OutputFormatJsonSchema",
     "OutputFormatText",
@@ -2152,6 +2155,7 @@
     "burstSummaryLabel",
     "burstWorkLabel",
     "callConnector",
+    "callOperation",
     "canManageBilling",
     "canOfferTopup",
     "cancelAccountDeletion",
@@ -2998,6 +3002,7 @@
     "listNotifications",
     "listOAuthClients",
     "listOAuthGrants",
+    "listOperations",
     "listPeerMessages",
     "listPendingApprovals",
     "listPendingProjectInvites",
@@ -4876,10 +4881,6 @@
     "deleteSessionFromIDB",
     "indexedDBKeyValueStorage"
   ],
-  "./iam-actions": [
-    "PROJECT_ACTIONS",
-    "WORKSPACE_ACTION_BY_LEGACY"
-  ],
   "./internal/diagnostics-store": [
     "DiagnosticSeverity",
     "DiagnosticsState",
@@ -4985,5 +4986,9 @@
     "toWorkspaceSearchEntry",
     "workspaceEntryMatchesQuery",
     "workspaceQueryLooksPathLike"
+  ],
+  "./iam-actions": [
+    "PROJECT_ACTIONS",
+    "WORKSPACE_ACTION_BY_LEGACY"
   ]
 }

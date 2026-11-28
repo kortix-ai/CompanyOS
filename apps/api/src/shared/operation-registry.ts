@@ -112,7 +112,7 @@ const registry = new Map<string, Operation>();
 const byId = new Map<string, CatalogOperation>();
 
 /** The path and query parameters and the JSON body an OpenAPI operation declares. */
-function operationInput(op: Record<string, unknown>): Pick<CatalogOperation, 'parameters' | 'body' | 'bodyRequired'> {
+export function operationInput(op: Record<string, unknown>): Pick<CatalogOperation, 'parameters' | 'body' | 'bodyRequired'> {
   const parameters: OperationParameter[] = [];
   for (const raw of Array.isArray(op.parameters) ? (op.parameters as Array<Record<string, unknown>>) : []) {
     if ((raw.in !== 'path' && raw.in !== 'query') || typeof raw.name !== 'string') continue;

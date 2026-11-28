@@ -512,6 +512,13 @@ export * from './core/http/fresh-sessions';
 export * from './core/http/impersonation';
 export * from './core/http/instance-routes';
 export * from './core/http/runtime-errors';
+export {
+  callOperation,
+  listOperations,
+  type OperationCallArgs,
+  type OperationDescriptor,
+  type OperationId,
+} from './core/rest/operations';
 export * from './core/rest/platform-client';
 export * from './core/rest/projects-client';
 export * from './core/multi-agent/tool-data';

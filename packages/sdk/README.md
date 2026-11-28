@@ -762,6 +762,28 @@ if (first?.capabilities.pause) {
 - Deprecated: `WorkspaceGoal.heartbeat` is always `null`;
   `CreateWorkspaceGoalInput.sessionId` is sent as the goal id.
 
+## Any API operation by id
+
+Every Kortix API operation has a stable id (`secrets.set`, `sessions.list`),
+the same ids the CLI, MCP and the `kortix` connector use. `callOperation`
+reaches any of them without a hand-written client function:
+
+```ts
+import { callOperation, listOperations } from '@kortix/sdk'
+
+await callOperation('secrets.set', { workspaceId, body: { name: 'API_KEY', value } })
+const { sessions } = await callOperation<{ sessions: unknown[] }>('sessions.list', { workspaceId, limit: 20 })
+listOperations().filter((op) => op.exposure === 'agent')   // id, method, path, parameters, IAM action
+```
+
+- Path parameters fill the path, `body` is the JSON body, every other
+  argument is a query parameter.
+- A workspace rule can hold an agent's call for a person: it resolves to
+  `{ status: 'pending_approval', execution_id, runs_on_approval: true }`.
+  Kortix runs it once after approval; do not call it again.
+- Any other non-2xx answer throws `ApiError`.
+- On the client: `kortix.call(id, args)` and `kortix.operations()`.
+
 ## The facade surface
 
 `createKortix(config)` returns one client. The table below is illustrative, not

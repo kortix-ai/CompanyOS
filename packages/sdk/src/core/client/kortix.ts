@@ -1,4 +1,5 @@
 import { bindCatalog } from './facade-catalog';
+import { callOperation, listOperations } from '../rest/operations';
 import { bindCommerce } from './facade-commerce';
 import { bindIdentity } from './facade-identity';
 import { bindPreviewOptions } from './facade-preview';
@@ -142,6 +143,10 @@ export function createKortix(config: KortixPlatformConfig = sandboxConfig(), opt
   return {
     /** The platform config in effect (for diagnostics). */
     config,
+    /** Call any Kortix API operation by its id (`secrets.set`): see `callOperation`. */
+    call: callOperation,
+    /** Every operation `call` reaches, with its method, path, parameters and IAM action. */
+    operations: listOperations,
     /** Headless regular auth — see `auth` above. */
     auth,
     accounts,

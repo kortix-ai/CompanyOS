@@ -72,7 +72,11 @@ has is a connector behind one gateway.
 6. **2d, built.** Phone: `KORTIX_PHONE_SMS_PREFIXES` (calling codes) and
    `KORTIX_PHONE_SMS_DAILY_CAP` (per account per UTC day, counted in the
    account state before the send).
-7. SDK `call(operation)` and a typed client.
+7. **4, built.** SDK `callOperation(id, args)`, `listOperations()`,
+   `kortix.call`, `kortix.operations` over a catalog the catalog script
+   generates (`packages/sdk/src/core/rest/operations.generated.ts`, checked
+   by `--check`). Typed per-operation inputs and outputs are not generated
+   yet: `OperationId` is a typed union, arguments and results are not.
 8. MCP: the verbs plus featured actions plus instructions; old tools removed.
 9. The CLI generated from the catalog.
 10. Featured actions replace the `kortix_*` tools; agent-minted keys carry

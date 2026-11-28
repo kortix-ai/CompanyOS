@@ -196,3 +196,15 @@ describe('agentEffectiveAllows (the helper surfaces outside authorize call)', ()
     ).toBe(false);
   });
 });
+
+
+test('session.list is project fenced and grants neither content nor writes', () => {
+  const listGrant = grant(['project.session.list']);
+  expect(decide('project.session.list', { grant: listGrant }).allowed).toBe(true);
+  expect(decide('project.session.list', { grant: listGrant, target: OTHER }).allowed).toBe(false);
+  expect(decide('project.session.list', { grant: grant([]) }).allowed).toBe(false);
+  expect(decide('project.session.list', { grant: listGrant, ceiling: new Set(['project.read']) }).allowed).toBe(false);
+  for (const action of ['project.session.read', 'project.session.start', 'project.session.stop']) {
+    expect(decide(action, { grant: listGrant }).allowed).toBe(false);
+  }
+});

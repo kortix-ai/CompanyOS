@@ -1200,7 +1200,9 @@
     "archivedView": "Arquivadas",
     "archivedEmpty": "As sessões que você arquivar aparecerão aqui.",
     "stoppedBy": "Interrompido por {{name}}",
-    "stopNotAllowed": "Somente o membro que iniciou esta execução, o proprietário da sessão ou um gerente do espaço de trabalho pode interrompê-la."
+    "stopNotAllowed": "Somente o membro que iniciou esta execução, o proprietário da sessão ou um gerente do espaço de trabalho pode interrompê-la.",
+    "turnSources_one": "{{count}} fonte",
+    "turnSources_other": "{{count}} fontes"
   },
   "genui": {
     "call": "Ligar",

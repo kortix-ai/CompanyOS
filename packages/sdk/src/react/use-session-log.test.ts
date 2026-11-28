@@ -991,6 +991,22 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
       expect(heldMessages()).toEqual(page().messages);
     });
 
+    // KRTX-4973: the person leaves a busy session and comes back. The saved copy is the page of the
+    // last open; more than a page of messages came since. The view showed the saved copy, a hole,
+    // then the newest page: every reply in the hole was gone until a hard refresh.
+    test('a re-open after more than a page of messages: the newest page alone, older pages offered', async () => {
+      const all = page().messages;
+      const data = new Map<string, string>();
+      const copies = createSavedCopyStore({ storage: { getItem: (k) => data.get(k) ?? null, setItem: (k, v) => void data.set(k, v), removeItem: (k) => void data.delete(k) }, userId: 'u1' });
+      await copies.write(PROJECT, SESSION, { ...page(), messages: all.slice(0, 4) });
+      setSavedCopyStore(copies);
+      const newest = (): SessionLogPage => ({ ...page(), messages: all.slice(10), has_more: true });
+      mount({ boxReady: true, loader: async (_p, _s, query) => (query.live ? asBox(newest()) : asStore(newest())) });
+      await flush();
+      expect(heldMessages().map((m) => m.message_id)).toEqual(all.slice(10).map((m) => m.message_id));
+      expect(useSyncStore.getState().sessionLogs[SESSION]!.older[log.threads[0]!.thread_id]).toBe(true);
+    });
+
     test('a new session the API holds no log for: the box getting ready reads the page at once and turns v2', async () => {
       let boxUp = false;
       const state = { dialect: '', setBoxReady: (_: boolean) => {} };

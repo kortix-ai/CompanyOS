@@ -1197,7 +1197,7 @@ The workspace registers what exists. Each agent enables what it uses, by name. A
 | `policy_sets` | map | the base rules | Connector slug → the name of a policy set on that connector. See [Connector rules and approvals](#connector-rules-and-approvals). |
 | `secrets` | grant | `none` | Secret names the agent's sandbox receives. |
 | `apps` | grant | `none` | App slugs the agent may open when the App's access is restricted or private. |
-| `kortix_permissions` | grant | `none` | Project permissions (`project.*`) the agent holds, whoever starts the session. `kortix validate --scopes` prints them. An account permission is an error. See [Agents](/docs/guide#agents). |
+| `kortix_permissions` | grant | `none` | Registered workspace permissions or terminal group.* patterns (workspace.session.*, session.*, or legacy project.session.*). Groups include descendant grantable leaves; role ceilings and human-only exclusions still apply. `kortix validate --scopes` prints individual permissions. See [Agents](/docs/guide#agents). |
 | `sandbox` | string | `sandbox.default` | A template slug, or `default` for the platform image. |
 | `space` | string | — | The space the agent works in (a key of the top-level `spaces` map, or a bare slug). Grouping only. |
 | `network_egress` | map | — | Only `{ version: 1, default: deny, rules: [] }`. It validates with a warning: Kortix does not enforce it. |
@@ -9496,6 +9496,21 @@ and `switch [session-id] <model> --prompt "Continue verification" --idempotency-
 The new verbs default to `KORTIX_SESSION_ID`. The existing `sessions model <session-id> <model>` remains supported.
 Never send a peer message to yourself to continue a model switch.
 
+
+### Session inventory permission
+
+Grant `session.list` in an agent's `kortix_permissions` to enumerate live sessions in its own workspace:
+
+```yaml
+agents:
+  observer:
+    prompt: Inspect session inventory.
+    kortix_permissions: [session.list]
+```
+
+`project.session.list` and `workspace.session.list` name the same permission. The agent's IAM ceiling must also allow it when a custom role is bound. The permission does not cross the credential's project/workspace or account boundary.
+
+Use `kortix sessions ls` or `GET /v1/projects/<workspace_id>/sessions`. Follow the response's `X-Next-Cursor` header as `cursor` to read subsequent pages. Existing filters still apply. Unrelated sessions are inventory entries only: `can_access` is false and conversation names, prompts, labels and metadata stay redacted. This grant does not permit transcript reads, session prompts, lifecycle changes, sharing changes, deleted-session recovery, or access to another workspace. Those operations retain their existing permissions and session visibility checks. Agents without this grant retain their existing enumeration behavior.
 
 ### Permission group wildcards
 

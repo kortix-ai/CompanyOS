@@ -4081,8 +4081,10 @@
                 "items": {
                   "type": "string",
                   "enum": [
+                    "session.list",
                     "project.read",
                     "project.write",
+                    "project.session.list",
                     "project.session.read",
                     "project.session.start",
                     "project.session.stop",
@@ -4160,6 +4162,7 @@
                     "capture.manage",
                     "workspace.read",
                     "workspace.write",
+                    "workspace.session.list",
                     "workspace.session.read",
                     "workspace.session.start",
                     "workspace.session.stop",
@@ -4458,8 +4461,10 @@
                 "items": {
                   "type": "string",
                   "enum": [
+                    "session.list",
                     "project.read",
                     "project.write",
+                    "project.session.list",
                     "project.session.read",
                     "project.session.start",
                     "project.session.stop",
@@ -4537,6 +4542,7 @@
                     "capture.manage",
                     "workspace.read",
                     "workspace.write",
+                    "workspace.session.list",
                     "workspace.session.read",
                     "workspace.session.start",
                     "workspace.session.stop",

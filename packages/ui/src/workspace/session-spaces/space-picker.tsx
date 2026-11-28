@@ -2,7 +2,7 @@
 
 import type { ProjectSessionGroup } from '@kortix/sdk';
 import { useFeatureFlag, useWorkspaceSessionGroups } from '@kortix/sdk/react';
-import { CaretDownIcon, CheckIcon, PlusIcon, StackIcon } from '@phosphor-icons/react';
+import { CaretDownIcon, CheckIcon, CirclesThreePlusIcon, PlusIcon } from '@phosphor-icons/react';
 import { useState } from 'react';
 
 import { useTranslations } from '../../i18n';
@@ -78,7 +78,7 @@ export function SpacePicker({
             aria-label={picked ? `${t('picker')}: ${picked.name}` : t('picker')}
             className={cn('rounded-lg hit-area-y-3', picked ? 'text-foreground' : 'text-muted-foreground')}
           >
-            {picked ? <SpaceIconBare space={picked} /> : <StackIcon className="size-4 shrink-0" />}
+            {picked ? <SpaceIconBare space={picked} /> : <CirclesThreePlusIcon className="size-4 shrink-0" />}
             <span className="max-w-[140px] truncate first-letter:uppercase">{picked ? picked.name : t('picker')}</span>
             <CaretDownIcon className={cn('size-3 transition-transform duration-moderate ease-out', open && 'rotate-180')} />
           </Button>
@@ -92,7 +92,7 @@ export function SpacePicker({
               {query ? null : (
                 <CommandItem value="space-none" className="gap-2" onSelect={() => pick(null)}>
                   {/* The trigger's own "no space" glyph, so every row's name starts on one edge. */}
-                  <StackIcon className="text-muted-foreground size-4 shrink-0" />
+                  <CirclesThreePlusIcon className="text-muted-foreground size-4 shrink-0" />
                   <span className="text-muted-foreground min-w-0 flex-1 truncate">{t('pickerNone')}</span>
                   {value === null ? <CheckIcon className="text-foreground size-4 shrink-0" /> : null}
                 </CommandItem>

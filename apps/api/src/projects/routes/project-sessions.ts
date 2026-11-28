@@ -584,7 +584,12 @@ export function registerProjectSessionsRoutes(): void {
     }
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
-    await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_SESSION_READ);
+    const canListSessions = isProjectSessionPrincipal(c) && await projectCapabilityAllowed(
+      c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_SESSION_LIST,
+    );
+    if (!canListSessions) {
+      await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_SESSION_READ);
+    }
     const personId = personUserId(c, loaded);
 
     const spaceId = resolveFeatureFlag(loaded.row.metadata, 'chat') ? (query.space_id ?? null) : null;
@@ -595,6 +600,7 @@ export function registerProjectSessionsRoutes(): void {
     }
     const inventory = await loadProjectSessionInventory({
       actor: loaded.actor,
+      canListSessions,
       projectId,
       accountId: loaded.row.accountId,
       userId: loaded.userId,

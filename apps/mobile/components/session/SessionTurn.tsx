@@ -45,8 +45,11 @@ import {
   getRetryMessage,
   sessionLogImageGenRuns,
   shouldShowToolPart,
+  deriveTurnSources,
   showDrawnByImageGen,
   type SessionLogTurn,
+  type ToolCallBlock,
+  type TurnSource,
 } from '@kortix/sdk';
 import type { PermissionRequest, QuestionRequest, SessionStatus } from '@/lib/session/types';
 import type { Command } from '@/lib/session/runtime-data';
@@ -224,6 +227,17 @@ function SessionTurnImpl({
 
   // Web: `working = isWorkingTurn && sessionWorking`: the SDK's `live`. Any other turn is never working.
   const working = turn.live;
+  // The pages this response read, for its sources button. A run's report turns
+  // draw no bar of their own: their pages count on the host's (web: the same).
+  const sources = useMemo(
+    () =>
+      working
+        ? NO_SOURCES
+        : deriveTurnSources(
+            [blocks, ...(runTurns ?? []).map(turnBlocks)].flat().filter((block): block is ToolCallBlock => block.type === 'tool_call'),
+          ),
+    [working, blocks, runTurns],
+  );
 
   const hasSteps = useMemo(() => turnHasSteps(blocks), [blocks]);
   const hasAssistantContent = turn.assistant.length > 0;
@@ -619,7 +633,7 @@ function SessionTurnImpl({
 
   // 7. Action bar
   if (!runMember && showTurnActions({ working })) {
-    body.push(<TurnActions key="actions" turn={turn} response={copyText} costInfo={costInfo} />);
+    body.push(<TurnActions key="actions" turn={turn} response={copyText} costInfo={costInfo} sources={sources} />);
   }
 
   // A run member (KRTX-4732): its report and work in the anchor's fold, or its answer under the row.
@@ -695,5 +709,8 @@ function SessionTurnImpl({
 
 const RUN_STACK = { gap: TURN_STACK_GAP };
 const RUN_STACK_HIDDEN = { ...RUN_STACK, ...HIDDEN };
+
+/** A working turn shows no sources yet. */
+const NO_SOURCES: readonly TurnSource[] = [];
 
 export const SessionTurn = React.memo(SessionTurnImpl);

@@ -107,7 +107,7 @@ try {
       "if (wireIdClockDelta(BigInt('0x000007530000'), BigInt('0xfffff8ad0000')) <= BigInt(0)) throw new Error('wireIdClockDelta is not ring-ordered');",
       "if (maxWireIdClock([BigInt('0xfffff8ad0000'), BigInt('0x000007530000')]) !== BigInt('0x000007530000')) throw new Error('maxWireIdClock is not ring-ordered');",
       "if (typeof listSessionCosts !== 'function') throw new Error('listSessionCosts missing');",
-      "if (Object.keys(liveActions).length !== 53 || 'PROJECT_ROOM_READ' in liveActions) throw new Error('live IAM catalog changed');",
+      "if (Object.keys(liveActions).length !== 54 || 'PROJECT_ROOM_READ' in liveActions) throw new Error('live IAM catalog changed');",
       "if (workspaceActions['project.read'] !== 'workspace.read') throw new Error('workspace IAM catalog missing');",
       "const sdk = await import('@kortix/sdk');",
       "for (const name of ['readKortixMember', 'requireKortixMember', 'verifyKortixToken', 'kortixToken', 'kortixBinding', 'KortixMemberError', 'createAppToken']) if (typeof sdk[name] !== 'function') throw new Error(`${name} missing`);",

@@ -1201,7 +1201,9 @@
     "archivedView": "Archived",
     "archivedEmpty": "Sessions you archive will show up here.",
     "stoppedBy": "Stopped by {{name}}",
-    "stopNotAllowed": "Only the member who started this run, the session owner or a workspace manager can stop it."
+    "stopNotAllowed": "Only the member who started this run, the session owner or a workspace manager can stop it.",
+    "turnSources_one": "{{count}} source",
+    "turnSources_other": "{{count}} sources"
   },
   "genui": {
     "call": "Call",

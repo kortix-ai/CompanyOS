@@ -968,10 +968,12 @@ test('PR and long demo labels render inside prose without leaking Slack delimite
   for (const isStreaming of [false, true]) {
     const html = renderToStaticMarkup(withIntl(<UnifiedMarkdown trust="agent" content={content} isStreaming={isStreaming} />));
     expect(html).toContain(`href="${pr}"`);
-    expect(html).toContain('>PR #13265</a>');
+    const prAnchor = html.match(/<a\b[^>]*href="https:\/\/github\.com\/example\/project\/pull\/13265"[^>]*>([\s\S]*?)<\/a>/)?.[1] ?? '';
+    expect(prAnchor.replace(/<svg[\s\S]*?<\/svg>/g, '').replace(/<[^>]*>/g, '')).toBe('GitHub: PR #13265');
     expect(html).toContain(`href="${demo}"`);
-    expect(html).toContain('>demo video</a>');
-    expect(html).toContain('Normal prose stays readable.');
+    const demoAnchor = html.match(/<a\b[^>]*href="https:\/\/github\.com\/user-attachments[^"]*"[^>]*>([\s\S]*?)<\/a>/)?.[1] ?? '';
+    expect(demoAnchor.replace(/<[^>]*>/g, '')).toBe('demo video');
+    expect(html.replace(/<[^>]*>/g, '')).toContain('Normal prose stays readable.');
     expect(html).not.toContain('|PR');
     expect(html).not.toContain('|demo');
     expect(html).not.toContain('&lt;https:');

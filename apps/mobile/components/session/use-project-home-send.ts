@@ -64,6 +64,7 @@ export function useProjectHomeSend(
       model,
       picks,
       agent,
+      artifact,
     }: ProjectHomeSubmit): Promise<boolean> => {
       if (!projectId || isDashboardSending) return false;
       if (!text.trim() && files.length === 0) return false;
@@ -91,6 +92,7 @@ export function useProjectHomeSend(
           model,
           picks,
           agent,
+          artifact,
         });
         const sessionId = await createSessionCommitted(
           {

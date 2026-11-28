@@ -1,7 +1,7 @@
 {
   "generatedAt": "static",
-  "count": 1838,
-  "aliases": 719,
+  "count": 1840,
+  "aliases": 720,
   "routes": [
     {
       "method": "GET",
@@ -4300,6 +4300,11 @@
       "aliasOf": "/v1/workspaces/:workspaceId/session-groups/:groupId"
     },
     {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/session-groups/:groupId/memory/update",
+      "aliasOf": "/v1/workspaces/:workspaceId/session-groups/:groupId/memory/update"
+    },
+    {
       "method": "PUT",
       "path": "/v1/projects/:workspaceId/session-groups/:groupId/sharing",
       "aliasOf": "/v1/workspaces/:workspaceId/session-groups/:groupId/sharing"
@@ -7417,6 +7422,10 @@
     {
       "method": "PATCH",
       "path": "/v1/workspaces/:workspaceId/session-groups/:groupId"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/session-groups/:groupId/memory/update"
     },
     {
       "method": "PUT",

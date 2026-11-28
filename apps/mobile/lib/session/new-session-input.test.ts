@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
+import { artifactChatLabel, artifactChatPrompt } from '@/lib/artifacts/artifact-chat';
 import { newSessionCreateInput } from './new-session-input';
 import { promptParts } from './prompt-parts';
 
@@ -70,5 +71,33 @@ describe('newSessionCreateInput', () => {
     expect('model' in bare).toBe(false);
     expect('model' in bare).toBe(false);
     expect('agent_name' in bare).toBe(false);
+  });
+
+  describe('an artifact chat (Ask AI)', () => {
+    const artifact = { artifactId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', path: 'artifacts/q3-plan', title: 'Q3 plan' };
+    const prompt = artifactChatPrompt('hi', artifact);
+
+    test('plain text carries the artifact in initial_prompt and the artifact label', () => {
+      const input = newSessionCreateInput({ ...base, artifact });
+      expect(input.initial_prompt).toBe(prompt);
+      expect(input.labels).toEqual([artifactChatLabel(artifact.artifactId)]);
+    });
+
+    test('a picked level carries the artifact in pending_prompt.text', () => {
+      const input = newSessionCreateInput({ ...base, picks, artifact });
+      expect(input.pending_prompt?.text).toBe(prompt);
+      expect(input.initial_prompt).toBeUndefined();
+    });
+
+    test('files carry the artifact in the text part', () => {
+      const input = newSessionCreateInput({ ...base, fileParts: [filePart], fileNames: ['photo_1.jpg'], artifact });
+      expect(input.pending_prompt?.parts).toEqual(promptParts(prompt, [filePart]));
+    });
+
+    test('no artifact: no label, the text as typed', () => {
+      const input = newSessionCreateInput({ ...base, artifact: null });
+      expect(input.initial_prompt).toBe('hi');
+      expect('labels' in input).toBe(false);
+    });
   });
 });

@@ -1403,6 +1403,10 @@
     "movedToFolder": "Verschoben nach {{name}}",
     "moveFailed": "Artefakt konnte nicht verschoben werden",
     "emptyFolder": "Keine Artefakte in diesem Ordner",
-    "emptyUnfiled": "Keine Artefakte ohne Ordner"
+    "emptyUnfiled": "Keine Artefakte ohne Ordner",
+    "askAgent": "KI fragen",
+    "askAgentRemove": "{{title}} entfernen",
+    "askAgentLoadError": "„{{title}}“ konnte nicht angehängt werden. Tippe darauf, um es erneut zu versuchen, oder entferne es.",
+    "askAgentLoading": "„{{title}}“ wird noch angehängt. Sende gleich noch einmal."
   }
 }

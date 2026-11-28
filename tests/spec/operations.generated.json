@@ -7242,7 +7242,7 @@
     "operation_id": "session_groups.update",
     "action": "project.session.start",
     "exposure": "agent",
-    "summary": "Rename a session group, or change its description or icon",
+    "summary": "Rename a session group, or change its description, instructions or icon",
     "tags": [
       "workspaces"
     ]
@@ -11455,6 +11455,18 @@
     "action": "project.session.start",
     "exposure": "agent",
     "summary": "Create a session group",
+    "tags": [
+      "workspaces"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/v1/workspaces/:workspaceId/session-groups/:groupId/memory/update",
+    "typed": true,
+    "operation_id": "session_groups.memory.update",
+    "action": "project.session.start",
+    "exposure": "human",
+    "summary": "Update a session group's memory now",
     "tags": [
       "workspaces"
     ]

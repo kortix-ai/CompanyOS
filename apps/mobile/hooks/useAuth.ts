@@ -29,6 +29,7 @@ import { KORTIX_WEB_URL } from '@/lib/kortix-web';
 import { applyProfileLocale } from '@/lib/utils/i18n';
 import { withDeadline } from '@/lib/utils/with-deadline';
 import { unregisterPushOnSignOut } from '@/lib/notifications/registration';
+import { useArtifactViewerStore } from '@/stores/artifact-viewer-store';
 import { useTabStore } from '@/stores/tab-store';
 import { useMessageQueueStore } from '@/stores/message-queue-store';
 import { useCurrentAccountStore } from '@/stores/current-account-store';
@@ -60,6 +61,7 @@ import { releaseSavedCopies } from '@/lib/session/saved-copy-registry';
  * (theme, sounds, notifications) are not reset.
  */
 function resetUserStores() {
+  useArtifactViewerStore.getState().reset();
   useTabStore.getState().reset();
   useMessageQueueStore.getState().reset();
   useCurrentAccountStore.getState().reset();

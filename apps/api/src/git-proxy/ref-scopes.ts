@@ -17,13 +17,14 @@
  * put a cross-region round trip on the hot path of every clone and fetch, which
  * is exactly what the 30 s authorization memo above it exists to avoid.
  *
- * DEFAULT-DENY, unlike the rest of the agent-grant fold. `agentMayPerform(null,
+ * DEFAULT-DENY, unlike the rest of the agent-grant fold. `agentListAllows(null,
  * …)` returns TRUE — a null grant means "no restriction" — and null is what
  * every project that never adopted `agents:` in its manifest has. Reading these
  * leaves through that helper would hand unrestricted ref authority to exactly
  * the ungoverned projects this whole change exists to protect. So a session
  * principal must find the leaf EXPLICITLY listed in its grant; absent is denied.
  */
+import { agentListAllows } from '../iam/agent-scope';
 import type { AgentGrant } from '@kortix/db';
 
 import { holdsEveryGrant } from '../iam/agent-grant-ceiling';
@@ -78,7 +79,7 @@ export async function principalHoldsRefScope(
     case 'session': {
       const grant = caller.agentGrant;
       if (!grant) return false; // Default-deny — see the header note.
-      if (grant.permissions !== 'all' && !grant.permissions.includes(scope)) return false;
+      if (!agentListAllows(grant, scope)) return false;
       if (!principal.userId || !principal.tokenId) return false;
       // actorForToken selects the agent's service account (a governed grant)
       // or the launcher (a null grant). The manifest can

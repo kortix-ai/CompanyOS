@@ -3,8 +3,9 @@
  * long press on an Artifacts row open it.
  *
  * Layout = the session actions sheet (board 11b): the title row titled with the
- * artifact, one untitled group of Share link · Open in browser · Reload (viewer
- * only) · Pin or Unpin · Rename (`can_manage`), then Stop sharing alone in its
+ * artifact, one untitled group of Ask AI (when the caller can start a chat) ·
+ * Share link · Open in browser · Reload (viewer only) · Pin or Unpin · Rename
+ * (`can_manage`), then Stop sharing alone in its
  * own group, destructive (`can_manage`). Rename pushes in place of the options
  * (`sheet-push`). Stop sharing confirms in a dialog that opens only after this
  * sheet has closed — never two overlays at once.
@@ -19,6 +20,9 @@
  * folders; a folder with subfolders opens its level (the folder itself first,
  * then its subfolders); a folder without picks it. Back goes up one level. The
  * current folder carries the check.
+ *
+ * Ask AI is web's Ask AI: it closes this sheet, then the caller opens a new
+ * chat with the artifact attached (`stores/artifact-chat-store.ts`).
  *
  * Stop sharing is web's "remove": the artifact leaves Artifacts and its links
  * stop working; its files stay in Files.
@@ -55,6 +59,7 @@ import {
   PushPinIcon,
   PushPinSlashIcon,
   ShareNetworkIcon,
+  SparkleIcon,
   XCircleIcon,
 } from '@/lib/icons';
 import { log } from '@/lib/logger';
@@ -75,12 +80,14 @@ interface ArtifactActionsSheetProps {
   onRemoved?: (artifactId: string) => void;
   /** Open over another sheet (the viewer), so the viewer stays under it. */
   pushed?: boolean;
+  /** Shows Ask AI: start a new chat with this artifact attached. Runs after this sheet closes. */
+  onAskAi?: (artifact: Artifact | ArtifactDetail) => void;
 }
 
 type SheetView = 'options' | 'rename' | 'move';
 
 export const ArtifactActionsSheet = React.forwardRef<ArtifactActionsSheetRef, ArtifactActionsSheetProps>(
-  function ArtifactActionsSheet({ projectId, onReload, onRemoved, pushed = false }, ref) {
+  function ArtifactActionsSheet({ projectId, onReload, onRemoved, pushed = false, onAskAi }, ref) {
     const { t } = useTranslation();
     const toast = useToast();
     const insets = useSafeAreaInsets();
@@ -288,6 +295,13 @@ export const ArtifactActionsSheet = React.forwardRef<ArtifactActionsSheetRef, Ar
       );
     }, [artifact, closeThen, confirm, mutations.remove, onRemoved, t, toast]);
 
+    const askAi = React.useCallback(() => {
+      if (!artifact || !onAskAi) return;
+      haptics.tap();
+      const target = artifact;
+      closeThen(() => onAskAi(target));
+    }, [artifact, closeThen, onAskAi]);
+
     const reload = React.useCallback(() => {
       if (!onReload) return;
       haptics.tap();
@@ -330,6 +344,9 @@ export const ArtifactActionsSheet = React.forwardRef<ArtifactActionsSheetRef, Ar
               <Animated.View key="options" entering={returning ? POP_IN : undefined}>
                 <View className="px-4" style={{ gap: 18 }}>
                   <SettingsGroup>
+                    {onAskAi ? (
+                      <SettingsRow icon={SparkleIcon} label={t('artifacts.askAgent')} right={null} onPress={askAi} />
+                    ) : null}
                     <SettingsRow icon={ShareNetworkIcon} label={t('artifacts.shareLink')} right={null} onPress={share} />
                     <SettingsRow
                       icon={ArrowSquareOutIcon}

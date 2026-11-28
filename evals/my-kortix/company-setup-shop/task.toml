@@ -9,6 +9,8 @@ difficulty = "medium"
 [metadata.kortix]
 # Every trial runs in a workspace of its own, made for it and deleted after it.
 workspace = "fresh"
+# What this fresh workspace may spend (default $2): a long setup runs past it.
+budget_usd = 8
 
 [agent]
 timeout_sec = 900.0

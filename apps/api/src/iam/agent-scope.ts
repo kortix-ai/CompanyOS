@@ -1,4 +1,4 @@
-import { DEPRECATED_KORTIX_PERMISSION_ALIASES } from '@kortix/manifest-schema';
+import { DEPRECATED_KORTIX_PERMISSION_ALIASES, expandKortixPermissionGroup, isKortixPermissionGroup } from '@kortix/manifest-schema';
 import { toLegacyAction } from '@kortix/shared/workspace-actions';
 import { canonicalConnectorAlias } from '../shared/connector-alias';
 /**
@@ -38,7 +38,7 @@ export { getAgentGrant, isProjectSessionPrincipal, isBorrowedSessionPrincipal } 
  * (`canonicalizeGrantActions`, called from projects/agents.ts beside the
  * connector canonicalization). It is a spelling correction on INPUT — NOT a
  * runtime alias table, and NOT a second permission model: after normalization
- * `agentMayPerform` is a plain membership test against the catalog's spelling.
+ * grants contain catalog leaves, including leaves selected by group wildcards.
  */
 const MANIFEST_ACTION_ALIASES = DEPRECATED_KORTIX_PERMISSION_ALIASES;
 
@@ -52,7 +52,7 @@ export function canonicalizeGrantActions(grant: AgentGrant | null): AgentGrant |
   if (!grant || grant.permissions === 'all') return grant;
   // A workspace name (`workspace.gitops.push`) resolves to the legacy name the
   // catalog stores, exactly like a renamed alias.
-  const canonical = grant.permissions.flatMap((a) => MANIFEST_ACTION_ALIASES[a] ?? [toLegacyAction(a)]);
+  const canonical = grant.permissions.flatMap((a) => isKortixPermissionGroup(a) ? expandKortixPermissionGroup(a) : MANIFEST_ACTION_ALIASES[a] ?? [toLegacyAction(a)]);
   return { ...grant, permissions: [...new Set(canonical)] };
 }
 
@@ -78,7 +78,7 @@ export function agentListAllows(grant: AgentGrant | null | undefined, action: st
   if (!grant || grant.permissions === 'all') return true;
   if (LIST_EXEMPT_ACTIONS.has(action)) return true;
   const wanted = toLegacyAction(action);
-  return grant.permissions.some((a) => toLegacyAction(a) === wanted);
+  return grant.permissions.some((a) => toLegacyAction(a) === wanted || expandKortixPermissionGroup(a).includes(wanted));
 }
 
 /**

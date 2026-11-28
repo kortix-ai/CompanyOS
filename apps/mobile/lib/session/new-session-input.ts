@@ -10,8 +10,12 @@
  * - text with a model/level pick: `pending_prompt` (a level cannot ride
  *   `initial_prompt`, which carries text only);
  * - plain text: `initial_prompt`.
+ *
+ * An Ask AI chat (`artifact`) sends web's artifact prompt in each shape
+ * (`artifactChatPrompt`) and labels the session `artifact:<id>`.
  */
 import type { SessionPromptPart } from '@kortix/sdk';
+import { artifactChatLabel, artifactChatPrompt, type ArtifactChatContext } from '@/lib/artifacts/artifact-chat';
 import type { CreateProjectSessionInput } from '@/lib/projects/projects-client';
 import { promptParts } from './prompt-parts';
 
@@ -31,27 +35,31 @@ export function newSessionCreateInput(i: {
   model: string | null;
   picks: FirstPromptPicks;
   agent: string | null;
+  /** The artifact the chat starts with (Ask AI), or none. */
+  artifact?: ArtifactChatContext | null;
 }): CreateProjectSessionInput {
+  const text = i.artifact ? artifactChatPrompt(i.text, i.artifact) : i.text;
   const firstPrompt: Pick<CreateProjectSessionInput, 'pending_prompt' | 'initial_prompt'> =
     i.fileParts.length > 0
       ? {
           pending_prompt: {
-            text: i.text,
+            text,
             agent: i.agent,
             model: i.picks?.model ?? null,
             variant: i.picks?.variant ?? null,
             attachment_names: i.fileNames,
-            parts: promptParts(i.text, i.fileParts),
+            parts: promptParts(text, i.fileParts),
           },
         }
       : i.picks
-        ? { pending_prompt: { text: i.text, agent: i.agent, model: i.picks.model, variant: i.picks.variant } }
-        : { initial_prompt: i.text };
+        ? { pending_prompt: { text, agent: i.agent, model: i.picks.model, variant: i.picks.variant } }
+        : { initial_prompt: text };
   return {
     ...(i.sessionId ? { session_id: i.sessionId } : {}),
     ...firstPrompt,
     ...(i.model ? { model: i.model } : {}),
     // The session is bound to this agent; the first prompt runs on it.
     ...(i.agent ? { agent_name: i.agent } : {}),
+    ...(i.artifact ? { labels: [artifactChatLabel(i.artifact.artifactId)] } : {}),
   };
 }

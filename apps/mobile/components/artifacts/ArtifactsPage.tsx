@@ -17,7 +17,8 @@
  * Creating and editing folders stays on web.
  *
  * A tap opens the viewer sheet over this page (`ArtifactViewerSheet`); a long
- * press opens the actions sheet. A project whose platform stores no Drive has
+ * press opens the actions sheet, whose Ask AI opens project home with the
+ * artifact attached (`onNewChat`). A project whose platform stores no Drive has
  * no Artifacts: the drawer hides the row, and a direct open says so.
  */
 
@@ -44,6 +45,7 @@ import { formatRelativeTime } from '@/lib/ui/format';
 import { useDebouncedValue } from '@/lib/ui/use-debounced-value';
 import { THEME } from '@/lib/utils/theme';
 import { useTone } from '@/lib/utils/tone';
+import { useArtifactChatStore } from '@/stores/artifact-chat-store';
 import { useArtifactViewerStore } from '@/stores/artifact-viewer-store';
 
 const SEARCH_DEBOUNCE_MS = 250;
@@ -51,9 +53,11 @@ const SEARCH_DEBOUNCE_MS = 250;
 interface ArtifactsPageProps {
   projectId: string;
   onOpenDrawer?: () => void;
+  /** Opens project home (the drawer's New session); Ask AI attaches the artifact first. */
+  onNewChat: () => void;
 }
 
-export function ArtifactsPage({ projectId, onOpenDrawer }: ArtifactsPageProps) {
+export function ArtifactsPage({ projectId, onOpenDrawer, onNewChat }: ArtifactsPageProps) {
   const { t } = useTranslation();
   const background = THEME[useTone()].background;
   const actionsRef = React.useRef<ArtifactActionsSheetRef>(null);
@@ -111,6 +115,13 @@ export function ArtifactsPage({ projectId, onOpenDrawer }: ArtifactsPageProps) {
     [projectId],
   );
   const openActions = React.useCallback((artifact: Artifact) => actionsRef.current?.present(artifact), []);
+  const askAi = React.useCallback(
+    (artifact: Artifact) => {
+      useArtifactChatStore.getState().attach(projectId, artifact);
+      onNewChat();
+    },
+    [onNewChat, projectId],
+  );
 
   const empty = artifactsEmptyState({ query: debouncedQuery, scope });
   const emptyLabel = !available
@@ -231,7 +242,7 @@ export function ArtifactsPage({ projectId, onOpenDrawer }: ArtifactsPageProps) {
         />
       ) : null}
 
-      <ArtifactActionsSheet ref={actionsRef} projectId={projectId} />
+      <ArtifactActionsSheet ref={actionsRef} projectId={projectId} onAskAi={askAi} />
     </View>
   );
 }

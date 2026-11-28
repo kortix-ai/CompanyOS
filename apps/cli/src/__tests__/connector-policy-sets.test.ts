@@ -154,6 +154,15 @@ describe('kortix connectors policy sets + agents scope --policy-set', () => {
     rmSync(tmp, { recursive: true, force: true });
   });
 
+  test('named-set replacement removes all duplicates and retains unrelated conditions', async () => {
+    const config = writeConfig(startServer());
+    const retained = { match: 'read_*', action: 'always_run', conditions: [{ arg: 'scope', match: 'synthetic' }] };
+    rules.read_only = [{ match: 'send_*', action: 'block' }, retained, { match: 'send_*', action: 'always_run' }];
+    const r = await runCli(['connectors', 'policy', 'gmail', '--policy-set', 'read_only', 'set', 'send_*', 'ask', '--project', PROJECT], config);
+    expect(r.code).toBe(0);
+    expect(writes()).toEqual([{ method: 'PUT', path: `${EX}/gmail/policies?policy_set=read_only`, body: { policies: [retained, { match: 'send_*', action: 'require_approval' }] } }]);
+  });
+
   test('policy <slug> --policy-set <name> set writes that set and keeps other rules', async () => {
     const config = writeConfig(startServer());
     const r = await runCli(

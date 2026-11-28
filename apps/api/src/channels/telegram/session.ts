@@ -266,6 +266,8 @@ export async function handleTelegramEvent(
     telegramPort,
     {
       target,
+      // A Telegram user proves no Kortix identity: the session is untrusted.
+      senderTrust: 'untrusted',
       keys: {
         followUp: `telegram:${install.botId}:${event.id}`,
         create: `telegram:create:${install.botId}:${event.id}`,

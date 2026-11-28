@@ -153,6 +153,9 @@ export async function handleEmailEvent(event: IntegrationEvent, run: { finalAtte
     emailPort,
     {
       target: { platform: 'email', workspaceId: inboxId, threadId, projectId, messageId: emailId },
+      // An email proves no sender: Resend's inbox API gives no SPF, DKIM or DMARC
+      // result, and a From header is forged in one line. The session is untrusted.
+      senderTrust: 'untrusted',
       // One lifecycle key per message, never per thread: the lifecycle keeps a
       // key forever, so under the thread's key a failed first start (dead-lettered)
       // answered every later reply in the thread with the same failure.

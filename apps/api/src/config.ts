@@ -1097,6 +1097,12 @@ const envSchema = z.object({
   TREG_API_URL: optStrDefault('https://treg.to'),
   TWILIO_ACCOUNT_SID: optStr,
   TWILIO_AUTH_TOKEN: optStr,
+  // Texts a kortix_phone account may send, whatever the workspace's rules say:
+  // Kortix pays for them. Country calling codes a recipient may have (comma
+  // separated; regions known for SMS-pumping fraud are left out), and texts
+  // per account per UTC day.
+  KORTIX_PHONE_SMS_PREFIXES: optStrDefault('+1,+31,+32,+33,+34,+39,+41,+43,+44,+45,+46,+47,+49,+61,+64,+353,+358'),
+  KORTIX_PHONE_SMS_DAILY_CAP: optInt(50),
   // Resend (https://resend.com).
   RESEND_API_KEY: optStr,
   // Override sender for the Resend leg only — needed while the primary from-
@@ -1880,6 +1886,8 @@ export const config = {
   TREG_API_URL: env.TREG_API_URL,
   TWILIO_ACCOUNT_SID: env.TWILIO_ACCOUNT_SID,
   TWILIO_AUTH_TOKEN: env.TWILIO_AUTH_TOKEN,
+  KORTIX_PHONE_SMS_PREFIXES: env.KORTIX_PHONE_SMS_PREFIXES.split(',').map((p) => p.trim()).filter((p) => /^\+\d{1,4}$/.test(p)),
+  KORTIX_PHONE_SMS_DAILY_CAP: env.KORTIX_PHONE_SMS_DAILY_CAP,
   RESEND_API_KEY: env.RESEND_API_KEY,
   RESEND_FROM_EMAIL: env.RESEND_FROM_EMAIL,
   EXPO_ACCESS_TOKEN: env.EXPO_ACCESS_TOKEN,

@@ -16,6 +16,8 @@ export interface Operation {
   id: string;
   action: string;
   exposure: Exposure;
+  /** The HTTP method of its canonical route: `GET` reads, anything else writes. */
+  method: string;
   summary: string | null;
   tags: string[];
 }
@@ -87,7 +89,7 @@ export function openApiOperations(source: OperationSource): (method: string, pat
 }
 
 /** The operation an OpenAPI operation object declares, or null when it is not classified. */
-export function operationOf(op: Record<string, unknown> | null): Operation | null {
+export function operationOf(op: Record<string, unknown> | null, method: string): Operation | null {
   const id = op?.operationId;
   const action = op?.['x-kortix-action'];
   const exposure = op?.['x-kortix-exposure'];
@@ -98,6 +100,7 @@ export function operationOf(op: Record<string, unknown> | null): Operation | nul
     id,
     action,
     exposure: exposure as Exposure,
+    method: method.toUpperCase(),
     summary: typeof op?.summary === 'string' ? op.summary : null,
     tags: Array.isArray(op?.tags) ? (op.tags as string[]) : [],
   };
@@ -140,7 +143,7 @@ export function installOperationRegistry(source: OperationSource): void {
   for (const r of routes) {
     const canonical = workspaceAliasOf(r.method, r.path, (m, p) => all.has(routeKey(m, p)));
     const raw = operation(r.method, r.path) ?? (canonical ? operation(r.method, canonical) : null);
-    const op = operationOf(raw);
+    const op = operationOf(raw, r.method);
     if (!op || !raw) continue;
     registry.set(routeKey(r.method, r.path), op);
     if (!canonical && !byId.has(op.id)) byId.set(op.id, { operation: op, method: r.method, path: r.path, ...operationInput(raw) });

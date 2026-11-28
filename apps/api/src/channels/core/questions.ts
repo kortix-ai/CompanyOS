@@ -602,6 +602,8 @@ function deliverAnswer({ port, target, followUp, run }: StepContext): AnswerDeli
       {
         target: { ...target, threadId: a.threadId },
         ...followUp(a.threadId, a.prompt),
+        // The platforms on this core prove no Kortix identity for a press.
+        senderTrust: 'untrusted',
         // An answer never starts a session.
         plan: async () => {
           gone = true;

@@ -1322,3 +1322,62 @@ flow(
     }
   },
 );
+
+// ── WS-AUTH-19 — an untrusted session: reads pass, writes ask, secrets block ───
+flow(
+  'WS-AUTH-19',
+  {
+    domain: 'workspaces',
+    requires: ['database'],
+    timeoutMs: 240_000,
+    routes: [
+      'GET /v1/workspaces/:workspaceId/sessions',
+      'POST /v1/workspaces/:workspaceId/secrets',
+      'PATCH /v1/workspaces/:workspaceId/sessions/:sessionId',
+      'POST /v1/connectors/workspaces/:workspaceId/call',
+    ],
+  },
+  async (ctx) => {
+    const team = await ctx.fixtures.team();
+    const project = await team.project({ managedGit: true });
+    const world = await AgentPrincipalsWorld.open(ctx, { accountId: team.id, projectId: project.id });
+    const w = project.id;
+    try {
+      await ctx.step('the manifest declares `steward` ("*")', async () => {
+        await world.writeManifest('project:\n  name: example-org-wsa19\ndefault_agent: steward\nagents:\n  steward:\n    kortix_permissions: "*"\n');
+      });
+      const tainted = await world.mintAgentSession({ agent: 'steward', launcher: ctx.P.OWNER });
+      const clean = await world.mintAgentSession({ agent: 'steward', launcher: ctx.P.OWNER });
+
+      await ctx.step('one session read an email from outside the workspace: its row says trust untrusted', async () => {
+        // What the email channel writes when it delivers (senderTrust: untrusted → markSessionUntrusted).
+        await world.db.query(
+          `UPDATE kortix.project_sessions SET metadata = coalesce(metadata, '{}'::jsonb) || '{"trust":"untrusted","trust_reason":"email"}'::jsonb WHERE session_id = $1`,
+          [tainted.sessionId],
+        );
+      });
+
+      await ctx.step('the untrusted session still reads: GET /sessions → 200', async () => {
+        (await tainted.client.get(`/v1/workspaces/${w}/sessions`)).status(200);
+      });
+
+      await ctx.step('it may not touch secrets: POST /secrets → 403 untrusted_session; the trusted session of the same agent → 200', async () => {
+        (await tainted.client.post(`/v1/workspaces/${w}/secrets`, { name: 'WSA19_KEY', value: 'v1' }))
+          .status(403).body().has('$.code', 'untrusted_session').has('$.operation', 'secrets.set');
+        (await clean.client.post(`/v1/workspaces/${w}/secrets`, { name: 'WSA19_KEY', value: 'v1' })).status(200);
+      });
+
+      await ctx.step('any other write asks a person: renaming its own session → 202 pending_approval', async () => {
+        const r = (await tainted.client.patch(`/v1/workspaces/${w}/sessions/${tainted.sessionId}`, { title: 'renamed by an email' })).status(202);
+        r.body().has('$.status', 'pending_approval').has('$.operation', 'sessions.update');
+      });
+
+      await ctx.step('through the kortix connector the same rules hold: secrets.list → denied untrusted_session', async () => {
+        const r = await tainted.client.post(`/v1/connectors/workspaces/${w}/call`, { connector: 'kortix', action: 'secrets.list', args: { workspaceId: w } });
+        if (!r.text().includes('untrusted_session')) throw new Error(`expected untrusted_session: ${r.text().slice(0, 400)}`);
+      });
+    } finally {
+      await world.close();
+    }
+  },
+);

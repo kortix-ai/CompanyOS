@@ -18,6 +18,7 @@ import { loadProjectPoliciesFor } from '../connectors/project-policies';
 import type { Policy } from '../connectors/policy';
 import { KORTIX_CONNECTOR_SLUG, type KortixRuleDecision, decideKortixOperation, isKortixPolicy } from '../iam/kortix-rules';
 import { type Operation, operationById, pathParams, requestOperation } from '../shared/operation-registry';
+import { sessionTrust } from '../shared/session-trust';
 import { getAgentGrant } from './agent-scope';
 
 /** What the agent tells the approver about a held call (the gateway's `approval_context`). */
@@ -71,11 +72,15 @@ function refusal(operation: Operation, decision: KortixRuleDecision): HTTPExcept
       ? 'operation_not_for_agents'
       : decision.source === 'agent_permissions'
         ? 'agent_scope_insufficient'
-        : 'policy_block';
+        : decision.source === 'untrusted'
+          ? 'untrusted_session'
+          : 'policy_block';
   const message =
     decision.source === 'exposure'
       ? `"${operation.id}" is for people only. Ask a person in the workspace to do it.`
-      : decision.source === 'agent_permissions'
+      : decision.source === 'untrusted'
+        ? `This session read a message from someone outside the workspace, so it may not run "${operation.id}". A person in the workspace can do it.`
+        : decision.source === 'agent_permissions'
         ? `This agent may not run "${operation.id}" (action "${operation.action}"). Add the action to its kortix_permissions, or give it a policy set on the kortix connector, in kortix.yaml.`
         : `A rule blocks "${operation.id}" for agents${decision.rule ? ` (match "${decision.rule.match}")` : ''}.`;
   return json403(
@@ -166,12 +171,17 @@ export async function gateAgentOperation(c: Context): Promise<Response | undefin
   if (!matched) return undefined;
   const { operation, path } = matched;
   const projectId = (c.get('tokenProjectId') as string | undefined) ?? null;
-  const projectPolicies: Policy[] = projectId ? (await loadProjectPoliciesFor(projectId)).filter(isKortixPolicy) : [];
+  const [stored, trust] = await Promise.all([
+    projectId ? loadProjectPoliciesFor(projectId) : Promise.resolve([] as Policy[]),
+    sessionTrust(c.get('sessionId') as string),
+  ]);
+  const projectPolicies = stored.filter(isKortixPolicy);
   const conditional = projectPolicies.some((p) => (p.conditions?.length ?? 0) > 0 || p.conditionsInvalid);
   const decision = decideKortixOperation({
     operation,
     grant: getAgentGrant(c),
     projectPolicies,
+    trust,
     ...(conditional ? { args: await requestArgs(c, path), argsAvailable: true } : {}),
   });
   c.set('operation', operation);

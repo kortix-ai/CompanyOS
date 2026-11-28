@@ -1,10 +1,11 @@
 import { copySessionLog, withForkAttachmentCleanup } from '../session-log-fork';
+import { trustOfMetadata } from '../../shared/session-trust';
 import { platformDefaultModelId } from '../../llm-gateway/models/served-managed-models';
 import { servableProjectCatalog } from '../../llm-gateway/models/servable-catalog';
 import { randomUUID } from 'node:crypto';
 import { SESSION_INITIAL_CONTEXT_MAX_CHARS, SessionCreateInputSchema } from '@kortix/api-contract';
 import { projectSessionConnectorBindings, projectSessionGrants, projectSessionRuntimeContexts, projectSessions, sessionLifecycleCommands, sessionProviderSecretPools } from '@kortix/db';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { HTTPException } from 'hono/http-exception';
 import { canonicalAgentName, isMyKortixAgentName, isMyKortixSandboxSlug, MY_KORTIX_AGENT_NAME, MY_KORTIX_SANDBOX_SLUG } from '@kortix/shared';
 import { checkBillingAdmission } from '../../billing/services/billing-gate';
@@ -1558,6 +1559,18 @@ async function insertSessionAndBindings(
   } = params;
   const { userId, body } = input;
   return db.transaction(async (tx) => {
+    // Taint follows creation: a session started, forked or spawned by an
+    // untrusted session read what that session read (projects/session-trust.ts).
+    const lineage = [parentSession?.sessionId, body.parent_session_id, body.fork_from_session_id].filter(
+      (id): id is string => typeof id === 'string' && id.length > 0,
+    );
+    const untrustedLine =
+      lineage.length > 0 &&
+      (await tx
+        .select({ metadata: projectSessions.metadata })
+        .from(projectSessions)
+        .where(inArray(projectSessions.sessionId, lineage))).some((r) => trustOfMetadata(r.metadata) === 'untrusted');
+    const trust = untrustedLine && trustOfMetadata(metadata) !== 'untrusted' ? { trust: 'untrusted', trust_reason: 'parent_session' } : {};
     const [row] = await tx
     .insert(projectSessions)
     .values({
@@ -1587,8 +1600,8 @@ async function insertSessionAndBindings(
       connectorBindingsConfigured,
       connectorBindingsInheritUnbound: inheritUnbound,
       metadata: typeof body.fork_from_session_id === 'string'
-        ? { ...metadata, forkedFromSessionId: body.fork_from_session_id }
-        : metadata,
+        ? { ...metadata, ...trust, forkedFromSessionId: body.fork_from_session_id }
+        : { ...metadata, ...trust },
       updatedAt: new Date(),
     })
     .returning();

@@ -56,6 +56,16 @@ export function resetSlackSessionLifecycleForTest() {
   slackSessionLifecycle = defaultSlackSessionLifecycle;
 }
 
+/**
+ * Who a Slack sender is to the workspace. With SLACK_REQUIRE_USER_IDENTITY
+ * every sender was resolved to a linked member before the message got here
+ * (slack/dispatch.ts); without it the agent runs as the owner stand-in for
+ * anyone in the Slack workspace, and the session is untrusted.
+ */
+export function slackSenderTrust(): 'principal' | 'untrusted' {
+  return config.SLACK_REQUIRE_USER_IDENTITY ? 'principal' : 'untrusted';
+}
+
 /** One Slack message, whichever events (message, app_mention) carry it. */
 export function slackFollowUpKey(teamId: string, event: SlackEvent): string {
   return `slack:${teamId}:${event.channel ?? ''}:${event.ts}`;
@@ -71,6 +81,7 @@ export async function deliverSlackFollowUpToSession(input: {
 }) {
   return slackSessionLifecycle.deliverFollowUp({
     source: 'slack',
+    senderTrust: slackSenderTrust(),
     idempotencyKey: input.idempotencyKey,
     sessionId: input.sessionId,
     text: input.text,
@@ -270,6 +281,7 @@ async function launchSlackSession(
     visibility: slackSessionIsPersonal(event) ? 'private' : conversationPolicy === 'project_open' ? 'project' : 'restricted',
     metadata: {
       source: 'slack',
+      ...(slackSenderTrust() === 'untrusted' ? { trust: 'untrusted', trust_reason: 'slack' } : {}),
       slack: {
         team_id: teamId,
         channel: event.channel,

@@ -62,9 +62,16 @@ has is a connector behind one gateway.
    own. `execute` lands with MCP (phase 5). Flow `WS-AUTH-18`.
 4. **2b, built.** "Ask": the gate hands the request to the gateway as a
    `kortix` call; held, approved, run once. Flow `WS-AUTH-18`.
-5. **2c.** Session trust (principal or untrusted), DMARC for email
-   principals, taint passed to what an untrusted session creates.
-6. **2d.** Phone: outbound country allowlist and daily cap.
+5. **2c, built.** Session trust in `project_sessions.metadata.trust`
+   (`shared/session-trust.ts`). Email, Discord, Telegram and chat question
+   answers mark the session untrusted; Slack and Teams do unless
+   `*_REQUIRE_USER_IDENTITY` resolved a linked member. A session created,
+   forked or spawned by an untrusted one is untrusted. The gate and the
+   gateway apply the untrusted rules (`untrustedDecision`). Flow
+   `WS-AUTH-19`.
+6. **2d, built.** Phone: `KORTIX_PHONE_SMS_PREFIXES` (calling codes) and
+   `KORTIX_PHONE_SMS_DAILY_CAP` (per account per UTC day, counted in the
+   account state before the send).
 7. SDK `call(operation)` and a typed client.
 8. MCP: the verbs plus featured actions plus instructions; old tools removed.
 9. The CLI generated from the catalog.
@@ -162,9 +169,11 @@ and an allowed sender can still forward an attack. Authority comes from the
 session's trust:
 
 - **Principal:** a workspace member on a channel that proves identity: the
-  app, Slack with a linked identity, email from a member's address with
-  DMARC pass. A text message is never a principal (caller id is forged
-  easily).
+  app, Slack or Teams with a linked identity. An email is never a principal:
+  Resend's Inboxes API returns no SPF, DKIM or DMARC result (checked
+  2026-11-28, `inbox.email.received` and "Retrieve Thread Email"), and a
+  `From` header is forged in one line. A text message is never a principal
+  either.
 - **Untrusted:** a session that received a message from anyone else. It
   stays untrusted until it ends. Approving one call does not clear it.
 - **Untrusted rules** (code, evaluated before every workspace rule):
@@ -176,8 +185,12 @@ session's trust:
   | edits to skills, triggers, rules, memory, kortix.yaml | ask |
   | reveal a secret, issue a credential or key, change members | block |
 
-- **Taint follows creation:** a child session, a trigger, a scheduled task
-  or a script created by an untrusted session is untrusted too.
+- **Taint follows creation:** a session created, forked or spawned by an
+  untrusted session is untrusted (`session-create.ts`). A trigger, a
+  script, a skill or a kortix.yaml edit by an untrusted session is a write,
+  so it asks: a person approves what would run later.
+- **The gateway call itself** (`connectors.call`) has no untrusted answer:
+  the gateway applies the rules to the connector action inside it.
 - **Web pages do not taint** (Marko may overrule): nearly every session reads
   the web. Text a stranger addressed to the agent does.
 

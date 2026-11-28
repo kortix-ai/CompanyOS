@@ -6,6 +6,8 @@
  *
  * Order (first answer wins):
  *   1. exposure `human`: block. An operation for people only.
+ *   1b. the session is untrusted (shared/session-trust.ts): the untrusted
+ *      rules, which no workspace rule can loosen.
  *   2. project `policies:` that name `kortix.` (`kortix.secrets.*`).
  *      A pattern that does not name `kortix` (`*`, `*.delete*`) is about the
  *      workspace's other connectors and does not apply here.
@@ -25,7 +27,39 @@ export { agentListAllows };
 
 export const KORTIX_CONNECTOR_SLUG = 'kortix';
 
-export type KortixRuleSource = 'exposure' | 'project' | 'policy_set' | 'agent_permissions' | 'connector' | 'default';
+/**
+ * What an untrusted session may never do, by IAM action prefix: read or
+ * change secrets, credentials, keys, members, IAM or billing. A hijacked
+ * session must not reach what would let its author in.
+ */
+const UNTRUSTED_BLOCKED_PREFIXES = [
+  'project.secret.',
+  'project.credentials.',
+  'project.gateway.keys.',
+  'project.members.',
+  'member.',
+  'token.',
+  'iam.',
+  'billing.',
+  'account.',
+] as const;
+
+/**
+ * Operations that are the connector gateway itself: the gateway applies the
+ * untrusted rules to the connector action inside (a read passes, a write asks),
+ * so the call to the gateway has no untrusted answer of its own.
+ */
+const GATEWAY_OPERATIONS: ReadonlySet<string> = new Set(['connectors.call', 'connectors.session.call']);
+
+/** The untrusted rules: block the sensitive actions, ask before any other write, allow reads. Null: no say. */
+export function untrustedDecision(operation: Pick<Operation, 'id' | 'action' | 'method'>): KortixRuleDecision | null {
+  if (GATEWAY_OPERATIONS.has(operation.id)) return null;
+  if (UNTRUSTED_BLOCKED_PREFIXES.some((prefix) => operation.action.startsWith(prefix))) return { action: 'block', source: 'untrusted' };
+  if (operation.method !== 'GET' && operation.method !== 'HEAD') return { action: 'require_approval', source: 'untrusted' };
+  return null;
+}
+
+export type KortixRuleSource = 'exposure' | 'untrusted' | 'project' | 'policy_set' | 'agent_permissions' | 'connector' | 'default';
 
 export interface KortixRuleDecision {
   action: PolicyAction;
@@ -42,6 +76,8 @@ export interface KortixRuleInput {
   /** The agent's set on `kortix`: undefined = no set assigned, null = assigned but missing. */
   setPolicies?: Policy[] | null;
   connectorPolicies?: Policy[];
+  /** The calling session's trust; absent = principal. */
+  trust?: 'principal' | 'untrusted';
   /** The request's arguments (path parameters, query, JSON body), for rules with conditions. */
   args?: Record<string, unknown> | null;
   argsAvailable?: boolean;
@@ -56,6 +92,15 @@ export function isKortixPolicy(policy: Policy): boolean {
 export function decideKortixOperation(input: KortixRuleInput): KortixRuleDecision {
   const { operation } = input;
   if (operation.exposure === 'human') return { action: 'block', source: 'exposure' };
+  if (input.trust === 'untrusted') {
+    const untrusted = untrustedDecision(operation);
+    // A block from the workspace's own rules still wins over an untrusted ask, below.
+    if (untrusted?.action === 'block') return untrusted;
+    if (untrusted) {
+      const rest = decideKortixOperation({ ...input, trust: 'principal' });
+      return rest.action === 'block' ? rest : untrusted;
+    }
+  }
 
   const scoped = (policies: { project?: Policy[]; set?: Policy[] | null; connector?: Policy[] }) =>
     resolveEffectiveRule({

@@ -178,6 +178,12 @@ export interface ChannelMessage {
   };
   /** The message as the agent and the session view read it, rendered by the core. */
   followUp: ChannelEnvelope;
+  /**
+   * `principal` only when the sender proved to be a member of the workspace
+   * (a linked Kortix identity). Anyone else makes the session untrusted
+   * (projects/session-trust.ts): their text may be written to hijack it.
+   */
+  senderTrust: 'principal' | 'untrusted';
   /** The message's own files, never a quoted message's. Read once per attempt, after the retry guard, on the way into a session. */
   files?: readonly ChannelFile[];
   /** How the thread's session starts. Null drops the message (the adapter logs why). */
@@ -336,7 +342,8 @@ export async function routeChannelMessage(
       requestingPrincipalType: 'human',
       body: { base_ref: plan.project.defaultBranch, ...plan.body },
       visibility: plan.visibility,
-      metadata: { source: target.platform, ...plan.metadata },
+      // An untrusted sender's first message makes the session untrusted from birth.
+      metadata: { source: target.platform, ...plan.metadata, ...(message.senderTrust === 'untrusted' ? { trust: 'untrusted', trust_reason: target.platform } : {}) },
       ...(plan.extraEnvVars ? { extraEnvVars: plan.extraEnvVars } : {}),
       ...(plan.mayManageSystemConnections ? { mayManageSystemConnections: true } : {}),
       idempotencyKey: keys.create,
@@ -433,7 +440,7 @@ export async function forgetChatThread(target: ChannelTarget, createClaim: strin
 
 async function followUp(
   port: ChannelPort,
-  { target, keys, followUp: envelope }: ChannelMessage,
+  { target, keys, followUp: envelope, senderTrust }: ChannelMessage,
   thread: { sessionId: string; projectId: string },
   run: { finalAttempt: boolean },
   files: () => Promise<MessageFiles>,
@@ -458,6 +465,7 @@ async function followUp(
     idempotencyKey: keys.followUp,
     projectId: target.projectId,
     sessionId: thread.sessionId,
+    senderTrust,
     ...prompt,
   });
   if (outcome === 'delivered' || outcome === 'queued') await touchChatThread(target);

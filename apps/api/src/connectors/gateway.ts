@@ -1,5 +1,6 @@
 import { logger } from '../lib/logger';
-import { KORTIX_CONNECTOR_SLUG, isKortixPolicy } from '../iam/kortix-rules';
+import { KORTIX_CONNECTOR_SLUG, isKortixPolicy, untrustedDecision } from '../iam/kortix-rules';
+import { operationById } from '../shared/operation-registry';
 import { APPROVAL_RERUN_RULE, heldCallRepeatInstructions, heldRunRule } from './approval-expiry';
 import {
   APPROVAL_ENRICHERS,
@@ -56,7 +57,7 @@ import { invalidArgsReason } from './args-validate';
  * (router.ts) wires real DB/secret deps. `enforcePolicies` exists for back-compat
  * with the original allow-all engine; production sets it true.
  */
-import { type DefaultMode, type Policy, resolveEffectiveAction } from './policy';
+import { type DefaultMode, type Policy, type PolicyAction, resolveEffectiveAction } from './policy';
 import { connectorRequestDigest } from './request-digest';
 import type { ShareSubject } from './share';
 import type { ActionBinding, Risk } from './types';
@@ -294,6 +295,8 @@ export interface GatewayDeps {
   loadProjectPolicies?(projectId: string): Promise<Policy[]>;
   /** Project's policy.default_mode setting (risk | allow_all). Defaults to allow_all. */
   loadDefaultMode?(projectId: string): Promise<DefaultMode>;
+  /** The calling session's trust (shared/session-trust.ts). Absent: every caller is a principal. */
+  sessionTrust?(sessionId: string): Promise<'principal' | 'untrusted'>;
   /** Records the audit row; returns the new execution id used in the approval URL. */
   recordExecution(rec: ExecutionRecord): Promise<string | null>;
   /** Set (`true`) or clear (`false`) `metadata.credential_rejected_at` on a
@@ -1229,7 +1232,7 @@ async function enforceCallPolicies(
     };
   };
 
-  const decision = resolveEffectiveAction({
+  const resolvedDecision = resolveEffectiveAction({
     fullPath,
     relPath: input.actionPath,
     projectPolicies: isKortix ? projectPolicies.filter(isKortixPolicy) : projectPolicies,
@@ -1246,6 +1249,23 @@ async function enforceCallPolicies(
     args: executionArgs,
     argsAvailable: true,
   });
+  // An untrusted session (shared/session-trust.ts): the untrusted rules come
+  // first and no workspace rule loosens them. On `kortix` they are the API's
+  // (iam/kortix-rules.ts); on any other connector a write asks, except a reply
+  // through a channel connector (the thread the session answers).
+  const trust = input.sessionId && deps.sessionTrust ? await deps.sessionTrust(input.sessionId) : 'principal';
+  let decision: { action: PolicyAction; source: string } = resolvedDecision;
+  if (trust === 'untrusted' && resolvedDecision.action !== 'block') {
+    const op = isKortix ? operationById(input.actionPath) : null;
+    const untrusted = isKortix
+      ? op
+        ? untrustedDecision(op.operation)
+        : { action: 'block' as const, source: 'untrusted' }
+      : action.risk === 'read' || connector.provider === 'channel'
+        ? null
+        : { action: 'require_approval' as const, source: 'untrusted' };
+    if (untrusted) decision = untrusted;
+  }
   // Audit keys naming the set that decided: the agent, the set, the manifest
   // commit the grant came from. Omitted when a project rule, a base rule,
   // `sensitive` or `default_mode` decided, so no surface credits the set.
@@ -1261,7 +1281,7 @@ async function enforceCallPolicies(
       'denied',
       action.risk,
       {
-        reason: setMissing ? 'policy_set_missing' : 'policy_block',
+        reason: setMissing ? 'policy_set_missing' : decision.source === 'untrusted' ? 'untrusted_session' : 'policy_block',
         policy_source: decision.source,
         ...setDetails,
         args_preview_complete: argsPreviewDetails.complete,
@@ -1271,6 +1291,13 @@ async function enforceCallPolicies(
       },
       requestDigest,
     );
+    if (decision.source === 'untrusted') {
+      return {
+        status: 'denied',
+        reason: 'untrusted_session',
+        message: `This session read a message from someone outside the workspace, so it may not run ${input.connectorSlug}.${input.actionPath}. A person in the workspace can do it.`,
+      };
+    }
     if (!policySet || decision.source !== 'policy_set') return { status: 'denied', reason: 'policy_block' };
     return {
       status: 'denied',

@@ -150,6 +150,11 @@ function conversationThread(tenantId: string, conversationId: string): ChatThrea
   return { platform: 'teams', workspaceId: tenantId, threadId: conversationId };
 }
 
+/** As `slackSenderTrust`: a linked member with TEAMS_REQUIRE_USER_IDENTITY, else untrusted. */
+export function teamsSenderTrust(): 'principal' | 'untrusted' {
+  return config.TEAMS_REQUIRE_USER_IDENTITY ? 'principal' : 'untrusted';
+}
+
 export async function deliverTeamsFollowUpToSession(input: {
   sessionId: string;
   text: string;
@@ -161,6 +166,7 @@ export async function deliverTeamsFollowUpToSession(input: {
 }) {
   return teamsSessionLifecycle.deliverFollowUp({
     source: 'teams',
+    senderTrust: teamsSenderTrust(),
     idempotencyKey: input.idempotencyKey,
     sessionId: input.sessionId,
     text: input.text,
@@ -681,6 +687,7 @@ export async function createOrJoinTeamsConversationSession(input: {
         : 'restricted',
     metadata: {
       source: 'teams',
+      ...(teamsSenderTrust() === 'untrusted' ? { trust: 'untrusted', trust_reason: 'teams' } : {}),
       teams: {
         tenant_id: tenantId,
         conversation_id: conversationId,

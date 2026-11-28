@@ -178,6 +178,12 @@ export interface ContinueSessionCommand {
   /** Legacy plain-text form. Ignored when `parts` is present. */
   text: string;
   userId?: string | null;
+  /**
+   * Who wrote the message, when a channel delivers it: `untrusted` marks the
+   * session untrusted before the message is queued (projects/session-trust.ts).
+   * Absent: a person in the app, or the session itself.
+   */
+  senderTrust?: 'principal' | 'untrusted';
   /** The full prompt body, when the producer has one (the prompt inbox). Text-only
    *  producers keep sending `text` and get the same single-part body as before. */
   parts?: PromptPartWire[];

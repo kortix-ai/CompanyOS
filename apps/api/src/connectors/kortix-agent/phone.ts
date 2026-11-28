@@ -20,6 +20,22 @@ export interface PhoneData {
   numberId?: string;
   country?: string;
   boughtAt?: string;
+  /** Texts sent on one UTC day: the daily cap's count. */
+  sent?: { day: string; count: number };
+}
+
+/**
+ * May the account text `to`? Kortix pays for every text, so these limits hold
+ * whatever the workspace's rules say: the recipient's calling code is on the
+ * allowlist (`KORTIX_PHONE_SMS_PREFIXES`), and the account is under its daily
+ * cap (`KORTIX_PHONE_SMS_DAILY_CAP`). Returns why not, or null.
+ */
+export function smsRefusal(to: string, sentToday: number, limits: { prefixes: readonly string[]; dailyCap: number }): string | null {
+  if (!limits.prefixes.some((prefix) => to.startsWith(prefix))) {
+    return `texts to ${to.slice(0, 4)}… are not allowed: Kortix sends texts only to ${limits.prefixes.join(', ')}`;
+  }
+  if (sentToday >= limits.dailyCap) return `this number sent its ${limits.dailyCap} texts for today (UTC); try again tomorrow`;
+  return null;
 }
 
 export interface PhoneMessage {
@@ -233,6 +249,15 @@ export const PHONE_TOOLS: readonly AgentTool<PhoneData>[] = [
       if (!E164.test(to)) throw new ToolInputError('to must be an E.164 number, e.g. +14155550123');
       const body = reqStr(args, 'body');
       if (body.length > 1600) throw new ToolInputError('body is over 1600 characters');
+      // Count the text before it goes: two sessions sending at once cannot both take the last one.
+      const day = new Date(ctx.now()).toISOString().slice(0, 10);
+      let refusal: string | null = null;
+      await ctx.update((d) => {
+        const count = d.sent?.day === day ? d.sent.count : 0;
+        refusal = smsRefusal(to, count, { prefixes: config.KORTIX_PHONE_SMS_PREFIXES, dailyCap: config.KORTIX_PHONE_SMS_DAILY_CAP });
+        return refusal ? d : { ...d, sent: { day, count: count + 1 } };
+      });
+      if (refusal) throw new ToolInputError(refusal);
       const sent = await api.send({ from, to, body });
       return { sent: true, id: sent.id, status: sent.status, from, to };
     },

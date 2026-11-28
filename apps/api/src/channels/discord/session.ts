@@ -600,6 +600,8 @@ export async function handleDiscordMessage(
     discordPort,
     {
       target,
+      // A Discord user proves no Kortix identity: the session is untrusted.
+      senderTrust: 'untrusted',
       keys: {
         followUp: `discord:${conversation.guildId}:${event.id}`,
         create: `discord:create:${conversation.guildId}:${event.id}`,

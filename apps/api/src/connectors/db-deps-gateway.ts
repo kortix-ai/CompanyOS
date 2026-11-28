@@ -58,6 +58,7 @@ import { recordFinishedComposioAuthorization } from './db-deps-connect';
 import { connectorEgressFetch } from './egress';
 import { KORTIX_SESSION_HEADER, kortixAgentServiceForUrl } from './kortix-agent/host';
 import { KORTIX_CALLER_HEADER, signCaller } from '../shared/in-process-caller';
+import { sessionTrust } from '../shared/session-trust';
 import { CredentialNotSharedError } from './gateway';
 import type { ExecutionRecord, GatewayAction, GatewayConnector, GatewayDeps, HeldApprovalVerdict } from './gateway';
 import { HELD_RUN_CEILING_MS, sealHeldInput } from './held-call-store';
@@ -779,6 +780,7 @@ export function makeDbGatewayDeps(principal: ConnectorPrincipal): GatewayDeps {
     loadPolicySet: loadConnectorPolicySetFor,
     loadProjectPolicies: loadProjectPoliciesFor,
     loadDefaultMode: loadDefaultModeFor,
+    sessionTrust,
     // The link expires with the approval it points at (`expires_at`). A failed
     // read still mints the link, with the default 24 h token.
     mintApprovalLink: async ({ projectId, executionId, sessionId }) => {

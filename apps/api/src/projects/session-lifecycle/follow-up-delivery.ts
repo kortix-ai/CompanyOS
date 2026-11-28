@@ -11,6 +11,7 @@
  * a live turn and a dead-letter does not park the session, as with the direct
  * call (see `QueuedContinueSessionPayload.directFollowUp`).
  */
+import { markSessionUntrusted } from '../../shared/session-trust';
 import { projectSessions, sessionLifecycleCommands } from '@kortix/db';
 import { eq } from 'drizzle-orm';
 import { db } from '../../shared/db';
@@ -47,6 +48,8 @@ export async function deliverThroughQueue(
   // A parked session refuses delivery (`continueSession` → `unreachable`); the
   // caller shows its error rather than queueing behind a restart nobody asked for.
   if (session.status === 'failed') return 'failed';
+  // Before the row exists: the agent never reads the message while the session still reads as trusted.
+  if (command.senderTrust === 'untrusted') await markSessionUntrusted(command.sessionId, command.source);
 
   const { row } = await enqueueContinueSessionCommand({
     source: command.source,

@@ -4,10 +4,11 @@ import type { Policy } from '../connectors/policy';
 import type { Operation } from '../shared/operation-registry';
 import { agentListAllows, decideKortixOperation } from './kortix-rules';
 
-const op = (id: string, action: string, exposure: Operation['exposure'] = 'agent'): Operation => ({
+const op = (id: string, action: string, exposure: Operation['exposure'] = 'agent', method = 'POST'): Operation => ({
   id,
   action,
   exposure,
+  method,
   summary: null,
   tags: [],
 });
@@ -110,5 +111,36 @@ describe('agentListAllows', () => {
     expect(decideKortixOperation({ operation: op('sessions.stop', 'project.session.stop'), grant: g, projectPolicies: [] }).action).toBe('block');
     expect(agentListAllows(grant(['project.session.stop']), 'project.session.stop')).toBe(true);
     expect(agentListAllows(null, 'project.session.stop')).toBe(true);
+  });
+});
+
+describe('an untrusted session', () => {
+  const untrusted = (operation: Operation, projectPolicies: Policy[] = []) =>
+    decideKortixOperation({ operation, grant: null, projectPolicies, trust: 'untrusted' });
+
+  test('reads stay allowed', () => {
+    expect(untrusted(op('sessions.list', 'project.session.read', 'agent', 'GET')).action).toBe('always_run');
+  });
+
+  test('every other write asks first, even when a workspace rule allows it', () => {
+    const d = untrusted(op('sessions.create', 'project.session.start'), [{ match: 'kortix.*', action: 'always_run' }]);
+    expect(d).toEqual({ action: 'require_approval', source: 'untrusted' });
+  });
+
+  test('secrets, credentials, members, IAM and billing are blocked, reads included', () => {
+    for (const [id, action, method] of [
+      ['secrets.list', 'project.secret.read', 'GET'],
+      ['secrets.set', 'project.secret.write', 'POST'],
+      ['members.update', 'member.update', 'PATCH'],
+      ['iam.assignments.create', 'iam.assignment.write', 'POST'],
+    ] as const) {
+      expect(untrusted(op(id, action, 'agent', method))).toEqual({ action: 'block', source: 'untrusted' });
+    }
+  });
+
+  test("a workspace rule's block still wins over an untrusted ask", () => {
+    const d = untrusted(op('sessions.create', 'project.session.start'), [{ match: 'kortix.sessions.create', action: 'block' }]);
+    expect(d.action).toBe('block');
+    expect(d.source).toBe('project');
   });
 });

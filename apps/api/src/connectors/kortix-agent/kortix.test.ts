@@ -4,7 +4,7 @@ import type { CatalogOperation } from '../../shared/operation-registry';
 import { operationInputSchema, operationRequest } from './kortix';
 
 const secretsSet: CatalogOperation = {
-  operation: { id: 'secrets.set', action: 'project.secret.write', exposure: 'agent', summary: 'Set a secret', tags: [] },
+  operation: { id: 'secrets.set', action: 'project.secret.write', exposure: 'agent', method: 'POST', summary: 'Set a secret', tags: [] },
   method: 'POST',
   path: '/v1/workspaces/:workspaceId/secrets',
   parameters: [

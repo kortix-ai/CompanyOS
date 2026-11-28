@@ -1,6 +1,6 @@
-import { afterAll, beforeEach, expect, test } from 'bun:test';
+import { afterAll, beforeEach, expect, test, describe } from 'bun:test';
 import { kortixAgentMcpUrl } from './host';
-import { codesIn, type PhoneApi, type PhoneMessage, setPhoneApiForTests, setPhoneSleepForTests } from './phone';
+import { codesIn, type PhoneApi, type PhoneMessage, setPhoneApiForTests, setPhoneSleepForTests, smsRefusal } from './phone';
 import { dispatchKortixAgentMcp, setKortixAgentClockForTests } from './server';
 import { type AccountState, encodeAccountState, setAccountStateStoreForTests } from './state';
 
@@ -133,5 +133,20 @@ test('list_messages, send_sms and release_number', async () => {
   expect((await call('release_number', { confirm: '+19999999999' })).isError).toBe(true);
   expect((await call('release_number', { confirm: NUMBER })).structuredContent).toEqual({ released: NUMBER });
   expect(released).toEqual(['PN1']);
-  expect(stored!.data).toEqual({});
+  // The day's count stays with the account: releasing and buying again does not reset the cap.
+  expect(stored!.data).toEqual({ sent: { day: expect.any(String), count: 1 } });
+});
+
+describe('smsRefusal: the limits Kortix holds on texts it pays for', () => {
+  const limits = { prefixes: ['+1', '+44'], dailyCap: 2 };
+  test('a listed calling code under the cap may be texted', () => {
+    expect(smsRefusal('+14155550123', 0, limits)).toBeNull();
+    expect(smsRefusal('+447700900123', 1, limits)).toBeNull();
+  });
+  test('a calling code off the list is refused, naming the allowed ones', () => {
+    expect(smsRefusal('+88212345678', 0, limits)).toContain('+1, +44');
+  });
+  test('the cap is per UTC day and refuses the next text', () => {
+    expect(smsRefusal('+14155550123', 2, limits)).toContain('sent its 2 texts for today');
+  });
 });

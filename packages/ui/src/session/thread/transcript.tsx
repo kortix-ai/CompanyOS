@@ -1813,11 +1813,11 @@ function TurnToolBlocks(
   const { working, hasSteps, hasReasoning } = model;
   // The turn folds from its first step, live and settled alike (KRTX-5238): its steps sit
   // behind the "Worked for" row, its words to the person stay in view in call order, and
-  // nothing moves into or out of view when the turn ends. The agents it started fold too:
-  // the row's label counts them.
+  // nothing moves into or out of view when the turn ends. Outstanding agent rows stay
+  // visible until every agent reports; only then can their launch rows fold.
   const split = useMemo(
-    () => (fold ? splitSessionLogTurnWork(segments.filter(segmentRendersSomething), { working: false, foldStartedWork: true }) : null),
-    [fold, segments],
+    () => (fold ? splitSessionLogTurnWork(segments.filter(segmentRendersSomething), { working: false, foldStartedWork }) : null),
+    [fold, segments, foldStartedWork],
   );
   // A settled turn whose prompt is another agent's notice folds the notice
   // row into this work fold with the work it led to (KRTX-4732): the parent's

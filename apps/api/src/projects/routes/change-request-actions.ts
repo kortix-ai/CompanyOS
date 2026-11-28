@@ -1,7 +1,8 @@
 /** Change request resolution: merge, close, and reopen. */
 import { createRoute, z } from '@hono/zod-openapi';
 import { PROJECT_ACTIONS } from '../../iam';
-import { agentMayPerform, assertAgentScope, getAgentGrant, isProjectSessionPrincipal } from '../../iam/agent-scope';
+import { getAgentGrant, isProjectSessionPrincipal } from '../../iam/agent-scope';
+import { agentListAllows } from '../../iam/kortix-rules';
 import { logger } from '../../lib/logger';
 import { refusesSelfMerge, secretMergeRefusal } from '../change-request-policy';
 // Its own module, not the `../git` barrel: several route suites replace the
@@ -94,7 +95,6 @@ export function registerChangeRequestActionsRoutes(): void {
       // manifest still spelling it that way is rewritten on input by
       // `canonicalizeGrantActions`. Non-agent tokens (human dashboard / laptop
       // CLI) pass through.
-      assertAgentScope(c, PROJECT_ACTIONS.PROJECT_GITOPS_MERGE);
 
       const cr = await getCrById(crId, projectId);
       if (!cr) return c.json({ error: 'Change request not found' }, 404);
@@ -102,15 +102,15 @@ export function registerChangeRequestActionsRoutes(): void {
         return c.json({ error: `Change request is ${cr.status}` }, 409);
       }
 
-      // An explicit agent grant permits self merge. Ungoverned sessions keep the
-      // original protection because a null grant makes assertAgentScope a no-op.
+      // An explicit agent grant permits self merge. A session with no list
+      // (ungoverned) keeps the protection.
       const agentGrant = getAgentGrant(c);
       if (
         refusesSelfMerge({
           actingSessionId: (c.get('sessionId') as string | null | undefined) ?? null,
           originSessionId: cr.originSessionId ?? null,
           hasExplicitMergeGrant: agentGrant !== null
-            && agentMayPerform(agentGrant, PROJECT_ACTIONS.PROJECT_GITOPS_MERGE),
+            && agentListAllows(agentGrant, PROJECT_ACTIONS.PROJECT_GITOPS_MERGE),
         })
       ) {
         return c.json(
@@ -470,7 +470,6 @@ export function registerChangeRequestActionsRoutes(): void {
       // Managing a CR's lifecycle is part of the change-request capability,
       // `project.gitops.push`, for humans and agents alike.
       await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_GITOPS_PUSH);
-      assertAgentScope(c, PROJECT_ACTIONS.PROJECT_GITOPS_PUSH);
 
       const cr = await getCrById(crId, projectId);
       if (!cr) return c.json({ error: 'Change request not found' }, 404);
@@ -520,7 +519,6 @@ export function registerChangeRequestActionsRoutes(): void {
       // Managing a CR's lifecycle is part of the change-request capability,
       // `project.gitops.push`, for humans and agents alike.
       await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_GITOPS_PUSH);
-      assertAgentScope(c, PROJECT_ACTIONS.PROJECT_GITOPS_PUSH);
 
       const cr = await getCrById(crId, projectId);
       if (!cr) return c.json({ error: 'Change request not found' }, 404);

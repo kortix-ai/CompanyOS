@@ -1,11 +1,9 @@
 /**
- * The agent-session scope readers: the agent grant and session binding the
- * auth middleware put on the request. The grant predicates they apply live in
- * `iam/agent-scope.ts`, which re-exports these names.
+ * The agent-session readers: the agent grant and session binding the auth
+ * middleware put on the request. `iam/agent-scope.ts` re-exports these names.
  */
 import type { Context } from 'hono';
 import type { AgentGrant } from '@kortix/db';
-import { assertAgentGrantAllows } from '../iam/agent-scope';
 
 /** Read the agent grant off the request context (set by the auth middleware). */
 export function getAgentGrant(c: Context): AgentGrant | null {
@@ -30,12 +28,4 @@ export function isBorrowedSessionPrincipal(c: Context): boolean {
   const credential = (c.get('actor') as { credential?: { kind?: string; agentPrincipal?: boolean } } | undefined)
     ?.credential;
   return !(credential?.kind === 'agent_session' && credential.agentPrincipal === true);
-}
-
-/**
- * Throw 403 if the request is an agent-session token whose grant does not
- * include `action`. No-op for non-agent tokens (null grant).
- */
-export function assertAgentScope(c: Context, action: string): void {
-  assertAgentGrantAllows(getAgentGrant(c), action);
 }

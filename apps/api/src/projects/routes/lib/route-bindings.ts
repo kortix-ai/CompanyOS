@@ -1,6 +1,5 @@
 import type { Context, TypedResponse } from 'hono';
 import { PROJECT_ACTIONS } from '../../../iam';
-import { assertAgentScope } from '../../../iam/agent-scope';
 import { callerKortixSessionId } from '../../../middleware/caller-session';
 import { isUuid } from '../../../shared/validate';
 import type { ProjectAccessAction } from '../../access';
@@ -70,7 +69,6 @@ export async function loadRunnableSession(
 > {
   const loaded = await loadProjectForUser(c, projectId, 'session');
   if (!loaded) return { kind: 'error', response: c.json({ error: 'Not found' }, 404) };
-  assertAgentScope(c, PROJECT_ACTIONS.PROJECT_SESSION_START);
   await assertProjectCapability(
     c,
     loaded.userId,

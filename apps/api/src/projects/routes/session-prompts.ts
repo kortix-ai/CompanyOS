@@ -8,7 +8,7 @@ import { assertProjectCapability, loadProjectForUser, loadVisibleSession, sessio
 import { resolveAndAuthorizeAgent } from '../lib/agent-access';
 import { promptModelOverride } from '../lib/prompt-model';
 import { clearRestoredModelPin } from '../lib/session-model-fallback-revert';
-import { assertAgentScope, isProjectSessionPrincipal } from '../../iam/agent-scope';
+import { isProjectSessionPrincipal } from '../../iam/agent-scope';
 import { PROJECT_ACTIONS } from '../../iam';
 import { callerKortixSessionId } from '../../middleware/caller-session';
 import {
@@ -197,7 +197,6 @@ export function registerSessionPromptsRoutes(): void {
       if (!loaded) return c.json({ error: 'Not found' }, 404);
       // Same per-agent gate as `/start`: a prompt is what spends the compute a
       // session start provisions.
-      assertAgentScope(c, PROJECT_ACTIONS.PROJECT_SESSION_START);
       await assertProjectCapability(
         c,
         loaded.userId,

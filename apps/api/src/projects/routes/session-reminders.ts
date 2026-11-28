@@ -11,7 +11,7 @@ import type { AppEnv } from '../../types';
 import { createRoute, z } from '@hono/zod-openapi';
 import { requireFeatureFlag } from '../../feature-flags/gate';
 import { PROJECT_ACTIONS } from '../../iam';
-import { assertAgentScope, isBorrowedSessionPrincipal, isProjectSessionPrincipal } from '../../iam/agent-scope';
+import { isBorrowedSessionPrincipal, isProjectSessionPrincipal } from '../../iam/agent-scope';
 import { auth, errors, json, lenientBody } from '../../openapi';
 import { readJsonObject } from '../../shared/http-body';
 import { isUuid } from '../../shared/validate';
@@ -66,7 +66,6 @@ export async function authorizeReminderSession(c: Context<AppEnv>, sessionIdOver
       response: c.json({ error: 'An agent session can manage loops on its own session only' }, 403),
     };
   }
-  assertAgentScope(c, PROJECT_ACTIONS.PROJECT_SESSION_START);
   await assertProjectCapability(
     c,
     loaded.userId,

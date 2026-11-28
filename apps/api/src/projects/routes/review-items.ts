@@ -7,7 +7,6 @@
 import { createRoute, z } from '@hono/zod-openapi';
 import { relayReviewCard } from '../../channels/turn-relay';
 import { PROJECT_ACTIONS } from '../../iam';
-import { assertAgentScope } from '../../iam/agent-scope';
 import { auth, errors, json, lenientBody, queryText } from '../../openapi';
 import { isUuid } from '../../shared/validate';
 import { assertProjectCapability, loadProjectForUser } from '../lib/access';
@@ -266,8 +265,6 @@ export function registerReviewItemsRoutes(): void {
         projectId,
         PROJECT_ACTIONS.PROJECT_REVIEW_SUBMIT,
       );
-      // Agent-side gate: submitting a reviewable is the agent's intended path.
-      assertAgentScope(c, 'project.review.submit');
 
       const kind = normalizeString(body.kind);
       if (!isSubmittableKind(kind)) {

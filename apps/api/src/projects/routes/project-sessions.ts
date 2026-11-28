@@ -13,7 +13,7 @@ import {
   sharingChangeKeepsEditorAccess,
 } from '../../connectors/share';
 import { PROJECT_ACTIONS } from '../../iam';
-import { assertAgentScope, isProjectSessionPrincipal } from '../../iam/agent-scope';
+import { isProjectSessionPrincipal } from '../../iam/agent-scope';
 import { isAgentPrincipalActor } from '../../iam/actor';
 import { supabaseAuth } from '../../middleware/auth';
 import { RESPONSE_ISSUE_LIMIT, auth, defaultHook, errors, json, lenientBody } from '../../openapi';
@@ -260,9 +260,6 @@ export function registerProjectSessionsRoutes(): void {
       }
     }
 
-    // Per-agent gate: starting a session provisions compute. A scoped agent token
-    // must hold project.session.start (no-op for human/PAT tokens).
-    assertAgentScope(c, PROJECT_ACTIONS.PROJECT_SESSION_START);
     const requestedConnectorBindings = body.connector_bindings;
     const mayManageSystemConnections =
       requestedConnectorBindings &&
@@ -1115,9 +1112,6 @@ export function registerProjectSessionsRoutes(): void {
 
     const loaded = await loadProjectForUser(c, projectId, 'session');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
-    // Per-agent gate: tearing down a session. A scoped agent token must hold
-    // project.session.stop (no-op for human/PAT tokens).
-    assertAgentScope(c, PROJECT_ACTIONS.PROJECT_SESSION_STOP);
 
     // Stopping a session is reserved for its owner or a project manager.
     const gate = await loadLifecycleSession(
@@ -1176,7 +1170,6 @@ export function registerProjectSessionsRoutes(): void {
 
     const loaded = await loadProjectForUser(c, projectId, 'session');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
-    assertAgentScope(c, PROJECT_ACTIONS.PROJECT_SESSION_STOP);
 
     const gate = await loadLifecycleSession(
       c,

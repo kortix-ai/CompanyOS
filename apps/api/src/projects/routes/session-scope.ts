@@ -19,7 +19,6 @@ import { callerKortixSessionId } from '../../middleware/caller-session';
 import { allowStaleMirrorReads } from '../git/mirror';
 import { DEFAULT_AGENT_SENTINEL } from '../agents';
 import { resolveSessionAgentGrant } from '../lib/secret-grant';
-import { assertAgentScope } from '../../iam/agent-scope';
 import { accountMayUseManagedModels } from '../../billing/services/entitlements';
 import { canChangeSessionModel, mayChangeSessionModel, modelChangeResult, validateModelChangeShape } from '../lib/session-model-change';
 import { pushSessionModelToSandbox, pushSessionScopeToSandbox } from '../lib/sandbox-env-sync';
@@ -387,10 +386,6 @@ export function registerSessionScopeRoutes(): void {
 
       const loaded = await loadProjectForUser(c, projectId, 'session');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
-      // A live model change restarts the runtime and can terminate the target
-      // session's in-flight turn. Scoped agent tokens therefore need the same
-      // destructive capability as the stop route (no-op for human/PAT tokens).
-      assertAgentScope(c, PROJECT_ACTIONS.PROJECT_SESSION_STOP);
       const visible = await loadVisibleSession(loaded, sessionId, c.get('sessionId') ?? null, callerKortixSessionId(c));
       if (!visible) return c.json({ error: 'Not found' }, 404);
       // Seeing a session is not permission to mutate it: visibility 'project'
@@ -465,7 +460,6 @@ export function registerSessionScopeRoutes(): void {
       const currentModel =
         typeof currentMetadata.model === 'string' ? currentMetadata.model : null;
       if (switchInput.kind === 'switch') {
-        assertAgentScope(c, PROJECT_ACTIONS.PROJECT_SESSION_START);
         await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_SESSION_START);
         await resolveAndAuthorizeAgent(c, loaded, projectId, null, visible.row.agentName, undefined, visible.row.spaceId);
         if (!isProjectSessionPrincipal(c)) {

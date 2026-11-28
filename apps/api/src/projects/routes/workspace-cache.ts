@@ -7,7 +7,6 @@
 import { createRoute, z } from '@hono/zod-openapi';
 import { requireFeatureFlag } from '../../feature-flags/gate';
 import { PROJECT_ACTIONS } from '../../iam';
-import { assertAgentScope } from '../../iam/agent-scope';
 import { callerKortixSessionId } from '../../middleware/caller-session';
 import { auth, errors, json } from '../../openapi';
 import { resolveSessionPlacement } from '../../platform/services/sandbox-region';
@@ -103,7 +102,6 @@ export function registerWorkspaceCacheRoutes(): void {
       const loaded = await loadProjectForUser(c, workspaceIdParam(c)!, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
       await assertProjectCapability(c, loaded.userId, loaded.row.accountId, loaded.row.projectId, PROJECT_ACTIONS.PROJECT_SETTINGS_WRITE);
-      assertAgentScope(c, PROJECT_ACTIONS.PROJECT_SETTINGS_WRITE);
       const gate = requireFeatureFlag(c, loaded.row.metadata, 'platinum_cache');
       if (gate) return gate;
       // A session could otherwise decide what every later session of the project starts with.
@@ -157,7 +155,6 @@ export function registerWorkspaceCacheRoutes(): void {
       const loaded = await loadProjectForUser(c, workspaceIdParam(c)!, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
       await assertProjectCapability(c, loaded.userId, loaded.row.accountId, loaded.row.projectId, PROJECT_ACTIONS.PROJECT_SETTINGS_WRITE);
-      assertAgentScope(c, PROJECT_ACTIONS.PROJECT_SETTINGS_WRITE);
       const gate = requireFeatureFlag(c, loaded.row.metadata, 'platinum_cache');
       if (gate) return gate;
       if (callerKortixSessionId(c) !== null) {

@@ -1,6 +1,5 @@
 import { createRoute, z } from '@hono/zod-openapi';
 import { PROJECT_ACTIONS } from '../../iam';
-import { assertAgentScope } from '../../iam/agent-scope';
 import { isSessionSandboxCredential } from '../../middleware/session-sandbox-credential';
 import { auth, errors, json } from '../../openapi';
 import { assertProjectCapability, loadProjectForUser } from '../lib/access';
@@ -51,7 +50,6 @@ async function scope(c: any) {
   const projectId = workspaceIdParam(c);
   const loaded = await loadProjectForUser(c, projectId, 'session');
   if (!loaded) return null;
-  assertAgentScope(c, PROJECT_ACTIONS.PROJECT_SESSION_START);
   await assertProjectCapability(
     c,
     loaded.userId,

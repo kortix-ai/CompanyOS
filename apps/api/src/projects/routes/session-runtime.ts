@@ -11,7 +11,7 @@ import {
   sessionIsTombstoned,
 } from '../lib/access';
 import { resolveAndAuthorizeAgent } from '../lib/agent-access';
-import { assertAgentScope, isProjectSessionPrincipal } from '../../iam/agent-scope';
+import { isProjectSessionPrincipal } from '../../iam/agent-scope';
 import { PROJECT_ACTIONS } from '../../iam';
 import { callerKortixSessionId } from '../../middleware/caller-session';
 import { SessionStartResultSchema, SessionTurnStatusSchema, projectsApp } from '../lib/app';
@@ -79,9 +79,6 @@ export function registerSessionRuntimeRoutes(): void {
       const loaded = await loadProjectForUser(c, projectId, 'session');
       stl.mark('project-loaded');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
-      // Per-agent gate: resuming a session provisions compute. A scoped agent
-      // token must hold project.session.start (no-op for human/PAT tokens).
-      assertAgentScope(c, PROJECT_ACTIONS.PROJECT_SESSION_START);
       const visible = await loadVisibleSession(loaded, sessionId, c.get('sessionId') ?? null, callerKortixSessionId(c));
       stl.mark('session-loaded');
       if (!visible) return c.json({ error: 'Not found' }, 404);
@@ -196,9 +193,6 @@ export function registerSessionRuntimeRoutes(): void {
       const binding = await resolveSessionBinding(c, projectId, sessionId, 'session');
       if (binding.kind === 'error') return binding.response as never;
       const { loaded } = binding;
-      // Per-agent gate: restart re-provisions compute. A scoped agent token must
-      // hold project.session.start (no-op for human/PAT tokens).
-      assertAgentScope(c, PROJECT_ACTIONS.PROJECT_SESSION_START);
 
       // Restart is reserved for the session owner or an account owner/admin.
       // Same tombstone rule as /start: a deleted session's restart used to 202
@@ -261,8 +255,6 @@ export function registerSessionRuntimeRoutes(): void {
       const binding = await resolveSessionBinding(c, projectId, sessionId, 'session');
       if (binding.kind === 'error') return binding.response as never;
       const { loaded } = binding;
-      // A new computer is compute: a scoped agent token needs project.session.start.
-      assertAgentScope(c, PROJECT_ACTIONS.PROJECT_SESSION_START);
       const gate = await loadLifecycleSession(
         c,
         loaded,
@@ -305,9 +297,6 @@ export function registerSessionRuntimeRoutes(): void {
       const binding = await resolveSessionBinding(c, projectId, sessionId, 'session');
       if (binding.kind === 'error') return binding.response as never;
       const { loaded } = binding;
-      // Per-agent gate: same capability as start/restart — stopping is part of
-      // the agent's session-lifecycle surface.
-      assertAgentScope(c, PROJECT_ACTIONS.PROJECT_SESSION_START);
       // Human gate: stopping has its own leaf (project.session.stop), distinct from
       // start, so a custom role can allow one and withhold the other. Every
       // built-in role holds it, so member/manager are unaffected.

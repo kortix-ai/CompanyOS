@@ -2,32 +2,21 @@ import { DEPRECATED_KORTIX_PERMISSION_ALIASES } from '@kortix/manifest-schema';
 import { toLegacyAction } from '@kortix/shared/workspace-actions';
 import { canonicalConnectorAlias } from '../shared/connector-alias';
 /**
- * Agent-session scope enforcement — the `kortix_permissions` half of per-agent
- * authorization.
+ * The agent grant a session token carries (resolved from kortix.yaml in
+ * projects/agents.ts): its connectors, secrets, Apps and policy sets, and the
+ * normalization of its old `kortix_permissions` list. That list is enforced as
+ * the agent's rules on the `kortix` connector (`iam/kortix-rules.ts`), by the
+ * agent rule gate before every handler.
  *
- * This runs BESIDE the role check (`assertAuthorized` / `loadProjectForUser`),
- * not inside the IAM engine (which stays role-only). The account token a
- * session presents carries a resolved `agentGrant` (see projects/agents.ts);
- * a route asserts the Kortix action it performs is in that grant. Combined with
- * the route's existing user-role check, the net effect is `userRole ∩ agentGrant`
- * — an agent can never exceed the human who launched it, nor its own grant.
- *
- * A null grant (non-agent token: laptop CLI PAT, dashboard session, or a project
- * that hasn't adopted `[[agents]]`) imposes no restriction.
+ * A null grant (a laptop CLI PAT, a dashboard session, or a project that
+ * declares no agents) imposes no restriction.
  */
-import { buildDenialError } from './denial-message';
 import type { AgentGrant } from '@kortix/db';
 
 // The request readers (`getAgentGrant`, `isProjectSessionPrincipal`,
-// `isBorrowedSessionPrincipal`, `assertAgentScope`) read the Hono context, so
-// they live in `middleware/agent-scope.ts`. Re-exported here so every importer
-// keeps working.
-export {
-  getAgentGrant,
-  isProjectSessionPrincipal,
-  isBorrowedSessionPrincipal,
-  assertAgentScope,
-} from '../middleware/agent-scope';
+// `isBorrowedSessionPrincipal`) read the Hono context, so they live in
+// `middleware/agent-scope.ts`. Re-exported here so every importer keeps working.
+export { getAgentGrant, isProjectSessionPrincipal, isBorrowedSessionPrincipal } from '../middleware/agent-scope';
 
 /**
  * MANIFEST-INPUT NORMALIZATION, and nothing else.
@@ -65,22 +54,6 @@ export function canonicalizeGrantActions(grant: AgentGrant | null): AgentGrant |
   // catalog stores, exactly like a renamed alias.
   const canonical = grant.permissions.flatMap((a) => MANIFEST_ACTION_ALIASES[a] ?? [toLegacyAction(a)]);
   return { ...grant, permissions: [...new Set(canonical)] };
-}
-
-/**
- * True if the agent-session grant permits `action` (or there is no grant).
- *
- * A plain membership test. The grant list is already in the catalog's spelling —
- * see `canonicalizeGrantActions`.
- */
-export function agentMayPerform(grant: AgentGrant | null, action: string): boolean {
-  if (!grant) return true; // no grant = no restriction
-  if (grant.permissions === 'all') return true;
-  // Both sides in the legacy spelling: a grant minted before
-  // `canonicalizeGrantActions` learned the workspace names, or a caller that
-  // asks with a workspace name, still compares like for like.
-  const legacy = toLegacyAction(action);
-  return grant.permissions.some((a) => toLegacyAction(a) === legacy);
 }
 
 /**
@@ -173,17 +146,4 @@ export function agentMayUseEnv(grant: AgentGrant | null, identifier: string): bo
   // `secrets: ["gmaps-primary"]` still admits identifier "GMAPS-primary".
   const target = identifier.toUpperCase();
   return env.some((e) => e.toUpperCase() === target);
-}
-
-/**
- * Throw 403 if `grant` (an agent session's) does not include `action`. No-op
- * for a null grant (a non-agent token).
- */
-export function assertAgentGrantAllows(grant: AgentGrant | null, action: string): void {
-  if (agentMayPerform(grant, action)) return;
-  throw buildDenialError(
-    action,
-    'agent_scope_insufficient',
-    `Agent "${grant!.agent}" is not granted "${action}". Add it to this agent's kortix_permissions in kortix.yaml (CR-merged).`,
-  );
 }

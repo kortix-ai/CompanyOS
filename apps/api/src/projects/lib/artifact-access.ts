@@ -12,7 +12,8 @@
  */
 import type { Context } from 'hono';
 import { PROJECT_ACTIONS } from '../../iam';
-import { agentMayPerform, assertAgentScope, getAgentGrant } from '../../iam/agent-scope';
+import { getAgentGrant } from '../../iam/agent-scope';
+import { agentListAllows } from '../../iam/kortix-rules';
 import { callerKortixSessionId } from '../../middleware/caller-session';
 import { privateChannelFoldersFor, sessionPrivateChannelFolder } from '../../drives/service';
 import { driveStorageAvailable } from '../../drives/volumes';
@@ -31,9 +32,8 @@ export async function authorizeArtifactCaller(c: Context, projectId: string, mod
   if (!driveStorageAvailable()) {
     return { ok: false as const, response: c.json({ error: 'Artifacts live in the Drive, and this Kortix stores no Drive.', code: 'feature_disabled', feature: 'artifacts' }, 403) };
   }
-  const can = async (leaf: string) => agentMayPerform(getAgentGrant(c), leaf) && projectCapabilityAllowed(c, loaded.userId, loaded.row.accountId, projectId, leaf);
+  const can = async (leaf: string) => agentListAllows(getAgentGrant(c), leaf) && projectCapabilityAllowed(c, loaded.userId, loaded.row.accountId, projectId, leaf);
   const action = mode === 'read' ? PROJECT_ACTIONS.PROJECT_ARTIFACT_READ : PROJECT_ACTIONS.PROJECT_ARTIFACT_WRITE;
-  assertAgentScope(c, action);
   await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, action);
   const [projectWrite, manageAny] = await Promise.all([can(PROJECT_ACTIONS.PROJECT_WRITE), can(PROJECT_ACTIONS.PROJECT_ARTIFACT_MANAGE)]);
   // A private channel's files: only its members, and a session token only from its own thread (the one Drive rule).

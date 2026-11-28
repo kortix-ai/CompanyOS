@@ -21,6 +21,7 @@ import { beginStage } from '../lib/server-timing';
 import { presentedKortixToken, withTokenAttemptBudget } from './token-attempt-budget';
 
 import { serviceAccountPrincipal, patPrincipal, jwtPrincipal } from './auth-principal';
+import { gateAgentOperation } from './agent-operation-gate';
 import { applyOAuthAccessTokenPrincipal } from './auth-oauth';
 import { deadCredential401 } from './auth';
 import {
@@ -177,6 +178,7 @@ async function resolvePat(c: Context, next: Next, token: string, isPreviewRoute:
       });
     }
     patPrincipal(c, patResult, { token, enabled: isPreviewRoute });
+    await gateAgentOperation(c);
     await next();
     return;
   }

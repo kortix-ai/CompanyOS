@@ -3,7 +3,6 @@ import { bodyLimit } from "hono/body-limit";
 import { MAX_SESSION_ATTACHMENT_BYTES } from "@kortix/shared";
 import { auth, errors, json } from "../../openapi";
 import { PROJECT_ACTIONS } from "../../iam";
-import { assertAgentScope } from "../../iam/agent-scope";
 import { projectsApp } from "../lib/app";
 import {
   assertProjectCapability,
@@ -71,7 +70,6 @@ export function registerSessionAttachmentsRoutes(): void {
       const { workspaceId: projectId, sessionId } = c.req.valid("param");
       const loaded = await loadProjectForUser(c, projectId, "session");
       if (!loaded) return c.json({ error: "Not found" }, 404);
-      assertAgentScope(c, PROJECT_ACTIONS.PROJECT_SESSION_START);
       await assertProjectCapability(
         c,
         loaded.userId,

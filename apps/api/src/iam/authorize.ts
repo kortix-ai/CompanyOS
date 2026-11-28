@@ -42,7 +42,6 @@ import { isUuid } from '../shared/validate';
 import { isMyKortixAgentName } from '@kortix/shared';
 import { isHumanOnlyAction, toLegacyAction } from '@kortix/shared/workspace-actions';
 import { ttlMemo } from '../shared/ttl-memo';
-import { agentMayPerform } from './agent-scope';
 import { keyScopeAllows } from './key-scope';
 import { AGENT_DEFAULT_CEILING, agentPrincipalDecision } from './agent-principal';
 import {
@@ -182,19 +181,6 @@ export function mfaGateBlocks(
 
 const allow = (reason: Reason): Verdict => ({ allowed: true, reason });
 const deny = (reason: Reason): Verdict => ({ allowed: false, reason });
-
-/**
- * The coarse project actions `loadProjectForUser` maps onto. An agent session's
- * kortix.yaml grant must NOT gate them: a route doing
- * `loadProjectForUser('write')` is asking a membership-tier question, and a
- * leaf-scoped agent (e.g. permissions=['project.gitops.push']) still has to pass
- * it — the route's own leaf assertion is what the grant gates. Every OTHER
- * project action is a specific capability the agent must hold.
- */
-const AGENT_GRANT_EXEMPT_ACTIONS: ReadonlySet<string> = new Set([
-  'project.read',
-  'project.write',
-]);
 
 /**
  * Authorize `actor` to perform `action` on `obj`.
@@ -410,15 +396,6 @@ async function authorizeDecision(actor: Actor, action: string, obj: EvalObj): Pr
       obj.resource.id,
     );
     if (!usable) return deny('resource_scope_insufficient');
-  }
-
-  // 10. role ∩ agent grant, for a token that carries a grant but did not take
-  // step 5a (a session token with no service account). Kept as the backstop so
-  // a grant is never ignored; a no-op for a null grant and for `all`.
-  if (tokenId && !AGENT_GRANT_EXEMPT_ACTIONS.has(action)) {
-    if (!agentMayPerform(binding?.agentGrant ?? null, action)) {
-      return deny('agent_scope_insufficient');
-    }
   }
 
   return allow('role');

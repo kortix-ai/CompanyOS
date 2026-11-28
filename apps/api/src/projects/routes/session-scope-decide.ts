@@ -14,7 +14,6 @@ import { SessionScopeInputSchema } from '@kortix/api-contract';
 import { projectSessionConnectorBindings, serviceAccounts } from '@kortix/db';
 import { and, eq } from 'drizzle-orm';
 import { PROJECT_ACTIONS } from '../../iam';
-import { assertAgentScope } from '../../iam/agent-scope';
 import { db } from '../../shared/db';
 import { readJsonObject } from '../../shared/http-body';
 import { DEFAULT_AGENT_SENTINEL } from '../agents';
@@ -71,7 +70,6 @@ export async function authorizeScopeRescope({
     projectId,
     PROJECT_ACTIONS.PROJECT_SESSION_STOP,
   );
-  assertAgentScope(c, PROJECT_ACTIONS.PROJECT_SESSION_STOP);
   const visible = await loadVisibleSession(loaded, sessionId, callerKortixSessionId(c), callerKortixSessionId(c));
   if (!visible) return { ok: false, status: 404, body: { error: 'Not found' } };
   // Seeing a session is not permission to re-scope it — same gate as the model

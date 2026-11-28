@@ -24,7 +24,8 @@ import {
 import type { Context } from 'hono';
 import { checkBillingAdmission } from '../../billing/services/billing-gate';
 import { PROJECT_ACTIONS } from '../../iam';
-import { agentMayPerform, getAgentGrant, isProjectSessionPrincipal } from '../../iam/agent-scope';
+import { getAgentGrant, isProjectSessionPrincipal } from '../../iam/agent-scope';
+import { agentListAllows } from '../../iam/kortix-rules';
 import { callerKortixSessionId } from '../../middleware/caller-session';
 import { mayPromptSessions } from '../../notifications/access';
 import { auth, errors, json } from '../../openapi';
@@ -73,7 +74,7 @@ async function authorize(c: Context, projectId: string, sessionId: string, mode:
   const caller: PeerCaller = {
     actor: loaded.actor ?? { userId: loaded.userId, accountId: loaded.row.accountId, credential: { kind: 'jwt' }, ctx: {} },
     userId: loaded.userId,
-    agentMayPrompt: agentMayPerform(getAgentGrant(c), PROJECT_ACTIONS.PROJECT_SESSION_START),
+    agentMayPrompt: agentListAllows(getAgentGrant(c), PROJECT_ACTIONS.PROJECT_SESSION_START),
   };
   return { ok: true as const, loaded, session: visible.row, caller };
 }

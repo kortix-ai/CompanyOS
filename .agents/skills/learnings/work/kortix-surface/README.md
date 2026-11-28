@@ -1,6 +1,6 @@
 ---
 title: One Kortix surface: catalog, connector, SDK, CLI, MCP
-status: design agreed with Marko 2026-11-27, not built
+status: phase 1 built (9dc091f72e); phase 2 in progress
 owner: unassigned (overlaps the tool-parity work on branch tool-surface-parity)
 updated: 2026-11-27
 ---
@@ -51,12 +51,102 @@ has is a connector behind one gateway.
 
 ## Order
 
-1. The operation catalog (ids, schemas, IAM action) for all 1,684 operations.
-2. The API enforces agent rules, with "ask".
-3. The `kortix` connector from the catalog.
-4. MCP: three verbs plus featured actions.
-5. The CLI generated from the catalog.
-6. The `kortix_*` tools as featured actions.
+1. **Done (9dc091f72e):** the operation catalog: 1,000 operations, 118
+   exclusions, enforced by `unit-operation-catalog.test.ts`.
+2. **2a.** The API knows each request's operation and decides allow or block
+   for every agent-session token (design below).
+3. **3.** The `kortix` connector from the catalog (find, describe, call,
+   execute), in-process.
+4. **2b.** "Ask": a held call through the gateway's held-call system, run
+   once through the `kortix` connector after approval. Needs 3.
+5. **2c.** Session trust (principal or untrusted), DMARC for email
+   principals, taint passed to what an untrusted session creates.
+6. **2d.** Phone: outbound country allowlist and daily cap.
+7. SDK `call(operation)` and a typed client.
+8. MCP: the verbs plus featured actions plus instructions; old tools removed.
+9. The CLI generated from the catalog.
+10. Featured actions replace the `kortix_*` tools; agent-minted keys carry
+    the minter's limits; `HUMAN_ONLY` becomes "always ask".
+
+## Phase 2: agent rules on the Kortix API
+
+One rule engine and one hold system for every connector, `kortix`
+included: `connectors/policy.ts` (`resolveEffectiveRule`: allow, ask, block,
+argument conditions, per-agent policy sets) and the gateway's held calls
+(`connectors/held-call-run.ts`: an approved call runs once, as its caller,
+and the session resumes). No second engine.
+
+- **The operation of a request.** At boot the API builds the registry from
+  its own routes (the same join as `scripts/operation-catalog.ts`). A
+  middleware after auth finds the matched route and sets
+  `c.get('operation')`: `{ id, action, exposure }`.
+- **Who is gated.** Every request whose credential is `agent_session`,
+  governed or not. People, PATs and workspace keys keep their IAM path.
+- **The decision**, in order; the first answer wins:
+  1. exposure `human`: block (`operation_not_for_agents`). `local` and
+     `internal` operations keep their own checks: a session box uses
+     `git_token.create` (local) for git.
+  2. the session is untrusted: the untrusted rules (2c), which nothing can
+     loosen.
+  3. project `policies:` whose pattern names `kortix.` (`kortix.secrets.*`).
+     A pattern that does not (`*`, `*.delete*`) is about the other
+     connectors: a workspace's `*: require_approval` would otherwise stop
+     every agent read of its own workspace.
+  4. the agent's policy set on `kortix` (`agents.<a>.policy_sets.kortix`);
+     else its old `kortix_permissions` list read as rules: allow an
+     operation whose action is listed (or is `project.read`,
+     `project.write` or `none`), block every other one. `all` (or no list)
+     allows. `sessions.stop` also accepts `project.session.start`, the action
+     its old check asked.
+  5. the `kortix` connector's base rules, when kortix.yaml declares them.
+  6. allow. The IAM role (the ceiling) still decides inside the handler.
+- **The answers.** Allow: the handler runs. Block: `403`
+  `{ error: 'policy_block', operation, reason }`. Ask (2b): `202`
+  `{ status: 'pending_approval', execution_id, approval_url,
+  runs_on_approval: true }`; after approval Kortix runs the stored request
+  once and resumes the session; the agent reads the result by
+  `execution_id`, never repeats the call.
+- **Removed in 2a:** the grant fold in `authorize.ts` (step 10 and the
+  grant half of `agentPrincipalDecision`), `assertAgentScope` at its 32 call
+  sites, `agentMayPerform` (its list reading is `agentListAllows` in
+  `iam/kortix-rules.ts`, used by the five checks that ask the list outside a
+  route: self merge, peer prompts, chat threads, artifacts, repository
+  access at session create). The ceiling (bound role) and `HUMAN_ONLY` stay
+  in `authorize`. The no-self-raise check (`agent-grant-ceiling.ts`) stays on
+  every rule-set write. Git refs keep their own default-deny grant reading
+  (`git-proxy/ref-scopes.ts`): git is a protocol, not an operation.
+- **Code:** `shared/operation-registry.ts` (the route join, shared with
+  `scripts/operation-catalog.ts`), `iam/kortix-rules.ts` (the decision),
+  `middleware/agent-operation-gate.ts` (called by `auth.ts` and
+  `auth-combined.ts` right after a session token is accepted),
+  `connectors/project-policies.ts` (the one query the gate makes).
+
+### Trust (2c)
+
+Inclusion lists decide who may wake the agent (spam and cost). They are not
+the security boundary: `isEmailSenderAllowed` matches the `From` header only,
+and an allowed sender can still forward an attack. Authority comes from the
+session's trust:
+
+- **Principal:** a workspace member on a channel that proves identity: the
+  app, Slack with a linked identity, email from a member's address with
+  DMARC pass. A text message is never a principal (caller id is forged
+  easily).
+- **Untrusted:** a session that received a message from anyone else. It
+  stays untrusted until it ends. Approving one call does not clear it.
+- **Untrusted rules** (code, evaluated before every workspace rule):
+
+  | Action | Untrusted |
+  |---|---|
+  | reads, search, Toolbox data tools, a reply in the same thread | allow |
+  | a send to a new recipient, any other connector write | ask |
+  | edits to skills, triggers, rules, memory, kortix.yaml | ask |
+  | reveal a secret, issue a credential or key, change members | block |
+
+- **Taint follows creation:** a child session, a trigger, a scheduled task
+  or a script created by an untrusted session is untrusted too.
+- **Web pages do not taint** (Marko may overrule): nearly every session reads
+  the web. Text a stranger addressed to the agent does.
 
 ## Ideas taken from executor (UsefulSoftwareCo/executor, MIT; reviewed 2026-11-27)
 

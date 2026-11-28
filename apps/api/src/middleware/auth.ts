@@ -31,6 +31,7 @@ import { beginStage } from '../lib/server-timing';
 import { presentedKortixToken, withTokenAttemptBudget } from './token-attempt-budget';
 
 import { serviceAccountPrincipal, patPrincipal, jwtPrincipal } from './auth-principal';
+import { gateAgentOperation } from './agent-operation-gate';
 import { applyOAuthAccessTokenPrincipal } from './auth-oauth';
 import { enforceTokenProjectScope } from './auth-scope';
 import { bearerToken } from '../shared/bearer-token';
@@ -223,6 +224,7 @@ async function resolvePat(c: Context, next: Next, token: string) {
       });
     }
     patPrincipal(c, result);
+    await gateAgentOperation(c);
     await next();
     return;
   }

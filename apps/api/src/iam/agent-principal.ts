@@ -5,8 +5,7 @@
  * `meta` coordinator) authorizes AS its agent's service account, never as the
  * human who launched it:
  *
- *   effective(agent, action) = action ∈ kortix_permissions(agent)   (manifest)
- *                            ∧ action ∈ ceiling(agent)              (IAM)
+ *   effective(agent, action) = action ∈ ceiling(agent)              (IAM)
  *                            ∧ action ∉ HUMAN_ONLY
  *   project.read is always granted inside the agent's own workspace.
  *   An account-scope action is about the agent's own workspace (1:1).
@@ -26,7 +25,6 @@ import { GRANTABLE_KORTIX_PERMISSIONS } from '@kortix/manifest-schema';
 import { isMyKortixAgentName } from '@kortix/shared';
 import { HUMAN_ONLY } from '@kortix/shared/workspace-actions';
 import type { AgentGrant } from '@kortix/db';
-import { agentMayPerform } from './agent-scope';
 import type { ScopeType } from './catalog';
 
 /**
@@ -41,20 +39,13 @@ export const HUMAN_ONLY_ACTIONS: ReadonlySet<string> = HUMAN_ONLY;
 /**
  * The ceiling of an agent whose service account has no role bound: every
  * grantable action (`GRANTABLE_KORTIX_PERMISSIONS` = every action except
- * HUMAN_ONLY). The manifest grant still narrows it. ONE constant on purpose:
+ * HUMAN_ONLY). The agent's rules on `kortix` still narrow it. ONE constant on purpose:
  * the alternative ceiling (no administration writes) is a one-line change
  * here (design.md §3.6 risk 1).
  */
 export const AGENT_DEFAULT_CEILING: ReadonlySet<string> = new Set(
   GRANTABLE_KORTIX_PERMISSIONS.filter((action) => !HUMAN_ONLY_ACTIONS.has(action)),
 );
-
-/**
- * The coarse membership-tier actions `loadProjectForUser` maps onto. The grant
- * never gates them (same exemption as the legacy fold in authorize.ts); the
- * ceiling still does, except that `project.read` of the own project is free.
- */
-const GRANT_EXEMPT_ACTIONS: ReadonlySet<string> = new Set(['project.read', 'project.write']);
 
 /** A grant the agent-principal model governs: non-null, and not `meta`. */
 export function isGovernedAgentGrant(grant: AgentGrant | null | undefined): grant is AgentGrant {
@@ -66,7 +57,6 @@ export type AgentPrincipalReason =
   | 'token_out_of_scope'
   | 'project_target_required'
   | 'agent_human_only_action'
-  | 'agent_scope_insufficient'
   | 'agent_ceiling_insufficient';
 
 export interface AgentPrincipalInput {
@@ -86,10 +76,10 @@ export interface AgentPrincipalInput {
 }
 
 /**
- * THE agent decision. Order: scope → HUMAN_ONLY → own-project read → grant →
- * ceiling. The grant is checked before the ceiling so the reason names the
- * first thing to change: a missing manifest entry is fixed by a change request,
- * a low ceiling by an admin.
+ * THE agent decision. Order: scope → HUMAN_ONLY → own-project read →
+ * ceiling. The agent's rules on the `kortix` connector (its old
+ * `kortix_permissions` list included) decided before the handler ran, in the
+ * agent rule gate (`middleware/agent-operation-gate.ts`).
  */
 export function agentPrincipalDecision(input: AgentPrincipalInput): {
   allowed: boolean;
@@ -98,7 +88,7 @@ export function agentPrincipalDecision(input: AgentPrincipalInput): {
   const { action } = input;
   if (input.scope === 'account') {
     // The workspace's own account surface (members, roles, billing reads, …):
-    // in scope for the token's own workspace, decided by grant ∩ ceiling.
+    // in scope for the token's own workspace, decided by the ceiling.
     if (!input.accountInScope || !input.tokenProjectId) return { allowed: false, reason: 'token_out_of_scope' };
   } else {
     if (!input.targetProjectId) return { allowed: false, reason: 'project_target_required' };
@@ -108,9 +98,6 @@ export function agentPrincipalDecision(input: AgentPrincipalInput): {
   }
   if (HUMAN_ONLY_ACTIONS.has(action)) return { allowed: false, reason: 'agent_human_only_action' };
   if (action === 'project.read') return { allowed: true, reason: 'role' };
-  if (!GRANT_EXEMPT_ACTIONS.has(action) && !agentMayPerform(input.grant, action)) {
-    return { allowed: false, reason: 'agent_scope_insufficient' };
-  }
   if (!input.ceilingAllows(action)) return { allowed: false, reason: 'agent_ceiling_insufficient' };
   return { allowed: true, reason: 'role' };
 }

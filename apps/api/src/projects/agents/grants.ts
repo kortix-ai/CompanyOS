@@ -1,7 +1,8 @@
 import type { AgentGrant } from '@kortix/db';
 import { isMyKortixAgentName } from '@kortix/shared';
 import { PROJECT_ACTIONS } from '../../iam/actions';
-import { agentMayPerform, canonicalizeGrantActions, canonicalizeGrantConnectors } from '../../iam/agent-scope';
+import { canonicalizeGrantActions, canonicalizeGrantConnectors } from '../../iam/agent-scope';
+import { agentListAllows } from '../../iam/kortix-rules';
 import type { GitBackedProject } from '../git';
 import { disabledMyKortixAgentGrant, myKortixAgentGrant } from '../lib/my-kortix-agent';
 import { RUNTIME_BUILTIN_AGENTS } from '@kortix/manifest-schema';
@@ -241,7 +242,7 @@ export function grantFromLoadedAgents(agentName: string, loaded: LoadedAgents): 
  * launching person's `project.file.read`.
  */
 export function agentGrantAllowsRepository(agentName: string, loaded: LoadedAgents): boolean {
-  return agentMayPerform(canonicalizeGrantActions(grantFromLoadedAgents(agentName, loaded)), PROJECT_ACTIONS.PROJECT_GITOPS_READ);
+  return agentListAllows(canonicalizeGrantActions(grantFromLoadedAgents(agentName, loaded)), PROJECT_ACTIONS.PROJECT_GITOPS_READ);
 }
 
 /** Resolve the selected agent's sandbox template without repository I/O. */

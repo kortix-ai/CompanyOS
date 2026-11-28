@@ -16,7 +16,8 @@ import { getOrCreateDm } from '../lib/project-spaces';
 import { requestAuditContext } from '../lib/serializers';
 import { SESSION_CREATE_ERROR_STATUSES, sendSessionCreateError } from '../lib/sessions';
 import { createSession } from '../session-lifecycle';
-import { agentMayPerform, getAgentGrant } from '../../iam/agent-scope';
+import { getAgentGrant } from '../../iam/agent-scope';
+import { agentListAllows } from '../../iam/kortix-rules';
 import { PROJECT_ACTIONS } from '../../iam';
 import { postIntoSpace } from '../lib/space-posts';
 import { workspaceIdParam } from '../../shared/route-params';
@@ -137,7 +138,7 @@ export function registerChatThreadRoutes(): void {
       threadId: input.thread_id ?? null,
       ask: input.ask === true,
       actor: loaded.actor ?? null,
-      agentMayPrompt: agentMayPerform(getAgentGrant(c), PROJECT_ACTIONS.PROJECT_SESSION_START),
+      agentMayPrompt: agentListAllows(getAgentGrant(c), PROJECT_ACTIONS.PROJECT_SESSION_START),
       startThread: async (spec) => {
         const result = await createSession({
           source: 'system:chat-post',

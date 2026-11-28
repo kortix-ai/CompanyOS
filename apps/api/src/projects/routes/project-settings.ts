@@ -3,7 +3,7 @@ import { releaseProjectEventSubscriptions } from '../trigger-events/subscription
 import { releaseProjectChannels } from '../../channels/install-store';
 import { ACCOUNT_ACTIONS, PROJECT_ACTIONS, assertAuthorized, authorize } from '../../iam';
 import { actorFor, actorOf } from '../../iam/actor';
-import { assertAgentScope, isProjectSessionPrincipal } from '../../iam/agent-scope';
+import { isProjectSessionPrincipal } from '../../iam/agent-scope';
 import { isUuid } from '../../shared/validate';
 import { auth, errors, json, lenientBody } from '../../openapi';
 import { db } from '../../shared/db';
@@ -156,9 +156,6 @@ const patchFeatureFlagHandler = async (c: any) => {
   const loaded = await loadProjectForUser(c, projectId, 'read');
   if (!loaded) return c.json({ error: 'Not found' }, 404);
   await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_SETTINGS_WRITE);
-  // Per-agent gate: toggling feature flags is project config. A scoped agent
-  // token must hold project.settings.write (no-op for humans/PATs).
-  assertAgentScope(c, PROJECT_ACTIONS.PROJECT_SETTINGS_WRITE);
   if (!isFeatureFlagKey(feature)) {
     return c.json({ error: `Unknown feature flag '${feature}'` }, 400);
   }

@@ -2,7 +2,6 @@ import { createRoute, z } from '@hono/zod-openapi';
 import { bodyLimit } from 'hono/body-limit';
 import { auth, errors, json } from '../../openapi';
 import { PROJECT_ACTIONS } from '../../iam';
-import { assertAgentScope } from '../../iam/agent-scope';
 import { DICTATION_CREDITS_PER_MINUTE } from '../../billing/services/tiers';
 import { createDictationRateLimitMiddleware } from '../../middleware/rate-limit';
 import { assertProjectCapability, loadProjectForUser } from '../lib/access';
@@ -111,7 +110,6 @@ export function registerDictationRoutes(): void {
       const { workspaceId: projectId } = c.req.valid('param');
       const loaded = await loadProjectForUser(c, projectId, 'session');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
-      assertAgentScope(c, PROJECT_ACTIONS.PROJECT_SESSION_START);
       await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_SESSION_START);
 
       // After the validator read the body, Hono hands back the cached form

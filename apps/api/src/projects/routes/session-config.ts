@@ -12,7 +12,6 @@ import { loadVisibleSession, assertProjectCapability, sessionIsTombstoned } from
 import { AnyObject, projectsApp } from '../lib/app';
 import { readJsonObject } from '../../shared/http-body';
 import { callerKortixSessionId } from '../../middleware/caller-session';
-import { assertAgentScope } from '../../iam/agent-scope';
 import { mayChangeSessionModel } from '../lib/session-model-change';
 import { resolveDesiredRelease } from '../../config-releases/desired';
 import { ownerMayUseAgent } from '../../config-releases/repoint';
@@ -311,7 +310,6 @@ export function registerSessionConfigRoutes(): void {
         projectId,
         PROJECT_ACTIONS.PROJECT_SESSION_STOP,
       );
-      assertAgentScope(c, PROJECT_ACTIONS.PROJECT_SESSION_STOP);
       const visible = await loadVisibleSession(loaded, sessionId, callerKortixSessionId(c), callerKortixSessionId(c));
       if (!visible || sessionIsTombstoned(visible.row)) return c.json({ error: 'Not found' }, 404);
       // Same gate as re-scoping and changing the model: seeing a session is not
@@ -399,7 +397,6 @@ export function registerSessionConfigRoutes(): void {
         projectId,
         PROJECT_ACTIONS.PROJECT_SESSION_STOP,
       );
-      assertAgentScope(c, PROJECT_ACTIONS.PROJECT_SESSION_STOP);
       const visible = await loadVisibleSession(loaded, sessionId, callerKortixSessionId(c), callerKortixSessionId(c));
       if (!visible || sessionIsTombstoned(visible.row)) return c.json({ error: 'Not found' }, 404);
       if (!mayChangeSessionModel(visible)) {

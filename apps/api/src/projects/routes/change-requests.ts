@@ -30,7 +30,7 @@ import {
   assertProjectCapability,
   loadProjectForUser,
 } from '../lib/access';
-import { assertAgentScope, isProjectSessionPrincipal } from '../../iam/agent-scope';
+import { isProjectSessionPrincipal } from '../../iam/agent-scope';
 import { resolveChangeRequestBase, resolveChangeRequestOrigin } from '../change-request-policy';
 import { PROJECT_ACTIONS } from '../../iam';
 import { callerKortixSessionId } from '../../middleware/caller-session';
@@ -240,12 +240,6 @@ export function registerChangeRequestsRoutes(): void {
       );
 
       // Per-agent gate: opening a CR is the agent's intended path to propose work.
-      // Default-deny — a scoped agent must be granted the leaf this route already
-      // gates the underlying commit on. `project.cr.open` was the SAME capability
-      // under a second name and is gone from the catalog (spec §2.4); a manifest
-      // still spelling it that way is rewritten on input by
-      // `canonicalizeGrantActions`, so the grant reaching here is always the leaf.
-      assertAgentScope(c, PROJECT_ACTIONS.PROJECT_GITOPS_PUSH);
 
       const title = normalizeString(body.title);
       if (!title) return c.json({ error: 'title is required' }, 400);
@@ -596,7 +590,6 @@ export function registerChangeRequestsRoutes(): void {
       // Editing a CR is part of the change-request capability,
       // `project.gitops.push` (see the create route above).
       await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_GITOPS_PUSH);
-      assertAgentScope(c, PROJECT_ACTIONS.PROJECT_GITOPS_PUSH);
 
       const cr = await getCrById(crId, projectId);
       if (!cr) return c.json({ error: 'Change request not found' }, 404);

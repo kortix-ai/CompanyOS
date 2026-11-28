@@ -1,4 +1,5 @@
 import { wellKnownResponse } from '@kortix/shared/well-known';
+import { installOperationRegistry } from './shared/operation-registry';
 import { createRoute, z } from '@hono/zod-openapi';
 import { config } from './config';
 import { auth, errors, json, makeOpenApiApp } from './openapi';
@@ -435,5 +436,8 @@ app.route('/v1/tunnel', tunnelApp);
 // Auth: unified previewProxyAuth (accepts Supabase JWT and kortix_ tokens).
 // MUST be after all explicit routes (wildcard catch-all).
 app.route('/v1/p', sandboxProxyApp);
+
+// Every route is mounted: the agent rule gate can name each request's operation.
+installOperationRegistry(app as never);
 
 installHttpErrors(app);

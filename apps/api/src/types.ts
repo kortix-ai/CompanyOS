@@ -58,10 +58,13 @@ export interface AuthVariables {
   iamTokenBinding?: TokenBinding & { tokenId: string };
   /** The Supabase session's MFA assurance level (`aal1`/`aal2`), from `auth-principal`. */
   mfaAal?: string;
-  /** Per-agent authorization grant — non-null only for agent-session tokens.
-   *  Read by assertAgentScope() to gate Kortix CLI/API actions on top of the
-   *  user's own role (net = userRole ∩ agentGrant). Null = full access. */
+  /** Per-agent grant: non-null only for agent-session tokens. Its
+   *  `kortix_permissions` list is read as the agent's rules on the `kortix`
+   *  connector (`iam/kortix-rules.ts`). Null = no list. */
   agentGrant?: AgentGrant | null;
+  /** The operation of an agent-session request, set by the agent rule gate
+   *  (`middleware/agent-operation-gate.ts`) after it allowed the request. */
+  operation?: import('./shared/operation-registry').Operation;
   /** The human an agent-session token acts on behalf of. Null for an
    *  unattended run, a cleared session, or any non-session credential. */
   onBehalfOfUserId?: string | null;

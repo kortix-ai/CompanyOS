@@ -70,7 +70,6 @@ import { createRoute, z } from '@hono/zod-openapi';
 import type { Context } from 'hono';
 
 import { PROJECT_ACTIONS } from '../../iam';
-import { assertAgentScope } from '../../iam/agent-scope';
 import { resolveAndAuthorizeAgent } from '../lib/agent-access';
 import { reauthorizeWakeLadderActor } from '../lib/wake-ladder-authorization';
 import { actorOf } from '../../iam/actor';
@@ -240,7 +239,6 @@ async function wakeLadderActorFor(
   if (!visible.canManageLifecycle) return null;
   if (c.get('authType') === 'apiKey' && c.get('apiKeyType') === 'user') return null;
   try {
-    assertAgentScope(c, PROJECT_ACTIONS.PROJECT_SESSION_START);
     const loaded = await loadProjectForUser(c, projectId, 'session');
     if (!loaded) return null;
     await resolveAndAuthorizeAgent(c, loaded, projectId, null, visible.row.agentName, undefined, visible.row.spaceId);

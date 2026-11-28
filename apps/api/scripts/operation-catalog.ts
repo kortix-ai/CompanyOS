@@ -26,12 +26,9 @@
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { workspaceAliasOf } from '@kortix/shared/workspace-routes';
 import { app } from '../src/index';
 import { RETIRED_ROUTES } from '../src/routes/retired';
-
-export const EXPOSURES = ['agent', 'human', 'internal', 'local'] as const;
-export type Exposure = (typeof EXPOSURES)[number];
+import { EXPOSURES, type Exposure, concreteRoutes, openApiOperations, routeKey as key } from '../src/shared/operation-registry';
 
 export interface CatalogEntry {
   method: string;
@@ -51,42 +48,14 @@ const BASELINE = resolve(import.meta.dir, 'operation-catalog.baseline.json');
 const EXCLUSIONS = resolve(import.meta.dir, 'operation-catalog.exclusions.json');
 const excluded: Record<string, string> = JSON.parse(readFileSync(EXCLUSIONS, 'utf8')) as Record<string, string>;
 // A retired route answers 410 with the route that replaced it: not an operation.
-const retired = new Set(RETIRED_ROUTES.map(([method, path]) => `${method.toUpperCase()} ${path}`));
+const retired = new Set(RETIRED_ROUTES.map(([method, path]) => key(method, path)));
 const isExcluded = (k: string) => k in excluded || retired.has(k);
 
-// A parameter starts a segment; a colon inside one is a literal custom verb (`/policies:bulk-delete`).
-const toOpenApiPath = (path: string) => path.replace(/(?<=\/):([A-Za-z0-9_]+)(\{[^}]*\})?/g, '{$1}');
-const key = (method: string, path: string) => `${method} ${path}`;
-
-function concreteRoutes(): Array<{ method: string; path: string }> {
-  // `use()` middleware is listed as `ALL` with a `(c, next)` handler; an `.all()` passthrough takes `(c)`.
-  const routes = (app.routes as Array<{ method: string; path: string; handler: (...args: unknown[]) => unknown }>)
-    .map((r) => ({ method: r.method.toUpperCase(), path: r.path, handler: r.handler }))
-    .filter((r) => !(r.method === 'ALL' && r.handler.length >= 2));
-  const all = new Set(routes.map((r) => key(r.method, r.path)));
-  const seen = new Set<string>();
-  const out: Array<{ method: string; path: string }> = [];
-  for (const r of routes) {
-    // A legacy name of a canonical route is the same operation (one alias rule, as in dump-routes.ts).
-    if (workspaceAliasOf(r.method, r.path, (m, p) => all.has(key(m, p)))) continue;
-    const k = key(r.method, r.path);
-    if (seen.has(k)) continue;
-    seen.add(k);
-    out.push({ method: r.method, path: r.path });
-  }
-  return out;
-}
-
 export function buildCatalog(): CatalogEntry[] {
-  const doc = (app as unknown as { getOpenAPI31Document(o: unknown): { paths?: Record<string, Record<string, Record<string, unknown>>> } }).getOpenAPI31Document({
-    openapi: '3.1.0',
-    info: { title: 'Kortix operation catalog', version: 'catalog' },
-  });
-  const paths = doc.paths ?? {};
-  return concreteRoutes()
-    .filter((r) => r.method !== 'OPTIONS')
+  const operation = openApiOperations(app as never);
+  return concreteRoutes(app as never, false)
     .map((r) => {
-      const op = paths[toOpenApiPath(r.path)]?.[r.method.toLowerCase()];
+      const op = operation(r.method, r.path);
       const exposure = op?.['x-kortix-exposure'];
       return {
         method: r.method,

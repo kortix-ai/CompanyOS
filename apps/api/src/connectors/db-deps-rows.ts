@@ -26,6 +26,9 @@ import {
   connectionCredentialExists,
 } from './credentials';
 import type { ConnectorAuth } from './call';
+import { loadProjectPoliciesFor, toPolicy } from './project-policies';
+
+export { loadProjectPoliciesFor };
 import { type DefaultMode, type Policy, type PolicyAction, type Risk, parseStoredConditions, resolveEffectiveAction } from './policy';
 import type { ConnectorPrincipal } from './router-contract';
 
@@ -261,16 +264,6 @@ export async function connectorActionAlwaysRuns(input: {
 
 /** One stored rule row → the engine's `Policy`. `connector_policies`,
  *  `connector_project_policies` and a stored set's rules carry the same shape. */
-function toPolicy(r: { match: string; action: PolicyAction; position: number; conditions: unknown }): Policy {
-  return {
-    match: r.match,
-    action: r.action,
-    position: r.position,
-    // Conditions are re-validated on READ, never trusted from storage.
-    ...parseStoredConditions(r.conditions),
-  };
-}
-
 export async function loadConnectorPoliciesFor(connectorId: string): Promise<Policy[]> {
   const rows = await db
     .select()
@@ -344,14 +337,6 @@ export async function loadConnectorPolicySetsForMany(
     map.set(r.connectorId, sets);
   }
   return map;
-}
-
-export async function loadProjectPoliciesFor(projectId: string): Promise<Policy[]> {
-  const rows = await db
-    .select()
-    .from(connectorProjectPolicies)
-    .where(eq(connectorProjectPolicies.projectId, projectId));
-  return rows.map(toPolicy);
 }
 
 export async function loadDefaultModeFor(projectId: string): Promise<DefaultMode> {

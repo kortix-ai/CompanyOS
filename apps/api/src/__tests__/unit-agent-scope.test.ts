@@ -1,21 +1,20 @@
 /**
  * Tests for the per-agent authorization layer: the grant-resolution rule
  * (grantFromLoadedAgents) and the enforcement helpers (agentMayPerform,
- * agentMayUseConnector, assertAgentScope). These are the heart of the security
+ * agentMayUseConnector). These are the heart of the security
  * update — a scoped agent is denied actions/connectors it wasn't granted, and
  * agent ≤ user is preserved (the route's role check provides the ∩ user).
  */
 import { describe, expect, test } from 'bun:test';
 import { extractAgents, grantFromLoadedAgents } from '../projects/agents';
 import {
-  agentMayPerform,
   canonicalizeGrantActions,
   agentMayUseConnector,
   agentMayUseEnv,
-  assertAgentScope,
   isProjectSessionPrincipal,
 } from '../iam/agent-scope';
 import { parseManifestString } from '../projects/triggers';
+import { agentListAllows as agentMayPerform } from '../iam/kortix-rules';
 
 /** `agentsBody` is the indented body of an `agents:` map; empty declares none. */
 function loadAgents(agentsBody: string) {
@@ -292,20 +291,3 @@ describe('agentMayUseConnector — connector gate', () => {
   });
 });
 
-describe('assertAgentScope — throws 403 on deny', () => {
-  function fakeCtx(grant: unknown) {
-    return { get: (k: string) => (k === 'agentGrant' ? grant : undefined) } as any;
-  }
-  test('throws for a non-granted action', () => {
-    const c = fakeCtx({ agent: 'a', permissions: ['project.gitops.push'], connectors: [] });
-    expect(() => assertAgentScope(c, 'project.gitops.merge')).toThrow();
-  });
-  test('does not throw for a granted action', () => {
-    const c = fakeCtx({ agent: 'a', permissions: ['project.gitops.push'], connectors: [] });
-    expect(() => assertAgentScope(c, 'project.gitops.push')).not.toThrow();
-  });
-  test('does not throw when there is no grant (human / laptop CLI)', () => {
-    const c = fakeCtx(null);
-    expect(() => assertAgentScope(c, 'project.gitops.merge')).not.toThrow();
-  });
-});

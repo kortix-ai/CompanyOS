@@ -15,7 +15,7 @@ def shared_request():
         data = json.loads(out)
     except ValueError:
         return False
-    found = data if isinstance(data, list) else (data.get('requests') or data.get('items') or [])
+    found = data if isinstance(data, list) else (data.get('connectors') or data.get('requests') or data.get('items') or [])
     return any('notion' in json.dumps(r).lower() and str(r.get('owner_type')) == 'project' for r in found)
 save({'shared': 1 if called(r'"shared":\s*true|"for_trigger":\s*true|--owner(=|\s+)project') or shared_request() else 0})
 PY

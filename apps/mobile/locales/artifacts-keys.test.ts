@@ -49,6 +49,10 @@ const KEYS = [
   'artifacts.removed',
   'artifacts.more',
   'artifacts.unavailable',
+  'artifacts.askAgent',
+  'artifacts.askAgentRemove',
+  'artifacts.askAgentLoadError',
+  'artifacts.askAgentLoading',
 ];
 // "HTML" is the same word in every locale.
 const SAME_IN_EVERY_LOCALE = ['artifacts.type.html'];
@@ -76,6 +80,8 @@ describe('artifacts strings', () => {
     expect(en.t('artifacts.remove')).toBe('Stop sharing');
     expect(en.t('artifacts.removeHint')).toBe('It leaves Artifacts and its links stop working. Its files stay in Files.');
     expect(en.t('artifacts.shareLink')).toBe('Share link');
+    // Web's Ask AI (apps/web/translations `artifacts.askAgent`).
+    expect(en.t('artifacts.askAgent')).toBe('Ask AI');
   });
 
   for (const locale of SUPPORTED_LOCALES.filter((locale) => locale !== 'en')) {

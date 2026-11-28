@@ -4,7 +4,9 @@
  * `SandboxPreviewSheet` / `FilePreviewSheet` shape). Mounted once in the
  * project screen; `useArtifactViewerStore` opens it.
  *
- * Title row: X · the artifact's title · `···` (`ArtifactActionsSheet`). Body:
+ * Title row: X · the artifact's title · `···` (`ArtifactActionsSheet`, whose
+ * Ask AI closes the viewer and opens project home with the artifact attached:
+ * `onNewChat`). Body:
  * the page from its signed `view_url` (`ArtifactWebView`). A doc and an HTML
  * page render the same way: the server renders a doc's Markdown as styled,
  * theme-aware HTML. Docs are read-only here; editing stays on web.
@@ -20,7 +22,7 @@ import { BackHandler, Platform, View } from 'react-native';
 import type { BottomSheetModal } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import { ApiError } from '@kortix/sdk';
+import { ApiError, type Artifact, type ArtifactDetail } from '@kortix/sdk';
 import { useArtifact } from '@kortix/sdk/react';
 
 import { ArtifactActionsSheet, type ArtifactActionsSheetRef } from '@/components/artifacts/ArtifactActionsSheet';
@@ -36,9 +38,17 @@ import { haptics } from '@/lib/haptics';
 import { DotsThreeIcon } from '@/lib/icons';
 import { THEME } from '@/lib/utils/theme';
 import { useTone } from '@/lib/utils/tone';
+import { useArtifactChatStore } from '@/stores/artifact-chat-store';
 import { useArtifactViewerStore } from '@/stores/artifact-viewer-store';
 
-export function ArtifactViewerSheet({ projectId }: { projectId: string }) {
+export function ArtifactViewerSheet({
+  projectId,
+  onNewChat,
+}: {
+  projectId: string;
+  /** Opens project home (the drawer's New session); Ask AI attaches the artifact first. */
+  onNewChat: () => void;
+}) {
   const target = useArtifactViewerStore((s) => s.target);
   const close = useArtifactViewerStore((s) => s.close);
   const modalRef = React.useRef<BottomSheetModal>(null);
@@ -90,6 +100,15 @@ export function ArtifactViewerSheet({ projectId }: { projectId: string }) {
     actionsRef.current?.present(artifact);
   }, [artifact]);
 
+  const askAi = React.useCallback(
+    (picked: Artifact | ArtifactDetail) => {
+      useArtifactChatStore.getState().attach(projectId, picked);
+      modalRef.current?.dismiss();
+      onNewChat();
+    },
+    [onNewChat, projectId],
+  );
+
   const onRemoved = React.useCallback((artifactId: string) => {
     if (useArtifactViewerStore.getState().target?.artifactId === artifactId) modalRef.current?.dismiss();
   }, []);
@@ -139,6 +158,7 @@ export function ArtifactViewerSheet({ projectId }: { projectId: string }) {
           projectId={target.projectId}
           onReload={reload}
           onRemoved={onRemoved}
+          onAskAi={askAi}
           pushed
         />
       ) : null}

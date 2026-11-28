@@ -1403,6 +1403,10 @@
     "movedToFolder": "Movido para {{name}}",
     "moveFailed": "Não foi possível mover o artefato",
     "emptyFolder": "Nenhum artefato nesta pasta",
-    "emptyUnfiled": "Nenhum artefato sem pasta"
+    "emptyUnfiled": "Nenhum artefato sem pasta",
+    "askAgent": "Perguntar à IA",
+    "askAgentRemove": "Remover {{title}}",
+    "askAgentLoadError": "Não foi possível anexar “{{title}}”. Toque para tentar de novo ou remova.",
+    "askAgentLoading": "“{{title}}” ainda está sendo anexado. Envie de novo em instantes."
   }
 }

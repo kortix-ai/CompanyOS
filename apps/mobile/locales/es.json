@@ -1403,6 +1403,10 @@
     "movedToFolder": "Movido a {{name}}",
     "moveFailed": "No se pudo mover el artefacto",
     "emptyFolder": "No hay artefactos en esta carpeta",
-    "emptyUnfiled": "No hay artefactos sin carpeta"
+    "emptyUnfiled": "No hay artefactos sin carpeta",
+    "askAgent": "Preguntar a la IA",
+    "askAgentRemove": "Quitar {{title}}",
+    "askAgentLoadError": "No se pudo adjuntar «{{title}}». Tócalo para reintentar o quítalo.",
+    "askAgentLoading": "«{{title}}» aún se está adjuntando. Vuelve a enviar en un momento."
   }
 }

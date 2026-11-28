@@ -1398,6 +1398,10 @@
     "movedToFolder": "已移动到 {{name}}",
     "moveFailed": "无法移动产物",
     "emptyFolder": "此文件夹中没有作品",
-    "emptyUnfiled": "没有未归档的产物"
+    "emptyUnfiled": "没有未归档的产物",
+    "askAgent": "询问 AI",
+    "askAgentRemove": "移除 {{title}}",
+    "askAgentLoadError": "无法附加“{{title}}”。点按重试，或将其移除。",
+    "askAgentLoading": "“{{title}}”仍在附加中。请稍后再发送。"
   }
 }

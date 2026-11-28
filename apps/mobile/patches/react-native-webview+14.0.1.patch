@@ -1,0 +1,16 @@
+diff --git a/node_modules/react-native-webview/src/WebView.ios.tsx b/node_modules/react-native-webview/src/WebView.ios.tsx
+index 970acb0..d741b25 100644
+--- a/node_modules/react-native-webview/src/WebView.ios.tsx
++++ b/node_modules/react-native-webview/src/WebView.ios.tsx
+@@ -19,7 +19,10 @@ const resolveAssetSource = (source: ImageSourcePropType) => Image.resolveAssetSo
+ const processDecelerationRate = (
+   decelerationRate: DecelerationRateConstant | number | undefined,
+ ) => {
+-  let newDecelerationRate = decelerationRate;
++  // Kortix patch (KRTX-5256): under the new architecture an unset rate reaches the
++  // native view as the codegen default 0, which the scroll view takes on every
++  // drag: a flick stops dead. Default to UIKit's normal rate (fixed natively in 17.x).
++  let newDecelerationRate = decelerationRate ?? 'normal';
+   if (newDecelerationRate === 'normal') {
+     newDecelerationRate = 0.998;
+   } else if (newDecelerationRate === 'fast') {

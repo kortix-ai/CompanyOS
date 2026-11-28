@@ -550,6 +550,8 @@ const envSchema = z.object({
   // are blocked. Set explicitly to "false" only for legacy fallback where
   // Slack messages should run as the bound project owner.
   SLACK_REQUIRE_USER_IDENTITY: optBoolTrue,
+  // The Slack Web API base the bot posts through. Overridable for tests.
+  SLACK_API_URL: optUrl('https://slack.com/api'),
 
   // ── Channels — email (Resend Inboxes) ─────────────────────────────────────
   // The managed team key is RESEND_API_KEY (also the transactional sender).
@@ -1628,6 +1630,7 @@ export const config = {
   SLACK_OAUTH_SCOPES: env.SLACK_OAUTH_SCOPES,
   SLACK_HOME_HERO_URL: env.SLACK_HOME_HERO_URL,
   SLACK_REQUIRE_USER_IDENTITY: env.SLACK_REQUIRE_USER_IDENTITY,
+  SLACK_API_URL: env.SLACK_API_URL,
 
   // ─── Channels (email, Resend Inboxes) ────────────────────────────────────
   RESEND_API_URL: env.RESEND_API_URL,

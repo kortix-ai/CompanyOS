@@ -52,7 +52,7 @@ export function channelAuth(platform: string): ConnectorAuth {
 
 /** Per-platform API base, read at call time from `config` where it is configurable. */
 const API_BASE: Record<ChannelPlatformId, () => string> = {
-  slack: () => 'https://slack.com/api',
+  slack: () => config.SLACK_API_URL,
   teams: () => 'https://graph.microsoft.com/v1.0',
   email: () => config.RESEND_API_URL,
   telegram: () => config.TELEGRAM_API_URL,

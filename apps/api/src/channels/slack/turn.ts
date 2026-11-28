@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { slackAgentPersona } from './persona';
-import { and, asc, eq, isNull, lt } from 'drizzle-orm';
-import { chatEventDedup, chatTurnStreams, projectSessions } from '@kortix/db';
+import { and, asc, desc, eq, inArray, isNotNull, isNull, lt } from 'drizzle-orm';
+import { chatEventDedup, chatTurnStreams, projectSessions, sessionTurns } from '@kortix/db';
 import { db } from '../../shared/db';
 import { registerSessionFailureNotifier } from '../../shared/session-failure-notifier';
 import { config } from '../../config';
@@ -9,6 +9,8 @@ import { sessionWebUrl, slackChannelIsDm } from './util';
 import { markdownToMrkdwn, mrkdwnToRichTextElements, slackMentionsAsText, unlabelledMentionIds } from './mrkdwn';
 import { slackUserNames } from './labels';
 import { loadSlackTokenForProject } from '../install-store';
+import { findChatThread } from '../core/threads';
+import { logger } from '../../lib/logger';
 import type { SlackPersona } from '../slack-api';
 import {
   addReaction,
@@ -754,34 +756,157 @@ export async function postAnswerWithoutTurnDetailed(
   text: string,
   blocks?: unknown[],
 ): Promise<TurnRelayResult> {
+  const thread = await sessionSlackThread(sessionId);
+  if (!thread) return { ok: false, reason: 'no_slack_thread' };
+  if (!(await claimAnswerRescue(sessionId, text))) return { ok: false, reason: 'answer_already_posted' };
+  if (!(await postInSessionThread(sessionId, thread, markdownToMrkdwn(text), blocks))) return { ok: false, reason: 'post_failed' };
+  // This turn has answered: its end must not post its last message again.
+  await markOpenTurnAnswered(sessionId);
+  return { ok: true };
+}
+
+/** The Slack thread a Slack-started session lives in. */
+interface SessionSlackThread {
+  projectId: string;
+  /** The Slack workspace; a session created before it was recorded has none. */
+  teamId: string | null;
+  channel: string;
+  threadTs: string;
+  token: string;
+}
+
+/**
+ * `project_sessions.metadata.slack`, written once at create
+ * (channels/slack/session.ts), and the project's bot token. Null for a session
+ * no Slack message started, or a project whose Slack install is gone.
+ */
+async function sessionSlackThread(sessionId: string): Promise<SessionSlackThread | null> {
   const [row] = await db
     .select({ projectId: projectSessions.projectId, metadata: projectSessions.metadata })
     .from(projectSessions)
     .where(eq(projectSessions.sessionId, sessionId))
     .limit(1);
-  if (!row) return { ok: false, reason: 'no_slack_thread' };
-  const slack = (row.metadata as { slack?: { channel?: string; thread_ts?: string } } | null)?.slack;
-  const channel = slack?.channel;
-  const threadTs = slack?.thread_ts;
-  if (!channel || !threadTs) return { ok: false, reason: 'no_slack_thread' }; // not a Slack-started session
+  if (!row) return null;
+  const slack = (row.metadata as { slack?: { channel?: string; thread_ts?: string; team_id?: string } } | null)?.slack;
+  if (!slack?.channel || !slack.thread_ts) return null;
   const token = await loadSlackTokenForProject(row.projectId);
-  if (!token) return { ok: false, reason: 'no_slack_thread' };
-  if (!(await claimAnswerRescue(sessionId, text))) return { ok: false, reason: 'answer_already_posted' };
+  if (!token) return null;
+  return { projectId: row.projectId, teamId: slack.team_id ?? null, channel: slack.channel, threadTs: slack.thread_ts, token };
+}
 
-  const rendered = markdownToMrkdwn(text);
+/**
+ * Post an answer (`body` is mrkdwn) into the session's thread, with the answer
+ * footer. A block render Slack rejects (a section caps at 3000 chars) falls
+ * back to plain text: the answer is never lost. True when it posted.
+ */
+async function postInSessionThread(
+  sessionId: string,
+  thread: SessionSlackThread,
+  rendered: string,
+  blocks?: unknown[],
+): Promise<boolean> {
+  const { projectId, channel, threadTs, token } = thread;
   const truncated = rendered.length > MAX_BODY;
   const body = rendered.slice(0, MAX_BODY);
-  const url = sessionWebUrl(config.FRONTEND_URL, row.projectId, sessionId);
-  const persona = await slackAgentPersona({ sessionId, projectId: row.projectId, token }).catch(() => null);
-  const footer = answerFooter({ channel, projectId: row.projectId, sessionId }, persona);
+  const url = sessionWebUrl(config.FRONTEND_URL, projectId, sessionId);
+  const persona = await slackAgentPersona({ sessionId, projectId, token }).catch(() => null);
+  const footer = answerFooter({ channel, projectId, sessionId }, persona);
   const finalBlocks =
     blocks && blocks.length > 0 ? [...blocks, ...footer] : [...toSectionBlocks(body, truncated), ...footer];
 
   const ts = await postBlocks(token, channel, body, finalBlocks, threadTs, persona);
-  if (ts) return { ok: true };
-  // Block render rejected (a section caps at 3000 chars) — never lose the answer.
+  if (ts) return true;
   const fallback = await postMessage(token, channel, `${body}\n\n<${url}|Open session in Kortix ↗>`, threadTs, persona);
-  return fallback != null ? { ok: true } : { ok: false, reason: 'post_failed' };
+  return fallback != null;
+}
+
+// ── The reply of a turn no Slack message started ─────────────────────────────
+// Only a Slack message opens a turn row (`startTurn`). A turn the platform
+// starts in the same session has none: a colleague's report, another session's
+// message, a held call the person approved. Its end found no handle, and its
+// reply was dropped. Prod, 2026-11-28: a Slack session handed a fix to a
+// colleague and answered once; its four relays of the colleague's reports
+// reached only the session page, and the thread stayed silent for 26 minutes.
+
+/**
+ * Prompt sources of a turn the platform starts for the conversation the thread
+ * is already having (`SessionInvocationSource`, projects/session-lifecycle/types.ts).
+ * The person waits in the thread for that turn, so its reply goes there. A turn
+ * a person started on another surface (the web, mobile, the CLI) is not the
+ * thread's. Neither is the agent's own scheduled check-in (`trigger:*`): its
+ * text narrates the check, and a check-in posts what changed itself.
+ */
+const THREAD_FOLLOW_UP_SOURCES: ReadonlySet<string> = new Set([
+  'system:subagent-finished',
+  'system:peer-message',
+  'system:approval-resume',
+  'system:connector-connected',
+  'system:secret-submitted',
+  'system:auto-recovery',
+]);
+
+/** The turn a channel relay ends, named by its wire message id, and how to read its prompt source. */
+export interface TurnFollowUp {
+  messageId: string;
+  /** The lifecycle source of the prompt the turn answers; null when no prompt row names it. */
+  source: () => Promise<string | null>;
+}
+
+/** A turn can run for hours: the claim outlives any turn. */
+const TURN_REPLY_TTL_MS = 24 * 60 * 60 * 1000;
+
+/** One reply per turn reaches the thread: a `slack send` of the turn, or its end. True when this call won it. */
+function claimTurnReply(sessionId: string, messageId: string): Promise<boolean> {
+  return claimExpiringKey(`slack:turnreply:${sessionId}:${messageId}`, TURN_REPLY_TTL_MS, {
+    onDbError: false,
+    log: 'turn-reply claim failed (suppressing)',
+  });
+}
+
+/**
+ * The session's running turn answered with `slack send`: claim its reply, so
+ * its end posts nothing more. Best-effort: the answer already posted.
+ */
+async function markOpenTurnAnswered(sessionId: string): Promise<void> {
+  try {
+    const [open] = await db
+      .select({ messageId: sessionTurns.messageId })
+      .from(sessionTurns)
+      .where(and(eq(sessionTurns.sessionId, sessionId), inArray(sessionTurns.state, ['delivering', 'active']), isNotNull(sessionTurns.messageId)))
+      .orderBy(desc(sessionTurns.startedAt))
+      .limit(1);
+    if (open?.messageId) await claimTurnReply(sessionId, open.messageId);
+  } catch (err) {
+    logger.warn('[slack-webhook] answered turn not marked', { sessionId, err: err instanceof Error ? err.message : String(err) });
+  }
+}
+
+/**
+ * Post the end of a turn no Slack message started, when the platform started
+ * it for this thread (`THREAD_FOLLOW_UP_SOURCES`): the turn's last message, or
+ * the classified failure. Only while the session still owns its thread: a
+ * thread that moved to another session (an agent switch, a revived thread)
+ * hears that session. True when it posted.
+ */
+async function postFollowUpTurnEnd(
+  sessionId: string,
+  status: 'idle' | 'error',
+  errorInfo: TurnErrorInfo | undefined,
+  finalText: string | undefined,
+  followUp: TurnFollowUp,
+): Promise<boolean> {
+  const answer = status === 'idle' ? finalText?.trim() : undefined;
+  const failure = status === 'error' ? classifyTurnError(errorInfo) : null;
+  const body = answer ? markdownToMrkdwn(answer) : failure && !failure.aborted ? failure.text : null;
+  if (!body) return false;
+  const source = await followUp.source().catch(() => null);
+  if (!source || !THREAD_FOLLOW_UP_SOURCES.has(source)) return false;
+  const thread = await sessionSlackThread(sessionId);
+  if (!thread?.teamId) return false;
+  const owner = await findChatThread({ platform: 'slack', workspaceId: thread.teamId, threadId: thread.threadTs });
+  if (owner?.sessionId !== sessionId) return false;
+  if (!(await claimTurnReply(sessionId, followUp.messageId))) return false;
+  return postInSessionThread(sessionId, thread, body);
 }
 
 // Called when the agent's turn ends — `session.idle` (finished) or
@@ -814,11 +939,14 @@ export async function relayTurnEnd(
   sessionId: string,
   status: 'idle' | 'error' = 'idle',
   errorInfo?: TurnErrorInfo,
-  opts: { deferred?: boolean; finalText?: string } = {},
+  opts: { deferred?: boolean; finalText?: string; followUp?: TurnFollowUp } = {},
 ): Promise<boolean> {
   const handle = await loadTurn(sessionId);
   if (!handle) {
-    // No open turn — the row was finalized/expired/GC'd before this arrived. A
+    // No open turn. A turn the platform started for this thread (a colleague's
+    // report) never had one: its reply goes to the thread now.
+    if (opts.followUp && (await postFollowUpTurnEnd(sessionId, status, errorInfo, opts.finalText, opts.followUp))) return true;
+    // Otherwise the row was finalized/expired/GC'd before this arrived. A
     // dropped IDLE is the benign tail of an already-answered turn, but a dropped
     // ERROR means we lost a real failure signal, so surface that one.
     if (status === 'error') {
@@ -838,7 +966,7 @@ export async function relayTurnEnd(
       deferred: opts.deferred === true,
     });
     setTimeout(() => {
-      void relayTurnEnd(sessionId, status, errorInfo, { deferred: true, finalText: opts.finalText }).catch((err) =>
+      void relayTurnEnd(sessionId, status, errorInfo, { deferred: true, finalText: opts.finalText, followUp: opts.followUp }).catch((err) =>
         console.warn('[slack-webhook] deferred turn-end failed', { sessionId, err }),
       );
     }, IDLE_END_GRACE_MS - sinceActivity + 250).unref();

@@ -39,6 +39,25 @@ export function canManageGroup(row: GroupAccessRow, viewer: GroupViewer): boolea
   return row.createdBy === viewer.userId || viewer.oversight;
 }
 
+/**
+ * Does the owner of a session filed in a group still see the group? A session
+ * no person started (`ownerId` null: a trigger, a backend caller) has nobody
+ * to remove and keeps its group. `oversight` (account session oversight) is
+ * asked only when membership does not decide it. The services wrapper is
+ * `sessionOwnerSeesGroup` (projects/lib/session-group-viewer.ts).
+ */
+export async function ownerSeesGroup(
+  group: GroupAccessRow,
+  ownerId: string | null,
+  ownerIsMember: boolean,
+  oversight: () => Promise<boolean>,
+): Promise<boolean> {
+  if (!ownerId) return true;
+  const members = ownerIsMember ? [ownerId] : [];
+  if (canSeeGroup(group, members, { userId: ownerId, oversight: false })) return true;
+  return canSeeGroup(group, members, { userId: ownerId, oversight: await oversight() });
+}
+
 /** Each group's members, in the order they were added. */
 export async function groupMemberIds(groupIds: readonly string[]): Promise<Map<string, string[]>> {
   const out = new Map<string, string[]>(groupIds.map((id) => [id, []]));

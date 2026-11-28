@@ -1685,7 +1685,10 @@
       "home": "Início",
       "more": "Mais",
       "pinTab": "Mostrar aba",
-      "unpinTab": "Ocultar aba"
+      "unpinTab": "Ocultar aba",
+      "viewAll": "Ver tudo",
+      "appsEmpty": "Ainda não há apps",
+      "artifactsEmpty": "Ainda não há artefatos"
     },
     "customize": "Personalizar",
     "sessions": "Sessões",

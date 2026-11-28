@@ -8,7 +8,7 @@ import { and, eq } from 'drizzle-orm';
 import { projectFeatureFlagEnabled } from '../../feature-flags/for-project';
 import { hasAccountSessionOversight } from '../../iam/session-oversight';
 import { db } from '../../shared/db';
-import { canSeeGroup, type GroupViewer, sessionSharedThroughGroup, sharedGroupIdsFor } from '../../shared/session-group-access';
+import { canSeeGroup, ownerSeesGroup, type GroupViewer, sessionSharedThroughGroup, sharedGroupIdsFor } from '../../shared/session-group-access';
 
 export async function groupViewerFor(userId: string, accountId: string): Promise<GroupViewer> {
   return { userId, oversight: await hasAccountSessionOversight(userId, accountId).catch(() => false) };
@@ -32,7 +32,7 @@ export async function sessionSharedThroughSpace(projectId: string, userId: strin
 }
 
 /**
- * The owner of a session filed in a Space still sees the Space (`canSeeGroup`).
+ * The owner of a session filed in a Space still sees the Space (`ownerSeesGroup`).
  * A session no person started (`ownerId` null: a trigger, a backend caller)
  * has nobody to remove, so it keeps its Space. Account session oversight is
  * read only when membership does not already decide it.
@@ -45,8 +45,23 @@ export async function sessionOwnerSeesGroup(
   oversight: (userId: string, accountId: string) => Promise<boolean> = (userId, account) =>
     hasAccountSessionOversight(userId, account).catch(() => false),
 ): Promise<boolean> {
-  if (!ownerId) return true;
-  const members = ownerIsMember ? [ownerId] : [];
-  if (canSeeGroup(group, members, { userId: ownerId, oversight: false })) return true;
-  return !!accountId && canSeeGroup(group, members, { userId: ownerId, oversight: await oversight(ownerId, accountId) });
+  return ownerSeesGroup(group, ownerId, ownerIsMember, async () => !!ownerId && !!accountId && (await oversight(ownerId, accountId)));
+}
+
+/**
+ * May a turn of a session filed in a Space read the Space (its brief and
+ * memory list)? Its owner must still see it (`sessionOwnerSeesGroup`), and so
+ * must the person prompting the turn. A turn with no person behind it
+ * (`prompterId` null: sandbox-authored, an automation) and the owner's own
+ * turn take the owner rule alone.
+ */
+export async function turnSeesGroup(
+  group: { visibility: string; createdBy: string | null },
+  who: { ownerId: string | null; ownerIsMember: boolean; prompterId: string | null; prompterIsMember: boolean; accountId: string | null },
+  oversight: (userId: string, accountId: string) => Promise<boolean> = (userId, account) =>
+    hasAccountSessionOversight(userId, account).catch(() => false),
+): Promise<boolean> {
+  if (!(await sessionOwnerSeesGroup(group, who.ownerId, who.ownerIsMember, who.accountId, oversight))) return false;
+  if (!who.prompterId || who.prompterId === who.ownerId) return true;
+  return sessionOwnerSeesGroup(group, who.prompterId, who.prompterIsMember, who.accountId, oversight);
 }

@@ -1155,7 +1155,10 @@ const catalog = {
       "home": "Home",
       "more": "More",
       "pinTab": "Show tab",
-      "unpinTab": "Hide tab"
+      "unpinTab": "Hide tab",
+      "viewAll": "View all",
+      "appsEmpty": "No apps yet",
+      "artifactsEmpty": "No artifacts yet"
     },
     "customize": "Customize",
     "sessions": "Sessions",

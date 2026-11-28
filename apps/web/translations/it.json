@@ -1685,7 +1685,10 @@
       "home": "Home",
       "more": "Altro",
       "pinTab": "Mostra scheda",
-      "unpinTab": "Nascondi scheda"
+      "unpinTab": "Nascondi scheda",
+      "viewAll": "Mostra tutto",
+      "appsEmpty": "Ancora nessuna app",
+      "artifactsEmpty": "Ancora nessun artefatto"
     },
     "customize": "Personalizza",
     "sessions": "Sessioni",

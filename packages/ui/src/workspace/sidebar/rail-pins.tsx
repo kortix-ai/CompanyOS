@@ -5,8 +5,8 @@ import {
   AppWindowIcon,
   CalendarBlankIcon,
   CardsThreeIcon,
-  CheckIcon,
   FoldersIcon,
+  GitPullRequestIcon,
   HardDrivesIcon,
   PushPinIcon,
   TargetIcon,
@@ -28,17 +28,27 @@ import { useGoalsRowVisible } from './footer/project-goals-nav';
 export const PINNABLE_PAGES = ['review', 'files', 'apps', 'calendar', 'goals', 'artifacts'] as const;
 export type PinnablePage = (typeof PINNABLE_PAGES)[number];
 
+/**
+ * The pages on the rail before a person pins or unpins anything: Review, Apps
+ * and Artifacts are the pages people reach for, and behind More they were not
+ * found. A person who changes the pins keeps their own list (an empty one too).
+ */
+export const DEFAULT_RAIL_PINS: readonly PinnablePage[] = ['review', 'apps', 'artifacts'];
+
 const storageKey = (projectId: string) => `kortix:rail-pins:${projectId}`;
+/** The stored value of a person who never changed the pins. */
+const UNSET = 'unset';
 
 function readRaw(projectId: string): string {
   try {
-    return localStorage.getItem(storageKey(projectId)) ?? '[]';
+    return localStorage.getItem(storageKey(projectId)) ?? UNSET;
   } catch {
-    return '[]';
+    return UNSET;
   }
 }
 
 function parsePins(raw: string): PinnablePage[] {
+  if (raw === UNSET) return [...DEFAULT_RAIL_PINS];
   try {
     const list: unknown = JSON.parse(raw);
     return Array.isArray(list)
@@ -63,10 +73,10 @@ function subscribe(listener: () => void) {
 /**
  * The pages this person pinned to the rail, in pin order. A per-viewer
  * convenience kept in this browser (localStorage, per workspace): a private
- * window or cleared site data starts with none. The server render has none.
+ * window or cleared site data starts with the defaults (`DEFAULT_RAIL_PINS`), as the server render does.
  */
 export function useRailPins(projectId: string): { pins: PinnablePage[]; toggle: (id: PinnablePage) => void } {
-  const raw = useSyncExternalStore(subscribe, () => readRaw(projectId), () => '[]');
+  const raw = useSyncExternalStore(subscribe, () => readRaw(projectId), () => UNSET);
   const pins = useMemo(() => parsePins(raw), [raw]);
   const toggle = useCallback(
     (id: PinnablePage) => {
@@ -132,7 +142,7 @@ function usePinnedReview(projectId: string): PinnedPage {
   const access = useCapabilityAccess(projectId);
   const href = reviewHref(projectId);
   if (!href || !access.settled || !access.tabs.includes('review')) return null;
-  return { href, label: t('spaces.review'), icon: <CheckIcon /> };
+  return { href, label: t('spaces.review'), icon: <GitPullRequestIcon /> };
 }
 
 function usePinnedFiles(projectId: string): PinnedPage {

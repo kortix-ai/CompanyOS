@@ -133,7 +133,7 @@ function desktopTabsMounted(): boolean {
   return typeof document !== 'undefined' && document.documentElement.hasAttribute('data-kx-desktop-tabs-mounted');
 }
 
-function ArtifactRow({ artifact, href, onOpen }: { artifact: Artifact; href: string; onOpen: () => void }) {
+export function ArtifactRow({ artifact, href, onOpen }: { artifact: Artifact; href: string; onOpen: () => void }) {
   const Glyph = TYPE_ICON[artifact.type];
   return (
     <HoverPrefetchLink

@@ -2,7 +2,7 @@
 
 import { useFeatureFlag } from '@kortix/sdk/react';
 import { DotsThreeIcon, MagnifyingGlassIcon, PushPinSlashIcon, StackIcon } from '@phosphor-icons/react';
-import { useState, type MouseEvent, type ReactNode } from 'react';
+import { useState, type MouseEvent, type PointerEvent, type ReactNode } from 'react';
 
 import { useTranslations } from '../../i18n';
 import { SidebarGlyph as PanelLeft } from '../../icons/sidebar-toggle';
@@ -18,6 +18,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '../../primitives/popove
 import { SidebarMenu, useSidebar } from '../../primitives/sidebar';
 import { UiLink as Link, useUiPathname } from '../../providers/ui-provider';
 import { ProjectNavItems } from './project-nav-items';
+import { isRailCardPage, RailHoverCard } from './rail-hover-card';
 import { PinnedRailItem, useRailPins } from './rail-pins';
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
@@ -144,9 +145,20 @@ export function ProjectRail({
                 }}
               >
                 <span className="flex">
-                  <RailButton label={page.label} href={page.href} current={current}>
-                    {page.icon}
-                  </RailButton>
+                  {isRailCardPage(id) ? (
+                    // Apps and Artifacts: the hover card names the page and lists what is in it.
+                    <RailHoverCard projectId={projectId} page={id} label={page.label} href={page.href}>
+                      {(rowProps) => (
+                        <RailButton label={page.label} href={page.href} current={current} hint={false} triggerProps={rowProps}>
+                          {page.icon}
+                        </RailButton>
+                      )}
+                    </RailHoverCard>
+                  ) : (
+                    <RailButton label={page.label} href={page.href} current={current}>
+                      {page.icon}
+                    </RailButton>
+                  )}
                 </span>
               </ContextMenuTrigger>
               <ContextMenuContent>
@@ -228,6 +240,8 @@ function RailButton({
   onClick,
   onPointerEnter,
   onPointerLeave,
+  hint = true,
+  triggerProps,
   children,
 }: {
   label: ReactNode;
@@ -238,40 +252,52 @@ function RailButton({
   onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
   onPointerEnter?: () => void;
   onPointerLeave?: () => void;
+  /** False: a hover card names the control instead (`RailHoverCard`). */
+  hint?: boolean;
+  /** The hover card's pointer handlers, put on the link. */
+  triggerProps?: {
+    onPointerEnter: (event: PointerEvent<HTMLElement>) => void;
+    onPointerLeave: (event: PointerEvent<HTMLElement>) => void;
+    onClick: () => void;
+  };
   children: ReactNode;
 }) {
   const name = ariaLabel ?? (typeof label === 'string' ? label : undefined);
   const className = cn(RAIL_CONTROL, 'text-muted-foreground hover:text-foreground', current && 'bg-sidebar-accent text-foreground');
-  return (
+  const control = href ? (
+    <Button asChild variant="ghost" size="icon-base" className={className}>
+      <Link
+        href={href}
+        prefetch
+        aria-label={name}
+        aria-current={current ? 'page' : undefined}
+        onPointerEnter={triggerProps?.onPointerEnter ?? onPointerEnter}
+        onPointerLeave={triggerProps?.onPointerLeave ?? onPointerLeave}
+        onClick={triggerProps?.onClick}
+      >
+        {children}
+      </Link>
+    </Button>
+  ) : (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-base"
+      aria-label={name}
+      aria-current={current ? 'page' : undefined}
+      onClick={onClick}
+      onPointerEnter={onPointerEnter}
+      onPointerLeave={onPointerLeave}
+      className={className}
+    >
+      {children}
+    </Button>
+  );
+  return hint ? (
     <Hint side="right" alignOffset={0} label={label}>
-      {href ? (
-        <Button asChild variant="ghost" size="icon-base" className={className}>
-          <Link
-            href={href}
-            prefetch
-            aria-label={name}
-            aria-current={current ? 'page' : undefined}
-            onPointerEnter={onPointerEnter}
-            onPointerLeave={onPointerLeave}
-          >
-            {children}
-          </Link>
-        </Button>
-      ) : (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-base"
-          aria-label={name}
-          aria-current={current ? 'page' : undefined}
-          onClick={onClick}
-          onPointerEnter={onPointerEnter}
-          onPointerLeave={onPointerLeave}
-          className={className}
-        >
-          {children}
-        </Button>
-      )}
+      {control}
     </Hint>
+  ) : (
+    control
   );
 }

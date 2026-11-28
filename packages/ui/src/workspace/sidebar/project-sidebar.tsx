@@ -48,6 +48,7 @@ import { UiLink as Link, useUiPathname, useUiRouter } from '../../providers/ui-p
 import { useCapabilityAccess } from '../../internal/layout/project-settings-nav';
 import { reviewHref } from '../../internal/lib/capability-tab-routes';
 import { SettingsReturnTracker, SidebarDrill } from './sidebar-drill';
+import { WorkspaceSettingsRailPublisher, type WorkspaceSettingsRailHost } from '../admin/workspace-settings-rail';
 import { ProjectRail } from './project-rail';
 import { SpaceFormModal } from '../session-spaces/space-form-modal';
 import { isProjectAdminPath } from '../../internal/layout/project-capability-nav';
@@ -74,8 +75,15 @@ export function ProjectSidebar({
   help,
   onOpenSearch,
   onOpenDownloadApp,
+  settingsHost,
 }: {
   projectId: string;
+  /**
+   * Which host pages Workspace settings lists (apps/web: the account panes).
+   * With the icon rail, the sidebar computes the Customize list itself from
+   * it, so hovering Customize on any page shows real rows.
+   */
+  settingsHost?: WorkspaceSettingsRailHost;
   /**
    * The footer's help control (apps/web passes `HelpMenu`: docs, support,
    * shortcuts, status, what's new). Without it, the sidebar has no footer.
@@ -239,6 +247,8 @@ export function ProjectSidebar({
   return (
     // The New agent modal mounts beside <Sidebar>, outside the mobile sheet.
     <NewAgentModalProvider projectId={projectId}>
+    {/* With the icon rail, the Customize list is drawn on any page (its hover): the sidebar fills it itself. */}
+    {railed && settingsHost ? <WorkspaceSettingsRailPublisher projectId={projectId} host={settingsHost} /> : null}
     <Sidebar
       collapsible="offcanvas"
       variant="inset"

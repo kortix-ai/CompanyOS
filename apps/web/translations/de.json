@@ -1685,7 +1685,10 @@
       "home": "Startseite",
       "more": "Mehr",
       "pinTab": "Tab anzeigen",
-      "unpinTab": "Tab ausblenden"
+      "unpinTab": "Tab ausblenden",
+      "viewAll": "Alle anzeigen",
+      "appsEmpty": "Noch keine Apps",
+      "artifactsEmpty": "Noch keine Artefakte"
     },
     "customize": "Anpassen",
     "sessions": "Sitzungen",

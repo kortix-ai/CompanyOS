@@ -10,7 +10,8 @@ import { isMyKortixAgentName, sessionGroupDriveFolder } from '@kortix/shared';
 import { sql } from 'drizzle-orm';
 import { MEMORY_DIR_NAME } from '../../drives/folders';
 import { projectFeatureFlagEnabled } from '../../feature-flags/for-project';
-import { sessionOwnerSeesGroup } from './session-group-viewer';
+import { turnSeesGroup } from './session-group-viewer';
+import { isUuid } from '../../shared/validate';
 import { logger } from '../../lib/logger';
 import { db } from '../../shared/db';
 import { memberDisplayName } from './project-space-members';
@@ -49,6 +50,8 @@ export interface SessionWhereRow {
   group_created_by?: string | null;
   /** The owner is in the space's `project_session_group_members`. */
   owner_is_member?: boolean | null;
+  /** The person prompting this turn is in the space's `project_session_group_members` (false without one). */
+  prompter_is_member?: boolean | null;
 }
 
 /**
@@ -153,7 +156,7 @@ export function sessionWhereText(row: SessionWhereRow): string {
  * One read: the session, its space, its parent session and the person who
  * started it. Null when the session is not in this project.
  */
-export async function readSessionWhere(projectId: string, sessionId: string): Promise<SessionWhereRow | null> {
+export async function readSessionWhere(projectId: string, sessionId: string, prompterId: string | null = null): Promise<SessionWhereRow | null> {
   const rows = (await db.execute(sql`
     SELECT s.space_id, s.created_by AS owner_id, s.account_id,
            sp.kind::text AS space_kind, sp.slug AS space_slug, sp.name AS space_name, sp.dm_agent_name AS space_dm_agent,
@@ -168,6 +171,9 @@ export async function readSessionWhere(projectId: string, sessionId: string): Pr
            (g.group_id IS NOT NULL AND s.created_by IS NOT NULL AND EXISTS (
               SELECT 1 FROM kortix.project_session_group_members m WHERE m.group_id = g.group_id AND m.user_id = s.created_by
            )) AS owner_is_member,
+           (g.group_id IS NOT NULL AND ${prompterId}::uuid IS NOT NULL AND EXISTS (
+              SELECT 1 FROM kortix.project_session_group_members m WHERE m.group_id = g.group_id AND m.user_id = ${prompterId}::uuid
+           )) AS prompter_is_member,
            sb.metadata->'driveMounts' AS drive_mounts,
            coalesce(nullif(p.metadata->>'custom_name', ''), nullif(p.metadata->>'name', ''), nullif(p.metadata->>'chat_root_text', '')) AS parent_title
       FROM kortix.project_sessions s
@@ -354,21 +360,27 @@ async function spaceMemoryFilesForTurn(projectId: string, groupId: string): Prom
 export async function sessionWhereTurn(
   projectId: string,
   sessionId: string,
+  /** The person prompting this turn; null for a sandbox-authored or automated turn (no person: the owner rule alone). */
+  prompterId: string | null = null,
 ): Promise<{ system: string; space: { kind: 'channel' | 'dm'; dmAgent: string | null } | null; spaceBrief: string | null } | null> {
-  const found = await readSessionWhere(projectId, sessionId);
+  const prompter = prompterId && isUuid(prompterId) ? prompterId : null;
+  const found = await readSessionWhere(projectId, sessionId, prompter);
   if (!found) return null;
   // A space shows only while `session_groups` is on (the flag is read only for a session in one),
   // and only while the session's owner still sees it: a person removed from a private space keeps
-  // their sessions, but no longer its instructions or its memory.
+  // their sessions, but no longer its instructions or its memory. The person prompting the turn must
+  // see it too: a member outside a private space who prompts a session filed in it gets no brief.
+  const group = { visibility: found.group_visibility ?? 'private', createdBy: found.group_created_by ?? null };
   const grouped =
     !!found.group_id &&
     (await projectFeatureFlagEnabled(projectId, 'session_groups')) &&
-    (await sessionOwnerSeesGroup(
-      { visibility: found.group_visibility ?? 'private', createdBy: found.group_created_by ?? null },
-      found.owner_id ?? null,
-      !!found.owner_is_member,
-      found.account_id ?? null,
-    ));
+    (await turnSeesGroup(group, {
+      ownerId: found.owner_id ?? null,
+      ownerIsMember: !!found.owner_is_member,
+      prompterId: prompter,
+      prompterIsMember: !!found.prompter_is_member,
+      accountId: found.account_id ?? null,
+    }));
   const row = grouped ? found : { ...found, group_id: null, group_name: null, group_description: null, group_instructions: null };
   // The memory folder is listed only when the box mounts the space's folder: the agent can open nothing else.
   const memoryFiles = row.group_id && spaceMountPath(row) ? await spaceMemoryFilesForTurn(projectId, row.group_id) : null;

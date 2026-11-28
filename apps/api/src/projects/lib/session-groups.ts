@@ -19,6 +19,7 @@
  * (`parent_session_id`, or the older `metadata.spawned_by_session`) stays
  * with its parent.
  */
+import { logger } from '../../lib/logger';
 import { SESSION_GROUPS_MAX, type SessionGroupIcon, type SpaceTab } from '@kortix/api-contract';
 import { accountMembers, projectSessionGroupMembers, projectSessionGroups, projectSessions } from '@kortix/db';
 import { isProjectGlyphName, normalizeProjectGlyphColor, suggestSpaceIcon } from '@kortix/shared';
@@ -273,7 +274,7 @@ export async function setSessionGroupSharing(input: {
   memberIds: readonly string[];
   addedBy: string;
 }): Promise<{ ok: true; group: SessionGroupRow; memberIds: string[] } | { ok: false; code: 'group_not_found' | 'not_a_member' }> {
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const [group] = await tx
       .select()
       .from(projectSessionGroups)
@@ -303,6 +304,21 @@ export async function setSessionGroupSharing(input: {
     forgetSessionListPollEtags(input.projectId);
     return { ok: true as const, group: updated!, memberIds: wanted };
   });
+  if (result.ok) {
+    // A running sandbox keeps the Space folder mounted until its mounts are
+    // enforced again: re-check the project's now, so a person removed from the
+    // Space loses its Files and memory folder at once, not at the next resume.
+    // Off the request's path; a failure leaves the next resume to do it.
+    void import('../../drives/service')
+      .then(({ enforceDriveMounts }) => enforceDriveMounts({ projectId: input.projectId }))
+      .catch((error: unknown) =>
+        logger.warn('[session-groups] mounts not re-checked after a sharing change', {
+          project_id: input.projectId,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
+  }
+  return result;
 }
 
 /**

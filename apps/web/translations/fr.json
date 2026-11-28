@@ -1685,7 +1685,10 @@
       "home": "Accueil",
       "more": "Plus",
       "pinTab": "Afficher l'onglet",
-      "unpinTab": "Masquer l'onglet"
+      "unpinTab": "Masquer l'onglet",
+      "viewAll": "Tout afficher",
+      "appsEmpty": "Aucune app pour l’instant",
+      "artifactsEmpty": "Aucun artefact pour l’instant"
     },
     "customize": "Personnaliser",
     "sessions": "Sessions",

@@ -1685,7 +1685,10 @@
       "home": "ホーム",
       "more": "その他",
       "pinTab": "タブを表示",
-      "unpinTab": "タブを非表示"
+      "unpinTab": "タブを非表示",
+      "viewAll": "すべて表示",
+      "appsEmpty": "まだアプリはありません",
+      "artifactsEmpty": "まだアーティファクトはありません"
     },
     "customize": "カスタマイズ",
     "sessions": "セッション",

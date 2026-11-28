@@ -78,9 +78,22 @@ const changedSinceMark = sql`${projectSessions.updatedAt} > coalesce(
        THEN (${projectSessions.metadata}->>${SPACE_MEMORY_SYNCED_AT_KEY})::timestamptz END,
   '-infinity'::timestamptz)`;
 
+/**
+ * Only a session whose content every member of the Space may read: one in no
+ * channel or DM, or one in a public channel.
+ * A thread of a private channel or a DM is never read, so its content never
+ * reaches the Space memory. The outer session id is qualified for the
+ * correlated subquery (`qualifiedColumn`).
+ */
+const readableBySpaceMembers = sql`(${qualifiedColumn(projectSessions.spaceId)} is null or exists (
+  select 1 from kortix.project_spaces sp
+   where sp.space_id = ${qualifiedColumn(projectSessions.spaceId)}
+     and sp.kind = 'channel' and sp.visibility = 'public'))`;
+
 /** The due condition of `sessionDue`, in SQL. */
 function dueSessions(now: Date, manual: boolean) {
   return and(
+    readableBySpaceMembers,
     sql`${projectSessions.parentSessionId} is null`,
     sql`(${projectSessions.metadata} ? 'deletedAt') is not true`,
     sql`${projectSessions.updatedAt} >= ${new Date(now.getTime() - SPACE_MEMORY_LOOKBACK_MS).toISOString()}::timestamptz`,

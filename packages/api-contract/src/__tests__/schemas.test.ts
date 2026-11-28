@@ -32,6 +32,7 @@ import {
   SessionCreateAcceptedSchema,
   SessionCreateInputSchema,
   SessionUpdateInputSchema,
+  SESSION_GROUP_INSTRUCTIONS_MAX,
   SessionGroupAssignInputSchema,
   SessionGroupCreateInputSchema,
   SessionGroupListSchema,
@@ -470,10 +471,11 @@ describe('session group contracts', () => {
     group_id: '22222222-3333-4444-8555-666666666666',
     name: 'Store A',
     description: null,
+    instructions: null,
     icon: { glyph: { name: 'Storefront', color: 'blue' } },
     visibility: 'private' as const,
     member_ids: [],
-    people: [{ user_id: '99999999-8888-4777-8666-555555555555', name: 'Ana', email: 'ana@example.test', avatar_url: null, is_creator: true, workspace_role: 'owner', added_at: null }],
+    people: [{ user_id: '99999999-8888-4777-8666-555555555555', name: 'Ana', email: 'ana@example.test', avatar_url: null, is_creator: true, workspace_role: 'owner' as const, added_at: null }],
     tabs: [],
     can_manage: true,
     position: 0,
@@ -508,6 +510,16 @@ describe('session group contracts', () => {
     expect(SessionGroupCreateInputSchema.safeParse({ name: 'A', description: 'x'.repeat(SESSION_GROUP_DESCRIPTION_MAX + 1) }).success).toBe(false);
     expect(SessionGroupUpdateInputSchema.parse({ description: null })).toEqual({ description: null });
     expect(SessionGroupUpdateInputSchema.safeParse({}).success).toBe(false);
+  });
+
+  test('instructions are trimmed, at most SESSION_GROUP_INSTRUCTIONS_MAX characters, null clears them, and alone are a valid update', () => {
+    expect(SESSION_GROUP_INSTRUCTIONS_MAX).toBe(8000);
+    expect(SessionGroupCreateInputSchema.parse({ name: 'A', instructions: '  Answer in German.  ' })).toEqual({ name: 'A', instructions: 'Answer in German.' });
+    expect(SessionGroupUpdateInputSchema.parse({ instructions: 'x'.repeat(SESSION_GROUP_INSTRUCTIONS_MAX) }).instructions).toHaveLength(8000);
+    expect(SessionGroupUpdateInputSchema.safeParse({ instructions: 'x'.repeat(SESSION_GROUP_INSTRUCTIONS_MAX + 1) }).success).toBe(false);
+    expect(SessionGroupUpdateInputSchema.parse({ instructions: null })).toEqual({ instructions: null });
+    expect(SessionGroupSchema.parse({ ...GROUP, instructions: 'Answer in German.' }).instructions).toBe('Answer in German.');
+    expect(SessionGroupSchema.safeParse({ ...GROUP, instructions: undefined }).success).toBe(false);
   });
 
   test('an icon is an emoji or a glyph, never both; null clears it on update', () => {

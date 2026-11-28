@@ -1,7 +1,8 @@
 // Session groups — `/v1/projects/:id/session-groups` (apps/api/src/projects/routes/session-groups.ts).
 // A group (product word "Space") is a named folder of the project's sessions
 // that every member sees, in one shared order. Every session of a group is told
-// its name and description at turn start and mounts its Files folder. A session is in at most one group
+// its name, description and instructions at turn start, mounts its Files
+// folder, and shares its memory (memory layer key = `group_id`). A session is in at most one group
 // (`ProjectSession.group_id`); list a group's sessions with
 // `listProjectSessionsPage(projectId, { group })`. Every route answers 403
 // `feature_disabled` while the project's `session_groups` flag is off.
@@ -21,6 +22,12 @@ export interface ProjectSessionGroup {
   name: string;
   /** What the group is for, at most 2000 characters; null when none was given. Absent on older APIs. */
   description?: string | null;
+  /**
+   * What every session of the group must follow while it works there, at most
+   * 8000 characters; null when none were given. Each session reads them at
+   * turn start, below its system and safety instructions. Absent on older APIs.
+   */
+  instructions?: string | null;
   /**
    * An emoji XOR a glyph from the project icon catalogue. Null (or absent, on
    * older APIs): draw `suggestSpaceIcon(name)` from `@kortix/shared`.
@@ -79,6 +86,8 @@ export interface CreateProjectSessionGroupInput {
   name: string;
   /** What the group is for, at most 2000 characters after trimming. */
   description?: string | null;
+  /** What every session of the group must follow there, at most 8000 characters after trimming. */
+  instructions?: string | null;
   /** Absent: the API gives the icon the name suggests. A bad value rejects with 400 `invalid_icon`. */
   icon?: { emoji: string } | { glyph: { name: string; color: string } };
 }
@@ -146,12 +155,14 @@ export interface UpdateWorkspaceSessionGroupInput {
   name?: string;
   /** At most 2000 characters after trimming; `null` or empty clears it. */
   description?: string | null;
+  /** At most 8000 characters after trimming; `null` or empty clears them. */
+  instructions?: string | null;
   /** The new icon; `null` takes it off. A bad value rejects with 400 `invalid_icon`. */
   icon?: { emoji: string } | { glyph: { name: string; color: string } } | null;
 }
 
 /**
- * Rename a group, change its description or its icon; only the fields given are
+ * Rename a group, change its description, its instructions or its icon; only the fields given are
  * sent. A taken name rejects with 409 `group_name_taken`; an unknown group
  * with 404 `group_not_found`.
  */

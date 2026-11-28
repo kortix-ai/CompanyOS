@@ -2013,6 +2013,8 @@ export const projectSessionGroups = kortixSchema.table(
     name: text('name').notNull(),
     /** What the space is for, at most 2000 characters (the API checks it). Every session of the space reads it at turn start. */
     description: text('description'),
+    /** What every session of the space must follow there, at most 8000 characters (check below). Members write it; every session of the space reads it at turn start. */
+    instructions: text('instructions'),
     /** `private` | `project` (check below). */
     visibility: text('visibility').default('private').notNull(),
     /** The tabs after Sessions, in order (at most 20): a channel's tab shape (`ProjectSpaceTabRecord`, kinds file|folder|artifact|app|link). */
@@ -2028,6 +2030,7 @@ export const projectSessionGroups = kortixSchema.table(
     check('project_session_groups_name_check', sql`char_length(${table.name}) between 1 and 80`),
     check('project_session_groups_position_check', sql`${table.position} >= 0`),
     check('project_session_groups_visibility_check', sql`${table.visibility} in ('private', 'project')`),
+    check('project_session_groups_instructions_check', sql`char_length(${table.instructions}) <= 8000`),
     uniqueIndex('uniq_project_session_groups_name').on(table.projectId, sql`lower(${table.name})`),
     index('idx_project_session_groups_project').on(table.projectId, table.position),
   ],

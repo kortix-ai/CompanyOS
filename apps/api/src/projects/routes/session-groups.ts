@@ -105,6 +105,7 @@ function serializeGroup(row: SessionGroupRow, memberIds: readonly string[], view
     group_id: row.groupId,
     name: row.name,
     description: row.description,
+    instructions: row.instructions,
     icon: normalizeSessionGroupIcon(row.icon),
     visibility: row.visibility === 'project' ? 'project' : 'private',
     member_ids: [...memberIds],
@@ -141,6 +142,20 @@ const FORBIDDEN_MANAGE = {
 /** Sharing and deleting a space are a person's decisions: a session-bound credential is refused. */
 const SESSION_BOUND_CALLER = {
   error: 'A person shares or deletes a space, on its page. A session cannot.',
+  code: 'session_bound_caller',
+} as const;
+/** Instructions are followed in every member's session, so whoever manages the space sets them, like its sharing. */
+const FORBIDDEN_INSTRUCTIONS = {
+  error: 'Only the space\'s creator or a workspace admin can change its instructions.',
+  code: 'group_manage_forbidden',
+} as const;
+/**
+ * A space's instructions reach every session in it as instructions, so only a
+ * person writes them: an agent that read an injected page must not turn it
+ * into a standing instruction for every other member's session.
+ */
+const SESSION_BOUND_INSTRUCTIONS = {
+  error: 'A person sets a space\'s instructions, in its settings. A session cannot.',
   code: 'session_bound_caller',
 } as const;
 
@@ -226,6 +241,7 @@ export function registerSessionGroupsRoutes(): void {
       const loaded = await loadGroupsProject(c, 'session');
       if (loaded instanceof Response) return loaded;
       const body = c.req.valid('json');
+      if (body.instructions?.trim() && callerKortixSessionId(c) !== null) return c.json(SESSION_BOUND_INSTRUCTIONS, 403);
       const icon = body.icon === undefined ? undefined : normalizeSessionGroupIcon(body.icon);
       if (icon === null) return c.json(INVALID_ICON, 400);
       const result = await createSessionGroup({
@@ -233,6 +249,7 @@ export function registerSessionGroupsRoutes(): void {
         projectId: loaded.row.projectId,
         name: body.name,
         description: body.description ?? null,
+        instructions: body.instructions ?? null,
         icon,
         createdBy: loaded.userId,
       });
@@ -286,7 +303,8 @@ export function registerSessionGroupsRoutes(): void {
       method: 'patch',
       path: '/{workspaceId}/session-groups/{groupId}',
       tags: ['sessions'],
-      summary: 'Rename a session group, or change its description or icon',
+      summary: 'Rename a session group, or change its description, instructions or icon',
+      description: 'Any member who sees the group may change its name, description and icon. Only whoever manages it (its creator, or an owner or admin under session oversight) may set `instructions`: 403 `group_manage_forbidden` for anyone else, and 403 `session_bound_caller` for a session-bound credential. Instructions are at most 8,000 characters; empty or null clears them. They reach every session of the group at turn start, below the system and safety instructions.',
       ...auth,
       request: {
         params: groupParams,
@@ -300,6 +318,8 @@ export function registerSessionGroupsRoutes(): void {
       const found = await loadGroup(c, loaded, 'see');
       if (found instanceof Response) return found;
       const body = c.req.valid('json');
+      if (body.instructions !== undefined && callerKortixSessionId(c) !== null) return c.json(SESSION_BOUND_INSTRUCTIONS, 403);
+      if (body.instructions !== undefined && !canManageGroup(found.group, found.viewer)) return c.json(FORBIDDEN_INSTRUCTIONS, 403);
       const icon = body.icon == null ? body.icon : normalizeSessionGroupIcon(body.icon);
       if (body.icon != null && icon === null) return c.json(INVALID_ICON, 400);
       const result = await updateSessionGroup(loaded.row.projectId, found.group.groupId, { ...body, icon });

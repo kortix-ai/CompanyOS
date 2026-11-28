@@ -89,6 +89,17 @@ test('createWorkspaceSessionGroup POSTs a description with the name', async () =
   expect(calls[0]!.body).toEqual({ name: 'Store A', description: 'Launch plan' });
 });
 
+test('a space\'s instructions: created with the group, PATCHed alone, read back, null clears them', async () => {
+  nextResponse = { status: 201, body: { ...storeA, instructions: 'Answer in German.' } };
+  const created = await createWorkspaceSessionGroup('P1', { name: 'Store A', instructions: 'Answer in German.' });
+  expect(created.instructions).toBe('Answer in German.');
+  expect(calls[0]!.body).toEqual({ name: 'Store A', instructions: 'Answer in German.' });
+  nextResponse = { status: 200, body: { ...storeA, instructions: null } };
+  const cleared = await updateWorkspaceSessionGroup('P1', storeA.group_id, { instructions: null });
+  expect(cleared.instructions).toBeNull();
+  expect(calls[1]).toEqual({ url: `http://test.local/v1/workspaces/P1/session-groups/${storeA.group_id}`, method: 'PATCH', body: { instructions: null } });
+});
+
 test('updateWorkspaceSessionGroup PATCHes only the fields given; null clears the description', async () => {
   nextResponse = { status: 200, body: { ...storeA, description: null } };
   expect((await updateWorkspaceSessionGroup('P1', storeA.group_id, { description: null })).description).toBeNull();

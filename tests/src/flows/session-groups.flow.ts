@@ -1,12 +1,16 @@
 /**
  * Session groups (product word "Spaces") — named folders of a project's
  * sessions that every member shares, behind the `session_groups` flag. A
- * group has a description, and a session can be created in one (`group_id`). Spec: tests/spec/end-to-end.md
+ * group has a description and instructions, its own memory layer (key = the
+ * group id), and a session can be created in one (`group_id`). Spec: tests/spec/end-to-end.md
  * § 7b. Source of truth: apps/api/src/projects/routes/session-groups.ts +
  * projects/lib/session-groups.ts + the `group` filter of GET /sessions.
  */
 import { randomUUID } from 'node:crypto';
 import {
+  MemoryLayerSchema,
+  MemoryPageListSchema,
+  MemoryPageSchema,
   OkResponseSchema,
   ProjectSessionSchema,
   SessionGroupAssignmentSchema,
@@ -16,7 +20,7 @@ import {
 import { flow, flowMeta } from '../core/flow';
 import { fail } from '../core/expect';
 import type { FlowMeta } from '../core/types';
-import { insertSession, openWorld } from '../fixtures/agent-principals';
+import { hasStorage, insertSession, openWorld } from '../fixtures/agent-principals';
 
 const ROUTES = {
   list: 'GET /v1/projects/:projectId/session-groups',
@@ -28,6 +32,15 @@ const ROUTES = {
   sharing: 'PUT /v1/projects/:projectId/session-groups/:groupId/sharing',
   tabs: 'PUT /v1/projects/:projectId/session-groups/:groupId/tabs',
 };
+const MEMORY_ROUTES = {
+  layer: 'GET /v1/projects/:projectId/memory/layers/:layerKey',
+  pages: 'GET /v1/projects/:projectId/memory/layers/:layerKey/pages',
+  create: 'POST /v1/projects/:projectId/memory/layers/:layerKey/pages',
+  page: 'GET /v1/projects/:projectId/memory/pages/:pageId',
+};
+const LAYER = '/v1/workspaces/:projectId/memory/layers/:layerKey';
+const LAYER_PAGES = '/v1/workspaces/:projectId/memory/layers/:layerKey/pages';
+const MEMORY_PAGE = '/v1/workspaces/:projectId/memory/pages/:pageId';
 const SESSION_ROUTES = {
   list: 'GET /v1/projects/:projectId/sessions',
   read: 'GET /v1/projects/:projectId/sessions/:sessionId',
@@ -484,6 +497,77 @@ flow('SGRP-4', createMeta([ROUTES.create, SESSION_ROUTES.create, SESSION_ROUTES.
     await ctx.step('an unknown group_id → 404 group_not_found and no session', async () => {
       (await world.owner.post(SESSIONS, { group_id: randomUUID(), initial_prompt: 'ke2e: noop' }, { params }))
         .status(404).body().has('$.code', 'group_not_found');
+    });
+  } finally {
+    await world.close();
+  }
+});
+
+flow('SGRP-8', flowMeta('session-groups', [ROUTES.create, ROUTES.update, ROUTES.list, ROUTES.sharing, ...Object.values(MEMORY_ROUTES)], { timeoutMs: 120_000 }), async (ctx) => {
+  const { team, project, world } = await openWorld(ctx);
+  const params = { projectId: project.id };
+  const ana = await team.addMember('member');
+  await team.grantProjectRole(project.id, ana.userId!, 'member');
+  const bob = await team.addMember('member');
+  await team.grantProjectRole(project.id, bob.userId!, 'member');
+  const asAna = ctx.client.as(ana);
+  const asBob = ctx.client.as(bob);
+  try {
+    await world.setFeature('session_groups', true);
+
+    await ctx.step('instructions are created with a space, trimmed, PATCHed alone, read back in the list; empty clears them; 8001 characters → 400', async () => {
+      const r = await world.owner.post(GROUPS, { name: 'Docs', instructions: '  Answer in German.  ' }, { params });
+      r.status(201).body().schema(SessionGroupSchema).has('$.instructions', 'Answer in German.').has('$.description', null);
+      const groupParams = { ...params, groupId: r.json<Group>().group_id };
+      (await world.owner.patch(GROUP, { instructions: 'Cite the source of every number.' }, { params: groupParams }))
+        .status(200).body().schema(SessionGroupSchema).has('$.name', 'Docs').has('$.instructions', 'Cite the source of every number.');
+      const listed = (await world.owner.get(GROUPS, { params })).status(200).json<{ groups: Array<Group & { instructions: string | null }> }>().groups;
+      if (listed.find((g) => g.group_id === groupParams.groupId)?.instructions !== 'Cite the source of every number.') fail('the list does not read the instructions back', listed);
+      (await world.owner.patch(GROUP, { instructions: 'x'.repeat(8001) }, { params: groupParams })).status(400);
+      (await world.owner.patch(GROUP, { instructions: '' }, { params: groupParams })).status(200).body().has('$.instructions', null);
+      const { rows } = await world.db.query('SELECT instructions FROM kortix.project_session_groups WHERE group_id = $1', [groupParams.groupId]);
+      if (rows[0]?.instructions !== null) fail('cleared instructions are still stored', rows);
+    });
+
+    const space = (await world.owner.post(GROUPS, { name: 'Board memory' }, { params })).status(201).json<Group>().group_id;
+    (await world.owner.put(SHARING, { visibility: 'private', member_ids: [ana.userId] }, { params: { ...params, groupId: space } })).status(200);
+    const layer = { params: { ...params, layerKey: space } };
+
+    await ctx.step('the space memory layer: scope channel, no space_id, its name, folder /Spaces/<id>/Memory, writable by its creator and by a member it is shared with', async () => {
+      for (const client of [world.owner, asAna]) {
+        (await client.get(LAYER, layer)).status(200).body().schema(MemoryLayerSchema)
+          .has('$.layer_id', space).has('$.scope', 'channel').has('$.space_id', null).has('$.name', 'Board memory')
+          .has('$.folder', `/Spaces/${space}/Memory`).has('$.can_write', true);
+      }
+    });
+
+    await ctx.step('a member the space is not shared with → 404 memory_not_found on the layer, its pages and create', async () => {
+      (await asBob.get(LAYER, layer)).status(404).body().has('$.code', 'memory_not_found');
+      (await asBob.get(LAYER_PAGES, layer)).status(404).body().has('$.code', 'memory_not_found');
+      (await asBob.post(LAYER_PAGES, { type: 'other', title: 'Intruder' }, layer)).status(404).body().has('$.code', 'memory_not_found');
+    });
+
+    await ctx.step('with session_groups off the space memory layer → 404 memory_not_found', async () => {
+      await world.setFeature('session_groups', false);
+      (await world.owner.get(LAYER, layer)).status(404).body().has('$.code', 'memory_not_found');
+      await world.setFeature('session_groups', true);
+    });
+
+    if (!(await hasStorage(world))) {
+      await ctx.step('no drive storage on this target: creating a space memory page → 503 drive_storage_unavailable', async () => {
+        (await asAna.post(LAYER_PAGES, { type: 'decisions', title: 'Board deck format' }, layer)).status(503).body().has('$.code', 'drive_storage_unavailable');
+      });
+      return;
+    }
+
+    await ctx.step('a member it is shared with creates a page (201, the Memory folder is made), the creator lists it and reads it back; a non-member → 404', async () => {
+      const created = await asAna.post(LAYER_PAGES, { type: 'decisions', title: 'Board deck format', body: 'Ten slides at most.' }, layer);
+      created.status(201).body().schema(MemoryPageSchema).has('$.title', 'Board deck format').has('$.path', `/Spaces/${space}/Memory/decisions/board-deck-format.md`);
+      const pageId = created.json<{ page_id: string }>().page_id;
+      const pages = (await world.owner.get(LAYER_PAGES, layer)).status(200).body().schema(MemoryPageListSchema).json<{ pages: Array<{ page_id: string }> }>().pages;
+      if (!pages.some((page) => page.page_id === pageId)) fail('the new page is not listed', pages);
+      (await world.owner.get(MEMORY_PAGE, { params: { ...params, pageId } })).status(200).body().has('$.body', 'Ten slides at most.').has('$.can_edit', true);
+      (await asBob.get(MEMORY_PAGE, { params: { ...params, pageId } })).status(404);
     });
   } finally {
     await world.close();

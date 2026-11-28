@@ -1877,6 +1877,13 @@
       "when": 1795852211747,
       "tag": "20261128075011_artifact_kind",
       "breakpoints": true
+    },
+    {
+      "idx": 268,
+      "version": "7",
+      "when": 1795863825527,
+      "tag": "20261128110345_session_group_instructions",
+      "breakpoints": true
     }
   ]
 }

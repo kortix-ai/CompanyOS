@@ -81,6 +81,7 @@ export async function createSessionGroup(input: {
   projectId: string;
   name: string;
   description?: string | null;
+  instructions?: string | null;
   /** Already checked (`normalizeSessionGroupIcon`). Absent: the icon the name suggests. */
   icon?: SessionGroupIcon;
   createdBy: string | null;
@@ -97,6 +98,7 @@ export async function createSessionGroup(input: {
           projectId: input.projectId,
           name: input.name,
           description: input.description || null,
+          instructions: input.instructions || null,
           icon: input.icon ?? suggestSpaceIcon(input.name),
           position: existing.length,
           createdBy: input.createdBy,
@@ -111,15 +113,16 @@ export async function createSessionGroup(input: {
 }
 
 /**
- * Rename a group of the project, change its description or its icon. Its own
- * name in another case is free. An empty description clears it; `icon: null`
+ * Rename a group of the project, change its description, its instructions or
+ * its icon. Its own name in another case is free. An empty description or
+ * empty instructions clear them; `icon: null`
  * takes the icon off (clients then draw the suggested one). The icon is
  * already checked (`normalizeSessionGroupIcon`).
  */
 export async function updateSessionGroup(
   projectId: string,
   groupId: string,
-  input: { name?: string; description?: string | null; icon?: SessionGroupIcon | null },
+  input: { name?: string; description?: string | null; instructions?: string | null; icon?: SessionGroupIcon | null },
 ): Promise<{ ok: true; group: SessionGroupRow } | { ok: false; code: 'group_name_taken' | 'group_not_found' }> {
   try {
     const [group] = await db
@@ -127,6 +130,7 @@ export async function updateSessionGroup(
       .set({
         ...(input.name !== undefined ? { name: input.name } : {}),
         ...(input.description !== undefined ? { description: input.description || null } : {}),
+        ...(input.instructions !== undefined ? { instructions: input.instructions || null } : {}),
         ...(input.icon !== undefined ? { icon: input.icon } : {}),
         updatedAt: new Date(),
       })

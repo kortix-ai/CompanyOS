@@ -77,7 +77,16 @@ has is a connector behind one gateway.
    generates (`packages/sdk/src/core/rest/operations.generated.ts`, checked
    by `--check`). Typed per-operation inputs and outputs are not generated
    yet: `OperationId` is a typed union, arguments and results are not.
-8. MCP: the verbs plus featured actions plus instructions; old tools removed.
+8. **5, built.** MCP: `find_operations`, `describe_operation`,
+   `call_operation` (by operation id, in-process as the caller) replace
+   `search_api`, `describe_api`, `call_api`; the `kortix` CLI-runner tool and
+   `mcp/cli.ts` are removed; `initialize` instructions name the verbs. The
+   featured actions are the session tools that already exist
+   (`start_session`, `read_session`, `send_message`, `run_command`, files).
+   No server-side `execute`: a program over the catalog runs with
+   `run_command` in a session box, where the CLI and the SDK are; an
+   in-process code runner in the API is attack surface with no gain.
+   Flows `MCP-1/3/4/5`.
 9. The CLI generated from the catalog.
 10. Featured actions replace the `kortix_*` tools; agent-minted keys carry
     the minter's limits; `HUMAN_ONLY` becomes "always ask".

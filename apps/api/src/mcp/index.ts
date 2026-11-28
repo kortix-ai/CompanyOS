@@ -12,7 +12,6 @@
  * tool call runs through the real API routes in-process with that token, so
  * authorization is exactly the API's.
  */
-import { canonicalWorkspaceRoute, renameWorkspaceRouteParams } from '@kortix/shared/workspace-routes';
 import { Hono, type Context, type Next } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { mintWireMessageId } from '@kortix/sdk';
@@ -36,7 +35,7 @@ import {
   renderJob,
   type JobState,
 } from './jobs';
-import { KORTIX_TOOL, parseArgs, runCli } from './cli';
+import { allOperations, operationById, toOpenApiPath } from '../shared/operation-registry';
 import { CONNECTOR_TOOLS, isConnectorTool, runConnectorTool, type Host } from './connectors';
 import { blockedPath, canonicalPath, logConversationRows, requestBodyShape, searchOperations, shapeTranscript, type Operation } from './shape';
 import { bearerToken } from '../shared/bearer-token';
@@ -607,10 +606,10 @@ const TOOLS = [
     annotations: { readOnlyHint: true, openWorldHint: false },
   },
   {
-    name: 'search_api',
-    title: 'Search the Kortix API',
+    name: 'find_operations',
+    title: 'Find Kortix operations',
     description:
-      'Search the Kortix API — the routes the web app and the kortix CLI use: accounts, projects, sessions, files, secrets, connectors, triggers, agents, models, change requests, Apps, access, billing, audit. Returns METHOD /path — summary lines. Follow with describe_api, then call_api.',
+      'Search the Kortix API by intent: every operation the web app and the kortix CLI use (sessions, files, secrets, connectors, triggers, agents, models, change requests, Apps, access, billing, audit), by its stable id. Returns `id — summary (METHOD path)` lines. Then describe_operation, then call_operation.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -623,35 +622,30 @@ const TOOLS = [
     annotations: { readOnlyHint: true, openWorldHint: false },
   },
   {
-    name: 'describe_api',
-    title: 'Describe an API route',
-    description: "Show one API route's parameters, request body schema and success response schema.",
+    name: 'describe_operation',
+    title: 'Describe a Kortix operation',
+    description: "One operation's parameters, request body and success response, and the IAM action it needs.",
     inputSchema: {
       type: 'object',
-      properties: {
-        method: { type: 'string', description: 'GET, POST, PUT, PATCH or DELETE.' },
-        path: { type: 'string', description: 'The route as search_api printed it, e.g. /v1/workspaces/{workspaceId}/secrets.' },
-      },
-      required: ['method', 'path'],
+      properties: { operation: { type: 'string', description: 'The operation id, e.g. secrets.set.' } },
+      required: ['operation'],
       additionalProperties: false,
     },
     annotations: { readOnlyHint: true, openWorldHint: false },
   },
   {
-    name: 'call_api',
-    title: 'Call the Kortix API',
+    name: 'call_operation',
+    title: 'Call a Kortix operation',
     description:
-      'Call any Kortix API route as the signed-in user, with their permissions. {workspaceId} (or the older {projectId}) in the path is replaced with project_id; replace every other {placeholder} yourself, e.g. /v1/workspaces/{workspaceId}/secrets/MY_KEY. Returns `METHOD path → HTTP status` and the response body.',
+      'Run one Kortix operation as you, with your permissions. `args` holds its path and query parameters by name and its JSON body as `body`; project_id fills workspaceId. A workspace rule can hold the call for a person: the answer is 202 pending_approval with an approval_url; Kortix runs it once after approval, so do not call it again.',
     inputSchema: {
       type: 'object',
       properties: {
-        method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] },
-        project_id: { type: 'string', description: 'Fills {workspaceId} (or {projectId}) in the path.' },
-        path: { type: 'string', description: 'Starts with /v1/, e.g. /v1/workspaces/{workspaceId}/sessions.' },
-        query: { type: 'object', description: 'Query-string parameters; an array value repeats the parameter.' },
-        body: { type: 'object', additionalProperties: true, description: 'JSON request body (an object; a JSON string is parsed).' },
+        operation: { type: 'string', description: 'The operation id, e.g. secrets.set.' },
+        project_id: { type: 'string', description: 'Fills the workspaceId (or projectId) parameter.' },
+        args: { type: 'object', additionalProperties: true, description: 'Parameters by name, and `body` for the JSON body.' },
       },
-      required: ['method', 'path'],
+      required: ['operation'],
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: true },
@@ -849,18 +843,15 @@ export async function runTool(ctx: ToolContext, name: string, input: Record<stri
     }
     case 'read_skill':
       return readSkillTool(ctx, input);
-    case 'kortix':
-      return kortixCliTool(ctx, input);
-    case 'search_api': {
-      const { ops } = await loadCatalog(ctx);
-      const hits = searchOperations(ops, arg(input, 'query'), limitArg(input, 'limit', 20, 100));
-      if (hits.length === 0) return text('No matching routes. Try broader keywords.');
-      return text(hits.map((op) => `${op.method} ${op.path}${op.summary && !op.summary.startsWith(op.method) ? ` — ${op.summary}` : ''}`).join('\n'));
+    case 'find_operations': {
+      const hits = searchOperations(callableOperations(), arg(input, 'query'), limitArg(input, 'limit', 20, 100));
+      if (hits.length === 0) return text('No matching operations. Try broader keywords.');
+      return text(hits.map((op) => `${op.spec.id} — ${op.summary || op.spec.id} (${op.method} ${op.path})`).join('\n'));
     }
-    case 'describe_api':
-      return describeApiTool(ctx, input);
-    case 'call_api':
-      return callApiTool(ctx, input);
+    case 'describe_operation':
+      return describeOperationTool(ctx, input);
+    case 'call_operation':
+      return callOperationTool(ctx, input);
     default:
       if (isConnectorTool(name)) return runConnectorTool(name, input, connectorHost(ctx));
       throw Object.assign(new Error(`Unknown tool: ${name}`), { rpcCode: -32602 });
@@ -1126,51 +1117,45 @@ async function readSkillTool(ctx: ToolContext, input: Record<string, unknown>): 
   return text(refs.length ? `${skill.body}\n\nReference files (read_skill with file):\n${refs.join('\n')}` : skill.body);
 }
 
-async function kortixCliTool(ctx: ToolContext, input: Record<string, unknown>): Promise<ToolResult> {
-  const args = parseArgs(input.args);
-  if (typeof args === 'string') throw new ToolInputError(args);
-  const projectId = optionalArg(input, 'project_id');
-  const sessionId = optionalArg(input, 'session_id');
-  if ((projectId && !isUuid(projectId)) || (sessionId && !isUuid(sessionId))) throw new ToolInputError('project_id and session_id must be UUIDs (list_projects, list_sessions)');
-  const timeoutMs = Math.min(45_000, ctx.deadline - Date.now() - 4_000);
-  if (timeoutMs < 2_000) throw new ToolInputError('Not enough time left in this MCP request for a command. Call again.');
-  const run = await runCli({
-    args,
-    // The caller's own credential, as sent: the CLI then acts as exactly this user through this API.
-    token: ctx.authorization.replace(/^Bearer\s+/i, ''),
-    apiUrl: `http://127.0.0.1:${Number(process.env.PORT) || 8008}/v1`,
-    projectId,
-    sessionId,
-    timeoutMs,
-  });
-  return run.ok ? text(run.json, run.exitCode !== 0) : text(run.error, true);
+/** Every operation a client may call (not `internal`), as the search ranks them. */
+function callableOperations(): Operation[] {
+  return allOperations()
+    .filter((op) => op.operation.exposure !== 'internal')
+    .map((op) => ({
+      method: op.method,
+      path: op.path,
+      summary: op.operation.summary ?? '',
+      description: op.operation.id.replace(/[._]/g, ' '),
+      tags: op.operation.tags,
+      spec: { id: op.operation.id },
+    }));
 }
 
-async function describeApiTool(ctx: ToolContext, input: Record<string, unknown>): Promise<ToolResult> {
-  const { ops, doc } = await loadCatalog(ctx);
-  const method = arg(input, 'method').toUpperCase();
-  const asked = arg(input, 'path');
-  // A legacy name (`/v1/projects/:projectId/secrets`) finds its canonical route
-  // (`/v1/workspaces/{workspaceId}/secrets`): search lists only canonical names.
-  const renamed = renameWorkspaceRouteParams(asked);
-  const candidates = [asked, renamed, canonicalWorkspaceRoute(renamed)]
-    .filter((p): p is string => typeof p === 'string')
-    .map((p) => p.replace(/:([A-Za-z_]+)/g, '{$1}'));
-  const op = ops.find((o) => o.method === method && candidates.includes(o.path));
-  const path = op?.path ?? candidates[0]!;
-  if (!op) return text(`No route ${method} ${path}. Use search_api to find it.`, true);
-  const responses = op.spec.responses ?? {};
+function callableOperation(input: Record<string, unknown>) {
+  const id = arg(input, 'operation');
+  const op = operationById(id);
+  if (!op || op.operation.exposure === 'internal') throw new ToolInputError(`No operation ${id}. find_operations names them.`);
+  return op;
+}
+
+async function describeOperationTool(ctx: ToolContext, input: Record<string, unknown>): Promise<ToolResult> {
+  const op = callableOperation(input);
+  const { doc } = await loadCatalog(ctx).catch(() => ({ doc: {} as any }));
+  const spec = doc?.paths?.[toOpenApiPath(op.path)]?.[op.method.toLowerCase()];
+  const responses = spec?.responses ?? {};
   const success = responses['200'] ?? responses['201'] ?? responses['202'];
   return text(
     JSON.stringify(
       resolveRefs(
         {
-          method,
-          path,
-          summary: op.summary,
-          description: op.description || undefined,
-          parameters: op.spec.parameters,
-          requestBody: requestBodyShape(resolveRefs(op.spec.requestBody, doc)),
+          operation: op.operation.id,
+          summary: op.operation.summary,
+          method: op.method,
+          path: op.path,
+          action: op.operation.action,
+          exposure: op.operation.exposure,
+          parameters: op.parameters,
+          body: op.body ? requestBodyShape(resolveRefs(spec?.requestBody, doc)) ?? op.body : undefined,
           response: success?.content?.['application/json']?.schema,
         },
         doc,
@@ -1181,27 +1166,32 @@ async function describeApiTool(ctx: ToolContext, input: Record<string, unknown>)
   );
 }
 
-async function callApiTool(ctx: ToolContext, input: Record<string, unknown>): Promise<ToolResult> {
-  const method = arg(input, 'method').toUpperCase();
-  let path = arg(input, 'path');
-  // `{workspaceId}` is the route param since 2026-11-05; `{projectId}` is what
-  // older prompts and clients still send. Both name the workspace.
-  if (/\{(projectId|workspaceId)\}|:(projectId|workspaceId)\b/.test(path)) {
-    const projectId = projectArg(input);
-    path = path
-      .replaceAll('{projectId}', projectId)
-      .replaceAll('{workspaceId}', projectId)
-      .replace(/:(projectId|workspaceId)\b/g, projectId);
+async function callOperationTool(ctx: ToolContext, input: Record<string, unknown>): Promise<ToolResult> {
+  const op = callableOperation(input);
+  const raw = input.args;
+  const args: Record<string, unknown> =
+    raw && typeof raw === 'object' && !Array.isArray(raw)
+      ? { ...(raw as Record<string, unknown>) }
+      : typeof raw === 'string'
+        ? (() => { try { return JSON.parse(raw) as Record<string, unknown>; } catch { throw new ToolInputError('args must be an object'); } })()
+        : {};
+  const projectId = optionalArg(input, 'project_id');
+  let path = op.path;
+  const query: Record<string, unknown> = {};
+  for (const p of op.parameters) {
+    let value = args[p.name];
+    if ((value === undefined || value === null) && projectId && (p.name === 'workspaceId' || p.name === 'projectId')) value = projectId;
+    if (value === undefined || value === null) {
+      if (p.required) throw new ToolInputError(`${op.operation.id} needs "${p.name}"${p.name === 'workspaceId' ? ' (or project_id)' : ''}.`);
+      continue;
+    }
+    if (p.in === 'path') path = path.replace(new RegExp(`:${p.name}(\\{[^}]*\\})?(?=/|$)`), encodeURIComponent(String(value)));
+    else query[p.name] = value;
   }
-  if (!['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) throw new ToolInputError(`method ${method} is not allowed`);
-  if (!path.startsWith('/v1/')) throw new ToolInputError('path must start with /v1/ and not target /v1/oauth or an MCP endpoint');
-  const open = /\{[^}/]+\}/.exec(path.split('?')[0]!)?.[0];
-  if (open) throw new ToolInputError(`path still has ${open}: replace it with the real value, e.g. /v1/workspaces/{workspaceId}/secrets/MY_KEY`);
-  const query = input.query && typeof input.query === 'object' ? (input.query as Record<string, unknown>) : undefined;
-  let body = input.body;
+  let body = args.body;
   // A client that types `body` as a string sends JSON text: parse it, never double-encode it.
   if (typeof body === 'string') body = (() => { try { return JSON.parse(body as string); } catch { return body; } })();
-  return apiResult(await callApi(ctx, method, path, { query, body, summarizeBinary: true }), `${method} ${path}`);
+  return apiResult(await callApi(ctx, op.method, path, { query, body, summarizeBinary: true }), `${op.operation.id}: ${op.method} ${path}`);
 }
 
 /** What ./connectors.ts needs from this file: the in-process transport and the sandbox file read. */
@@ -1229,14 +1219,13 @@ const connectorHost = (ctx: ToolContext): Host => ({
 function instructions(): string {
   return [
     'Kortix MCP. You act as the signed-in user, with their permissions, in the workspaces this connection reaches. The person chose its reach when they connected it: one workspace, or All my workspaces (the same reach as the kortix CLI).',
-    'Start with list_projects: it lists exactly the workspaces this connection reaches. A 403 that says "This connection reaches the one workspace chosen" means the work needs another workspace, or a new one: ask the person to reconnect this app and choose All my workspaces. Creating a workspace (call_api POST /v1/workspaces) needs that reach too.',
+    'Start with list_projects: it lists exactly the workspaces this connection reaches. A 403 that says "This connection reaches the one workspace chosen" means the work needs another workspace, or a new one: ask the person to reconnect this app and choose All my workspaces. Creating a workspace (call_operation workspaces.create) needs that reach too.',
     'Tools take a project_id (start_session, list_sessions, repository reads) or a session_id (everything about one session).',
     'Sessions: start_session delegates a task to a Kortix agent in its own cloud sandbox; read_session (with wait_seconds) follows it; send_message continues it; list_sessions finds existing ones.',
     "Sandboxes: run_command runs bash in a session's sandbox, and read_file / write_file / list_files reach its live /workspace. With a project_id instead of a session_id, read_file and list_files read the project's git repository.",
     'Platform knowledge: read_skill lists the Kortix guides; read_skill name=kortix-system is the complete reference.',
     'Connectors (Gmail, Slack, GitHub, MCP servers, APIs a project connected): list_connectors shows what is connected and its accounts → search_connector_actions finds an action by intent → describe_connector_action reads its arguments → call_connector runs it as you (pass `reason` for a write whose args are only ids; a `pending_approval` result carries a link the human opens, then call again). A connector that is not connected: connect_connector returns the url the human opens. upload_connector_attachment stages a file for a call; search_connector_apps finds an app (every MCP server, API and Composio app), get_connector_app lists its ways to connect and their tools, and add_connector installs one.',
-    'The kortix CLI itself: the `kortix` tool runs any CLI command as you, e.g. args ["secrets","ls","--json"] (discover with ["--help"] and ["<group>","--help"]; project_id and session_id set the context). Login, hosts, ship, tui and other machine-local commands are refused with the alternative. read_skill with project_id also lists the project\'s own skills.',
-    'Everything else the web app and the kortix CLI can do is the Kortix API: search_api finds a route, describe_api reads it, call_api runs it (project_id fills {workspaceId}).',
+    'Everything else the web app and the kortix CLI can do is a Kortix operation with a stable id: find_operations finds it by intent, describe_operation reads its arguments, call_operation runs it as you (project_id fills workspaceId). A held call answers pending_approval with a link for a person; Kortix runs it once after approval. read_skill with project_id also lists the project\'s own skills.',
   ].join('\n');
 }
 
@@ -1256,7 +1245,7 @@ async function handleRpc(ctx: ToolContext, method: string, params: Record<string
     case 'ping':
       return {};
     case 'tools/list':
-      return { tools: [...TOOLS, ...CONNECTOR_TOOLS, KORTIX_TOOL] };
+      return { tools: [...TOOLS, ...CONNECTOR_TOOLS] };
     case 'tools/call': {
       if (typeof params.name !== 'string') throw Object.assign(new Error('Invalid params: name must be a tool name'), { rpcCode: -32602 });
       try {

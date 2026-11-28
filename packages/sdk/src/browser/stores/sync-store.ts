@@ -1250,11 +1250,6 @@ function takeDeltaEventId(sessionID: string, tailKey: string, id: string): boole
 }
 
 /**
- * One `log.*` frame into `sessionId`'s log. `log.block.delta` shares the v1
- * delta path's duplicate-delivery check (keyed by thread, the runtime session
- * id) and counts as runtime activity, as `message.part.delta` does.
- */
-/**
  * The optimistic stubs of this tab's sends that `log` holds, under the stub's own id or under
  * the id the control plane re-minted it to (`optimisticEchoes`). Only threads with a stub in
  * flight are read, so a frame with no send pending costs one map lookup per thread.
@@ -1298,6 +1293,11 @@ function withoutLoggedSends(s: SyncState, log: SessionLogState): Pick<SyncState,
 	return { messages, parts };
 }
 
+/**
+ * One `log.*` frame into `sessionId`'s log. `log.block.delta` shares the v1
+ * delta path's duplicate-delivery check (keyed by thread, the runtime session
+ * id) and counts as runtime activity, as `message.part.delta` does.
+ */
 function applySessionLogFrame(sessionId: string, event: SessionLogEventInput): void {
 	const state = useSyncStore.getState();
 	const current = state.sessionLogs[sessionId] ?? EMPTY_SESSION_LOG_STATE;

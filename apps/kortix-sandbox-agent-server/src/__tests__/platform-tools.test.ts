@@ -572,6 +572,21 @@ describe('kortix_people and kortix_access', () => {
     expect(result.card.changes).toEqual([{ field: 'role', before: 'owner', after: 'member' }])
   })
 
+  // Agent Evals on dev: set_role said "not a member" and invite said "already invited", so an invited
+  // person's role could not change through the tool.
+  test('set_role on someone only invited replaces the invitation; remove cancels it', async () => {
+    fakeKortix(`${ROSTER}
+  'access pending --json') echo '{"pending":[{"invite_id":"inv_9","email":"sam.reyes@example.test","project_role":"member","invite_expired":false}]}' ;;
+  'access cancel inv_9') echo 'Cancelled' ;;
+  'access invite sam.reyes@example.test --role manager --json') echo '{"email_sent":true}' ;;`)
+    const changed = await run('kortix_people', { action: 'set_role', who: 'sam.reyes@example.test', role: 'manager' })
+    expect(changed.card.title).toBe("sam.reyes@example.test's invitation is now as manager")
+    expect(changed.card.changes).toEqual([{ field: 'role', before: 'member', after: 'manager' }])
+    expect(argvs().filter((a) => a.startsWith('access cancel') || a.startsWith('access invite'))).toEqual(['access cancel inv_9', 'access invite sam.reyes@example.test --role manager --json'])
+    const removed = await run('kortix_people', { action: 'remove', who: 'sam.reyes@example.test' })
+    expect(removed.card.title).toBe("Cancelled sam.reyes@example.test's invitation")
+  })
+
   test('who_can_grant lists the managers', async () => {
     fakeKortix(ROSTER)
     const result = await run('kortix_access', { action: 'who_can_grant' })

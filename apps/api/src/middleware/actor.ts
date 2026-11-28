@@ -24,9 +24,11 @@ export async function buildActor(c: Context, accountIdOverride?: string): Promis
   const accountId = accountIdOverride ?? (c.get('accountId') as string | undefined) ?? '';
   if (!userId) return null;
 
+  const approvedExecutionId = c.get('approvedExecutionId') as string | undefined;
   const ctx = {
     ip: requestClientIp(c) ?? undefined,
     mfaAal: requestMfaAal(c, accountId),
+    ...(approvedExecutionId ? { approvedExecutionId } : {}),
   };
 
   const authType = c.get('authType') as string | undefined;

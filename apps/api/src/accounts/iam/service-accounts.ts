@@ -64,7 +64,7 @@ export function registerIamServiceAccountsRoutes(): void {
       path: '/{workspaceId}/iam/service-accounts',
       operationId: 'iam.service_accounts.create',
       'x-kortix-action': ACCOUNT_ACTIONS.TOKEN_CREATE,
-      'x-kortix-exposure': 'human',
+      'x-kortix-exposure': 'agent',
       tags: ['iam'],
       summary: 'Create a service account',
       ...auth,

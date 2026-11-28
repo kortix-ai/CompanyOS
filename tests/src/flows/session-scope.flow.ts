@@ -602,7 +602,8 @@ flow(
   },
   async (ctx) => {
     const db = await openDb(ctx);
-    const project = await ctx.fixtures.project();
+    // A repository: a held call goes through the connector gateway, which reads kortix.yaml.
+    const project = await ctx.fixtures.project({ managedGit: true });
     const team = await ctx.fixtures.team();
     const policyProject = await team.project();
     const owner = ctx.client.as(ctx.P.OWNER);
@@ -621,39 +622,42 @@ flow(
         minted.push(humanTokenId);
       });
 
-      await ctx.step('the session-bound credential cannot mint a project CLI token → 403', async () => {
+      await ctx.step('the session-bound credential cannot mint a project CLI token on its own → 202, held for a person', async () => {
         (
           await ctx.client
             .withBearer(bound!.token, 'SESSION_TOKEN')
             .post('/v1/workspaces/:projectId/cli-token', { name: 'from-session' }, { params: { projectId: project.id } })
         )
-          .status(403)
+          .status(202)
           .body()
-          // The agent rule gate refuses it before the handler: minting a credential is for people only.
-          .has('$.code', 'operation_not_for_agents')
+          // Minting a credential always asks a person: the call is held, never run.
+          .has('$.status', 'pending_approval')
           .has('$.operation', 'cli_tokens.create');
       });
 
-      await ctx.step('the session-bound credential cannot revoke a project CLI token → 403', async () => {
+      await ctx.step('the session-bound credential cannot revoke a project CLI token on its own (held, or refused by its agent list); the token stays active', async () => {
+        // The first held call reconciled the session's grant from kortix.yaml: its list may now refuse instead of asking.
         (
           await ctx.client
             .withBearer(bound!.token, 'SESSION_TOKEN')
             .del('/v1/workspaces/:projectId/cli-token/:tokenId', {
               params: { projectId: project.id, tokenId: humanTokenId },
             })
-        ).status(403);
+        ).status([202, 403]);
+        const tokens = (await owner.get('/v1/workspaces/:projectId/cli-token', { params: { projectId: project.id } }))
+          .status(200)
+          .json<{ items: Array<{ name: string; status: string }> }>().items;
+        if (!tokens.some((t) => t.name === 'scope-5' && t.status === 'active')) throw new Error(`the owner token is gone: ${JSON.stringify(tokens).slice(0, 300)}`);
       });
 
-      await ctx.step('the session-bound credential cannot mint or revoke a gateway key; the owner can → 403 / 200', async () => {
+      await ctx.step('the session-bound credential cannot mint or revoke a gateway key on its own (held or refused); the owner can → 200', async () => {
         const session = ctx.client.withBearer(bound!.token, 'SESSION_TOKEN');
         (await session.post('/v1/workspaces/:projectId/gateway/keys', { name: 'from-session' }, { params: { projectId: project.id } }))
-          .status(403)
-          .body()
-          .has('$.code', 'operation_not_for_agents');
+          .status([202, 403]);
         const made = await owner.post('/v1/workspaces/:projectId/gateway/keys', { name: 'scope-5' }, { params: { projectId: project.id } });
         made.status(200).body().exists('$.secret_key');
         const keyId = made.json<{ key_id: string }>().key_id;
-        (await session.del('/v1/workspaces/:projectId/gateway/keys/:keyId', { params: { projectId: project.id, keyId } })).status(403);
+        (await session.del('/v1/workspaces/:projectId/gateway/keys/:keyId', { params: { projectId: project.id, keyId } })).status([202, 403]);
         (await owner.del('/v1/workspaces/:projectId/gateway/keys/:keyId', { params: { projectId: project.id, keyId } }))
           .status(200)
           .body()

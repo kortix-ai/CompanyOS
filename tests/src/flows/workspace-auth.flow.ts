@@ -388,10 +388,11 @@ flow(
         if (r.exitCode !== 0) throw new Error(`kortix members ls: exit ${r.exitCode}: ${r.all.slice(0, 600)}`);
       });
 
-      await ctx.step('the same agent minting a key or deleting the workspace → 403 operation_not_for_agents', async () => {
+      await ctx.step('the same agent: a personal-style token → 403 operation_not_for_agents; deleting the workspace → 202, held for a person', async () => {
         const mint = await governed.client.post(`/v1/workspaces/${project.id}/tokens`, { name: 'wsa5-agent-key' });
         mint.status(403).body().has('$.code', 'operation_not_for_agents').has('$.operation', 'tokens.create');
-        (await governed.client.del(`/v1/workspaces/${project.id}`)).status(403).body().has('$.code', 'operation_not_for_agents').has('$.operation', 'workspaces.delete');
+        (await governed.client.del(`/v1/workspaces/${project.id}`)).status(202).body().has('$.status', 'pending_approval').has('$.operation', 'workspaces.delete');
+        (await ctx.client.as(ctx.P.OWNER).get(`/v1/workspaces/${project.id}`)).status(200);
       });
     } finally {
       sandbox.dispose();
@@ -542,12 +543,12 @@ flow(
         (await session.get(`/v1/workspaces/${w.id}/members`)).status(200);
       });
 
-      await ctx.step('minting a service account, configuring auto-topup and deleting the workspace → 403 operation_not_for_agents', async () => {
+      await ctx.step('minting a service account or deleting the workspace → 202, held for a person; auto-topup (a browser flow) → 403 operation_not_for_agents', async () => {
         (await session.post(`/v1/workspaces/${w.id}/iam/service-accounts`, { name: 'wsa8-sa' }))
-          .status(403).body().has('$.code', 'operation_not_for_agents');
+          .status(202).body().has('$.status', 'pending_approval').has('$.operation', 'iam.service_accounts.create');
         (await session.post('/v1/billing/auto-topup/configure', { account_id: team.id, enabled: true, threshold: 5, amount: 20 }))
           .status(403).body().has('$.code', 'operation_not_for_agents');
-        (await session.del(`/v1/workspaces/${w.id}`)).status(403).body().has('$.code', 'operation_not_for_agents');
+        (await session.del(`/v1/workspaces/${w.id}`)).status(202).body().has('$.status', 'pending_approval');
       });
 
       await ctx.step('the owner in the browser keeps the same power: POST /iam/service-accounts → 201; the workspace still answers 200', async () => {
@@ -1375,6 +1376,71 @@ flow(
       await ctx.step('through the kortix connector the same rules hold: secrets.list → denied untrusted_session', async () => {
         const r = await tainted.client.post(`/v1/connectors/workspaces/${w}/call`, { connector: 'kortix', action: 'secrets.list', args: { workspaceId: w } });
         if (!r.text().includes('untrusted_session')) throw new Error(`expected untrusted_session: ${r.text().slice(0, 400)}`);
+      });
+    } finally {
+      await world.close();
+    }
+  },
+);
+
+// ── WS-AUTH-20 — an agent mints its own key, with a person's approval ────────────
+flow(
+  'WS-AUTH-20',
+  {
+    domain: 'workspaces',
+    requires: ['database'],
+    timeoutMs: 240_000,
+    routes: [
+      'POST /v1/workspaces/:workspaceId/keys',
+      'GET /v1/workspaces/:workspaceId/keys',
+      'POST /v1/workspaces/:workspaceId/approvals/:executionId',
+    ],
+  },
+  async (ctx) => {
+    const team = await ctx.fixtures.team();
+    const project = await team.project({ managedGit: true });
+    const world = await AgentPrincipalsWorld.open(ctx, { accountId: team.id, projectId: project.id });
+    const w = project.id;
+    const owner = ctx.client.as(ctx.P.OWNER);
+    type KeyRow = { name: string; acts_as: { type: string; name?: string | null } };
+    const keyNamed = async (name: string) =>
+      ((await owner.get(`/v1/workspaces/${w}/keys`)).status(200).json<{ keys: KeyRow[] }>().keys ?? []).find((k) => k.name === name) ?? null;
+    const approve = (executionId: string) => owner.post(`/v1/workspaces/${w}/approvals/${executionId}`, { decision: 'approve' });
+    try {
+      await ctx.step('the manifest declares `steward` ("*")', async () => {
+        await world.writeManifest('project:\n  name: example-org-wsa20\ndefault_agent: steward\nagents:\n  steward:\n    kortix_permissions: "*"\n');
+      });
+      const steward = await world.mintAgentSession({ agent: 'steward', launcher: ctx.P.OWNER });
+
+      let executionId = '';
+      await ctx.step('steward asks for a key acting as itself → 202 pending_approval, always ask; no key exists yet', async () => {
+        const r = (await steward.client.post(`/v1/workspaces/${w}/keys`, { name: 'wsa20-own', acts_as: 'agent', agent: 'steward' })).status(202);
+        r.body().has('$.status', 'pending_approval').has('$.operation', 'keys.create');
+        executionId = r.json<{ execution_id: string }>().execution_id;
+        if (await keyNamed('wsa20-own')) throw new Error('the key exists before approval');
+      });
+
+      await ctx.step('the owner approves → Kortix runs it once, as steward: the key exists and acts as steward', async () => {
+        (await approve(executionId)).status([200, 201]);
+        const key = await waitFor(() => keyNamed('wsa20-own'), {
+          until: (k) => k !== null,
+          timeoutMs: 60_000,
+          intervalMs: 1_000,
+          description: 'the approved mint created wsa20-own',
+        }).catch(async (e) => {
+          // The held call's own outcome names why the run did not create the key.
+          const { rows } = await world.db.query(`SELECT state, outcome::text AS outcome FROM kortix.connector_held_calls WHERE execution_id = $1`, [executionId]);
+          throw new Error(`${(e as Error).message} :: held ${JSON.stringify(rows)}`);
+        });
+        if (key!.acts_as.type !== 'agent' || key!.acts_as.name !== 'steward') throw new Error(`acts_as: ${JSON.stringify(key!.acts_as)}`);
+      });
+
+      await ctx.step('a key acting as the person, even approved, is refused at the run: no key is created', async () => {
+        const r = (await steward.client.post(`/v1/workspaces/${w}/keys`, { name: 'wsa20-me', acts_as: 'me' })).status(202);
+        (await approve(r.json<{ execution_id: string }>().execution_id)).status([200, 201]);
+        // The run settles within seconds; then the key must not exist.
+        await new Promise((resolve) => setTimeout(resolve, 5_000));
+        if (await keyNamed('wsa20-me')) throw new Error('an agent minted a key acting as its person');
       });
     } finally {
       await world.close();

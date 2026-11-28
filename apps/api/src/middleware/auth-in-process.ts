@@ -21,6 +21,8 @@ export async function resolveInProcessCaller(c: Context, next: Next): Promise<bo
   if (!result.isValid || !result.userId) throw new HTTPException(401, { message: result.error || 'The caller token is no longer valid' });
   if (result.projectId) await enforceTokenProjectScope(c, result.projectId, { sessionBound: Boolean(result.sessionId) });
   patPrincipal(c, result);
+  // A person approved this exact call: authorize lets its HUMAN_ONLY action through.
+  if (caller.approvedExecutionId) c.set('approvedExecutionId', caller.approvedExecutionId);
   await next();
   return true;
 }

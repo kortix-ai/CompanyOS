@@ -56,6 +56,23 @@ describe('agentPrincipalDecision', () => {
     expect(decide('project.session.read', { grant: grant(['project.session.read']), ceiling: memberCeiling }).allowed).toBe(true);
   });
 
+  test('HUMAN_ONLY passes only on the run of a call a person approved', () => {
+    for (const action of HUMAN_ONLY_ACTIONS) {
+      expect(decide(action, { grant: grant('all') }).allowed).toBe(false);
+      expect(
+        agentPrincipalDecision({
+          action,
+          scope: 'project',
+          targetProjectId: PROJECT,
+          tokenProjectId: PROJECT,
+          grant: grant('all'),
+          humanApproved: true,
+          ceilingAllows: (a) => AGENT_DEFAULT_CEILING.has(a),
+        }),
+      ).toEqual({ allowed: true, reason: 'role' });
+    }
+  });
+
   test('HUMAN_ONLY is denied even when the grant lists it or is `all`', () => {
     for (const action of HUMAN_ONLY_ACTIONS) {
       expect(decide(action, { grant: grant([action]) })).toEqual({ allowed: false, reason: 'agent_human_only_action' });
@@ -125,13 +142,13 @@ describe('agentPrincipalDecision', () => {
 });
 
 describe('AGENT_DEFAULT_CEILING', () => {
-  test('holds every grantable action (administration included) and no HUMAN_ONLY action', () => {
+  test('holds every grantable action (administration included) and the HUMAN_ONLY ones, which a person approves per call', () => {
     expect(AGENT_DEFAULT_CEILING.has('project.file.read')).toBe(true);
     expect(AGENT_DEFAULT_CEILING.has('project.members.manage')).toBe(true);
     expect(AGENT_DEFAULT_CEILING.has('member.invite')).toBe(true);
     expect(AGENT_DEFAULT_CEILING.has('billing.read')).toBe(true);
-    for (const action of HUMAN_ONLY_ACTIONS) expect(AGENT_DEFAULT_CEILING.has(action)).toBe(false);
-    expect([...AGENT_DEFAULT_CEILING].sort()).toEqual([...GRANTABLE_KORTIX_PERMISSIONS].sort());
+    for (const action of HUMAN_ONLY_ACTIONS) expect(AGENT_DEFAULT_CEILING.has(action)).toBe(true);
+    expect([...AGENT_DEFAULT_CEILING].sort()).toEqual([...new Set([...GRANTABLE_KORTIX_PERMISSIONS, ...HUMAN_ONLY_ACTIONS])].sort());
   });
 
   test('HUMAN_ONLY is minting credentials and moving money, nothing else', () => {

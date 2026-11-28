@@ -141,7 +141,18 @@ async function askThroughGateway(c: Context, operation: Operation, routePath: st
       import('../connectors/principal-access'),
       import('../connectors/kortix-agent/ensure'),
     ]);
-  const principal = await resolvePrincipal(c);
+  // Resolving the principal reconciles the agent's grant from kortix.yaml: a
+  // repository that cannot be read leaves the call unheld, never run.
+  const principal = await resolvePrincipal(c).catch(() => {
+    const message = `"${operation.id}" needs a person's approval, and Kortix could not hold it now. Try again shortly.`;
+    throw new HTTPException(503, {
+      message,
+      res: new Response(JSON.stringify({ error: true, status: 503, code: 'approval_unavailable', operation: operation.id, message, retryable: true }), {
+        status: 503,
+        headers: { 'content-type': 'application/json', 'retry-after': '10' },
+      }),
+    });
+  });
   if (!principal) {
     const message = `"${operation.id}" needs a person to approve it, and this caller cannot hold a call.`;
     throw json403({ error: true, status: 403, code: 'approval_required', operation: operation.id, message }, message);

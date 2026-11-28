@@ -48,15 +48,19 @@ describe('the kortix connector tool input', () => {
 describe('the signed caller header', () => {
   const caller = { tokenId: '0b6f7a9e-1111-4222-8333-944455556666', sessionId: 'b1c2d3e4-1111-4222-8333-944455556666' };
 
-  test('round-trips; no session reads back as null', () => {
-    expect(verifyCaller(signCaller(caller, 1_000), 2_000)).toEqual(caller);
-    expect(verifyCaller(signCaller({ tokenId: caller.tokenId, sessionId: null }, 1_000), 2_000)).toEqual({ tokenId: caller.tokenId, sessionId: null });
+  test('round-trips; no session or approval reads back as null', () => {
+    expect(verifyCaller(signCaller(caller, 1_000), 2_000)).toEqual({ ...caller, approvedExecutionId: null });
+    expect(verifyCaller(signCaller({ tokenId: caller.tokenId, sessionId: null }, 1_000), 2_000)).toEqual({ tokenId: caller.tokenId, sessionId: null, approvedExecutionId: null });
+    const approved = { ...caller, approvedExecutionId: 'e1e2e3e4-1111-4222-8333-944455556666' };
+    expect(verifyCaller(signCaller(approved, 1_000), 2_000)).toEqual(approved);
   });
 
   test('a changed token, a forged signature, two joined headers or an expired one is refused', () => {
     const signed = signCaller(caller, 1_000);
-    const [, session, expiry, mac] = signed.split('.');
-    expect(verifyCaller(`ffffffff-1111-4222-8333-944455556666.${session}.${expiry}.${mac}`, 2_000)).toBeNull();
+    const [, session, approved, expiry, mac] = signed.split('.');
+    expect(verifyCaller(`ffffffff-1111-4222-8333-944455556666.${session}.${approved}.${expiry}.${mac}`, 2_000)).toBeNull();
+    // An approval cannot be added to a signed caller.
+    expect(verifyCaller(`${caller.tokenId}.${session}.0b6f7a9e-0000-4000-8000-000000000000.${expiry}.${mac}`, 2_000)).toBeNull();
     expect(verifyCaller(`${signed.slice(0, -2)}xx`, 2_000)).toBeNull();
     expect(verifyCaller(`${signed}, ${signed}`, 2_000)).toBeNull();
     expect(verifyCaller(signed, 1_000 + 6 * 60_000)).toBeNull();

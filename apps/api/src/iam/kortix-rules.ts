@@ -8,6 +8,9 @@
  *   1. exposure `human`: block. An operation for people only.
  *   1b. the session is untrusted (shared/session-trust.ts): the untrusted
  *      rules, which no workspace rule can loosen.
+ *   1c. a HUMAN_ONLY action (minting a credential, paying, deleting the
+ *      workspace): always ask a person. A workspace rule can block it, never
+ *      allow it; the approved run passes authorize's HUMAN_ONLY wall.
  *   2. project `policies:` that name `kortix.` (`kortix.secrets.*`).
  *      A pattern that does not name `kortix` (`*`, `*.delete*`) is about the
  *      workspace's other connectors and does not apply here.
@@ -21,6 +24,7 @@
 import type { AgentGrant } from '@kortix/db';
 import { type Policy, type PolicyAction, resolveEffectiveRule } from '../connectors/policy';
 import type { Operation } from '../shared/operation-registry';
+import { isHumanOnlyAction } from '@kortix/shared/workspace-actions';
 import { agentListAllows } from './agent-scope';
 
 export { agentListAllows };
@@ -59,7 +63,7 @@ export function untrustedDecision(operation: Pick<Operation, 'id' | 'action' | '
   return null;
 }
 
-export type KortixRuleSource = 'exposure' | 'untrusted' | 'project' | 'policy_set' | 'agent_permissions' | 'connector' | 'default';
+export type KortixRuleSource = 'exposure' | 'untrusted' | 'always_ask' | 'project' | 'policy_set' | 'agent_permissions' | 'connector' | 'default';
 
 export interface KortixRuleDecision {
   action: PolicyAction;
@@ -92,16 +96,22 @@ export function isKortixPolicy(policy: Policy): boolean {
 export function decideKortixOperation(input: KortixRuleInput): KortixRuleDecision {
   const { operation } = input;
   if (operation.exposure === 'human') return { action: 'block', source: 'exposure' };
+  const workspace = workspaceRules(input);
+  // The guards below only tighten: a block from the workspace's own rules wins over their ask.
   if (input.trust === 'untrusted') {
     const untrusted = untrustedDecision(operation);
-    // A block from the workspace's own rules still wins over an untrusted ask, below.
     if (untrusted?.action === 'block') return untrusted;
-    if (untrusted) {
-      const rest = decideKortixOperation({ ...input, trust: 'principal' });
-      return rest.action === 'block' ? rest : untrusted;
-    }
+    if (untrusted) return workspace.action === 'block' ? workspace : untrusted;
   }
+  if (isHumanOnlyAction(operation.action)) {
+    return workspace.action === 'block' ? workspace : { action: 'require_approval', source: 'always_ask' };
+  }
+  return workspace;
+}
 
+/** The workspace's own rules: project rules, the agent's set or list, the base rules, else allow. */
+function workspaceRules(input: KortixRuleInput): KortixRuleDecision {
+  const { operation } = input;
   const scoped = (policies: { project?: Policy[]; set?: Policy[] | null; connector?: Policy[] }) =>
     resolveEffectiveRule({
       fullPath: `${KORTIX_CONNECTOR_SLUG}.${operation.id}`,

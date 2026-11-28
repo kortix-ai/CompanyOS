@@ -1,5 +1,5 @@
 import { logger } from '../lib/logger';
-import { KORTIX_CONNECTOR_SLUG, isKortixPolicy, untrustedDecision } from '../iam/kortix-rules';
+import { KORTIX_CONNECTOR_SLUG, decideKortixOperation } from '../iam/kortix-rules';
 import { operationById } from '../shared/operation-registry';
 import { APPROVAL_RERUN_RULE, heldCallRepeatInstructions, heldRunRule } from './approval-expiry';
 import {
@@ -57,7 +57,7 @@ import { invalidArgsReason } from './args-validate';
  * (router.ts) wires real DB/secret deps. `enforcePolicies` exists for back-compat
  * with the original allow-all engine; production sets it true.
  */
-import { type DefaultMode, type Policy, type PolicyAction, resolveEffectiveAction } from './policy';
+import { type DefaultMode, type Policy, type PolicyAction, resolveEffectiveAction, resolveEffectiveRule } from './policy';
 import { connectorRequestDigest } from './request-digest';
 import type { ShareSubject } from './share';
 import type { ActionBinding, Risk } from './types';
@@ -1163,6 +1163,12 @@ async function selectComputerAccountForCall(
   return { input, connector };
 }
 
+/** A `kortix` call's arguments as a rule reads them: the parameters, and the JSON body's own keys. */
+function kortixRuleArgs(args: Record<string, unknown>): Record<string, unknown> {
+  const { body, ...params } = args;
+  return body && typeof body === 'object' && !Array.isArray(body) ? { ...params, ...(body as Record<string, unknown>) } : params;
+}
+
 /**
  * Layered enforcement: project → connection → risk default. Returns the
  * result to answer with when policy blocks the call or holds it for approval,
@@ -1232,39 +1238,50 @@ async function enforceCallPolicies(
     };
   };
 
-  const resolvedDecision = resolveEffectiveAction({
-    fullPath,
-    relPath: input.actionPath,
-    projectPolicies: isKortix ? projectPolicies.filter(isKortixPolicy) : projectPolicies,
-    connectorPolicies,
-    setPolicies: setPolicies ?? undefined,
-    setMissing,
-    risk: action.risk,
-    defaultMode: isKortix ? 'allow_all' : defaultMode,
-    sensitive: connector.sensitive,
-    // Rules may also condition on the ARGUMENTS ("only to these addresses"),
-    // so the engine needs the real payload. This is the post-context-injection
-    // form — the same args the call will actually execute with — so a rule
-    // can't be dodged by a field the gateway fills in later.
-    args: executionArgs,
-    argsAvailable: true,
-  });
-  // An untrusted session (shared/session-trust.ts): the untrusted rules come
-  // first and no workspace rule loosens them. On `kortix` they are the API's
-  // (iam/kortix-rules.ts); on any other connector a write asks, except a reply
-  // through a channel connector (the thread the session answers).
+  // An untrusted session (shared/session-trust.ts) gets the untrusted rules first.
   const trust = input.sessionId && deps.sessionTrust ? await deps.sessionTrust(input.sessionId) : 'principal';
-  let decision: { action: PolicyAction; source: string } = resolvedDecision;
-  if (trust === 'untrusted' && resolvedDecision.action !== 'block') {
-    const op = isKortix ? operationById(input.actionPath) : null;
-    const untrusted = isKortix
-      ? op
-        ? untrustedDecision(op.operation)
-        : { action: 'block' as const, source: 'untrusted' }
-      : action.risk === 'read' || connector.provider === 'channel'
-        ? null
-        : { action: 'require_approval' as const, source: 'untrusted' };
-    if (untrusted) decision = untrusted;
+  let decision: { action: PolicyAction; source: string; rule?: Policy };
+  if (isKortix) {
+    // `kortix` is the Kortix API: the one decision the agent rule gate makes
+    // for a direct call (iam/kortix-rules.ts), so both paths always agree. The
+    // agent's kortix_permissions list is enforced again inside the handler.
+    const op = operationById(input.actionPath);
+    decision = op
+      ? decideKortixOperation({
+          operation: op.operation,
+          grant: null,
+          projectPolicies,
+          setPolicies: policySet ? (setPolicies ?? null) : undefined,
+          connectorPolicies,
+          trust,
+          // A rule names the request's fields: parameters, and the body's own keys.
+          args: kortixRuleArgs(executionArgs),
+          argsAvailable: true,
+        })
+      : { action: 'block', source: 'exposure' };
+  } else {
+    decision = resolveEffectiveRule({
+      fullPath,
+      relPath: input.actionPath,
+      projectPolicies,
+      connectorPolicies,
+      setPolicies: setPolicies ?? undefined,
+      setMissing,
+      risk: action.risk,
+      defaultMode,
+      sensitive: connector.sensitive,
+      // Rules may also condition on the ARGUMENTS ("only to these addresses"),
+      // so the engine needs the real payload. This is the post-context-injection
+      // form — the same args the call will actually execute with — so a rule
+      // can't be dodged by a field the gateway fills in later.
+      args: executionArgs,
+      argsAvailable: true,
+    });
+    // On any other connector an untrusted session's write asks, except a reply
+    // through a channel connector (the thread the session answers).
+    if (trust === 'untrusted' && decision.action !== 'block' && action.risk !== 'read' && connector.provider !== 'channel') {
+      decision = { action: 'require_approval', source: 'untrusted' };
+    }
   }
   // Audit keys naming the set that decided: the agent, the set, the manifest
   // commit the grant came from. Omitted when a project rule, a base rule,

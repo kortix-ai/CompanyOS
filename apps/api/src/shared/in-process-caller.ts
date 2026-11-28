@@ -26,6 +26,8 @@ export interface InProcessCaller {
   /** The account token the call acts as (an agent session's, a person's CLI key). */
   tokenId: string;
   sessionId: string | null;
+  /** The held call a person approved, when this is its run: lets a HUMAN_ONLY action through. */
+  approvedExecutionId?: string | null;
 }
 
 type Executor = (request: Request, env: Record<symbol, unknown>) => Promise<Response>;
@@ -53,9 +55,9 @@ export function inProcessCaller(c: Context): InProcessCaller | null {
 
 const mac = (payload: string) => createHmac('sha256', `kortix-caller:${config.API_KEY_SECRET}`).update(payload).digest('base64url');
 
-/** `<token id>.<session id or ->.<expiry ms>.<mac>` for `x-kortix-caller`. */
+/** `<token id>.<session id or ->.<approved execution id or ->.<expiry ms>.<mac>` for `x-kortix-caller`. */
 export function signCaller(caller: InProcessCaller, now = Date.now()): string {
-  const payload = `${caller.tokenId}.${caller.sessionId ?? '-'}.${now + CALLER_TTL_MS}`;
+  const payload = `${caller.tokenId}.${caller.sessionId ?? '-'}.${caller.approvedExecutionId ?? '-'}.${now + CALLER_TTL_MS}`;
   return `${payload}.${mac(payload)}`;
 }
 
@@ -63,11 +65,11 @@ export function signCaller(caller: InProcessCaller, now = Date.now()): string {
 export function verifyCaller(header: string | null | undefined, now = Date.now()): InProcessCaller | null {
   if (!header) return null;
   const parts = header.split('.');
-  if (parts.length !== 4) return null;
-  const [tokenId, session, expiry, signature] = parts as [string, string, string, string];
-  const expected = Buffer.from(mac(`${tokenId}.${session}.${expiry}`));
+  if (parts.length !== 5) return null;
+  const [tokenId, session, approved, expiry, signature] = parts as [string, string, string, string, string];
+  const expected = Buffer.from(mac(`${tokenId}.${session}.${approved}.${expiry}`));
   const given = Buffer.from(signature);
   if (expected.length !== given.length || !timingSafeEqual(expected, given)) return null;
   if (!(Number(expiry) > now)) return null;
-  return { tokenId, sessionId: session === '-' ? null : session };
+  return { tokenId, sessionId: session === '-' ? null : session, approvedExecutionId: approved === '-' ? null : approved };
 }

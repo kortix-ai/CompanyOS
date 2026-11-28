@@ -144,3 +144,18 @@ describe('an untrusted session', () => {
     expect(d.source).toBe('project');
   });
 });
+
+describe('a HUMAN_ONLY action: always ask, never allow', () => {
+  const mint = op('keys.create', 'token.create');
+  test('an agent with every permission is asked, even when a workspace rule allows it', () => {
+    expect(decideKortixOperation({ operation: mint, grant: grant('all'), projectPolicies: [{ match: 'kortix.*', action: 'always_run' }] })).toEqual({
+      action: 'require_approval',
+      source: 'always_ask',
+    });
+  });
+  test("a list that names the action is asked too; a list without it, or a workspace block, blocks", () => {
+    expect(decideKortixOperation({ operation: mint, grant: grant(['token.create']), projectPolicies: [] }).action).toBe('require_approval');
+    expect(decideKortixOperation({ operation: mint, grant: grant(['project.read']), projectPolicies: [] }).action).toBe('block');
+    expect(decideKortixOperation({ operation: mint, grant: null, projectPolicies: [{ match: 'kortix.keys.*', action: 'block' }] }).action).toBe('block');
+  });
+});

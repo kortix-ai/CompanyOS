@@ -21,6 +21,12 @@ export interface ConnectorPrincipal {
   accountId: string;
   projectId: string;
   sessionId: string | null;
+  /**
+   * Set only on the run of an approved held call (held-call-run.ts): a person
+   * approved this exact call. The `kortix` connector passes it to the API, where
+   * it lets one HUMAN_ONLY action through (iam/authorize.ts).
+   */
+  approvedExecutionId?: string | null;
   /** The presented account token's id, when the caller used one. With
    *  `sessionId`, identifies the agent session a Kortix App assertion names. */
   tokenId?: string | null;

@@ -258,7 +258,9 @@ async function authorizeDecision(actor: Actor, action: string, obj: EvalObj): Pr
   // 2. The acting token's binding: project confinement, agent grant, standing
   // identity — one memoized read, skipped entirely for browser requests.
   const { tokenId, binding } = await actingTokenBinding(actor);
-  if (isHumanOnlyAction(action) && isAgentSessionToken(actor, binding)) {
+  // An agent reaches one only through a person: the run of a held call they
+  // approved carries `approvedExecutionId` (middleware/auth-in-process.ts).
+  if (isHumanOnlyAction(action) && isAgentSessionToken(actor, binding) && !actor.ctx.approvedExecutionId) {
     return deny('agent_human_only_action');
   }
 
@@ -334,6 +336,7 @@ async function authorizeDecision(actor: Actor, action: string, obj: EvalObj): Pr
       tokenProjectId: binding.projectId,
       accountInScope: binding.projectId !== null && binding.projectId === facts.soleProjectId,
       grant,
+      humanApproved: Boolean(actor.ctx.approvedExecutionId),
       ceilingAllows: (a) =>
         bound
           ? scope === 'account'

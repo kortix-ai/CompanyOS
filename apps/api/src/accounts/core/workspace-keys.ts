@@ -21,6 +21,7 @@ import { isMyKortixAgentName } from '@kortix/shared';
 import { json, errors, auth } from '../../openapi';
 import { ACCOUNT_ACTIONS, assertAuthorized, authorize } from '../../iam';
 import { actorForToken, actorOf, loadServiceAccountActivation } from '../../iam/actor';
+import { getAgentGrant } from '../../iam/agent-scope';
 import { assignRole, SYSTEM_ACTOR } from '../../iam/assignments';
 import { invalidateIamCacheForUser } from '../../iam/cache-invalidation';
 import { parseKeyScopesInput, type KeyScopes } from '../../iam/key-scope';
@@ -287,8 +288,11 @@ async function mintServiceAccountKey(c: Context<AppEnv>, body: Record<string, un
     return c.json({ error: 'Connected apps cannot mint keys.' }, 403);
   }
   // Only a person mints a key that acts as an agent or a bot: a key that mints
-  // one could hand out a principal wider than itself.
-  if (!isPersonCaller(c)) {
+  // one could hand out a principal wider than itself. The one exception is the
+  // run of an agent's own mint that a person approved: mintKey already pinned
+  // it to `acts_as: agent` for that same agent, so it is never wider.
+  const approvedOwnMint = Boolean(c.get('approvedExecutionId')) && kind === 'agent' && body.agent === getAgentGrant(c)?.agent;
+  if (!isPersonCaller(c) && !approvedOwnMint) {
     return c.json(
       { error: 'Only a person signed in to Kortix (a browser session or a personal key) can create a key for an agent or a bot.', code: 'key_principal_requires_person' },
       403,
@@ -435,6 +439,23 @@ async function mintKey(c: Context<AppEnv>) {
   if (raw !== 'me' && raw !== 'agent' && raw !== 'bot') {
     return c.json({ error: 'acts_as must be "me", "agent" or "bot"', code: 'invalid_acts_as' }, 400);
   }
+  // A key an agent mints (after a person approved the call) carries the
+  // minter's limits: it acts as that same agent, never as its person or a bot,
+  // either of which could reach more than the agent can.
+  const minter = c.get('authType') === 'pat' && c.get('sessionId') ? getAgentGrant(c)?.agent ?? null : undefined;
+  if (minter !== undefined) {
+    const named = typeof body.agent === 'string' && body.agent.trim() ? body.agent.trim() : minter;
+    if (raw !== 'agent' || !minter || named !== minter) {
+      return c.json(
+        {
+          error: `An agent's key acts as that agent: send acts_as "agent"${minter ? ` and agent "${minter}"` : ''}.`,
+          code: 'agent_key_acts_as_minter',
+        },
+        403,
+      );
+    }
+    body.agent = minter;
+  }
   if (raw !== 'me') return mintServiceAccountKey(c, body, raw);
   // `me`: exactly the workspace-key mint of `POST …/tokens`, answered as a key
   // row rendered off the inserted token — not off a re-parse of the mint reply.
@@ -548,7 +569,7 @@ const keysMintRoute = createRoute({
   path: '/{workspaceId}/keys',
   operationId: 'keys.create',
   'x-kortix-action': ACCOUNT_ACTIONS.TOKEN_CREATE,
-  'x-kortix-exposure': 'human',
+  'x-kortix-exposure': 'agent',
   tags: ['accounts'],
   summary: 'Create an API key that acts as you, an agent, or a bot (secret returned once)',
   ...auth,

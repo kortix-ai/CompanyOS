@@ -96,8 +96,29 @@ has is a connector behind one gateway.
    flows drive them; each one is removed only after a parity check of its
    output against its operation command. Next step: list the hand-written
    commands that are a single GET or POST with no rendering beyond JSON.
-10. Featured actions replace the `kortix_*` tools; agent-minted keys carry
-    the minter's limits; `HUMAN_ONLY` becomes "always ask".
+10. **7a, built.** `HUMAN_ONLY` is "always ask": the rule decision answers
+    `require_approval` (`source: always_ask`) for every HUMAN_ONLY action; a
+    workspace rule can block it, never allow it. The approved held run
+    carries `approvedExecutionId` (signed `x-kortix-caller` → in-process auth
+    → actor context), the only thing that passes `authorize`'s HUMAN_ONLY
+    wall. The default agent ceiling holds the HUMAN_ONLY actions (approval
+    gates them). `keys.create`, `iam.service_accounts.create`,
+    `cli_tokens.*`, `gateway.keys.*`, `workspaces.delete` and
+    `workspaces.transfer` are `agent` operations now; billing checkout stays
+    people-only (a browser flow). A key an agent mints acts as that agent
+    (`agent_key_acts_as_minter` otherwise). The gateway makes the same
+    `decideKortixOperation` decision as the gate for `kortix`, so both paths
+    hold the same calls. Flows `WS-AUTH-20` (mint, approve, key acts as the
+    agent; `acts_as: me` refused at the run), `WS-AUTH-5/8`, `SCOPE-5`,
+    `AGP-5`. **Not done:** revoking the minter does not revoke its keys yet
+    (needs a `minted_by_token_id` column).
+11. **7b, not built.** The nine `kortix_*` sandbox tools
+    (`apps/kortix-sandbox-agent-server/src/services/tools/platform/`, 3,125
+    lines) render chat cards from curated CLI calls. Each becomes a
+    featured action: an operation id with a card renderer, called through
+    the SDK, never the CLI. Done when every card renders the same in the web
+    session view (checked with agent-browser) and the old tool and its
+    `cliRun` helper are deleted.
 
 ## Phase 2: agent rules on the Kortix API
 

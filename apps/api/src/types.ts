@@ -65,6 +65,8 @@ export interface AuthVariables {
   /** The operation of an agent-session request, set by the agent rule gate
    *  (`middleware/agent-operation-gate.ts`) after it allowed the request. */
   operation?: import('./shared/operation-registry').Operation;
+  /** Set only on the in-process run of a held call a person approved (middleware/auth-in-process.ts). */
+  approvedExecutionId?: string;
   /** The human an agent-session token acts on behalf of. Null for an
    *  unattended run, a cleared session, or any non-session credential. */
   onBehalfOfUserId?: string | null;

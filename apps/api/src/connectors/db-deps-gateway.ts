@@ -837,7 +837,9 @@ export function makeDbGatewayDeps(principal: ConnectorPrincipal): GatewayDeps {
                 ...init.headers,
                 [KORTIX_SESSION_HEADER]: principal.sessionId ?? '',
                 // The caller the `kortix` connector acts as, signed: no configured header can forge it.
-                [KORTIX_CALLER_HEADER]: principal.tokenId ? signCaller({ tokenId: principal.tokenId, sessionId: principal.sessionId }) : '',
+                [KORTIX_CALLER_HEADER]: principal.tokenId
+                  ? signCaller({ tokenId: principal.tokenId, sessionId: principal.sessionId, approvedExecutionId: principal.approvedExecutionId ?? null })
+                  : '',
               },
             }
           : init,

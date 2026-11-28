@@ -40,14 +40,12 @@ export const HUMAN_ONLY_ACTIONS: ReadonlySet<string> = HUMAN_ONLY;
 
 /**
  * The ceiling of an agent whose service account has no role bound: every
- * grantable action (`GRANTABLE_KORTIX_PERMISSIONS` = every action except
- * HUMAN_ONLY). The agent's rules on `kortix` still narrow it. ONE constant on purpose:
- * the alternative ceiling (no administration writes) is a one-line change
- * here (design.md §3.6 risk 1).
+ * grantable action, and the HUMAN_ONLY ones too. A HUMAN_ONLY action still
+ * passes only on the run of a call a person approved (`humanApproved` below;
+ * the agent rule gate always asks for it), so the ceiling does not decide it.
+ * A role an admin binds to the agent lowers the ceiling as before.
  */
-export const AGENT_DEFAULT_CEILING: ReadonlySet<string> = new Set(
-  GRANTABLE_KORTIX_PERMISSIONS.filter((action) => !HUMAN_ONLY_ACTIONS.has(action)),
-);
+export const AGENT_DEFAULT_CEILING: ReadonlySet<string> = new Set([...GRANTABLE_KORTIX_PERMISSIONS, ...HUMAN_ONLY_ACTIONS]);
 
 /** A grant the agent-principal model governs: non-null, and not `meta`. */
 export function isGovernedAgentGrant(grant: AgentGrant | null | undefined): grant is AgentGrant {
@@ -74,6 +72,8 @@ export interface AgentPrincipalInput {
    *  not split_pending (design.md §3.2 C4). */
   accountInScope?: boolean;
   grant: AgentGrant;
+  /** A person approved this exact call (the run of a held call): a HUMAN_ONLY action passes. */
+  humanApproved?: boolean;
   /** Does the agent's ceiling (bound roles, else the default) hold `action`? */
   ceilingAllows: (action: string) => boolean;
 }
@@ -99,7 +99,7 @@ export function agentPrincipalDecision(input: AgentPrincipalInput): {
       return { allowed: false, reason: 'token_out_of_scope' };
     }
   }
-  if (HUMAN_ONLY_ACTIONS.has(action)) return { allowed: false, reason: 'agent_human_only_action' };
+  if (HUMAN_ONLY_ACTIONS.has(action) && !input.humanApproved) return { allowed: false, reason: 'agent_human_only_action' };
   if (action === 'project.read') return { allowed: true, reason: 'role' };
   if (!agentListAllows(input.grant, action)) return { allowed: false, reason: 'agent_scope_insufficient' };
   if (!input.ceilingAllows(action)) return { allowed: false, reason: 'agent_ceiling_insufficient' };

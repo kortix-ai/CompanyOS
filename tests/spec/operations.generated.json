@@ -561,7 +561,7 @@
     "typed": true,
     "operation_id": "workspaces.delete",
     "action": "account.delete",
-    "exposure": "human",
+    "exposure": "agent",
     "summary": "Delete a workspace",
     "tags": [
       "workspaces"
@@ -909,7 +909,7 @@
     "typed": true,
     "operation_id": "cli_tokens.delete",
     "action": "project.credentials.issue",
-    "exposure": "human",
+    "exposure": "agent",
     "summary": "Revoke a workspace CLI token",
     "tags": [
       "workspaces"
@@ -957,7 +957,7 @@
     "typed": true,
     "operation_id": "gateway.keys.delete",
     "action": "project.gateway.keys.manage",
-    "exposure": "human",
+    "exposure": "agent",
     "summary": "Revoke a workspace LLM gateway API key",
     "tags": [
       "workspaces"
@@ -5061,7 +5061,7 @@
     "typed": true,
     "operation_id": "gateway.keys.list",
     "action": "project.gateway.keys.manage",
-    "exposure": "human",
+    "exposure": "agent",
     "summary": "List workspace LLM gateway API keys",
     "tags": [
       "workspaces"
@@ -10411,7 +10411,7 @@
     "typed": true,
     "operation_id": "cli_tokens.create",
     "action": "project.credentials.issue",
-    "exposure": "human",
+    "exposure": "agent",
     "summary": "Create a workspace CLI token (API key)",
     "tags": [
       "workspaces"
@@ -10675,7 +10675,7 @@
     "typed": true,
     "operation_id": "gateway.keys.create",
     "action": "project.gateway.keys.manage",
-    "exposure": "human",
+    "exposure": "agent",
     "summary": "Create a workspace LLM gateway API key",
     "tags": [
       "workspaces"
@@ -11035,7 +11035,7 @@
     "typed": true,
     "operation_id": "iam.service_accounts.create",
     "action": "token.create",
-    "exposure": "human",
+    "exposure": "agent",
     "summary": "Create a service account",
     "tags": [
       "workspaces"
@@ -11119,7 +11119,7 @@
     "typed": true,
     "operation_id": "keys.create",
     "action": "token.create",
-    "exposure": "human",
+    "exposure": "agent",
     "summary": "Create an API key that acts as you, an agent, or a bot (secret returned once)",
     "tags": [
       "workspaces"
@@ -11981,7 +11981,7 @@
     "typed": true,
     "operation_id": "workspaces.transfer",
     "action": "project.delete",
-    "exposure": "human",
+    "exposure": "agent",
     "summary": "Transfer the workspace to another workspace",
     "tags": [
       "workspaces"

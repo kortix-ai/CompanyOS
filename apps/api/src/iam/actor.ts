@@ -112,6 +112,8 @@ export interface RequestContext {
   ip?: string;
   /** JWT's `aal` claim — 'aal1' = password-only, 'aal2' = MFA-verified. */
   mfaAal?: string;
+  /** The held call a person approved, when this request is its run: one HUMAN_ONLY action passes. */
+  approvedExecutionId?: string;
 }
 
 export interface Actor {

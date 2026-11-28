@@ -145,7 +145,8 @@ export async function runHeldCall(
   }
 
   const { principal, policySet } = caller;
-  const base = makeDeps(principal);
+  // A person approved this exact call: the `kortix` connector tells the API (approvedExecutionId).
+  const base = makeDeps({ ...principal, approvedExecutionId: executionId });
   let lastRecorded: string | null = null;
   const deps: GatewayDeps = {
     ...base,

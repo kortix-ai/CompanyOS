@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { slackAgentPersona } from './persona';
-import { and, asc, desc, eq, isNotNull, isNull, lt } from 'drizzle-orm';
+import { and, asc, eq, isNotNull, isNull, lt, ne } from 'drizzle-orm';
 import { chatEventDedup, chatTurnStreams, projectSessions, sessionTurns } from '@kortix/db';
 import { db } from '../../shared/db';
 import { registerSessionFailureNotifier } from '../../shared/session-failure-notifier';
@@ -760,11 +760,11 @@ export async function postAnswerWithoutTurnDetailed(
   if (!thread) return { ok: false, reason: 'no_slack_thread' };
   if (!(await claimAnswerRescue(sessionId, text))) return { ok: false, reason: 'answer_already_posted' };
   // This turn answers now: its end must not post its last message again.
+  // A turn may send several distinct answers; only its end must not repeat them.
   const turnClaim = await claimRunningTurnReply(sessionId);
-  if (turnClaim === false) return { ok: false, reason: 'answer_already_posted' };
   if (!(await postInSessionThread(sessionId, thread, markdownToMrkdwn(text), blocks))) {
     // Nothing reached the thread: the turn's end may still post its reply.
-    if (turnClaim) await db.delete(chatEventDedup).where(eq(chatEventDedup.eventId, turnClaim)).catch(() => {});
+    if (turnClaim) await releaseTurnReply(turnClaim);
     return { ok: false, reason: 'post_failed' };
   }
   return { ok: true };
@@ -862,6 +862,10 @@ function turnReplyKey(sessionId: string, messageId: string): string {
   return `slack:turnreply:${sessionId}:${messageId}`;
 }
 
+function releaseTurnReply(key: string): Promise<unknown> {
+  return db.delete(chatEventDedup).where(eq(chatEventDedup.eventId, key)).catch(() => undefined);
+}
+
 /** One reply per turn reaches the thread: a `slack send` of the turn, or its end. True when this call won it. */
 function claimTurnReply(sessionId: string, messageId: string): Promise<boolean> {
   return claimExpiringKey(turnReplyKey(sessionId, messageId), TURN_REPLY_TTL_MS, {
@@ -873,19 +877,20 @@ function claimTurnReply(sessionId: string, messageId: string): Promise<boolean> 
 /**
  * A `slack send` with no turn row answers the session's running turn: claim
  * that turn's reply before posting, so its end posts nothing more. The claim's
- * key when won; false when the turn's reply already went out; null when no
- * running turn was read, which lets the send through: the answer must not be lost.
+ * key when this send won it; null when an earlier send holds it or no running
+ * turn was read. The send posts either way: the answer must not be lost.
  */
-async function claimRunningTurnReply(sessionId: string): Promise<string | false | null> {
+async function claimRunningTurnReply(sessionId: string): Promise<string | null> {
   try {
     const [running] = await db
       .select({ messageId: sessionTurns.messageId })
       .from(sessionTurns)
-      .where(and(eq(sessionTurns.sessionId, sessionId), eq(sessionTurns.state, 'active'), isNotNull(sessionTurns.messageId)))
-      .orderBy(desc(sessionTurns.startedAt))
+      .where(and(eq(sessionTurns.sessionId, sessionId), ne(sessionTurns.state, 'ended'), isNotNull(sessionTurns.messageId)))
+      // The oldest open turn executes; a newer one is a prompt still queued behind it.
+      .orderBy(asc(sessionTurns.startedAt))
       .limit(1);
     if (!running?.messageId) return null;
-    return (await claimTurnReply(sessionId, running.messageId)) ? turnReplyKey(sessionId, running.messageId) : false;
+    return (await claimTurnReply(sessionId, running.messageId)) ? turnReplyKey(sessionId, running.messageId) : null;
   } catch (err) {
     logger.warn('[slack-webhook] running turn not read for its reply claim', { sessionId, err: err instanceof Error ? err.message : String(err) });
     return null;
@@ -917,7 +922,10 @@ async function postFollowUpTurnEnd(
   const owner = await findChatThread({ platform: 'slack', workspaceId: thread.teamId, threadId: thread.threadTs });
   if (owner?.sessionId !== sessionId) return false;
   if (!(await claimTurnReply(sessionId, followUp.messageId))) return false;
-  return postInSessionThread(sessionId, thread, body);
+  if (await postInSessionThread(sessionId, thread, body)) return true;
+  // Slack refused it: a repeated end of the same turn may try again.
+  await releaseTurnReply(turnReplyKey(sessionId, followUp.messageId));
+  return false;
 }
 
 // Called when the agent's turn ends — `session.idle` (finished) or

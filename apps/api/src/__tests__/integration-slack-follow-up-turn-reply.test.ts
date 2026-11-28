@@ -233,6 +233,17 @@ describe('a turn no Slack message started answers its Slack thread', () => {
     expect(posts()[0]!.body.text).toBe('Engineering finished the fix.');
   });
 
+  test('a report turn may send two distinct answers; its end adds nothing', async () => {
+    const messageId = await colleagueReport();
+    await runTurn(messageId);
+    for (const text of ['Engineering is still testing.', 'Engineering finished the fix.']) {
+      const sent = await relayContent(responder, { kind: 'answer', text }, sessionId);
+      expect(await sent.json()).toEqual({ ok: true });
+    }
+    await endTurn(messageId, { text: 'I posted both updates.' });
+    expect(posts().map((call) => call.body.text)).toEqual(['Engineering is still testing.', 'Engineering finished the fix.']);
+  });
+
   test('a `slack send` Slack refused leaves the reply to the turn end', async () => {
     const messageId = await colleagueReport();
     await runTurn(messageId);

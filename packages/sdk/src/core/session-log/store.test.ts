@@ -272,6 +272,41 @@ describe('older (has_more): the oldest page read decides', () => {
     expect(ids(state)).toEqual(all.filter((m) => m !== gone).map((m) => m.message_id));
   });
 
+  // Replies missing, the person's own old messages at the bottom (KRTX-4973). The device's saved
+  // copy is the page of the last open; a re-open applies it, then the newest page. With more than a
+  // page of messages since, the two never meet: everything between them was missing for good, and
+  // older pages were read only below the saved copy, so nothing ever filled the hole.
+  test('a newest page that reaches no held message: the held messages leave and older pages are offered', () => {
+    const all = rootMessages();
+    let state = applySessionLogPage(EMPTY_SESSION_LOG_STATE, window(all.slice(0, 4), false));
+    state = applySessionLogPage(state, window(all.slice(10), true));
+    expect(ids(state)).toEqual(all.slice(10).map((m) => m.message_id));
+    expect(state.older[ROOT]).toBe(true);
+    // Scrolling up reads the page before the window: the history is whole again.
+    state = applySessionLogPage(state, window(all.slice(0, 10), false), all[10]!.seq);
+    expect(ids(state)).toEqual(all.map((m) => m.message_id));
+    expect(state.older[ROOT]).toBe(false);
+  });
+
+  test('a stream-put message below such a page leaves too, and the older page brings it back', () => {
+    const all = rootMessages();
+    let state = EMPTY_SESSION_LOG_STATE;
+    for (const [i, m] of all.slice(0, 4).entries()) state = applySessionLogEvent(state, ev('log.message', { rev: i + 1, message: m }));
+    state = applySessionLogPage(state, window(all.slice(10), true));
+    expect(ids(state)).toEqual(all.slice(10).map((m) => m.message_id));
+    state = applySessionLogPage(state, window(all.slice(0, 10), false), all[10]!.seq);
+    expect(ids(state)).toEqual(all.map((m) => m.message_id));
+  });
+
+  test('a queued prompt is no position: it stays when such a page drops the messages below it', () => {
+    const all = rootMessages();
+    const queued = { ...all[0]!, message_id: 'msg_queued', seq: Number.MAX_SAFE_INTEGER };
+    let state = applySessionLogPage(EMPTY_SESSION_LOG_STATE, window(all.slice(0, 4), false));
+    state = applySessionLogEvent(state, ev('log.message', { rev: 1, message: queued }));
+    state = applySessionLogPage(state, window(all.slice(10), true));
+    expect(ids(state)).toEqual([...all.slice(10).map((m) => m.message_id), 'msg_queued']);
+  });
+
   test('per thread: a child page leaves the root answer alone', () => {
     const all = rootMessages();
     let state = applySessionLogPage(EMPTY_SESSION_LOG_STATE, window(all.slice(4), true));

@@ -17,7 +17,14 @@ const none = () => null;
 let url = 'https://api.example.test/v1/artifacts/s/first/';
 let error: ApiError | null = null;
 let mounts = 0;
-const refetch = async () => ({ isError: false, data: { version: { view_url: url } } });
+let finishRefetch: (() => void) | undefined;
+const refetch = async () => {
+  if (finishRefetch)
+    await new Promise<void>((resolve) => {
+      finishRefetch = resolve;
+    });
+  return { isError: !!error, data: { version: { view_url: url } } };
+};
 mock.module('react-native', () => ({
   View: host('view'),
   Platform: { OS: 'ios' },
@@ -38,7 +45,10 @@ mock.module('@kortix/sdk/react', () => ({
     refetch,
   }),
 }));
-mock.module('@/components/artifacts/ArtifactActionsSheet', () => ({ ArtifactActionsSheet: none }));
+mock.module('@/components/artifacts/ArtifactActionsSheet', () => ({
+  ArtifactActionsSheet: (props: Props) =>
+    React.createElement('actions', { ...props, 'data-artifact-actions': true }),
+}));
 mock.module('@/components/artifacts/ArtifactWebView', () => ({
   ArtifactWebView: (props: Props) => {
     React.useEffect(() => {
@@ -48,10 +58,12 @@ mock.module('@/components/artifacts/ArtifactWebView', () => ({
   },
 }));
 mock.module('@/components/kortix/sheet', () => ({
-  KortixBottomSheetModal: React.forwardRef<unknown, { children?: React.ReactNode }>(({ children }, ref) => {
-    React.useImperativeHandle(ref, () => ({ present: none, dismiss: none }));
-    return React.createElement('sheet', {}, children);
-  }),
+  KortixBottomSheetModal: React.forwardRef<unknown, { children?: React.ReactNode }>(
+    ({ children }, ref) => {
+      React.useImperativeHandle(ref, () => ({ present: none, dismiss: none }));
+      return React.createElement('sheet', {}, children);
+    }
+  ),
 }));
 mock.module('@/components/kortix/header-button', () => ({ HEADER_ICON_SIZE: 20 }));
 mock.module('@/components/kortix/kortix-loader', () => ({ KortixLoader: none }));
@@ -69,6 +81,8 @@ afterEach(async () => {
   tree = undefined;
   store.setState({ projectId: null, target: null, userId: null, byUser: {} });
   error = null;
+  finishRefetch = undefined;
+  url = 'https://api.example.test/v1/artifacts/s/first/';
 });
 const screen = () => <ArtifactViewerSheet projectId="project-a" onNewChat={none} />;
 
@@ -101,6 +115,65 @@ test('a gone artifact never keeps showing cached content', async () => {
   });
   error = new ApiError('Gone', { status: 404 });
   await act(async () => tree?.update(screen()));
+  expect(tree?.root.findAllByProps({ 'data-artifact-page': true })).toHaveLength(0);
+  expect(JSON.stringify(tree?.toJSON())).toContain('artifacts.notFoundTitle');
+});
+
+test('explicit Reload waits for fresh metadata before replacing the loaded page', async () => {
+  mounts = 0;
+  store.setState({ userId: 'user-a' });
+  store.getState().setProjectId('project-a');
+  store.getState().open({ projectId: 'project-a', artifactId: 'artifact-a' });
+  await act(async () => {
+    tree = create(screen());
+  });
+  const first = tree?.root.findByProps({ 'data-artifact-page': true }).props.viewUrl;
+  finishRefetch = none;
+  await act(async () => {
+    tree?.root.findByProps({ 'data-artifact-actions': true }).props.onReload();
+  });
+  expect(mounts).toBe(1);
+  expect(tree?.root.findByProps({ 'data-artifact-page': true }).props.viewUrl).toBe(first);
+  url = 'https://api.example.test/v1/artifacts/s/reloaded/';
+  await act(async () => {
+    tree?.update(screen());
+    finishRefetch?.();
+  });
+  expect(tree?.root.findByProps({ 'data-artifact-page': true }).props.viewUrl).toBe(url);
+  expect(mounts).toBe(2);
+});
+
+test('explicit Reload replaces the page even when its content URL is unchanged', async () => {
+  mounts = 0;
+  store.setState({ userId: 'user-a' });
+  store.getState().setProjectId('project-a');
+  store.getState().open({ projectId: 'project-a', artifactId: 'artifact-a' });
+  await act(async () => {
+    tree = create(screen());
+  });
+  await act(async () => {
+    await tree?.root.findByProps({ 'data-artifact-actions': true }).props.onReload();
+  });
+  expect(mounts).toBe(2);
+  expect(tree?.root.findByProps({ 'data-artifact-page': true }).props.viewUrl).toBe(url);
+});
+
+test('a forbidden Reload result hides the previously loaded content', async () => {
+  store.setState({ userId: 'user-a' });
+  store.getState().setProjectId('project-a');
+  store.getState().open({ projectId: 'project-a', artifactId: 'artifact-a' });
+  await act(async () => {
+    tree = create(screen());
+  });
+  finishRefetch = none;
+  await act(async () => {
+    tree?.root.findByProps({ 'data-artifact-actions': true }).props.onReload();
+  });
+  error = new ApiError('Forbidden', { status: 403 });
+  await act(async () => {
+    tree?.update(screen());
+    finishRefetch?.();
+  });
   expect(tree?.root.findAllByProps({ 'data-artifact-page': true })).toHaveLength(0);
   expect(JSON.stringify(tree?.toJSON())).toContain('artifacts.notFoundTitle');
 });

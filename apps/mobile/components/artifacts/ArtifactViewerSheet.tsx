@@ -99,8 +99,9 @@ export function ArtifactViewerSheet({
     query.data && query.data.artifact_id === target?.artifactId ? query.data : undefined;
 
   const [reloadKey, setReloadKey] = React.useState(0);
-  const reload = React.useCallback(() => {
-    void query.refetch();
+  const reload = React.useCallback(async () => {
+    // Keep the loaded page until the authorized read has updated the query.
+    await query.refetch();
     setReloadKey((value) => value + 1);
   }, [query]);
 

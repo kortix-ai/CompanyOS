@@ -62,7 +62,7 @@ The eval loop. Follow it for any change to an agent.
    ```
 4. **Read the failures.** `kortix evals show <job>` lists every trial.
    `kortix evals trial <job> <trial> --file verifier/test-stdout.txt` shows
-   why a trial failed; the trial's session holds what the agent did. Find
+   why a trial failed; `--file agent/session-log.json` (`steps/<step>/agent/` for a multi-step task) holds what the agent did, also after a fresh workspace is gone. Find
    the cause, not the symptom.
 5. **Change one thing.** The prompt, a skill, a tool, the model. One change
    per run, or you cannot tell which change moved the score.

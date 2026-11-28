@@ -26,11 +26,6 @@ describe('template root fallback', () => {
     );
   });
 
-  test('keeps an absent optional project root empty', async () => {
-    const { starter } = await fixture();
-    expect(starter.getProjectTemplateFiles()).toEqual([]);
-  });
-
   test('propagates a nested missing entry instead of using the snapshot', async () => {
     const { dir, starter } = await fixture();
     const root = join(dir, 'templates/managed');
@@ -45,4 +40,17 @@ describe('template root fallback', () => {
     writeFileSync(join(dir, 'templates/managed'), 'not a directory');
     expect(() => starter.getManagedSkillFiles()).toThrow('ENOTDIR');
   });
+});
+
+test('starter substitutions preserve literal values and unknown placeholders', async () => {
+  const { dir, starter } = await fixture();
+  const root = join(dir, 'templates/base');
+  mkdirSync(root, { recursive: true });
+  writeFileSync(join(root, 'vars.txt'), '{{projectName}}|{{repoFullName}}|{{template}}|{{unknown}}|{{ body.action }}');
+  expect(starter.getStarterFiles({ projectName: '$&{{unknown}}', template: 'minimal' })).toEqual([
+    { path: 'vars.txt', content: '$&{{unknown}}|your-org/your-repo|minimal|{{unknown}}|{{ body.action }}' },
+  ]);
+  expect(starter.getStarterFiles({ projectName: '', repoFullName: '', template: 'minimal' })).toEqual([
+    { path: 'vars.txt', content: '||minimal|{{unknown}}|{{ body.action }}' },
+  ]);
 });

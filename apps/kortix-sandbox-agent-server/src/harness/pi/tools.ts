@@ -190,6 +190,7 @@ export function createQuestionTool(
     label: 'question',
     description:
       'Ask the user one or more questions. Use it when a decision needs the user, not to narrate progress. Each question has a short header, the full question, and 2-5 options. ' +
+      'An option picks a detail; it never approves an action that needs the person\'s yes (a sign-in, an invitation, an automation, sending): no option may say it starts one ("Gmail: I\'ll start the sign-in"). After the answer, say the whole action and ask for the yes. ' +
       'The answer comes back here when the person answers within a few minutes. Otherwise the question waits in their Review inbox, you continue, and the answer arrives later as a new message.',
     parameters: questionSchema,
     async execute(toolCallId, params) {
@@ -218,11 +219,20 @@ function agentTool(definition: ToolDefinition<any, any, any>): AgentTool<any, an
 
 /** A hosted tool as the pi `Agent` runs it: the call's context names this session and agent. */
 function hostedAgentTool(tool: HostedTool, cwd: string, caller: () => { sessionId: string; agent: string; turnId?: string }): AgentTool<any, undefined> {
+  const { validate } = tool
   return {
     name: tool.name,
     label: tool.name,
     description: tool.description,
     parameters: tool.parameters as never,
+    // pi runs this before the schema check, the permission gate and execute; a throw is the call's error.
+    ...(validate && {
+      prepareArguments(args: unknown) {
+        const error = validate(args as Record<string, unknown>)
+        if (error) throw new Error(error)
+        return args
+      },
+    }),
     async execute(_id, args, signal) {
       const text = await runTool(tool, args as Record<string, unknown>, { ...caller(), directory: cwd, env: sessionEnv(), signal: signal ?? new AbortController().signal })
       return { content: [{ type: 'text', text }], details: undefined }

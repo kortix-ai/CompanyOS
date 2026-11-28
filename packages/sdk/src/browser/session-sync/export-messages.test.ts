@@ -74,7 +74,7 @@ const ids = (messages: Array<{ info: { id: string } }>) => messages.map((message
 test('no log page (a 404 without a code), asleep: the export fails, and no /transcript (P8.3)', async () => {
   windows = { '': { messages: [row('m1', 1)], next_cursor: null } };
   await expect(loadSessionExportMessages('ses_root', 'p1/s1')).rejects.toThrow();
-  expect(calls).toEqual([`${base}/projects/p1/sessions/s1/log?limit=500`]);
+  expect(calls).toEqual([`${base}/workspaces/p1/sessions/s1/log?limit=500`]);
 });
 
 test('running: the runtime history, and no saved-copy read', async () => {
@@ -90,6 +90,13 @@ test('no log page, and a runtime that answers empty: the export fails, and no /t
   windows = { '': { messages: [row('m1', 1)], next_cursor: null } };
   await expect(loadSessionExportMessages('ses_root', 'p1/s1')).rejects.toThrow();
   expect(calls.some((url) => url.includes('/transcript'))).toBe(false);
+});
+
+test('no saved scope, running: the runtime history only, and no log read (the mobile project stats)', async () => {
+  setCurrentRuntime(`${base}/runtime`, 'sbx-1');
+  runtimeRows = [row('live-1', 1), row('live-2', 2)];
+  expect(ids(await loadSessionExportMessages('ses_root'))).toEqual(['live-1', 'live-2']);
+  expect(calls.some((url) => url.includes('/log?') || url.includes('/transcript'))).toBe(false);
 });
 
 test('no saved scope: a runtime that is not ready still throws', async () => {

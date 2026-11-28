@@ -34,7 +34,6 @@ export type CustomizeSection =
   | 'git'
   | 'review'
   | 'commands'
-  | 'marketplace'
   | 'secrets'
   | 'llm-management'
   | 'llm-overview'
@@ -64,16 +63,15 @@ export type CustomizeSection =
  *   actual Slack connect/disconnect routes assert project.connector.write.
  * - `git` surfaces repository metadata and clone instructions; pushes remain
  *   separately gated by project.gitops.push.
- * - sandbox/settings/marketplace have no dedicated read leaf, so
- *   they stay visible on project.read and gate writes on the closest real leaf
- *   the backend asserts (e.g. sandbox rebuild → sandbox.write, marketplace
- *   install → gitops.push).
+ * - sandbox/settings have no dedicated read leaf, so they stay visible on
+ *   project.read and gate writes on the closest real leaf the backend asserts
+ *   (e.g. sandbox rebuild → sandbox.write).
  */
 export const CUSTOMIZE_SECTION_ACCESS: Record<
   CustomizeSection,
   { read: ProjectAction; write?: ProjectAction }
 > = {
-  // No `agents` entry: Agents graduated to /projects/<id>/agent, which gates
+  // No `agents` entry: Agents graduated to /workspaces/<id>/agent, which gates
   // itself on PROJECT_AGENT_READ/WRITE directly (project-settings-nav's
   // TAB_PREFERENCE and the page's own useProjectCan).
   //
@@ -118,7 +116,6 @@ export const CUSTOMIZE_SECTION_ACCESS: Record<
     read: PROJECT_ACTIONS.PROJECT_MEMBERS_READ,
     write: PROJECT_ACTIONS.PROJECT_MEMBERS_MANAGE,
   },
-  marketplace: { read: PROJECT_ACTIONS.PROJECT_READ, write: PROJECT_ACTIONS.PROJECT_GITOPS_PUSH },
   // LLM gateway sections — visible to any project member; the backend enforces
   // the specific gateway capability (logs/spend.read, budget.set, keys.manage)
   // on each mutation route, so visibility gates on project.read.
@@ -140,12 +137,6 @@ export const CUSTOMIZE_SECTION_ACCESS: Record<
   },
 };
 
-/** The distinct read leaves used to gate section visibility — handy for a single
- *  batched probe over every section the rail might show. */
-export const CUSTOMIZE_SECTION_READ_ACTIONS: readonly ProjectAction[] = Array.from(
-  new Set(Object.values(CUSTOMIZE_SECTION_ACCESS).map((a) => a.read)),
-);
-
 /**
  * Whether a section is visible in the rail, given the current user's resolved
  * capabilities (`caps[action].allowed`). Visibility gates on the section's own
@@ -158,7 +149,7 @@ export const CUSTOMIZE_SECTION_READ_ACTIONS: readonly ProjectAction[] = Array.fr
  * (Previously this ALSO required a write leaf, which blanked the whole panel
  * for every read-only / granular role — the bug this fixes.) This
  * is a VISIBILITY layer only; the API re-checks every mutation. Files is NOT
- * here — it's the standalone /projects/[id]/files page, gated on project.file.read.
+ * here — it's the standalone /workspaces/[id]/files page, gated on project.file.read.
  */
 export function isCustomizeSectionVisible(
   s: CustomizeSection,

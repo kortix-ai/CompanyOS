@@ -2,7 +2,7 @@
 
 import { SessionDotMatrix } from '@kortix/ui/dot-matrix/session-dot-matrix';
 import { Button } from '@kortix/ui/button';
-import { InfoBanner } from '@kortix/ui/info-banner';
+import { Alert as BannerAlert, AlertTitle as BannerAlertTitle, AlertMedia as BannerAlertMedia } from '@kortix/ui/alert';
 import Loading from '@kortix/ui/loading';
 import {
   Modal,
@@ -35,7 +35,7 @@ import {
 import { useProjectAccountId } from '@kortix/sdk/react';
 import { CheckIcon, WarningIcon } from '@phosphor-icons/react';
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { ConnectorHandshake } from '@kortix/ui/markdown/setup-links/connector-handshake';
 import { useConnectorIntake } from './connector-intake';
@@ -141,6 +141,7 @@ function AddAccountDialogBody({
 }: DialogBodyProps & { info: ConnectorSetupLinkInfo; projectId: string }) {
   const copy = useLocalizedUiCatalog(COPY);
   const tSharing = useTranslations('accessSharing');
+  const tSignIn = useTranslations('connectSignIn');
   const headline = connectorHeadline(info);
   const app = headline.app || fallbackName || copy.fallbackApp;
   const accountId = useProjectAccountId(projectId);
@@ -178,6 +179,15 @@ function AddAccountDialogBody({
   const [authorizedId, setAuthorizedId] = useState<string | null>(null);
   const { user } = useAuth();
   const managed = useAddManagedAccount(projectId, info.slug, accountId, () => undefined);
+  // A dialog closed while finalize runs must not complete: the card would
+  // report an account the person walked away from.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   const labelTaken = newAccountLabelTaken(draft, rows);
   const ready =
@@ -199,6 +209,10 @@ function AddAccountDialogBody({
         { backendUrl: setupLinkApiBase() },
         { connectionId },
       );
+      if (!mounted.current) return;
+      // 200 `{connected:false}`: the provider has not confirmed the account yet.
+      // The retry finalizes the same account again.
+      if (!done.connected) throw new Error(tSignIn('signInUnfinished'));
       setLanded({
         connectionId,
         label: done.label ?? draft.label.trim(),
@@ -209,6 +223,7 @@ function AddAccountDialogBody({
       // The new row, with its grants, so the summary names the audience.
       void connectionsQuery.refetch();
     } catch (cause) {
+      if (!mounted.current) return;
       setError(cause instanceof Error ? cause.message : tSharing('connectFailed'));
       setPhase('form');
     }
@@ -261,7 +276,7 @@ function AddAccountDialogBody({
 
       <ModalBody className="max-h-[50vh] space-y-4 overflow-y-auto">
         {error ? (
-          <InfoBanner tone="destructive" icon={<WarningIcon weight="fill" />} title={error} />
+          <BannerAlert variant="destructive" ><BannerAlertMedia>{<WarningIcon weight="fill" />}</BannerAlertMedia><BannerAlertTitle>{error}</BannerAlertTitle></BannerAlert>
         ) : null}
         {connected && landed ? (
           <div className="space-y-1.5" data-testid="connector-connect-landed">
@@ -360,7 +375,7 @@ function OneClickDialogBody({ token, onClose, onConnected, fallbackName }: Dialo
         {copy.loading}
       </p>
     ) : phase === 'error' || error ? (
-      <InfoBanner tone="destructive" icon={<WarningIcon weight="fill" />} title={error ?? ''} />
+      <BannerAlert variant="destructive" ><BannerAlertMedia>{<WarningIcon weight="fill" />}</BannerAlertMedia><BannerAlertTitle>{error ?? ''}</BannerAlertTitle></BannerAlert>
     ) : waiting ? (
       <div className="bg-popover flex items-center gap-3 rounded-md border px-4 py-3">
         <Loading variant="spokes" className="size-4 shrink-0" />

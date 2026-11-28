@@ -11,7 +11,7 @@ import {
   setActiveAccount,
   setDefaultProject,
 } from '../api/config.ts';
-import { resolveProjectId, saveLink } from '../project-link.ts';
+import { loadLink, migrateLegacyLink, resolveProjectId, saveLink } from '../project-link.ts';
 import { renderContext, renderHostNotice } from '../host-notice.ts';
 import { stripAnsi } from '../style.ts';
 
@@ -148,19 +148,35 @@ describe('resolveProjectId fallback order', () => {
         default_project: { project_id: 'proj_default', account_id: 'account_1' },
       }),
     });
-    mkdirSync(join(tmp, '.kortix'), { recursive: true });
+    Bun.spawnSync(['git', 'init', '-q'], { cwd: tmp });
     process.chdir(tmp);
     saveLink(
       { project_id: 'proj_linked', account_id: 'account_1', linked_at: '2026-01-01T00:00:00.000Z' },
       tmp,
     );
-    expect(existsSync(join(tmp, '.kortix', 'link.json'))).toBe(true);
+    // The link is in .git/config: the working tree gets no .kortix/ folder.
+    expect(existsSync(join(tmp, '.kortix'))).toBe(false);
     expect(resolveProjectId()).toBe('proj_linked');
+  });
+
+  test('an older .kortix/link.json still resolves, and migrating moves it into the git config', () => {
+    Bun.spawnSync(['git', 'init', '-q'], { cwd: tmp });
+    mkdirSync(join(tmp, '.kortix'), { recursive: true });
+    writeFileSync(
+      join(tmp, '.kortix', 'link.json'),
+      JSON.stringify({ project_id: 'proj_legacy', account_id: 'account_1', host: 'test' }),
+    );
+    process.chdir(tmp);
+    expect(resolveProjectId()).toBe('proj_legacy');
+    expect(migrateLegacyLink(tmp)).toBe(true);
+    expect(existsSync(join(tmp, '.kortix'))).toBe(false);
+    expect(loadLink(tmp)).toMatchObject({ project_id: 'proj_legacy', host: 'test' });
+    expect(resolveProjectId()).toBe('proj_legacy');
   });
 });
 
 describe('renderContext + host notice', () => {
-  test('context block shows host, account, and default project', () => {
+  test('context block shows host and the default workspace, with no account row', () => {
     writeConfig({
       test: loggedInHost({
         account_slug: 'kortix',
@@ -172,13 +188,12 @@ describe('renderContext + host notice', () => {
     const out = stripAnsi(renderContext());
     expect(out).toContain('host');
     expect(out).toContain('test');
-    expect(out).toContain('account');
-    expect(out).toContain('Kortix');
-    expect(out).toContain('project');
+    expect(out).not.toContain('account');
+    expect(out).toContain('workspace');
     expect(out).toContain('Alpha');
     expect(out).toContain('(default)');
-    // A bound default project points at the switch verb.
-    expect(out).toContain('switch with `kortix projects use`');
+    // A bound default workspace points at the switch verb.
+    expect(out).toContain('switch with `kortix workspaces use`');
   });
 
   test('a directory-linked project does not show the default-project switch hint', () => {
@@ -189,7 +204,7 @@ describe('renderContext + host notice', () => {
         default_project: { project_id: 'proj_a', account_id: 'account_1', name: 'Alpha' },
       }),
     });
-    mkdirSync(join(tmp, '.kortix'), { recursive: true });
+    Bun.spawnSync(['git', 'init', '-q'], { cwd: tmp });
     saveLink(
       { project_id: 'proj_linked', account_id: 'account_1', linked_at: '2026-01-01T00:00:00.000Z' },
       tmp,
@@ -200,15 +215,15 @@ describe('renderContext + host notice', () => {
     expect(out).not.toContain('switch with');
   });
 
-  test('context block nudges when account / default project are unset', () => {
+  test('context block nudges when the default workspace is unset', () => {
     writeConfig({ test: loggedInHost({ account_id: '' }) });
     process.chdir(tmp);
     const out = stripAnsi(renderContext());
-    expect(out).toContain('kortix accounts use');
-    expect(out).toContain('kortix projects use');
+    expect(out).not.toContain('kortix accounts use');
+    expect(out).toContain('kortix workspaces use');
   });
 
-  test('breadcrumb renders the full host -> account -> project -> session path when signed in', () => {
+  test('breadcrumb renders the full host -> workspace -> session path when signed in', () => {
     writeConfig({
       test: loggedInHost({
         account_slug: 'kortix',
@@ -222,8 +237,7 @@ describe('renderContext + host notice', () => {
     expect(out).toMatch(/●\s+host/);
     expect(out).toContain('▸ kortix hosts use');
     // Every level is present, top-down.
-    expect(out).toContain('account');
-    expect(out).toContain('project');
+    expect(out).toContain('workspace');
     expect(out).toContain('session');
     // The session leaf is empty (no persisted active session) and offers a verb.
     expect(out).toContain('open one: kortix chat');
@@ -245,20 +259,20 @@ describe('renderContext + host notice', () => {
     expect(out).toMatch(/○\s+host/);
     expect(out).toContain('not logged in');
     expect(out).toContain('→ kortix hosts login');
-    // Can't have an account/project without a signed-in host.
-    expect(out).not.toContain('account');
+    // Can't have a workspace without a signed-in host.
+    expect(out).not.toContain('workspace');
     expect(out).not.toContain('session');
   });
 
-  test('breadcrumb marks an unmet account gap as actionable', () => {
+  test('breadcrumb marks an unmet workspace gap as actionable', () => {
     writeConfig({ test: loggedInHost({ account_id: '' }) });
     process.chdir(tmp);
     const out = stripAnsi(renderContext());
-    expect(out).toMatch(/⚠\s+account/);
-    expect(out).toContain('→ kortix accounts use');
+    expect(out).toMatch(/⚠\s+workspace/);
+    expect(out).toContain('→ kortix workspaces use');
   });
 
-  test('subcommand host notice appends account + default project', () => {
+  test('subcommand host notice appends the default workspace', () => {
     writeConfig({
       test: loggedInHost({
         account_slug: 'kortix',
@@ -269,8 +283,8 @@ describe('renderContext + host notice', () => {
     process.chdir(tmp);
     const notice = stripAnsi(renderHostNotice(['whoami']) ?? '');
     expect(notice).toContain('host test');
-    expect(notice).toContain('account Kortix');
-    expect(notice).toContain('project Alpha');
+    expect(notice).not.toContain('account Kortix');
+    expect(notice).toContain('workspace Alpha');
     expect(notice).toContain('(default)');
   });
 
@@ -279,7 +293,7 @@ describe('renderContext + host notice', () => {
       cloud: loggedInHost({ url: 'https://api.kortix.com' }),
       customdev: loggedInHost({ url: 'https://dev-api.kortix.com' }),
     });
-    mkdirSync(join(tmp, '.kortix'), { recursive: true });
+    Bun.spawnSync(['git', 'init', '-q'], { cwd: tmp });
     saveLink(
       {
         project_id: 'proj_linked',
@@ -295,7 +309,7 @@ describe('renderContext + host notice', () => {
     const notice = stripAnsi(renderHostNotice(['env', 'pull']) ?? '');
     expect(notice).toContain('host customdev');
     expect(notice).toContain('https://dev-api.kortix.com');
-    expect(notice).toContain('project proj_lin');
+    expect(notice).toContain('workspace proj_lin');
     expect(notice).not.toContain('host cloud');
   });
 
@@ -311,6 +325,6 @@ describe('renderContext + host notice', () => {
     const notice = stripAnsi(renderHostNotice(['whoami', '--host', 'cloud']) ?? '');
     expect(notice).toContain('host cloud');
     expect(notice).not.toContain('account Kortix');
-    expect(notice).not.toContain('project Alpha');
+    expect(notice).not.toContain('workspace Alpha');
   });
 });

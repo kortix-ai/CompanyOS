@@ -12,7 +12,6 @@ import { useEffect } from 'react';
  */
 export function AuthEventTracker() {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
@@ -53,7 +52,7 @@ export function AuthEventTracker() {
       // Replace URL without triggering navigation
       window.history.replaceState({}, '', newUrl);
     }
-  }, [searchParams, pathname, router]);
+  }, [searchParams, pathname]);
 
   return null;
 }

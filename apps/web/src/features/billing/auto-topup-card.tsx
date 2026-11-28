@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { Button } from '@kortix/ui/button';
-import { InfoBanner } from '@kortix/ui/info-banner';
+import { Alert as BannerAlert, AlertDescription as BannerAlertDescription, AlertActions as BannerAlertActions} from '@kortix/ui/alert';
 import Loading from '@kortix/ui/loading';
 import { Switch } from '@kortix/ui/switch';
 import { errorToast, successToast } from '@kortix/ui/toast';
@@ -28,7 +28,7 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, m } from 'motion/react';
 import { useLocale, useTranslations } from '@/i18n/use-translations';
-import { formatWholeUsd, monthlyCreditsForUsd, TOP_UP_BONUS_STEPS, topUpBonusCredits } from '@kortix/ui/internal/billing/compute-pricing';
+import { creditsForUsd, formatWholeUsd } from '@kortix/ui/internal/billing/compute-pricing';
 import { autoTopupFailureNotice } from './auto-topup-failure-notice';
 
 /**
@@ -232,20 +232,15 @@ export function AutoTopupCard({
   return (
     <div className="space-y-3">
       {settingsError && (
-        <InfoBanner
-          tone="warning"
-          action={
-            <Button size="sm" variant="outline" onClick={() => refetchSettings()}>
-              {t('retry')}
-            </Button>
-          }
-        >
+        <BannerAlert variant="warning" ><BannerAlertDescription>
           {t('settingsLoadFailed')}
-        </InfoBanner>
+        </BannerAlertDescription><BannerAlertActions>{<Button size="sm" variant="outline" onClick={() => refetchSettings()}>
+              {t('retry')}
+            </Button>}</BannerAlertActions></BannerAlert>
       )}
 
       {failureNotice && (
-        <InfoBanner tone="warning">{t(failureNotice.key, failureNotice.values)}</InfoBanner>
+        <BannerAlert variant="warning" ><BannerAlertDescription>{t(failureNotice.key, failureNotice.values)}</BannerAlertDescription></BannerAlert>
       )}
 
       <div className="flex items-center justify-between gap-4">
@@ -332,14 +327,7 @@ export function AutoTopupCard({
 
             {!bufferError && !showMissingCardWarning && (
               <p className="text-muted-foreground mt-2.5 text-xs tabular-nums">
-                {topUpBonusCredits(amountNum) > 0
-                  ? t('bonusHint', {
-                      credits: formatCredits(monthlyCreditsForUsd(amountNum), { locale }),
-                      bonus: formatCredits(topUpBonusCredits(amountNum), { locale }),
-                    })
-                  : t('bonusFrom', {
-                      min: formatWholeUsd(TOP_UP_BONUS_STEPS[TOP_UP_BONUS_STEPS.length - 1].minUsd, locale),
-                    })}
+                {t('creditsHint', { credits: formatCredits(creditsForUsd(amountNum), { locale }) })}
               </p>
             )}
           </m.div>

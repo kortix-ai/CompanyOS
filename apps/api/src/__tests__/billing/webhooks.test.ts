@@ -82,7 +82,7 @@ beforeEach(() => {
 
 // Import AFTER mocking
 const { processStripeWebhook, processRevenueCatWebhook } = await import('../../billing/services/webhooks');
-const { resolveCreditsPriceId } = await import('../../billing/services/tiers');
+const { resolveCreditsPriceId, resolveFreePriceId } = await import('../../billing/services/tiers');
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
@@ -131,7 +131,7 @@ describe('checkout.session.completed', () => {
     expect(upsertCustomerCalls.length).toBe(1);
   });
 
-  test('payment mode: grants non-expiring credits for purchase, plus the top-up bonus', async () => {
+  test('payment mode: grants non-expiring credits for purchase at the flat rate, no bonus', async () => {
     const session = createMockStripeCheckoutSession({
       mode: 'payment',
       amount_total: 5000,
@@ -152,12 +152,11 @@ describe('checkout.session.completed', () => {
 
     await processStripeWebhook(JSON.stringify(event), 'sig');
 
-    expect(walletGrants.length).toBe(2);
+    // One row: top-ups carry no bonus; the plan is the volume discount.
+    expect(walletGrants.length).toBe(1);
     expect(walletGrants[0].amount).toBe(50);
     expect(walletGrants[0].expiring).toBe(false);
     expect(walletGrants[0].key).toEqual({ event: session.id });
-    // $50 is the first bonus step: +1%, its own ledger row, keyed on the session.
-    expect(walletGrants[1]).toMatchObject({ amount: 0.5, kind: 'topup_bonus', expiring: false, key: { event: `${session.id}:bonus` } });
     // The purchase row is found through its PaymentIntent and marked settled.
     expect(purchaseUpdates).toEqual([['purchase_123', 'completed', expect.anything()]]);
   });
@@ -485,6 +484,28 @@ describe('subscription changes', () => {
     expect(updateCreditAccountCalls[0].data.tier).toBe('credits');
     expect(updateCreditAccountCalls[0].data.planMonthlyUsd).toBe('20');
   });
+
+  // KRTX-1510: the Stripe portal downgrades by switching the item to the $0
+  // Free price; the subscription stays active. The paid amount goes with the plan.
+  test('a switch to the Free price moves the plan to Free and clears the paid amount', async () => {
+    mockRegistry.getCreditAccount = async () =>
+      createMockCreditAccount({ tier: 'credits', planMonthlyUsd: '50', scheduledMonthlyUsd: '20', stripeSubscriptionId: 'sub_test_123' });
+    const sub = createMockStripeSubscription({
+      items: { data: [{ id: 'si_test_123', quantity: 5000, price: { id: resolveFreePriceId(), unit_amount: 0, currency: 'usd' } }] },
+      metadata: { account_id: 'acc_test_123', plan_key: 'credits', tier_key: 'credits' },
+    });
+    const event = createMockStripeEvent('customer.subscription.updated', sub);
+    mockRegistry.stripeClient.webhooks.constructEvent = () => event;
+
+    await processStripeWebhook(JSON.stringify(event), 'sig');
+
+    expect(updateCreditAccountCalls[0].data).toMatchObject({
+      tier: 'free',
+      planMonthlyUsd: null,
+      scheduledMonthlyUsd: null,
+      scheduledTierChangeDate: null,
+    });
+  });
 });
 
 describe('subscription deleted', () => {
@@ -555,6 +576,32 @@ describe('invoice.paid (renewal)', () => {
     expect(walletGrants.length).toBe(0);
   });
 
+  test('a $1,000 plan renews with its +20% bonus, rolls over at most one month of credits, and stores the billed $1,000', async () => {
+    const invoice = createMockStripeInvoice();
+    const event = createMockStripeEvent('invoice.paid', invoice);
+    mockRegistry.stripeClient.webhooks.constructEvent = () => event;
+    mockRegistry.stripeClient.subscriptions.retrieve = async () =>
+      createMockStripeSubscription({
+        metadata: { account_id: 'acc_test_123' },
+        items: { data: [{ id: 'si_1', quantity: 100_000, price: { id: resolveCreditsPriceId(), unit_amount: 1, currency: 'usd' } }] },
+      });
+    mockRegistry.getCreditAccount = async () =>
+      createMockCreditAccount({ tier: 'credits', planMonthlyUsd: '1000', lastRenewalPeriodStart: null });
+    const balance = fakeWallet.wallet.balance;
+    // More unused monthly credits than one month grants: the carry stops at 1,200.
+    fakeWallet.wallet.balance = async () => ({ balance: 2_000, expiring: 2_000, nonExpiring: 0, daily: 0 });
+    try {
+      await processStripeWebhook(JSON.stringify(event), 'sig');
+    } finally {
+      fakeWallet.wallet.balance = balance;
+    }
+
+    expect(walletResets.map((reset) => reset.amount)).toEqual([2_400]);
+    expect(walletResets[0].description).toBe('Monthly renewal: 120000 credits + 120000 rolled over');
+    const persisted = updateCreditAccountCalls.find((c: any) => c.data.planMonthlyUsd !== undefined);
+    expect(persisted?.data.planMonthlyUsd).toBe('1000');
+  });
+
 });
 
 describe('invoice.payment_failed', () => {
@@ -562,6 +609,9 @@ describe('invoice.payment_failed', () => {
     const invoice = createMockStripeInvoice();
     const event = createMockStripeEvent('invoice.payment_failed', invoice);
     mockRegistry.stripeClient.webhooks.constructEvent = () => event;
+    // Stripe moves a subscription whose renewal failed to past_due.
+    mockRegistry.stripeClient.subscriptions.retrieve = async () =>
+      createMockStripeSubscription({ status: 'past_due' });
 
     await processStripeWebhook(JSON.stringify(event), 'sig');
 
@@ -573,6 +623,13 @@ describe('invoice.payment_failed', () => {
 });
 
 describe('RevenueCat', () => {
+  // A store lifecycle event speaks only for an account billed through the
+  // store, on the product the event names.
+  beforeEach(() => {
+    mockRegistry.getCreditAccount = async () =>
+      createMockCreditAccount({ provider: 'revenuecat' });
+  });
+
   test('INITIAL_PURCHASE: maps product to tier, grants credits', async () => {
     const body = createMockRevenueCatEvent('INITIAL_PURCHASE', {
       product_id: 'kortix_pro_monthly',
@@ -1265,7 +1322,7 @@ describe('handleSubscriptionDeleted: restore other active sub', () => {
     expect(machineRestore).toBeUndefined();
   });
 
-  test('falls through to revertToFree when Stripe list fails', async () => {
+  test('keeps the paid tier and rethrows when the Stripe list fails (redelivery)', async () => {
     mockRegistry.getCreditAccount = async () =>
       createMockCreditAccount({
         stripeSubscriptionId: 'sub_machine',
@@ -1285,11 +1342,10 @@ describe('handleSubscriptionDeleted: restore other active sub', () => {
       throw new Error('Stripe API error');
     };
 
-    await processStripeWebhook(JSON.stringify(event), 'sig');
+    await expect(processStripeWebhook(JSON.stringify(event), 'sig')).rejects.toThrow('Stripe API error');
 
-    // Should fall through to revertToFree
-    const freeRevert = updateCreditAccountCalls.find((c: any) => c.data.tier === 'free');
-    expect(freeRevert).toBeDefined();
+    // The account must stay on its paid tier; Stripe redelivers the event.
+    expect(updateCreditAccountCalls.find((c: any) => c.data.tier === 'free')).toBeUndefined();
   });
 });
 
@@ -1319,13 +1375,14 @@ describe('the allowance is the subscription list price per month', () => {
   const recovering = () =>
     createMockCreditAccount({ tier: 'free', planMonthlyUsd: null, stripeSubscriptionId: null });
 
-  test('a recovering credits subscription is reset to quantity x $0.01', async () => {
+  test('a recovering credits subscription is reset to quantity x $0.01 plus its volume bonus', async () => {
     mockRegistry.getCreditAccount = async () => recovering();
 
     await syncPlan(planSub({ priceId: resolveCreditsPriceId(), quantity: 10_000 }));
 
+    // $100 billed (+5%): 10,500 credits granted, $100 stored as the plan.
     expect(walletResets.length).toBe(1);
-    expect(walletResets[0].amount).toBe(100);
+    expect(walletResets[0].amount).toBe(105);
     expect(walletGrants.length).toBe(0);
     const persisted = updateCreditAccountCalls.find((c: any) => c.data.planMonthlyUsd !== undefined);
     expect(persisted?.data.tier).toBe('credits');
@@ -1337,7 +1394,8 @@ describe('the allowance is the subscription list price per month', () => {
 
     await syncPlan(planSub({ priceId: 'price_1TdyruG6l1KZGqIrMzPVmQSO', quantity: 6, unitAmount: 4000 }));
 
-    expect(walletResets.map((reset) => reset.amount)).toEqual([240]);
+    // $240 billed earns the $200 step (+10%): 26,400 credits.
+    expect(walletResets.map((reset) => reset.amount)).toEqual([264]);
     const seatTouching = updateCreditAccountCalls.find(
       (c: any) => c.data.seatCount !== undefined || c.data.billingModel !== undefined,
     );

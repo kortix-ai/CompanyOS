@@ -11,6 +11,12 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { dirname } from 'node:path';
+import {
+  RUNTIME_AUDIT_SECRET_VALUE_RE,
+  RUNTIME_AUDIT_STRUCTURAL_WRAPPER_KEYS,
+  RUNTIME_AUDIT_SUMMARY_KEYS,
+  isSafeRuntimeAuditSummary,
+} from '@kortix/api-contract/runtime-relay';
 import type { RuntimeAuditBatch, RuntimeAuditEvent } from '@kortix/api-contract/runtime-relay';
 import { logger } from '@/lib/log/logger';
 import { sandboxRelayContext } from '@/lib/kortix-api/relay-context';
@@ -18,6 +24,7 @@ import {
   noteControlPlaneResponse,
   sessionTokenPresumedDead,
 } from '@/lib/kortix-api/session-token-health';
+import { kortixApiFetch } from '@/lib/kortix-api/workspace-routes'
 
 /*
  * The session's tool audit trail, for every harness (E12). Each runtime event
@@ -43,69 +50,6 @@ function stableJson(value: unknown): string {
 function sha256(value: unknown): string {
   return createHash('sha256').update(stableJson(value)).digest('hex');
 }
-
-const SECRET_VALUE =
-  /(?:bearer\s+[a-z0-9._~+/=-]+|sk-[a-z0-9_-]{12,}|gh[opusr]_[a-z0-9_]{12,}|kortix_(?:pat|sbx)_[a-z0-9_-]+|(?:token|secret|password|api[_-]?key)=\S+)/i;
-const SAFE_KEYS = new Set([
-  'id',
-  'sessionID',
-  'sessionId',
-  'session_id',
-  'parentID',
-  'parentId',
-  'messageID',
-  'messageId',
-  'partID',
-  'partId',
-  'callID',
-  'callId',
-  'toolCallID',
-  'toolCallId',
-  'executionID',
-  'executionId',
-  'tool',
-  'name',
-  'status',
-  'role',
-  'type',
-  'path',
-  'filename',
-  'mime',
-  'size',
-  'bytes',
-  'duration',
-  'durationMs',
-  'agent',
-  'agentID',
-  'agentId',
-  'agentName',
-  'depth',
-  'multiple',
-  'custom',
-  'count',
-  // The wire wraps the safe identity and lifecycle fields below in these
-  // objects. Raw prompt, input, output, error text, and arbitrary metadata are
-  // still excluded by the recursive allowlist.
-  'session',
-  'message',
-  'part',
-  'info',
-  'error',
-  'state',
-  'time',
-  'start',
-  'end',
-  'created',
-  'completed',
-  'updated',
-  'compacting',
-  'archived',
-  'providerID',
-  'modelID',
-  'mode',
-  'delivery',
-]);
-const STRUCTURAL_WRAPPER_KEYS = new Set(['session', 'message', 'part', 'info', 'error', 'state']);
 
 const EVENT_FIELDS = new Set([
   'event_id',
@@ -133,23 +77,6 @@ const EVENT_FIELDS = new Set([
   'metadata',
 ]);
 const SHA256_RE = /^[0-9a-f]{64}$/;
-
-function isSafePersistedSummary(value: unknown, depth = 0): boolean {
-  if (!value || typeof value !== 'object' || Array.isArray(value) || depth > 4) return false;
-  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
-    if (!SAFE_KEYS.has(key)) return false;
-    if (STRUCTURAL_WRAPPER_KEYS.has(key)) {
-      if (!isSafePersistedSummary(child, depth + 1)) return false;
-      continue;
-    }
-    if (child === null || typeof child === 'boolean') continue;
-    if (typeof child === 'number' && Number.isFinite(child)) continue;
-    if (typeof child === 'string' && child.length <= 512 && !SECRET_VALUE.test(child)) continue;
-    if (isSafePersistedSummary(child, depth + 1)) continue;
-    return false;
-  }
-  return true;
-}
 
 function isPersistedRuntimeAuditEvent(value: unknown): value is RuntimeAuditEvent {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -184,8 +111,8 @@ function isPersistedRuntimeAuditEvent(value: unknown): value is RuntimeAuditEven
     !['success', 'failure', 'denied', 'pending'].includes(String(event.outcome)) ||
     typeof event.phase !== 'string' ||
     !/^[a-z0-9_.:-]{1,32}$/i.test(event.phase) ||
-    !isSafePersistedSummary(event.input_summary) ||
-    (event.output_summary !== null && !isSafePersistedSummary(event.output_summary)) ||
+    !isSafeRuntimeAuditSummary(event.input_summary) ||
+    (event.output_summary !== null && !isSafeRuntimeAuditSummary(event.output_summary)) ||
     !SHA256_RE.test(String(event.input_sha256 ?? '')) ||
     (event.output_sha256 !== null && !SHA256_RE.test(String(event.output_sha256))) ||
     event.error_message !== null
@@ -224,7 +151,7 @@ function safeScalar(value: unknown): string | number | boolean | null {
   if (typeof value !== 'string') return null;
   const origin = originOnlyUrl(value);
   if (origin) return origin;
-  if (SECRET_VALUE.test(value)) return '[REDACTED]';
+  if (RUNTIME_AUDIT_SECRET_VALUE_RE.test(value)) return '[REDACTED]';
   return value.slice(0, 512);
 }
 
@@ -232,13 +159,13 @@ function structuralSummary(value: unknown, depth = 0): Record<string, unknown> {
   if (!value || typeof value !== 'object' || depth > 3) return {};
   const result: Record<string, unknown> = {};
   for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
-    if (STRUCTURAL_WRAPPER_KEYS.has(key)) {
+    if (RUNTIME_AUDIT_STRUCTURAL_WRAPPER_KEYS.has(key)) {
       if (child && typeof child === 'object' && !Array.isArray(child)) {
         result[key] = structuralSummary(child, depth + 1);
       }
       continue;
     }
-    if (SAFE_KEYS.has(key)) {
+    if (RUNTIME_AUDIT_SUMMARY_KEYS.has(key)) {
       if (Array.isArray(child)) result[key] = { count: child.length };
       else if (child && typeof child === 'object')
         result[key] = structuralSummary(child, depth + 1);
@@ -423,7 +350,7 @@ export interface AuditRelay {
  *        TOKEN. The token itself is stripped by `sanitizeRuntimeEvent`, so the
  *        persisted row is identity + hashes and nothing a reconstruction can
  *        use. The API already names this the one droppable class
- *        (`SUPPRESSED_ACTION_CLASS`, apps/api `shared/opencode-audit-rate-guard.ts`) — it just dropped it AFTER
+ *        (`SUPPRESSED_ACTION_CLASS` in apps/api's audit rate guard) — it just dropped it AFTER
  *        paying for the network hop, the two scope queries and the insert.
  *    Dropping happens BEFORE `sanitizeRuntimeEvent` and before `persist()`, so
  *    it also removes that share of the spool's fsyncs from the sandbox's hot path.
@@ -442,7 +369,7 @@ export interface AuditRelay {
  *    whichever comes first — the timer runs from the OLDEST pending event, so
  *    a steady stream cannot keep postponing a flush. `batchSize` defaults to
  *    the API's own ceiling
- *    (`MAX_BATCH_SIZE = 200`, apps/api `shared/opencode-audit-ingestion.ts`) and is
+ *    (`MAX_BATCH_SIZE = 200` in apps/api's audit ingestion) and is
  *    clamped to it, so a misconfigured env can never produce a 400. The route
  *    still writes in 25-row chunks server-side, so a 200-event POST costs the
  *    same insert work as four 50-event POSTs but ONE auth pass and ONE pair of
@@ -995,8 +922,8 @@ export function createRuntimeAuditRelay(harness: string, spoolPath: string): Aud
       const ctx = sandboxRelayContext();
       if (!ctx) throw new Error('audit relay context is unavailable');
       const batch: RuntimeAuditBatch = { source: 'runtime', harness, events };
-      const response = await fetch(
-        `${ctx.apiRoot}/projects/${encodeURIComponent(ctx.projectId)}/sessions/${encodeURIComponent(ctx.sessionId)}/audit/events`,
+      const response = await kortixApiFetch(
+        `${ctx.apiRoot}/workspaces/${encodeURIComponent(ctx.projectId)}/sessions/${encodeURIComponent(ctx.sessionId)}/audit/events`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ctx.token}` },

@@ -7,7 +7,7 @@ import { setRuntimeCapabilities } from '../browser/stores/sandbox-connection-sto
 import { configureKortix } from '../core/http/config';
 import { setCurrentRuntime } from '../core/session/current-runtime';
 import { sessionStartKey, type SessionStartResult } from '../core/rest/projects-client';
-import { useSession } from './opencode';
+import { useSession } from './runtime-hooks';
 import { useSessionLogThread } from './use-session-log';
 import { qk } from './query-keys';
 import { resetSessionOpenBundles } from '../core/session/open-bundle';
@@ -77,7 +77,7 @@ beforeEach(() => {
       const all = page();
       return Response.json(before === null ? { ...all, messages: all.messages.slice(4), has_more: true } : { ...all, messages: all.messages.slice(0, 4), has_more: false });
     }
-    // The box's own page (`runtime.log.v1`): the API's page.
+    // The box's own page (`runtime.log.v1`): no client reads it any more (the API does, for `live`).
     if (path.endsWith('/kortix/runtime/log')) return Response.json(page());
     if (path.endsWith('/kortix/runtime/pending')) return Response.json({ statuses: {}, permissions: [], questions: [] });
     if (path.endsWith('/kortix/health')) return Response.json({ capabilities: ['runtime.actions.v1', 'runtime.log.v1'] });
@@ -86,8 +86,8 @@ beforeEach(() => {
     // The turn record of a session that never ran a turn.
     if (turnPending && path.endsWith('/turn')) return new Promise<Response>(() => {});
     if (emptyLog && path.endsWith('/turn')) return Response.json({ turns: [], last_ended: null });
-    if (path === `/projects/${PROJECT_ID}/detail` && detailPending) return new Promise<Response>(() => {});
-    if (path === `/projects/${PROJECT_ID}/detail`) return Response.json({ project: { project_id: PROJECT_ID, experimental: { session_log: true } }, config: {} });
+    if (path === `/workspaces/${PROJECT_ID}/detail` && detailPending) return new Promise<Response>(() => {});
+    if (path === `/workspaces/${PROJECT_ID}/detail`) return Response.json({ project: { project_id: PROJECT_ID, experimental: { session_log: true } }, config: {} });
     return Response.json({}, { status: 404 });
   }) as unknown as typeof fetch;
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -114,7 +114,7 @@ describe('useSession negotiates the session log without its chat engine', () => 
     // The runtime's health answer lists the log (a box switch clears the list first).
     act(() => setRuntimeCapabilities(['session.log.v2']));
     await flush();
-    expect(urls.some((u) => u.startsWith(`/projects/${PROJECT_ID}/sessions/${SESSION_ID}/log`))).toBe(true);
+    expect(urls.some((u) => u.startsWith(`/workspaces/${PROJECT_ID}/sessions/${SESSION_ID}/log`))).toBe(true);
   });
 
   test.each([true, false])('chatEngine false, flag %p known at the open: the snapshot asks no transcript window', async (flag) => {
@@ -194,7 +194,7 @@ describe('useSession with its chat engine: the session log owns the history once
     pagedLog = true;
     const seen = mountHost(true);
     await flush();
-    const base = `/projects/${PROJECT_ID}/sessions/${SESSION_ID}`;
+    const base = `/workspaces/${PROJECT_ID}/sessions/${SESSION_ID}`;
     expect(urls.filter((u) => u.includes('/transcript'))).toEqual([]);
     expect(urls).toContain(`${base}/log?limit=40`);
     expect(seen.result!.savedTranscript).toBe('shown');
@@ -209,7 +209,7 @@ describe('useSession with its chat engine: the session log owns the history once
     const root = log.threads[0]!;
     await act(async () => { await seen.result!.loadOlder(); });
     await flush();
-    expect(urls).toContain(`/projects/${PROJECT_ID}/sessions/${SESSION_ID}/log?thread=${root.thread_id}&before_seq=${root.messages[4]!.seq}&limit=100`);
+    expect(urls).toContain(`/workspaces/${PROJECT_ID}/sessions/${SESSION_ID}/log?thread=${root.thread_id}&before_seq=${root.messages[4]!.seq}&limit=100`);
     expect(urls.filter((u) => u.includes('/transcript'))).toEqual([]);
     expect(seen.result!.hasOlder).toBe(false);
   });
@@ -284,7 +284,7 @@ describe('useSession with its chat engine: the session log owns the history once
       renderer = create(createElement(QueryClientProvider, { client: queryClient }, createElement(Host)));
     });
     await flush();
-    const base = `/projects/${PROJECT_ID}/sessions/${SESSION_ID}`;
+    const base = `/workspaces/${PROJECT_ID}/sessions/${SESSION_ID}`;
     expect(urls.filter((u) => u.includes('/transcript'))).toEqual([]);
     expect(urls).toContain(`${base}/log?limit=40`);
     // The snapshot asks no v1 window either.
@@ -296,7 +296,7 @@ describe('useSession with its chat engine: the session log owns the history once
     missingLog = true;
     const seen = mountHost(true);
     await flush();
-    const base = `/projects/${PROJECT_ID}/sessions/${SESSION_ID}`;
+    const base = `/workspaces/${PROJECT_ID}/sessions/${SESSION_ID}`;
     expect(urls).toContain(`${base}/log?limit=40`);
     expect(urls.filter((u) => u.includes('/transcript'))).toEqual([]);
     expect(seen.result!.savedTranscript).toBe('none');
@@ -306,7 +306,7 @@ describe('useSession with its chat engine: the session log owns the history once
     failedLog = failure;
     const seen = mountHost(true);
     await flush();
-    const base = `/projects/${PROJECT_ID}/sessions/${SESSION_ID}`;
+    const base = `/workspaces/${PROJECT_ID}/sessions/${SESSION_ID}`;
     expect(urls).toContain(`${base}/log?limit=40`);
     expect(urls.filter((u) => u.includes('/transcript'))).toEqual([]);
     expect(seen.result!.savedTranscript).toBe('none');
@@ -335,10 +335,12 @@ describe('useSession with its chat engine: the session log owns the history once
       await act(async () => { await new Promise((r) => setTimeout(r, 300)); });
     };
 
-    test('the box page is read; no v1 transcript, session record, status, permission, question or diagnostics read goes to the box', async () => {
+    // One read endpoint: the API reads the box's page (GET …/log?live=1); the client never reads the box's log itself.
+    test('the newest page is read live through the API; no log, v1 transcript, session record, status, permission, question or diagnostics read goes to the box', async () => {
       await open(['session.log.v2', 'runtime.actions.v1', 'runtime.log.v1']);
+      expect(urls).toContain(`/workspaces/${PROJECT_ID}/sessions/${SESSION_ID}/log?limit=40&live=1`);
       const reads = boxReads();
-      expect(reads).toContain('/kortix/runtime/log');
+      expect(reads).not.toContain('/kortix/runtime/log');
       expect(reads.filter((r) => !r.startsWith('/kortix/'))).toEqual([]);
     });
 
@@ -346,8 +348,9 @@ describe('useSession with its chat engine: the session log owns the history once
     // reason to fall back: the open reads the box log and no v1 route.
     test('a ready answer whose capability list lacks runtime.log.v1 reads the same, and no v1 route', async () => {
       await open(['session.log.v2', 'runtime.actions.v1']);
+      expect(urls).toContain(`/workspaces/${PROJECT_ID}/sessions/${SESSION_ID}/log?limit=40&live=1`);
       const reads = boxReads();
-      expect(reads).toContain('/kortix/runtime/log');
+      expect(reads).not.toContain('/kortix/runtime/log');
       expect(reads.filter((r) => !r.startsWith('/kortix/'))).toEqual([]);
     });
   });

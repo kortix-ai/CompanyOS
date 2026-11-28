@@ -1,43 +1,131 @@
 // Session groups — `/v1/projects/:id/session-groups` (apps/api/src/projects/routes/session-groups.ts).
-// A group is a named folder of the project's sessions that every member sees,
-// in one shared order. A session is in at most one group
+// A group (product word "Space") is a named folder of the project's sessions
+// that every member sees, in one shared order. Every session of a group is told
+// its name, description and instructions at turn start, mounts its Files
+// folder, and shares its memory (memory layer key = `group_id`). A session is in at most one group
 // (`ProjectSession.group_id`); list a group's sessions with
 // `listProjectSessionsPage(projectId, { group })`. Every route answers 403
 // `feature_disabled` while the project's `session_groups` flag is off.
 
 import { backendApi } from '../../http/api-client';
 import { unwrap } from './shared';
+import type { ProjectSpaceTab } from './spaces';
 
-/** A session group. Same fields as the API's `SessionGroup`. */
+/**
+ * A session group. Same fields as the API's `SessionGroup`.
+ *
+ * @deprecated Use `WorkspaceSessionGroup`. Kept permanently.
+ */
 export interface ProjectSessionGroup {
   group_id: string;
   /** 1–80 characters, unique in the project in any case. */
   name: string;
+  /** What the group is for, at most 2000 characters; null when none was given. Absent on older APIs. */
+  description?: string | null;
+  /**
+   * What every session of the group must follow while it works there, at most
+   * 8000 characters; null when none were given. Each session reads them at
+   * turn start, below its system and safety instructions. Absent on older APIs.
+   */
+  instructions?: string | null;
+  /**
+   * An emoji XOR a glyph from the project icon catalogue. Null (or absent, on
+   * older APIs): draw `suggestSpaceIcon(name)` from `@kortix/shared`.
+   */
+  icon?: { emoji: string } | { glyph: { name: string; color: string } } | null;
+  /**
+   * `private` (the default): its creator and `member_ids` see it and every
+   * session in it. `project`: everyone in the project does. Absent on older APIs.
+   */
+  visibility?: WorkspaceSessionGroupVisibility;
+  /** The people a `private` group is shared with (its creator not listed). Absent on older APIs. */
+  member_ids?: string[];
+  /** Its creator, then `member_ids`, each with a profile; every viewer of the group can read it. Absent on older APIs. */
+  people?: Array<{
+    user_id: string;
+    name: string | null;
+    email: string | null;
+    avatar_url: string | null;
+    is_creator: boolean;
+    /** Their role in the workspace; null when they left it. Absent on older APIs. */
+    workspace_role?: 'owner' | 'admin' | 'member' | null;
+    /** When they were added to the group; null for its creator. Absent on older APIs. */
+    added_at?: string | null;
+  }>;
+  /** The tabs after Sessions, in order: a channel's tab shape. Absent on older APIs. */
+  tabs?: ProjectSpaceTab[];
+  /** The caller may change its sharing and delete it. Absent on older APIs. */
+  can_manage?: boolean;
   /** 0-based place in the project's order. */
   position: number;
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  /**
+   * Kortix files durable facts (decisions, people, workstreams, playbooks)
+   * from the group's idle sessions into its memory on its own. On by default;
+   * only whoever manages the group changes it. Absent on older APIs.
+   */
+  memory_auto_update?: boolean;
+  /** When an update last wrote a page into the group's memory; null before the first. Absent on older APIs. */
+  memory_updated_at?: string | null;
+  /** In a list: the group's top-level sessions the caller can open. Absent on older APIs and on single-group responses. */
+  session_count?: number;
+  /** In a list: when the newest of those sessions last changed; null with none. Absent on older APIs and on single-group responses. */
+  last_activity_at?: string | null;
 }
 
+/** The workspace name of {@link ProjectSessionGroup}: the same type. */
+export type WorkspaceSessionGroup = ProjectSessionGroup;
+
+/** Who sees a session group: its creator and members (`private`) or the whole project. */
+export type WorkspaceSessionGroupVisibility = 'private' | 'project';
+
+/** {@link setWorkspaceSessionGroupSharing}: `private` with no ids is "Only me", with ids "Specific people"; `project` is everyone. */
+export interface WorkspaceSessionGroupSharingInput {
+  visibility: WorkspaceSessionGroupVisibility;
+  /** Members of the account; ignored (and cleared) for `project`. */
+  member_ids?: string[];
+}
+
+/** @deprecated Use `CreateWorkspaceSessionGroupInput`. Kept permanently. */
 export interface CreateProjectSessionGroupInput {
   /** 1–80 characters after trimming. */
   name: string;
+  /** What the group is for, at most 2000 characters after trimming. */
+  description?: string | null;
+  /** What every session of the group must follow there, at most 8000 characters after trimming. */
+  instructions?: string | null;
+  /** Absent: the API gives the icon the name suggests. A bad value rejects with 400 `invalid_icon`. */
+  icon?: { emoji: string } | { glyph: { name: string; color: string } };
 }
 
-/** A session and the group it is filed in (null: none). */
+/** The workspace name of {@link CreateProjectSessionGroupInput}: the same type. */
+export type CreateWorkspaceSessionGroupInput = CreateProjectSessionGroupInput;
+
+/**
+ * A session and the group it is filed in (null: none).
+ *
+ * @deprecated Use `WorkspaceSessionGroupAssignment`. Kept permanently.
+ */
 export interface ProjectSessionGroupAssignment {
   session_id: string;
   group_id: string | null;
 }
 
+/** The workspace name of {@link ProjectSessionGroupAssignment}: the same type. */
+export type WorkspaceSessionGroupAssignment = ProjectSessionGroupAssignment;
+
 /** The project's groups, in order. A background read: a failure reaches the caller's query state, not the host error handler. */
-export async function listProjectSessionGroups(projectId: string): Promise<ProjectSessionGroup[]> {
+export async function listWorkspaceSessionGroups(projectId: string): Promise<ProjectSessionGroup[]> {
   const body = unwrap(
-    await backendApi.get<{ groups: ProjectSessionGroup[] }>(`/projects/${projectId}/session-groups`, { showErrors: false }),
+    await backendApi.get<{ groups: ProjectSessionGroup[] }>(`/workspaces/${projectId}/session-groups`, { showErrors: false }),
   );
   return body.groups;
 }
+
+/** @deprecated Use `listWorkspaceSessionGroups`. Kept permanently. */
+export const listProjectSessionGroups = listWorkspaceSessionGroups;
 
 /**
  * Create a group, last in the order. A name another group of the project has
@@ -45,23 +133,111 @@ export async function listProjectSessionGroups(projectId: string): Promise<Proje
  * 50 groups rejects with 409 `group_limit`. The caller shows the error, so it
  * never reaches the host error handler.
  */
-export async function createProjectSessionGroup(projectId: string, input: CreateProjectSessionGroupInput) {
+export async function createWorkspaceSessionGroup(projectId: string, input: CreateProjectSessionGroupInput) {
   return unwrap(
-    await backendApi.post<ProjectSessionGroup>(`/projects/${projectId}/session-groups`, input, { showErrors: false }),
+    await backendApi.post<ProjectSessionGroup>(`/workspaces/${projectId}/session-groups`, input, { showErrors: false }),
   );
 }
+
+/** @deprecated Use `createWorkspaceSessionGroup`. Kept permanently. */
+export const createProjectSessionGroup = createWorkspaceSessionGroup;
 
 /** Rename a group. A taken name rejects with 409 `group_name_taken`; an unknown group with 404 `group_not_found`. */
-export async function renameProjectSessionGroup(projectId: string, groupId: string, name: string) {
+export async function renameWorkspaceSessionGroup(projectId: string, groupId: string, name: string) {
   return unwrap(
-    await backendApi.patch<ProjectSessionGroup>(`/projects/${projectId}/session-groups/${groupId}`, { name }, { showErrors: false }),
+    await backendApi.patch<ProjectSessionGroup>(`/workspaces/${projectId}/session-groups/${groupId}`, { name }, { showErrors: false }),
   );
 }
 
+/** @deprecated Use `renameWorkspaceSessionGroup`. Kept permanently. */
+export const renameProjectSessionGroup = renameWorkspaceSessionGroup;
+
 /** Delete a group. Its sessions stay, in no group; the groups after it move up one place. */
-export async function deleteProjectSessionGroup(projectId: string, groupId: string): Promise<void> {
-  unwrap(await backendApi.delete<{ ok: true }>(`/projects/${projectId}/session-groups/${groupId}`, { showErrors: false }));
+export async function deleteWorkspaceSessionGroup(projectId: string, groupId: string): Promise<void> {
+  unwrap(await backendApi.delete<{ ok: true }>(`/workspaces/${projectId}/session-groups/${groupId}`, { showErrors: false }));
 }
+
+/** The fields {@link updateWorkspaceSessionGroup} changes; at least one. */
+export interface UpdateWorkspaceSessionGroupInput {
+  /** 1–80 characters after trimming. */
+  name?: string;
+  /** At most 2000 characters after trimming; `null` or empty clears it. */
+  description?: string | null;
+  /** At most 8000 characters after trimming; `null` or empty clears them. */
+  instructions?: string | null;
+  /**
+   * Turn automatic memory updates on or off. Whoever manages the group only:
+   * anyone else rejects with 403 `group_manage_forbidden`.
+   */
+  memory_auto_update?: boolean;
+  /** The new icon; `null` takes it off. A bad value rejects with 400 `invalid_icon`. */
+  icon?: { emoji: string } | { glyph: { name: string; color: string } } | null;
+}
+
+/** What one {@link updateWorkspaceSessionGroupMemory} did. */
+export interface WorkspaceSessionGroupMemoryUpdate {
+  /** The memory pages it created or changed. */
+  updated_pages: number;
+  /** The sessions whose new messages it read. */
+  sessions: number;
+  /** When an update last wrote a page; null before the first. */
+  memory_updated_at: string | null;
+}
+
+/**
+ * Update a group's memory now: the new messages of its 10 most recently
+ * active sessions (changed in the last 3 days, since the last update) become
+ * at most 6 pages of the group's memory (layer key = `group_id`). Anyone who
+ * sees the group. Rejects with an `ApiError`: 503 `memory_unavailable`
+ * (no Files storage), 503 `memory_model_unavailable` (no model, or the model
+ * call failed), 409 `memory_update_running`, 404 `group_not_found`.
+ */
+export async function updateWorkspaceSessionGroupMemory(projectId: string, groupId: string): Promise<WorkspaceSessionGroupMemoryUpdate> {
+  return unwrap(
+    await backendApi.post<WorkspaceSessionGroupMemoryUpdate>(
+      `/workspaces/${projectId}/session-groups/${groupId}/memory/update`,
+      undefined,
+      { showErrors: false },
+    ),
+  );
+}
+
+/**
+ * Rename a group, change its description, its instructions or its icon; only the fields given are
+ * sent. A taken name rejects with 409 `group_name_taken`; an unknown group
+ * with 404 `group_not_found`.
+ */
+export async function updateWorkspaceSessionGroup(projectId: string, groupId: string, input: UpdateWorkspaceSessionGroupInput) {
+  return unwrap(
+    await backendApi.patch<ProjectSessionGroup>(`/workspaces/${projectId}/session-groups/${groupId}`, input, { showErrors: false }),
+  );
+}
+
+/**
+ * Change who sees a group; whoever sees it sees every session in it. Its
+ * creator only (or an owner or admin under account session oversight): 403
+ * `group_manage_forbidden` otherwise; a person outside the account in
+ * `member_ids` rejects with 400 `not_a_member`.
+ */
+export async function setWorkspaceSessionGroupSharing(
+  projectId: string,
+  groupId: string,
+  input: WorkspaceSessionGroupSharingInput,
+) {
+  return unwrap(
+    await backendApi.put<ProjectSessionGroup>(`/workspaces/${projectId}/session-groups/${groupId}/sharing`, input, { showErrors: false }),
+  );
+}
+
+/** Replace a group's tabs (the whole ordered list after Sessions, at most 20). Anyone who sees the group. */
+export async function setWorkspaceSessionGroupTabs(projectId: string, groupId: string, tabs: ProjectSpaceTab[]) {
+  return unwrap(
+    await backendApi.put<ProjectSessionGroup>(`/workspaces/${projectId}/session-groups/${groupId}/tabs`, { tabs }, { showErrors: false }),
+  );
+}
+
+/** @deprecated Use `deleteWorkspaceSessionGroup`. Kept permanently. */
+export const deleteProjectSessionGroup = deleteWorkspaceSessionGroup;
 
 /**
  * Put the project's groups in this order: every group id, each once. A list
@@ -69,10 +245,10 @@ export async function deleteProjectSessionGroup(projectId: string, groupId: stri
  * rejects with 409 `group_order_stale`: read the list again. Resolves the
  * groups in the new order.
  */
-export async function reorderProjectSessionGroups(projectId: string, groupIds: readonly string[]): Promise<ProjectSessionGroup[]> {
+export async function reorderWorkspaceSessionGroups(projectId: string, groupIds: readonly string[]): Promise<ProjectSessionGroup[]> {
   const body = unwrap(
     await backendApi.put<{ groups: ProjectSessionGroup[] }>(
-      `/projects/${projectId}/session-groups/order`,
+      `/workspaces/${projectId}/session-groups/order`,
       { group_ids: groupIds },
       { showErrors: false },
     ),
@@ -80,18 +256,24 @@ export async function reorderProjectSessionGroups(projectId: string, groupIds: r
   return body.groups;
 }
 
+/** @deprecated Use `reorderWorkspaceSessionGroups`. Kept permanently. */
+export const reorderProjectSessionGroups = reorderWorkspaceSessionGroups;
+
 /**
  * File a session into a group of its project, or take it out of its group
  * (`null`). The session keeps its `updated_at`, so it keeps its place in the
  * list. An unknown group rejects with 404 `group_not_found`; a session the
  * caller cannot see with 404.
  */
-export async function setProjectSessionGroup(projectId: string, sessionId: string, groupId: string | null) {
+export async function setWorkspaceSessionGroup(projectId: string, sessionId: string, groupId: string | null) {
   return unwrap(
     await backendApi.put<ProjectSessionGroupAssignment>(
-      `/projects/${projectId}/sessions/${sessionId}/group`,
+      `/workspaces/${projectId}/sessions/${sessionId}/group`,
       { group_id: groupId },
       { showErrors: false },
     ),
   );
 }
+
+/** @deprecated Use `setWorkspaceSessionGroup`. Kept permanently. */
+export const setProjectSessionGroup = setWorkspaceSessionGroup;

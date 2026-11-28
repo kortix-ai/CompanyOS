@@ -1,11 +1,27 @@
 import { Context } from 'hono';
 import { setSentryUser } from '../lib/sentry';
 import { setContextField } from '../lib/request-context';
-import { auditLoginSuccess } from './auth-audit';
+import { HTTPException } from 'hono/http-exception';
+import { auditLoginFail, auditLoginSuccess } from './auth-audit';
+import { keyScopeMethodAllows } from '../iam/key-scope';
 import { jitSyncSso } from './auth-sso';
 import { setPreviewSessionCookie } from './auth-scope';
 
 type Preview = { token: string; enabled: boolean };
+
+/** The code a read-only key's write request is refused with. */
+export const KEY_SCOPE_READ_ONLY_CODE = 'key_scope_read_only';
+
+function keyScopeReadOnly403(method: string): HTTPException {
+  const message = `This key is read-only and cannot make a ${method.toUpperCase()} request. Use a key with write permissions.`;
+  return new HTTPException(403, {
+    message,
+    res: new Response(JSON.stringify({ error: true, message, status: 403, code: KEY_SCOPE_READ_ONLY_CODE }), {
+      status: 403,
+      headers: { 'content-type': 'application/json' },
+    }),
+  });
+}
 
 export function serviceAccountPrincipal(c: Context, id: string, accountId: string, preview?: Preview) {
   c.set('userId', id);
@@ -15,16 +31,27 @@ export function serviceAccountPrincipal(c: Context, id: string, accountId: strin
   c.set('iamTokenId', id);
   setSentryUser({ id, accountId });
   setContextField('userId', id);
+  setContextField('authSessionId', '');
   setContextField('accountId', accountId);
   if (preview?.enabled) setPreviewSessionCookie(c, preview.token);
   auditLoginSuccess({ c, userId: id, accountId, authType: 'service_account' });
 }
 
 export function patPrincipal(c: Context, result: Awaited<ReturnType<typeof import('../repositories/account-tokens').validateAccountToken>>, preview?: Preview) {
+  // A read-only workspace key (`scopes` holds only `*.read` actions) makes no
+  // write request at all, whatever the route gates on (iam/key-scope.ts).
+  if (!keyScopeMethodAllows(result.scopes ?? null, c.req.method)) {
+    auditLoginFail({ c, reason: 'key_scope_read_only', authType: 'pat', accountId: result.accountId ?? null });
+    throw keyScopeReadOnly403(c.req.method);
+  }
   const userId = result.userId!;
   c.set('userId', userId);
   c.set('userEmail', '');
-  c.set('authType', 'pat');
+  // A workspace key that acts as an agent or a bot (`service_account_id` set,
+  // no session, design.md §3.2 C4b): `user_id` is that service account, and
+  // the request is a service account's in every gate that asks, while the
+  // token row keeps its workspace binding and scope (`iamTokenId` below).
+  c.set('authType', result.serviceAccountId && !result.sessionId ? 'service_account' : 'pat');
   if (result.accountId) c.set('accountId', result.accountId);
   if (result.projectId) c.set('tokenProjectId', result.projectId);
   if (preview || result.tokenId) c.set('iamTokenId', result.tokenId);
@@ -46,14 +73,17 @@ export function patPrincipal(c: Context, result: Awaited<ReturnType<typeof impor
       projectId: result.projectId ?? null,
       agentGrant: result.agentGrant ?? null,
       serviceAccountId: result.serviceAccountId,
+      sessionId: result.sessionId ?? null,
       onBehalfOfUserId: result.onBehalfOfUserId ?? null,
+      scopes: result.scopes ?? null,
     });
   }
   setSentryUser({ id: userId, accountId: result.accountId });
   setContextField('userId', userId);
+  setContextField('authSessionId', result.sessionId ?? '');
   if (result.accountId) setContextField('accountId', result.accountId);
   if (preview?.enabled) setPreviewSessionCookie(c, preview.token);
-  auditLoginSuccess({ c, userId, accountId: result.accountId ?? null, authType: 'pat',
+  auditLoginSuccess({ c, userId, accountId: result.accountId ?? null, authType: c.get('authType') === 'service_account' ? 'service_account' : 'pat',
     metadata: preview ? undefined : result.projectId ? { project_id: result.projectId } : undefined });
 }
 
@@ -74,6 +104,7 @@ export async function jwtPrincipal(c: Context, userId: string, email: string, pa
   if (!preview && path === 'local') await jitSyncSso(userId, email, payload);
   setSentryUser({ id: userId, email: sentryEmail ?? email });
   setContextField('userId', userId);
+  setContextField('authSessionId', typeof payload?.session_id === 'string' ? payload.session_id : '');
   setContextField('userEmail', email);
   if (preview?.enabled) setPreviewSessionCookie(c, preview.token);
   auditLoginSuccess({ c, userId, authType: 'supabase', metadata: !preview && path === 'local'

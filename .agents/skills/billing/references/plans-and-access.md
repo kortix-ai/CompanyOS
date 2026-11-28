@@ -18,7 +18,10 @@ account buys, and which features it may use.
 1. **Money and features are separate.** Every account buys usage the same way:
    a billing plan (Free or Credits) plus top-ups. Enterprise never changes that.
 2. **Enterprise is a feature entitlement**, nothing else: SSO, SCIM, advanced
-   roles, audit export, branding. No credits come with it.
+   roles, audit export, branding. No credits come with it. Branding is
+   self-host only: with billing on (the Kortix cloud) `brandingEntitled`
+   in `apps/api/src/accounts/branding.ts` is always false, nothing stored is
+   served, and the writes answer `403 branding_unavailable`.
 3. **Three Enterprise states, no clocks.** Off, Demo (self-serve) and Licensed
    (a contract). There are no trials.
 4. **Exceptions are per-key overrides** in `entitlement_overrides`, each with an
@@ -42,13 +45,180 @@ it is not a fleet-wide quota and does not retry failed money operations.
 
 | | Free | Credits |
 |---|---|---|
-| Price | $0 | $50–$50,000 a month (25 ladder tiers; sales above it) |
-| Usage | 500 credits a month | Monthly credits, 1-month rollover, top-ups |
+| Price | $0 | $50–$10,000 a month (16 ladder tiers; sales above it) |
+| Usage | 500 credits a month | Monthly credits with the volume bonus, 1-month rollover, top-ups |
 | Features | Every self-serve feature except managed models; credit purchases | Same as Free, plus Kortix-managed models |
-| Limits | 1 project, free model rate budget | 200 projects, paid model rate budget |
+| Limits | free model rate budget | paid model rate budget |
+
+No plan caps workspaces. A workspace holds one project; a person may create
+any number of workspaces on Free, and only the first gets the free credits.
+
+Dictation (composer speech-to-text, `POST /v1/workspaces/:id/dictation`) is
+on every plan, Free included, although it runs a Kortix-managed Whisper: it
+is an input method, not a model choice (decision 2026-11-24). It costs
+`DICTATION_CREDITS_PER_MINUTE` (1 credit a minute, billed per second) from
+the wallet, a silent clip included, and it passes the same wallet gate
+and project budgets as model usage. Its ledger rows read "Dictation".
 
 `credit_accounts.tier` is the billing plan: `free` or `credits` (legacy keys
 resolve to `credits`). Stripe owns it. `tier='enterprise'` no longer exists.
+
+### Plan volume bonus (2026-11-27)
+
+A bigger monthly amount buys more credits per dollar: the plan is the volume
+discount and the upgrade path. Self-serve Credits sells no one-off top-ups or
+auto top-up (`plan-catalog.ts`, `canPurchaseCredits: false` since 2026-11-09);
+Enterprise and an `entitlement_overrides.canPurchaseCredits` account buy them
+at the flat 100 credits per dollar, with no bonus.
+
+| Monthly amount | Bonus | Example |
+|---|---|---|
+| $50–$99 | 0% | $50 → 5,000 credits |
+| $100–$199 | +5% | $100 → 10,500 |
+| $200–$499 | +10% | $200 → 22,000 |
+| $500–$999 | +15% | $500 → 57,500 |
+| $1,000–$2,999 | +20% | $1,000 → 120,000 |
+| $3,000–$7,499 | +25% | $3,000 → 375,000 |
+| $7,500–$10,000 | +30% | $10,000 → 1,300,000 |
+
+- One rule: `planCreditsUsd(monthlyUsd)` in `billing/services/tiers.ts`
+  (`PLAN_BONUS_STEPS`), mirrored by `monthlyCreditsForUsd` in
+  `packages/ui/src/internal/billing/compute-pricing.ts`.
+- `credit_accounts.plan_monthly_usd` and the Stripe quantity stay the amount
+  BILLED. The bonus is applied only where credits are granted or shown:
+  activation, renewal, subscription recovery, the yearly rotation, a split-off
+  comp, `tier.monthly_credits`, `scheduled_change.*.monthly_credits` and
+  `GET /billing/tier-configurations`.
+- A raise is granted per proration line at that line's own rate, so the grant
+  is exactly the remaining share of (new credits − old credits)
+  (`proration-grants.ts`).
+- The rollover cap is last month's credits, bonus included.
+- Store (RevenueCat) products grant their listed amount, no bonus: the store
+  keeps its own cut.
+- An amount above $10,000 bought before the cut keeps its subscription and
+  its bill; its bonus is the top step (+30%). `POST /billing/plan` refuses a new one.
+- Top-ups carried a +1–5% bonus until 2026-11-27 (ledger kind `topup_bonus`,
+  key `<payment>:bonus`). A refund or dispute of such a payment still takes
+  back its share of the bonus row the payment actually got
+  (`refund-clawback.ts`, `ledgerEventAmount`).
+
+### Free credits: once per person
+
+The Free plan's credits (the signup grant and the monthly rotation) belong to
+the first workspace a person creates (Workspaces, 2026-11-05).
+
+- `kortix.free_credit_claims` holds one row per person (`user_id` primary
+  key, no foreign key): the account that got the grant. A deleted workspace
+  keeps its claim, so a new one never grants twice.
+- A person who already owned an account before the rule (their sign-up
+  personal account held the grant) writes no claim; their new workspaces get 0.
+- A further workspace starts on Free with 0 credits and
+  `credit_accounts.free_credits_eligible = false`. The rotation
+  (`getFreeAccountsDueForRotation`) and the signup repair
+  (`ensureFreeTierAccountReady`) skip it. Its first session gets the usual
+  402 `insufficient_credits`, `billing_state: no_subscription`.
+- Every row that existed before is `free_credits_eligible = true`: no account
+  loses credits. Billing off (self-host) never runs any of this.
+- Dormant exception: another account the person owns counts as an earlier
+  workspace only when it has a project row or pays (`kortix.account_is_paying`).
+  A legacy person whose only account is a dormant sign-up account (no project,
+  Free, no purchase) gets the grant on their first created workspace.
+- A further workspace has no grant date: `initializeFreeTierAccount({
+  freeCredits: false })` writes `next_credit_grant = NULL`.
+- The customer sees it: account-state returns `credits.free_grant {eligible,
+  claimed_workspace_id}` and, when not eligible, `tier.monthly_credits: 0` and
+  `credits.expires_at: null`. `claimed_workspace_id` names the workspace that
+  holds the caller's free credits, only on a workspace that is not eligible and
+  only when the caller is a member of it. The Plan card, the billing pane and
+  the billing modal print the line; the modal opens on the top-up for a Free
+  workspace below the run floor (`billingModalNeedsTopUp`).
+- The modal's TRIGGER follows the same rule (KRTX-4713): opening a workspace
+  never auto-opens the Out-of-credits modal while the person's free credits
+  are unspent elsewhere (`freeGrantUnspentElsewhere` — the claimed
+  workspace's wallet still covers a run; unknown until its state loads).
+  The modal opens on an actual blocked turn (the send gate, a 402) or at a
+  true zero balance (the claimed wallet dry).
+- Code: `billing/services/free-credit-claims.ts`, called by
+  `createOwnedAccount` (`accounts/core/create-account.ts`);
+  `billing/services/free-grant.ts` (the claimed workspace).
+
+### Paying (the rule every surface reads)
+
+`kortix.account_is_paying(account_id)`, TS `isPayingAccount`: a paid tier
+(`tier NOT IN ('free','none')`), purchased credits
+(`lifetime_purchased_precise > 0`), a completed `credit_purchases` row, or an
+active Enterprise contract. A `stripe_subscription_id` alone never counts: 149
+legacy prod accounts carry a stale one on Free. A split-off comp alone never
+counts either: a paid tier with `comp_plan_until` set pays only with a live
+Stripe subscription or a RevenueCat subscription the account bought. A
+project-less account that
+pays is listed as a `setup_required` workspace, so nothing billable is
+invisible.
+
+### Split-off billing (Workspaces, design.md §3.2 C6)
+
+The split moves each extra project of a legacy account into its own new
+account. The split runner calls `applySplitOffBilling({runId,
+sourceAccountId, newAccountId})` after each move
+(`billing/services/split-off-billing.ts`):
+
+- Source on Free, or paying only through top-ups or a contract: the
+  split-off goes on Free with `free_credits_eligible = true` and gets one Free
+  grant (wallet key `split_off_grant:<runId>`). This is the one exception to
+  "free credits once per person"; no `free_credit_claims` row is written. A
+  source that pays through top-ups or a contract is held until its owner
+  confirms the keeper (the split runbook); its purchased credits and contract
+  stay with the keeper. A comped split-off is not paying, so a split of it
+  is Free too, never a second comp.
+- Source on a paid plan: the split-off gets the keeper's plan comped, with no
+  Stripe subscription, until min(the keeper's current period end, now + 31 d),
+  stored in `credit_accounts.comp_plan_until`. It gets the plan's monthly
+  credits pro-rated to that window, expiring at its end (key
+  `split_off_comp:<runId>`).
+- Comp state: account-state returns `plan_comp {until, source:
+  'workspace_split'}` and `credits.expires_at` = `until`; the Plan card reads
+  "No charge until <date>, then Free". The comped plan is the paid plan key
+  `credits`, so managed models come with it.
+- Comp end: the Free rotation tick (`runFreeTierCreditRotation`) first runs
+  `expireSplitOffComps`: the account moves to Free with eligibility and a Free
+  grant. A split-off that bought its own subscription keeps it; only the
+  marker clears.
+- `applyStripeSync` never writes a non-paid tier over an active comp, and
+  `comp_plan_until` is admin-owned (operator path only).
+- Store purchases: the mobile app has no in-app purchase and no RevenueCat
+  SDK (removed in 1.6.58). Existing RevenueCat subscriptions still reach the
+  webhook; `resolveRevenueCatAccountId` credits the `kortix_workspace_id`
+  attribute's workspace when the buyer is a member, else the buyer's default
+  account. A renewal follows the account that holds the store subscription.
+- Cost views across a move: a project-scope read takes a row billed to another
+  account only through one of the project's own sessions (marked billed
+  elsewhere); account money views stay by `account_id`.
+- `previewSplitOffBilling(sourceAccountId)` reports the kind, the comp end and
+  the credits for the dry run. `reverseSplitOffBilling({runId, newAccountId})`
+  clears the comp and forfeits the split-off credits; it refuses an account
+  that took money.
+- Every write goes through `applyAdminOverride` and records a
+  `billing.split_off.*` audit event. Idempotent per `runId`.
+
+### Billing is per workspace
+
+- Checkout, portal, top-ups and plan changes take the workspace's
+  `account_id`.
+- Stripe webhooks resolve the account from the customer mapping
+  (`billing_customers`) before `metadata.account_id`.
+- The legacy Stripe sync never matches customers by email: it adopts only a
+  subscription of this account's own customer, or of an unmapped customer
+  whose subscription names this account, never one whose `metadata.account_id`
+  names another live account, and never one another `credit_accounts` row
+  holds (I11). Only `POST /v1/billing/sync-subscription` runs it.
+- RevenueCat (`resolveRevenueCatAccountId`): the account that holds the store
+  subscription, else the `kortix_workspace_id` subscriber attribute when the
+  person is a member of it, else the person's default account.
+- Cost views: workspace and session views read `gateway_request_logs` by
+  `project_id`, so a moved project keeps its history; rows another account
+  paid for carry `billed_elsewhere`. Account money totals stay by
+  `account_id`; the payer's per-project rollup labels a moved project
+  "Moved to another workspace".
 
 Compute is billed at Platinum's list rates at 1× on every plan
 (`platform/providers/compute-rates.ts`).
@@ -150,7 +320,7 @@ continue to use `billing_state`, independently of this soft warning.
 |---|---|---|---|---|---|
 | Off | — | default | plan's | plan's | plan's (on) |
 | **Demo** | `credit_accounts.demo_enterprise = true` | an owner or admin turns it on (`PUT /v1/accounts/{id}/iam/enterprise-demo`) | + SSO, SCIM, roles, audit, branding | plan's | plan's (on) |
-| **Licensed** | `credit_accounts.enterprise_entitled = true` | an active license contract | + all Enterprise features | Enterprise (uncapped projects/apps) | off |
+| **Licensed** | `credit_accounts.enterprise_entitled = true` | an active license contract | + all Enterprise features | Enterprise (uncapped Apps) | off |
 
 - Demo has no end date. Turning it on emails Kortix sales
   (`DEMO_LEAD_NOTIFY_EMAIL`), and the account is marked "Demo" wherever
@@ -289,6 +459,16 @@ that date beside remaining plan credits. The ledger shows each grant's own
 `expires_at` when recorded, never a current account schedule substituted for
 a historical grant. New free welcome grants record their scheduled reset date.
 
+### Account state without `billing.read`
+
+A caller without `billing.read` (a custom role without it, or a workspace key
+or session token of a `split_pending` legacy account) gets the gating view
+(`gatingView` in `billing/routes/account-state.ts`): plan, `billing_state`,
+`credits.can_run` and entitlements. `credits.total`, `daily`, `monthly` and
+`extra` are absent, never `0` (flow BILL-21 asserts the absence). `credits.hidden
+{ reason, message }` names the verdict reason and the remedy. The CLI's
+`billing status` prints `credits hidden — <message>`.
+
 ## Wallet admission and model access
 
 `credits.can_run` and `billing_state` describe wallet admission, not model
@@ -298,3 +478,24 @@ readiness. A funded Free account can pay for compute while it uses BYOK.
 The project/principal-scoped `/model-picker` catalog is the source of truth
 for executable models. A gateway trigger with no enabled model returns
 `402 no_usable_model`; credits alone never unlock managed inference.
+
+### Identity without a workspace
+
+An unscoped Supabase-authenticated person with no membership can read account-state
+without creating or choosing a workspace. The response contains `billing_state`,
+`has_active_subscription`, `subscription.status`, and `can_manage_billing: false`.
+It checks the legacy personal account key (`account_id = user_id`), its wallet
+subscription references, every page of subscriptions of its mapped Stripe
+customers, and every page of a Stripe search for subscriptions whose
+`metadata.account_id` names the person (an unmapped legacy purchase). A
+subscription the wallet already proves is reported without a provider read;
+absence always needs Stripe, so a deployment without a Stripe key answers an
+error, never absence. Ended Stripe subscriptions (`canceled`, `incomplete_expired`) do not
+count. Unknown statuses fail closed as active. A cancelled store (RevenueCat)
+subscription stays active until its recorded expiry has passed. A database or provider error is
+an error response, never a no-subscription fallback. No database means the read
+cannot be authoritative. When the personal key names an existing workspace the
+person does not serve, the read refuses with 409 `no_workspace` and reads nothing.
+Named workspace requests retain membership authorization.
+This read performs no billing writes and never grants credits. Deployment does
+not unhold production dogfood: its prerequisite must be validated separately.

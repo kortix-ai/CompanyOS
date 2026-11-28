@@ -20,6 +20,7 @@ import {
   ObjectFetchTooLargeError,
   fetchObjects,
   isObjectFetchTooLargeError,
+  isObjectNotOnRemoteError,
   missingObjectIdsFromGitError,
   missingObjects,
   partialStoresEnabled,
@@ -476,12 +477,20 @@ export function isGitOperationError(err: unknown): err is GitOperationError {
  * day succeeded. The message was a transient credential/visibility blip, not a
  * missing repository.
  *
+ * `fatal: remote error: upload-pack: not our ref <id>` (KRTX-4890) is the
+ * remote refusing an object the store still points at: a force-push or a
+ * deleted branch made it unreachable, or the remote has not replicated it. The
+ * next refresh drops the stale ref, so a retry is the right answer, not a 500.
+ *
  * PERMANENT failures stay loud — a bad ref (`couldn't find remote ref`), a real
  * auth denial (`Authentication failed`, `Permission denied`), and a corrupt
  * local repo (`not a git repository`) do NOT match.
  */
 const TRANSIENT_MIRROR_ERROR_PATTERN =
-  /repository '[^']*' not found|could not resolve host|temporary failure in name resolution|network is unreachable|couldn't connect to server|connection (?:reset|refused|timed out|closed)|remote end hung up unexpectedly|early eof|rpc failed|the requested url returned error: 5\d\d|operation timed out|timed out|ssl_error|gnutls_handshake|tls handshake|cannot fork\(\) for|resource temporarily unavailable|spawn(?: \S+)? EAGAIN|\bEMFILE\b|\bENFILE\b|too many open files/i;
+  /repository '[^']*' not found|could not resolve host|temporary failure in name resolution|network is unreachable|couldn't connect to server|connection (?:reset|refused|timed out|closed)|remote end hung up unexpectedly|early eof|rpc failed|the requested url returned error: 5\d\d|operation timed out|timed out|ssl_error|gnutls_handshake|tls handshake|cannot fork\(\) for|resource temporarily unavailable|spawn(?: \S+)? EAGAIN|upload-pack: not our ref|\bEMFILE\b|\bENFILE\b|too many open files/i;
+
+/** "could not resolve host" for a .test, .invalid, .example or .localhost name. */
+const RESERVED_NAME_UNRESOLVED_PATTERN = /could not resolve host: [^\s'"]*\.(?:test|invalid|example|localhost)\b/i;
 
 /**
  * A push the REMOTE rejected with its own server-side 5xx reason (KRTX-1683,
@@ -508,6 +517,8 @@ export function isTransientGitMirrorError(err: unknown): err is GitOperationErro
   if (!isGitOperationError(err)) return false;
   if (err.kind === 'timeout' || err.kind === 'busy') return true;
   const text = `${err.message}\n${err.stderr}\n${err.stdout}`;
+  // A reserved name (RFC 2606 / RFC 6761) never resolves: not a DNS blip.
+  if (RESERVED_NAME_UNRESOLVED_PATTERN.test(text)) return false;
   if (err.gitArgs[0] === 'push' && REMOTE_PUSH_TRANSIENT_REJECTION_PATTERN.test(text)) return true;
   return TRANSIENT_MIRROR_ERROR_PATTERN.test(text);
 }
@@ -799,6 +810,29 @@ export interface EnsureObjectsOptions {
 }
 
 /**
+ * Download the objects a failed git command in `repoPath` named in `stderr`,
+ * as `runGitCapture` does for its own commands: for one a config release tree
+ * thread ran (`config-releases/tree-jobs.ts`). True when any was fetched.
+ */
+export async function faultInFromGitError(repoPath: string, stderr: string): Promise<boolean> {
+  return faultInMissingObjects(repoPath, stderr, new Set());
+}
+
+/**
+ * `ensureStoreObjects`, remembering a fetch over `maxBytes` per store and
+ * `what` (a tree, as `ensureTreeContents` names it): the same fetch is not
+ * tried again with a bound it already passed.
+ */
+export async function ensureStoreObjectsRemembered(
+  repoPath: string,
+  what: string,
+  oids: readonly string[],
+  options: EnsureObjectsOptions = {},
+): Promise<number> {
+  return withOverLimitMemo(repoPath, what, options, () => ensureStoreObjects(repoPath, oids, options));
+}
+
+/**
  * Make `oids` present in the store at `repoPath`, in one authenticated
  * request, and return the bytes received. A tree arrives with its subtrees and without blobs; a blob arrives
  * itself. A no-op for objects already present, for a store that is not
@@ -814,14 +848,28 @@ export async function ensureStoreObjects(
   const missing = await missingObjects(repoPath, oids);
   if (missing.length === 0) return 0;
   const access = await ensureMirrorAccess(project);
-  const { receivedBytes } = await timeStage('git', () =>
-    fetchObjects(repoPath, missing, {
-      env: gitAuthEnv(access.token, hostFromRepoUrl(access.repoUrl), access.headers),
-      maxBytes: options.maxBytes ?? DEFAULT_OBJECT_FETCH_MAX_BYTES,
-      timeoutMs: options.timeoutMs,
-    }),
-  );
-  return receivedBytes;
+  try {
+    const { receivedBytes } = await timeStage('git', () =>
+      fetchObjects(repoPath, missing, {
+        env: gitAuthEnv(access.token, hostFromRepoUrl(access.repoUrl), access.headers),
+        maxBytes: options.maxBytes ?? DEFAULT_OBJECT_FETCH_MAX_BYTES,
+        timeoutMs: options.timeoutMs,
+      }),
+    );
+    return receivedBytes;
+  } catch (error) {
+    // The remote no longer serves an object the store still points at. Typed as
+    // a git failure so the retryable-503 classification applies, not a 500 that pages.
+    if (!isObjectNotOnRemoteError(error)) throw error;
+    throw new GitOperationError({
+      kind: 'failed',
+      message: error.message,
+      gitArgs: ['fetch'],
+      exitCode: 128,
+      stderr: error.stderr,
+      cause: error,
+    });
+  }
 }
 
 /**
@@ -830,7 +878,7 @@ export async function ensureStoreObjects(
  */
 async function rootTreeIds(repoPath: string, revs: readonly string[]): Promise<string[]> {
   if (revs.length === 0) return [];
-  const listed = await runGitCapture(['log', '--no-walk=unsorted', '--format=%T', ...revs, '--'], repoPath);
+  const listed = await runGitCapture(['log', '--no-walk=unsorted', '--format=%T', '--end-of-options', ...revs, '--'], repoPath);
   if (listed.exitCode !== 0) return [];
   return listed.stdout.split('\n').map((line) => line.trim()).filter((id) => /^[0-9a-f]{40}$/.test(id));
 }
@@ -1003,9 +1051,21 @@ const BARE_CLONE_TIMEOUT_MS = bareCloneTimeoutMs();
 /** A cold clone OR a warm fetch can transiently fail (timeout, network blip, or
  * GitHub's ambiguous `repository … not found` for a private mirror whose token
  * is momentarily unusable); retry a bounded number of times before surfacing —
- * most clear on a later attempt. See `isTransientGitMirrorError`. */
-const MIRROR_RETRY_MAX_ATTEMPTS = 3;
-const MIRROR_RETRY_DELAY_MS = 500;
+ * most clear on a later attempt. See `isTransientGitMirrorError`.
+ *
+ * The budget has to cover GitHub's visibility window for a BRAND-NEW repo:
+ * the first session of a freshly provisioned project clones a repo created
+ * ~2 s earlier, and GitHub kept answering `repository … not found` past the
+ * old budget (3 × 500 ms ≈ 1.6 s; release gate 42666114535, attempt 3 on
+ * staging, 2026-11-09). 5 × 2 s surfaces a genuinely dead upstream in ~10 s
+ * while surviving the propagation window. */
+const MIRROR_RETRY_MAX_ATTEMPTS = 5;
+const MIRROR_RETRY_DELAY_MS = 2000;
+/** The refresh-epoch cap is a CONCURRENCY budget, not a transient-network one:
+ * how many times a refresh may retry while a base move keeps invalidating the
+ * mirror under it (`kind: "busy"`). Its neighbor test pins the move count —
+ * deliberately unchanged, and not the transient budget above. */
+const MIRROR_EPOCH_MAX_ATTEMPTS = 3;
 
 function looksLikeBareMirror(repoPath: string): boolean {
   return (
@@ -1355,7 +1415,7 @@ async function refreshStore(
   // reader) is finishing. Dropping its proof is not enough: this reader must
   // not ground a new session on the checkout that the move invalidated.
   if (epoch !== (invalidations.get(project.projectId) ?? 0)) {
-    if (epochRetries >= MIRROR_RETRY_MAX_ATTEMPTS) throw new GitOperationError({ kind: 'busy', message: 'Project mirror changed repeatedly during refresh', gitArgs: [] });
+    if (epochRetries >= MIRROR_EPOCH_MAX_ATTEMPTS) throw new GitOperationError({ kind: 'busy', message: 'Project mirror changed repeatedly during refresh', gitArgs: [] });
     return refreshMirror(project, force, opts, epochRetries + 1);
   }
   return repoPath;
@@ -1412,7 +1472,7 @@ async function lockedRefreshMirror(
       // Timed as git: a request that waits out another caller's fetch shows the wait.
       const repoPath = await timeStage('git', () => current.promise);
       if (current.epoch === (invalidations.get(project.projectId) ?? 0)) return repoPath;
-      if (epochRetries >= MIRROR_RETRY_MAX_ATTEMPTS) throw new GitOperationError({ kind: 'busy', message: 'Project mirror changed repeatedly during refresh', gitArgs: [] });
+      if (epochRetries >= MIRROR_EPOCH_MAX_ATTEMPTS) throw new GitOperationError({ kind: 'busy', message: 'Project mirror changed repeatedly during refresh', gitArgs: [] });
       return refreshMirror(project, force, opts, epochRetries + 1);
     }
     // The in-flight refresh belongs to another caller, often with another

@@ -22,6 +22,9 @@ export {
   type GitProxyAuth,
 } from './lib/git';
 
+// A My Kortix session's grant, with the list a person allowed a colleague (consumed by platform/services/session-sandbox).
+export { myKortixSessionGrant } from './lib/colleague-access';
+
 // Idle sessions off a fallback model (consumed by worker/jobs/session-model-fallback).
 export { revertIdleSessionFallbacks } from './lib/session-model-fallback-revert';
 
@@ -30,8 +33,23 @@ export { chatThreadBoardTurn } from './lib/chat-threads';
 export { sessionWhereTurn } from './lib/session-where';
 export { messageAddressesOnlyPeople, notifyMessageMentions } from './lib/space-posts';
 export { runSpaceWatcherTick } from './lib/space-watch/wake';
+export { runSpaceMemoryTick } from './lib/space-memory-update/service';
 export { runGoalReconcilerTick } from './goals/reconcile';
 export { sessionSpaceAgents } from './lib/front-thread';
+
+// The eval runner's tick (consumed by worker/jobs/eval-runner). Loaded on the
+// first tick, not at import: the runner reaches provisioning and account
+// deletion, and a static re-export put that whole graph into every module that
+// loads this surface (the sandbox-proxy boot order, session-sandbox).
+export async function runWorkspaceCacheBuilderTick(now?: Date): Promise<number> {
+  const { runWorkspaceCacheBuilderTick: tick } = await import('./workspace-cache/builder');
+  return tick(now);
+}
+
+export async function runEvalRunnerTick(now?: Date): Promise<number> {
+  const { runEvalRunnerTick: tick } = await import('./evals/runner');
+  return tick(now);
+}
 
 // A person's pins and archive (consumed by account erasure and offboarding).
 export { deleteMemberSessionStates, deleteUserSessionStates } from './lib/session-user-state';
@@ -73,9 +91,9 @@ export {
 
 // Every declared agent's grant (consumed by the connectors rules matrix).
 export { extractAgents, grantsByAgent, loadProjectAgents } from './agents';
-export { mentionTokens, mentionsMember } from './lib/mentions';
+export { mentionTokens } from './lib/mentions';
 export { resolveAndAuthorizeAgentAs } from './lib/agent-access';
-export { loadVisibleSession } from './lib/session-visibility';
+export { isSpawnAncestor, loadVisibleSession } from './lib/session-visibility';
 export { sessionHoldsLiveTurn } from './session-lifecycle/inbox-admission';
 // Does a sandbox's runtime keep a prompt's message id (consumed by the sandbox proxy's wire-id placement).
 export { sandboxKeepsMessageIds } from './session-lifecycle/inbox-admission';
@@ -97,6 +115,7 @@ export { approvalTargetSession, expireDueApprovals } from './lib/connector-appro
 export { projectsApp } from './lib/app';
 export { decryptProjectSecret, encryptProjectSecret } from './secrets/envelope';
 export { listProjectSecretNamesForConsumer, listResolvedProjectSecrets, resolveProjectSecretForConsumer } from './secrets';
+export { browserLoginSavedPrompt, saveBrowserLoginsFromLink } from './lib/browser-logins';
 // App events (`type: app` triggers): apps/event-routes.ts appends through these.
 export {
   APP_EVENT_LOG_STATUSES,
@@ -132,8 +151,10 @@ export { markKortixRemovalIntent } from './runtime-identity';
 export { disableRemindersAuthoredBy } from './lib/session-reminders';
 
 // Nested `projects.metadata` writes (consumed by ../feature-flags/write).
-export { metadataClearSubtreeKey, metadataMerge, metadataMergeSubtree } from './lib/metadata-merge';
+export { metadataClearSubtreeKey, metadataMerge, metadataMergeSubtree } from '../workspaces/rows';
 export { MANIFEST_PROJECT_NAME_KEY, projectNameAction } from './lib/manifest-project-name';
+// Workspace name = account name = project name (consumed by account rename and manifest sync).
+export { renameAccountOfSoleProject, renameSoleProjectOfAccount } from './lib/workspace-name';
 
 // Whether any app-event adapter is configured (consumed by ../feature-flags/registry).
 
@@ -148,6 +169,10 @@ export const reconcileEventSubscriptionsFromCatalog: typeof import('./trigger-ev
   async (...args) => (await eventSubscriptions()).reconcileEventSubscriptionsFromCatalog(...args);
 export const releaseProjectEventSubscriptions: typeof import('./trigger-events/subscriptions').releaseProjectEventSubscriptions =
   async (...args) => (await eventSubscriptions()).releaseProjectEventSubscriptions(...args);
+// The save-time model check of triggers (consumed by connector sync, which
+// reconciles kortix.yaml triggers). Lazy for the same cycle as above.
+export const gateTriggerSetup: typeof import('./lib/trigger-setup-pause').gateTriggerSetup =
+  async (...args) => (await import('./lib/trigger-setup-pause')).gateTriggerSetup(...args);
 // Kortix-polled app events (consumed by replica/trigger-event-poll.ts). Loading the
 // module registers the delivery queue's job handler. Lazy for the same cycle as above.
 export const runDueEventPolls = async (onSlotFree?: () => void): Promise<number> =>
@@ -173,9 +198,6 @@ export {
   resolvePendingQuestion,
 } from './lib/pending-questions';
 export { releaseRuntimeQuestion } from './session-lifecycle/release-runtime-question';
-
-// The stored transcript (`toV1` of the session log), consumed by the public share route.
-export { readStoredTranscriptWindow } from './session-log-read';
 
 // Abort a session's running turn (consumed by chrome/, on a user's Stop in Chrome, and by
 // channels/core/commands.ts, on a chat's /stop and /new).
@@ -206,6 +228,12 @@ export { signalSessionRuntimeActive } from './session-lifecycle/runtime-active-s
 export { noteSandboxHealthBody } from './lib/turn-start-convergence';
 
 export { registerRuntimeFork } from './lib/runtime-session-snapshot';
+// A provider edge refused a daemon-port request: start the dead-daemon relaunch now (consumed by sandbox-proxy/forward/retry.ts).
+// Behind a dynamic import: the wiring module must stay out of the proxy's static graph (sandbox-proxy/module-graph.test.ts).
+export async function repairDeadDaemonOnEdgeRefusal(sandboxId: string): Promise<boolean> {
+  const wiring = await import('./lib/legacy-runtime-bootstrap-wiring');
+  return wiring.repairDeadDaemonOnEdgeRefusal(sandboxId);
+}
 
 // `chat` on: file every session into `#general`, and the "turned on
 // again" record (consumed by ../feature-flags/toggle-effects).
@@ -228,3 +256,38 @@ export {
 } from './git/push-manifest-check';
 // A manifest write refused while the default branch's kortix.yaml is not YAML (consumed by the HTTP error handler).
 export { ManifestWriteRefusedError } from './manifest-io';
+
+// The transfer engine and the workspace split's data movement (consumed by workspaces/split).
+export {
+  afterProjectMoved,
+  copyProjectSiteBlobs,
+  moveOwnedRows,
+  PROJECT_TRANSFER_APP_TABLES,
+  PROJECT_TRANSFER_LEAVE_TABLES,
+  PROJECT_TRANSFER_TABLES,
+} from './lib/project-transfer';
+export {
+  countRotatingLogins,
+  isRotatingLogin,
+  projectGrantCounts,
+  reachingGroupsSql,
+  reachingUsersSql,
+  ProjectSplitError,
+  reverseProjectSplit,
+  splitProjectIntoNewAccount,
+  type SplitCopiedIds,
+} from './lib/workspace-split-copy';
+
+// Session and sandbox status transitions (consumed by the preview proxy's
+// lifecycle writes) and the canonical live session set (consumed by every
+// domain that counts or stops live sessions).
+export { settleLiveSessionsOfAccounts, transitionSandbox, transitionSession } from './session-lifecycle/status-transitions';
+export { ACTIVE_SESSION_STATUSES, PROVISIONING_SESSION_STATUSES } from './lib/session-status';
+// Spaces (session groups): whether a Space the caller sees shares a session (the preview proxy's gate injects it).
+export { sessionSharedThroughSpace } from './lib/session-group-viewer';
+
+export { type ConnectorPolicyAction, type ConnectorPolicySpec, extractConnectors } from './connectors';
+export { type DefaultMode, type ProjectPolicySpec, extractProjectPolicies, projectPoliciesToManifestEntries, projectPolicySettingsToManifest } from './policies';
+
+// One QualiLoop test turn against the real agent (consumed by ../qualiloop).
+export { runQualiloopTurn, QualiloopTurnError } from './qualiloop/turn';

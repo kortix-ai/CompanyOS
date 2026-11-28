@@ -23,16 +23,19 @@ export const FEATURE_DISABLED_CODE = 'feature_disabled' as const;
 /** 403 code: only a platform operator may write this flag (`catalogHidden`). */
 export const FEATURE_OPERATOR_ONLY_CODE = 'feature_operator_only' as const;
 
-export function featureDisabledBody(key: FeatureFlagKey): {
+export function featureDisabledBody(gated: FeatureFlagKey): {
   error: string;
   code: typeof FEATURE_DISABLED_CODE;
   feature: FeatureFlagKey;
 } {
+  // A flag withdrawn into another (`chat` into `channels`) is no switch: name the one a person turns on.
+  const withdrawnInto = featureFlagDef(gated)?.withdrawn;
+  const key: FeatureFlagKey = withdrawnInto && withdrawnInto !== 'off' ? withdrawnInto : gated;
   const def = featureFlagDef(key);
   return {
     error: def?.catalogHidden
-      ? `${def.name} is not enabled for this project. Contact Kortix to enable it.`
-      : `${def?.name ?? key} is not enabled for this project. Enable it in Settings → Feature flags.`,
+      ? `${def.name} is not enabled for this workspace. Contact Kortix to enable it.`
+      : `${def?.name ?? key} is not enabled for this workspace. Enable it in Workspace settings → Feature flags.`,
     code: FEATURE_DISABLED_CODE,
     feature: key,
   };

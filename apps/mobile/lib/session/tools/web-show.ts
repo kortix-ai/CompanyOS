@@ -367,21 +367,6 @@ export function showInlineToolbarKind({
   return null;
 }
 
-export type ShowFileAction = 'refresh' | 'preview' | 'full-screen';
-
-/**
- * The controls of `ShowFileActions`, in order. Web: Refresh · Full screen ·
- * "Preview" (open in the side panel); the panel surface drops "Preview".
- *
- * Mobile has no side panel: "Full screen" and "Preview" both open the
- * full-screen `FileViewer`. One control per target, so the inline card keeps
- * the labelled "Preview" (web's primary action) and the panel keeps the
- * "Full screen" icon (web's panel toolbar).
- */
-export function showFileActions({ inPanel }: { inPanel: boolean }): ShowFileAction[] {
-  return inPanel ? ['refresh', 'full-screen'] : ['refresh', 'preview'];
-}
-
 export type ShowBodyKind = 'hidden' | 'loading' | 'unavailable' | 'content';
 
 export function showBodyKind({

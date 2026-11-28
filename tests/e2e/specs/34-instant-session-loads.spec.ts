@@ -64,6 +64,7 @@ import { createDatabaseSession } from '../../src/fixtures/database-project';
 import { journalSessionLog, seedSessionTranscript } from '../../src/fixtures/session-transcript';
 import { runDatabaseSql } from '../helpers/database';
 import { createApiJsonClient } from '../helpers/http';
+import { ensureOwnedAccount } from '../helpers/accounts';
 import { createManifestProject, fundAccount } from '../helpers/manifest-project';
 import { createAuthUser, installBrowserSessionDirect, signIn } from '../helpers/session-auth';
 import { dismissOnboarding, selectAccountForUi } from '../helpers/ui';
@@ -253,12 +254,7 @@ async function setup(page: Page, label: string, messages?: SavedMessages) {
   const email = `instant-${label}-${Date.now()}@example.test`;
   const user = await createAuthUser(email, authOptions);
   const auth = await signIn(email, authOptions);
-  const accounts = await api<Array<{ account_id: string; personal_account?: boolean }>>(
-    auth.access_token,
-    'GET',
-    '/accounts',
-  );
-  const accountId = (accounts.find((a) => a.personal_account) ?? accounts[0]).account_id;
+  const accountId = await ensureOwnedAccount(api, auth.access_token);
   await fundAccount(env.databaseUrl!, accountId);
   const project = await createManifestProject({
     api,
@@ -288,7 +284,7 @@ async function setup(page: Page, label: string, messages?: SavedMessages) {
   // The recordings are PR demos: keep the personal welcome card a new account
   // gets off the session pages they show.
   await page.addInitScript(() => localStorage.setItem('kortix:marko-welcome-dismissed', '1'));
-  await installBrowserSessionDirect(page, auth, `/projects/${project.id}`, authOptions);
+  await installBrowserSessionDirect(page, auth, `/workspaces/${project.id}`, authOptions);
   await selectAccountForUi(page, accountId);
   await dismissOnboarding(page);
   return { user, auth, accountId, project, sessionId, root: seeded.root, seeded: seeded.messages };
@@ -315,7 +311,7 @@ test('34 — a reload with every read held shows the project, its session list a
       await route.continue().catch(() => {});
     });
     // Once `holding`, every read the reload depends on waits for the end of the test.
-    for (const path of ['snapshot', 'transcript', 'log']) {
+    for (const path of ['snapshot', 'log']) {
       await page.route(`**/sessions/${sessionId}/${path}*`, hold);
     }
     await page.route(
@@ -326,7 +322,7 @@ test('34 — a reload with every read held shows the project, its session list a
     );
 
     // First open, with nothing held: the device keeps what it was shown.
-    await page.goto(`/projects/${project.id}/sessions/${sessionId}`, { waitUntil: 'commit' });
+    await page.goto(`/workspaces/${project.id}/sessions/${sessionId}`, { waitUntil: 'commit' });
     await expect(page.getByText(SAVED_REPLY, { exact: true })).toBeVisible({ timeout: 120_000 });
     await expect(page.locator(`a[href$="/sessions/${sessionId}"]`).first()).toBeVisible({
       timeout: 60_000,
@@ -398,7 +394,7 @@ test('34 — a stopped session with no computer shows its conversation and a liv
       });
     });
 
-    await page.goto(`/projects/${project.id}/sessions/${sessionId}`, { waitUntil: 'commit' });
+    await page.goto(`/workspaces/${project.id}/sessions/${sessionId}`, { waitUntil: 'commit' });
 
     await expect(page.getByText(SAVED_REPLY, { exact: true })).toBeVisible({ timeout: 120_000 });
     // A sent message wakes the computer and is delivered, so the composer
@@ -500,7 +496,7 @@ test('34 — a saved tool call shows its command and output, from the server and
       await held;
       await route.continue().catch(() => {});
     });
-    for (const path of ['snapshot', 'transcript', 'log']) {
+    for (const path of ['snapshot', 'log']) {
       await page.route(`**/sessions/${sessionId}/${path}*`, hold);
     }
     await page.route(
@@ -511,7 +507,7 @@ test('34 — a saved tool call shows its command and output, from the server and
     );
 
     // From the server's saved copy.
-    await page.goto(`/projects/${project.id}/sessions/${sessionId}`, { waitUntil: 'commit' });
+    await page.goto(`/workspaces/${project.id}/sessions/${sessionId}`, { waitUntil: 'commit' });
     await expect(page.getByText(TOOL_REPLY, { exact: true })).toBeVisible({ timeout: 120_000 });
     await openWork(page);
     await expect(commandRow()).toBeVisible();
@@ -648,7 +644,7 @@ test("34 — a saved sub-agent's steps open while the computer is off", async ({
       await route.continue().catch(() => {});
     });
 
-    await page.goto(`/projects/${project.id}/sessions/${sessionId}`, { waitUntil: 'commit' });
+    await page.goto(`/workspaces/${project.id}/sessions/${sessionId}`, { waitUntil: 'commit' });
     await expect(page.getByText(SUBAGENT_REPLY, { exact: true })).toBeVisible({ timeout: 120_000 });
 
     // A finished turn folds its work; the sub-agent row is part of it. Since
@@ -718,7 +714,7 @@ test('34 — a tool call saved before tool calls were kept 1:1 shows its command
       await route.continue().catch(() => {});
     });
 
-    await page.goto(`/projects/${project.id}/sessions/${sessionId}`, { waitUntil: 'commit' });
+    await page.goto(`/workspaces/${project.id}/sessions/${sessionId}`, { waitUntil: 'commit' });
     await expect(page.getByText(TOOL_REPLY, { exact: true })).toBeVisible({ timeout: 120_000 });
     await openWork(page);
     await expect(commandRow()).toBeVisible();
@@ -750,7 +746,7 @@ test('34 — a session proven empty opens on its composer, not the boot screen',
     });
     await installFirstShown(page, sessionId);
 
-    await page.goto(`/projects/${project.id}/sessions/${sessionId}`, { waitUntil: 'commit' });
+    await page.goto(`/workspaces/${project.id}/sessions/${sessionId}`, { waitUntil: 'commit' });
     await expect(page.getByRole('textbox', { name: 'Message input' })).toBeVisible({ timeout: 120_000 });
     await page.waitForTimeout(1_000); // long enough for a boot screen to paint, were it coming
     // Never painted in any frame since the navigation. (The collapsed side
@@ -793,7 +789,7 @@ test("34 — a reload shows the server's newer saved copy, not only the one this
     });
 
     // First open: the device keeps the saved copy it was shown.
-    await page.goto(`/projects/${project.id}/sessions/${sessionId}`, { waitUntil: 'commit' });
+    await page.goto(`/workspaces/${project.id}/sessions/${sessionId}`, { waitUntil: 'commit' });
     await expect(page.getByText(SAVED_REPLY, { exact: true })).toBeVisible({ timeout: 120_000 });
     await expect
       .poll(
@@ -924,7 +920,7 @@ test('34 — a Sessions page reload shows the kept rows while the manager probe 
         new URL(response.url()).searchParams.get('scope') === 'project',
       { timeout: 120_000 },
     );
-    await page.goto(`/projects/${project.id}/sessions`, { waitUntil: 'commit' });
+    await page.goto(`/workspaces/${project.id}/sessions`, { waitUntil: 'commit' });
     expect((await inventory).status()).toBe(200);
     await expect(row()).toBeVisible({ timeout: 60_000 });
     await expect
@@ -990,7 +986,7 @@ test('34 — an open reads the saved copy once: the session-open snapshot carrie
     for (const open of ['first open', 'reload'] as const) {
       const snapshot = page.waitForResponse((r) => r.url().includes(`/sessions/${sessionId}/snapshot`));
       if (open === 'first open') {
-        await page.goto(`/projects/${project.id}/sessions/${sessionId}`, { waitUntil: 'commit' });
+        await page.goto(`/workspaces/${project.id}/sessions/${sessionId}`, { waitUntil: 'commit' });
       } else {
         await page.reload({ waitUntil: 'commit' });
       }
@@ -1074,7 +1070,7 @@ test('34 — loading older messages leaves the turn the reader is reading where 
         json: { stage: 'stopped', agent_name: 'kortix', retriable: false, sandbox: null, runtime_session_id: root, failure: null },
       });
     });
-    await page.goto(`/projects/${project.id}/sessions/${sessionId}`, { waitUntil: 'commit' });
+    await page.goto(`/workspaces/${project.id}/sessions/${sessionId}`, { waitUntil: 'commit' });
     await expect(page.getByText('Answer 60.', { exact: true })).toBeVisible({ timeout: 120_000 });
     // The newest page only: the first turn is older history, not drawn yet.
     await expect(page.getByText('Question 1: what is special about the number 1?', { exact: true })).toHaveCount(0);
@@ -1126,6 +1122,80 @@ test('34 — loading older messages leaves the turn the reader is reading where 
     expect(result.maxShiftPx, `the reader's turn never moved on screen (${JSON.stringify(result)})`).toBeLessThanOrEqual(1);
     expect(Math.abs(result.finalShiftPx), 'and ends where it started').toBeLessThanOrEqual(1);
   } finally {
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    await project?.dispose?.();
+  }
+});
+
+test('34 — transcript invalidation during a held page read fetches the finished reply without reload', async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(300_000);
+  const env = loadEnv();
+  let fullTurn: ReturnType<NonNullable<SavedMessages>> = [];
+  const { auth, accountId, project, sessionId, root } = await setup(page, 'held-invalidation', (_root, defaults) => {
+    fullTurn = defaults;
+    return defaults.filter((message) => message.info.role === 'user');
+  });
+  let release = () => {};
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  let holdNext = false;
+  let holding = false;
+  let released = false;
+  let freshReads = 0;
+  const visible = () => page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  try {
+    // Neither boot nor the snapshot can supply the reply or provision a cloud computer.
+    for (const path of ['start', 'snapshot']) {
+      await page.route(`**/sessions/${sessionId}/${path}*`, async (route) => {
+        await held;
+        await route.abort().catch(() => {});
+      });
+    }
+    await page.route(`**/sessions/${sessionId}/log*`, async (route) => {
+      const url = new URL(route.request().url());
+      if (route.request().method() !== 'GET' || url.searchParams.has('before_seq') || url.searchParams.has('thread')) {
+        return route.continue();
+      }
+      // Capture a real stored page BEFORE the journal commits the assistant. Its
+      // metadata and message revisions stay canonical, including source: 'store'.
+      const response = await route.fetch();
+      expect(response.status()).toBe(200);
+      const body = await response.json();
+      if (holdNext) {
+        holdNext = false;
+        holding = true;
+        expect(body.messages).toHaveLength(1);
+        await held;
+      } else if (released) {
+        freshReads += 1;
+      }
+      await route.fulfill({ response, json: { ...body, source: 'store' } });
+    });
+    await page.goto(`/workspaces/${project.id}/sessions/${sessionId}`, { waitUntil: 'commit' });
+    await expect(page.getByText(SAVED_PROMPT, { exact: true })).toBeVisible({ timeout: 120_000 });
+    await expect(page.getByText(SAVED_REPLY, { exact: true })).toHaveCount(0);
+
+    holdNext = true;
+    await visible();
+    await expect.poll(() => holding, { message: 'visibility refresh has a user-only page held on the wire' }).toBe(true);
+    await journalSessionLog(env, {
+      projectId: project.id, accountId, sessionId, bearer: auth.access_token, root, messages: fullTurn,
+    });
+    // This invalidation must survive the read already in flight. No navigation,
+    // reload, or additional visibility signal is allowed to rescue the assertion.
+    await visible();
+    released = true;
+    release();
+    await expect.poll(() => freshReads, { timeout: 15_000, message: 'a fresh GET follows the stale response' }).toBeGreaterThan(0);
+    await expect(page.getByText(SAVED_REPLY, { exact: true })).toBeVisible({ timeout: 15_000 });
+    await page.screenshot({ path: testInfo.outputPath('held-read-finished-reply.png') });
+
+  } finally {
+    release();
     await page.unrouteAll({ behavior: 'ignoreErrors' });
     await project?.dispose?.();
   }

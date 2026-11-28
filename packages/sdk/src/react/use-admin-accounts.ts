@@ -85,6 +85,7 @@ export const ADMIN_OVERRIDE_KEYS = [
   'managedModels',
   'byokFee',
   'storageBilling',
+  'canPurchaseCredits',
 ] as const;
 
 export type AdminOverrideKey = (typeof ADMIN_OVERRIDE_KEYS)[number];
@@ -109,6 +110,9 @@ export const ADMIN_ENTITLEMENT_OVERRIDE_KEYS = [
   // Volume storage billing (Files folders, session /workspace volumes). On by
   // default on every plan; set off to waive storage charges for one account.
   'storageBilling',
+  // One-off credit top-ups and auto top-up. Off below Enterprise (the monthly
+  // plan is the upgrade path); set on to allow them for one account.
+  'canPurchaseCredits',
 ] as const satisfies readonly AdminOverrideKey[];
 
 /**
@@ -577,6 +581,7 @@ export function useAdminAccountLedger(accountId: string | null, limit = 50) {
   });
 }
 
+/** @deprecated Use `AdminAccountWorkspace`. Kept permanently. */
 export interface AdminAccountProject {
   projectId: string;
   name: string;
@@ -591,7 +596,10 @@ export interface AdminAccountProject {
   lastSessionAt: string | null;
 }
 
-export function useAdminAccountProjects(accountId: string | null) {
+/** The workspace name of {@link AdminAccountProject}: the same type. */
+export type AdminAccountWorkspace = AdminAccountProject;
+
+export function useAdminAccountWorkspaces(accountId: string | null) {
   return useQuery<{ projects: AdminAccountProject[] }>({
     queryKey: ['admin', 'accounts', accountId, 'projects'],
     enabled: !!accountId,
@@ -604,6 +612,9 @@ export function useAdminAccountProjects(accountId: string | null) {
     },
   });
 }
+
+/** @deprecated Use `useAdminAccountWorkspaces`. Kept permanently. */
+export const useAdminAccountProjects = useAdminAccountWorkspaces;
 
 /**
  * The account's live Stripe subscription, exactly as Stripe reports it — what

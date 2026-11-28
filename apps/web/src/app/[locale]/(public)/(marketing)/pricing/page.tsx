@@ -3,9 +3,11 @@
 import Link from '@/components/site-link';
 import type { PricingPlan, PricingPlanId } from '@/features/billing/pricing-plans';
 import { usePricingPlans } from '@/features/billing/use-pricing-plans';
+import { CompareTable } from '@/features/marketing/pricing/compare-table';
 import { useRequestDemo } from '@/features/contact/request-demo-provider';
 import { useEnglishOnly } from '@/features/marketing/kit/english-only';
 import { MarketingButton } from '@/features/marketing/kit/marketing-button';
+import { Band, PageFrame } from '@/features/marketing/kit/page-frame';
 import { WorksWithStrip } from '@/features/marketing/landing-sections/works-with-strip';
 import { CreditLadder } from '@/features/marketing/pricing/credit-ladder';
 import { useLocale, useTranslations } from '@/i18n/use-translations';
@@ -24,11 +26,11 @@ import {
   FREE_MONTHLY_CREDITS,
   MINUTES_PER_CREDIT,
   monthlyCreditsForUsd,
+  PLAN_BONUS_STEPS,
   PLATFORM_FEE_PERCENT,
-  TOP_UP_BONUS_STEPS,
 } from '@kortix/ui/internal/billing/compute-pricing';
 import { SolidCheckIcon } from '@kortix/ui/internal/icons/solid-check-icon';
-import { MinusIcon, PlusIcon } from '@phosphor-icons/react';
+import { PlusIcon } from '@phosphor-icons/react';
 import { Fragment, useState, type ReactNode } from 'react';
 
 const START_URL = '/auth';
@@ -65,60 +67,6 @@ const RATE_ROWS = [
 /** "Models are separate": the three ways a model call is paid, in display order. */
 const MODEL_SOURCES = ['keys', 'chatgpt', 'kortix'] as const;
 
-/** A cell in the compare table: included, not included, or a value. */
-type Mark = boolean | string;
-
-/**
- * The compare table (Accrue "Compare Plans"). Every row restates a plan
- * feature or an FAQ answer in `billing.pricing`, so the table makes no claim
- * the cards and the FAQ do not. Labels are English only, like the landing
- * sections; the table renders for `en` alone until it has catalog keys.
- */
-function compareGroups(
-  locale: string,
-): { title: string; rows: { label: string; marks: [Mark, Mark, Mark] }[] }[] {
-  const credits = (usd: number) => new Intl.NumberFormat(locale).format(monthlyCreditsForUsd(usd));
-  return [
-    {
-      title: 'Usage',
-      rows: [
-        {
-          label: 'Credits each month',
-          marks: [
-            new Intl.NumberFormat(locale).format(FREE_MONTHLY_CREDITS),
-            `${credits(CREDITS_PLAN_MIN_USD)} to ${credits(CREDITS_PLAN_MAX_USD)}`,
-            'Volume pricing',
-          ],
-        },
-        { label: 'Projects', marks: ['1', 'Up to 200', 'Up to 200'] },
-        { label: 'Members', marks: ['Unlimited', 'Unlimited', 'Unlimited'] },
-        { label: 'Unused credits roll over', marks: [false, 'One month', 'One month'] },
-        { label: 'Top-ups that never expire', marks: [false, true, true] },
-      ],
-    },
-    {
-      title: 'Models',
-      rows: [
-        { label: 'Managed models: Kimi, DeepSeek, GLM', marks: [true, true, true] },
-        { label: 'Your own API keys', marks: [true, true, true] },
-        { label: 'ChatGPT subscription', marks: [true, true, true] },
-        { label: 'Higher model rate limits', marks: [false, true, true] },
-        { label: 'Managed model controls', marks: [false, false, true] },
-      ],
-    },
-    {
-      title: 'Security and support',
-      rows: [
-        { label: 'SAML SSO and SCIM directory sync', marks: [false, false, true] },
-        { label: 'Advanced RBAC and audit logs', marks: [false, false, true] },
-        { label: 'Deployment', marks: ['Cloud', 'Cloud', 'Cloud, VPC or on-prem'] },
-        { label: 'Support', marks: [false, 'Email', 'Dedicated'] },
-        { label: 'SLA and DPA', marks: [false, false, true] },
-      ],
-    },
-  ];
-}
-
 /** `$0.0324` — a rate in USD with up to four decimals. */
 function formatRateUsd(amount: number, locale: string): string {
   return new Intl.NumberFormat(locale, {
@@ -132,31 +80,6 @@ function formatRateUsd(amount: number, locale: string): string {
 /** A catalog sentence with no full stop gets one, so both title lines end alike. */
 function sentence(text: string): string {
   return /[.!?。！？]$/.test(text) ? text : `${text}.`;
-}
-
-/** Hairline rails 62px in from each edge, the same pair the landing page draws. */
-function Rails() {
-  return (
-    <>
-      <div
-        aria-hidden
-        className="bg-border pointer-events-none absolute inset-y-0 left-4 z-10 w-px lg:left-17"
-      />
-      <div
-        aria-hidden
-        className="bg-border pointer-events-none absolute inset-y-0 right-4 z-10 w-px lg:right-17"
-      />
-    </>
-  );
-}
-
-/** A band row (landing `kx-rail-fade`): hairlines top and bottom across the page, content between the rails. */
-function Band({ className, children }: { className?: string; children: ReactNode }) {
-  return (
-    <div className="kx-rail-fade border-y px-4 lg:px-17">
-      <div className={className}>{children}</div>
-    </div>
-  );
 }
 
 /** The landing section heading: the two-tone title and an optional line under it, inside the text gutter. */
@@ -256,98 +179,13 @@ function PlanColumn({ plan, includedLabel }: { plan: PricingPlan; includedLabel:
   );
 }
 
-/** A compare-table cell: a check, a muted dash, or the value as text. */
-function MarkCell({ mark }: { mark: Mark }) {
-  if (mark === true) {
-    return (
-      <>
-        <SolidCheckIcon className="text-ring mx-auto" />
-        <span className="sr-only">Included</span>
-      </>
-    );
-  }
-  if (mark === false) {
-    return (
-      <>
-        <MinusIcon aria-hidden className="text-muted-foreground mx-auto size-4" />
-        <span className="sr-only">Not included</span>
-      </>
-    );
-  }
-  return <span className="text-foreground text-pretty">{mark}</span>;
-}
-
-/** Compare plans (Accrue): a sticky row of plan names, then one group of rows per topic. */
+/** Compare plans (Accrue): the two-tone heading, then the table in a band. */
 function ComparePlans({ plans, locale }: { plans: PricingPlan[]; locale: string }) {
-  const groups = compareGroups(locale);
   return (
     <section id="compare" className="scroll-mt-16 pt-24 lg:pt-32">
       <BandHeading title="Compare plans." titleMuted="Every plan runs the same product." />
       <Band>
-        <table className="w-full table-fixed border-collapse text-sm">
-          <caption className="sr-only">Compare plans</caption>
-          <colgroup>
-            <col className="w-2/5" />
-            <col />
-            <col />
-            <col />
-          </colgroup>
-          <thead className="bg-background sticky top-16 z-20">
-            <tr className="border-b">
-              <th scope="col" className="px-4 py-4 text-left font-normal lg:px-11">
-                <span className="sr-only">Feature</span>
-              </th>
-              {plans.map((plan) => (
-                <th
-                  key={plan.id}
-                  scope="col"
-                  className={cn(
-                    'text-foreground px-2 py-4 text-center font-medium',
-                    plan.highlight && 'bg-card',
-                  )}
-                >
-                  {plan.name}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {groups.map((group) => (
-              <Fragment key={group.title}>
-                <tr>
-                  <th
-                    scope="colgroup"
-                    colSpan={4}
-                    className="text-foreground px-4 pt-10 pb-3 text-left text-base font-medium lg:px-11"
-                  >
-                    {group.title}
-                  </th>
-                </tr>
-                {group.rows.map((row) => (
-                  <tr key={row.label} className="border-t">
-                    <th
-                      scope="row"
-                      className="text-muted-foreground px-4 py-4 text-left font-normal text-pretty lg:px-11"
-                    >
-                      {row.label}
-                    </th>
-                    {row.marks.map((mark, i) => (
-                      <td
-                        key={plans[i]?.id ?? i}
-                        className={cn(
-                          'px-2 py-4 text-center tabular-nums',
-                          plans[i]?.highlight && 'bg-card',
-                        )}
-                      >
-                        <MarkCell mark={mark} />
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </Fragment>
-            ))}
-          </tbody>
-        </table>
+        <CompareTable plans={plans} locale={locale} />
       </Band>
     </section>
   );
@@ -370,19 +208,25 @@ export default function PricingPage() {
   // Every number on this page comes from compute-pricing.ts, so the page
   // cannot drift from the billing code.
   const tierCredits = monthlyCreditsForUsd(DEFAULT_TIER_USD);
-  const bonusSmallest = TOP_UP_BONUS_STEPS[TOP_UP_BONUS_STEPS.length - 1];
-  const bonusLargest = TOP_UP_BONUS_STEPS[0];
+  const bonusFirst = PLAN_BONUS_STEPS[PLAN_BONUS_STEPS.length - 1];
+  const bonusTop = PLAN_BONUS_STEPS[0];
+  const count = (credits: number) => new Intl.NumberFormat(locale).format(credits);
   const facts = {
+    freeCredits: new Intl.NumberFormat(locale).format(FREE_MONTHLY_CREDITS),
     creditsPerHour: DEFAULT_COMPUTE_CREDITS_PER_HOUR,
     minutes: MINUTES_PER_CREDIT,
     spec: DEFAULT_COMPUTE_SPEC,
     fee: PLATFORM_FEE_PERCENT,
     tierUsd: formatWholeUsd(DEFAULT_TIER_USD, locale),
     hours: new Intl.NumberFormat(locale).format(agentHoursForCredits(tierCredits)),
-    smallestBonus: bonusSmallest.percent,
-    smallestBonusUsd: formatWholeUsd(bonusSmallest.minUsd, locale),
-    largestBonus: bonusLargest.percent,
-    largestBonusUsd: formatWholeUsd(bonusLargest.minUsd, locale),
+    minUsd: formatWholeUsd(CREDITS_PLAN_MIN_USD, locale),
+    minCredits: count(monthlyCreditsForUsd(CREDITS_PLAN_MIN_USD)),
+    maxUsd: formatWholeUsd(CREDITS_PLAN_MAX_USD, locale),
+    maxCredits: count(monthlyCreditsForUsd(CREDITS_PLAN_MAX_USD)),
+    firstBonus: bonusFirst.percent,
+    firstBonusUsd: formatWholeUsd(bonusFirst.minUsd, locale),
+    topBonus: bonusTop.percent,
+    topBonusUsd: formatWholeUsd(bonusTop.minUsd, locale),
     vcpuRate: formatRateUsd(COMPUTE_RATES_USD.vcpuHour, locale),
     memoryRate: formatRateUsd(COMPUTE_RATES_USD.memoryGbHour, locale),
     diskRate: formatRateUsd(COMPUTE_RATES_USD.diskGbMonth, locale),
@@ -394,9 +238,7 @@ export default function PricingPage() {
   }));
 
   return (
-    <main className="bg-background relative mx-auto w-full max-w-[1440px]">
-      <Rails />
-
+    <PageFrame>
       {/* ── Hero and plans: the free offer first, as the reader's first question ── */}
       <section id="plans" className="relative">
         <div className="flex flex-col gap-7.5 px-8 pt-40 pb-16 lg:px-28 lg:pt-48 lg:pb-20">
@@ -562,6 +404,6 @@ export default function PricingPage() {
           </div>
         </div>
       </section>
-    </main>
+    </PageFrame>
   );
 }

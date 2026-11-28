@@ -33,7 +33,7 @@ export interface StatusMeta {
 export const STATUS_META: Record<KortixTaskStatus, StatusMeta> = {
   todo: {
     icon: Circle,
-    color: 'text-muted-foreground/70',
+    color: 'text-muted-foreground',
     bg: 'bg-muted/30',
     border: 'border-border',
     label: 'Planned',
@@ -77,7 +77,7 @@ export const STATUS_META: Record<KortixTaskStatus, StatusMeta> = {
   },
   cancelled: {
     icon: XCircle,
-    color: 'text-muted-foreground/40',
+    color: 'text-muted-foreground',
     bg: 'bg-muted/20',
     border: 'border-border',
     label: 'Cancelled',
@@ -85,25 +85,6 @@ export const STATUS_META: Record<KortixTaskStatus, StatusMeta> = {
     terminal: true,
   },
 };
-
-/** All statuses in pipeline order. */
-export const ALL_STATUSES: KortixTaskStatus[] = [
-  'todo',
-  'in_progress',
-  'input_needed',
-  'awaiting_review',
-  'completed',
-  'cancelled',
-];
-
-/** Linear-style short ID — KTX-XXXX from the trailing chars of the task id. */
-export function shortTaskId(id: string): string {
-  const tail = id
-    .replace(/[^a-z0-9]/gi, '')
-    .slice(-4)
-    .toUpperCase();
-  return `KTX-${tail || '0000'}`;
-}
 
 export { relativeTime } from '@kortix/ui/internal/lib/relative-time';
 

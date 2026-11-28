@@ -34,7 +34,7 @@ import { Disclosure, DisclosureContent, DisclosureTrigger } from '@kortix/ui/dis
 import { Badge } from '@kortix/ui/badge';
 import { Button } from '@kortix/ui/button';
 import { ConfirmDialog } from '@kortix/ui/confirm-dialog';
-import { InfoBanner } from '@kortix/ui/info-banner';
+import { Alert as BannerAlert, AlertTitle as BannerAlertTitle, AlertDescription as BannerAlertDescription} from '@kortix/ui/alert';
 import { Input } from '@kortix/ui/input';
 import { Label } from '@kortix/ui/label';
 import Loading from '@kortix/ui/loading';
@@ -106,7 +106,7 @@ function ProvisioningHealthPanel({
   const freshness = scimSyncFreshness(lastSyncAt);
 
   return (
-    <div className="border-border/60 bg-muted/10 space-y-2 rounded-md border px-3 py-2.5">
+    <div className="border-border bg-muted/10 space-y-2 rounded-md border px-3 py-2.5">
       <div className="flex items-center justify-between gap-2">
         <p className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium">
           <ShieldCheck className="size-3.5 shrink-0" />
@@ -258,9 +258,9 @@ export function ScimCard({ accountId, canManage }: ScimCardProps) {
       </div>
 
       {!providerQuery.isLoading && !providerQuery.data && (
-        <InfoBanner tone="info" title={tI18nComplete.raw('text74be9df9fd88')}>
+        <BannerAlert variant="default" ><BannerAlertTitle>{tI18nComplete.raw('text74be9df9fd88')}</BannerAlertTitle><BannerAlertDescription>
           {tI18nComplete.raw('text711cf5ef692d')}
-        </InfoBanner>
+        </BannerAlertDescription></BannerAlert>
       )}
 
       <div className="bg-popover rounded-md border">

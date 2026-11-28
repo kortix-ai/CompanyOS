@@ -1,43 +1,17 @@
 'use client';
 
-import {
-  PROJECT_WIDE_SPACE,
-  getArtifactCommentContext,
-  type Artifact,
-  type ArtifactListScope,
-  type ManifestSpace,
-} from '@kortix/sdk';
-import {
-  prefetchArtifact,
-  useArtifactMutations,
-  useArtifacts,
-  useFeatureFlag,
-  useProjectConfig,
-} from '@kortix/sdk/react';
-import { useQueryClient } from '@tanstack/react-query';
+import type { Artifact, ArtifactListScope } from '@kortix/sdk';
+import { useArtifactFolders, useArtifactMutations, useArtifacts, useProjectConfig } from '@kortix/sdk/react';
 import { Button } from '@kortix/ui/button';
-import { ConfirmDialog } from '@kortix/ui/confirm-dialog';
-import { CountBadge } from '@kortix/ui/count-badge';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
-  DropdownMenuTrigger,
-} from '@kortix/ui/dropdown-menu';
+
 import { EmptyState } from '@kortix/ui/empty-state';
 import { ErrorState } from '@kortix/ui/error-state';
 import { useSlashFocus } from '@kortix/ui/internal/hooks/use-slash-focus';
 import { InputGroupSearch, InputGroupSearchClear, InputGroupSearchIcon, InputGroupSearchInput } from '@kortix/ui/input-group';
 import Loading from '@kortix/ui/loading';
 import { Skeleton } from '@kortix/ui/skeleton';
+import { SortMenu, useStoredSort } from '@kortix/ui/sort-menu';
 import { Tabs, TabsList, TabsTrigger } from '@kortix/ui/tabs';
-import Hint from '@kortix/ui/hint';
 import { errorToast, successToast } from '@kortix/ui/toast';
 import {
   ALL_SPACES,
@@ -48,34 +22,18 @@ import {
   useSpaceFilter,
   useSpacesEnabled,
 } from '@kortix/ui/workspace';
-import {
-  ArrowSquareOutIcon,
-  ChatCircleIcon,
-  DotsThreeIcon,
-  MagnifyingGlassIcon,
-  PlusIcon,
-  PushPinIcon,
-  PushPinSlashIcon,
-  ShareNetworkIcon,
-  StackSimpleIcon,
-  XCircleIcon,
-} from '@phosphor-icons/react';
-import Link from 'next/link';
+import { CaretRightIcon, FolderPlusIcon, MagnifyingGlassIcon, PlusIcon } from '@phosphor-icons/react';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { useRouter } from '@/lib/navigation/use-identity-router';
-import { memo, useEffect, useRef, useState } from 'react';
-
-import { ArtifactFrame, artifactFrameKey } from '@kortix/ui/artifacts';
+import { useRef, useState } from 'react';
 
 import { useAuth } from '@/features/providers/auth-provider';
-import { useLocale, useTranslations } from '@/i18n/use-translations';
+import { useTranslations } from '@/i18n/use-translations';
 
-import {
-  VISIBILITY_ICON,
-  artifactHref,
-  relativeTime,
-} from './artifact-meta';
-import { ShareArtifactDialog } from './share-artifact-dialog';
-import { useArtifactUnshare } from './use-artifact-unshare';
+import { ArtifactFolderActions, ArtifactFolderCrumb, ArtifactFolderEditor, ArtifactFolderTile } from './artifact-folders';
+import { folderChildren, folderPath } from './artifact-folder-tree';
+import { ArtifactCard, CreatingCard, useColumnWidth } from './artifact-card';
+import { artifactHref } from './artifact-meta';
 
 const SCOPES: ArtifactListScope[] = ['all', 'mine', 'shared', 'pinned'];
 
@@ -90,24 +48,54 @@ function matches(a: Artifact, scope: ArtifactListScope, q: string, viewerId: str
   return !q || a.title.toLowerCase().includes(q) || !!a.description?.toLowerCase().includes(q);
 }
 
+type ArtifactSort = 'activity' | 'name' | 'created';
+const ARTIFACT_SORTS: ArtifactSort[] = ['activity', 'name', 'created'];
+
+/** Artifacts in the picked order: last edit, title, or newest first. */
+function sortArtifacts(artifacts: Artifact[], sort: ArtifactSort): Artifact[] {
+  const sorted = [...artifacts];
+  if (sort === 'name') return sorted.sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }));
+  const at = (artifact: Artifact) => (sort === 'created' ? artifact.created_at : artifact.updated_at);
+  return sorted.sort((a, b) => at(b).localeCompare(at(a)));
+}
+
 /**
- * /projects/[id]/artifacts — every artifact the viewer may see, as live
- * previews, and a New doc button after the search (the Skills page's pair).
+ * /workspaces/[id]/artifacts — every artifact the viewer may see, as live
+ * previews. The header holds the order and New doc; the search sits beside the tabs.
  * A new doc joins the grid where you are; its toast opens it.
  */
 export function ArtifactsGallery({ projectId }: { projectId: string }) {
   const t = useTranslations('artifacts');
+  const tCommon = useTranslations('common');
+  const folders = useArtifactFolders(projectId);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const folderId = searchParams.get('folder');
+  const setFolderId = (id: string | null) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (id) params.set('folder', id);
+    else params.delete('folder');
+    router.push(`${pathname}${params.size ? `?${params}` : ''}`, { scroll: false });
+  };
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const allFolders = folders.data ?? [];
+  const currentFolder = allFolders.find(f => f.folder_id === folderId);
+  // The crumbs above the open folder (root first), and the folders inside it.
+  const ancestors = folderPath(allFolders, folderId).slice(0, -1);
+  const childFolders = folderChildren(allFolders, currentFolder ? currentFolder.folder_id : null);
   const [scope, setScope] = useState<ArtifactListScope>('all');
   const [q, setQ] = useState('');
   // As on Skills: the search is focused on arrival (desktop), and "/" jumps back to it.
   const searchRef = useRef<HTMLInputElement>(null);
   useSlashFocus(searchRef);
   const grid = useColumnWidth();
-  const router = useRouter();
   const { create } = useArtifactMutations(projectId);
   const newDoc = async () => {
-    const a = await create.mutateAsync({ files: { 'index.md': { content: `# ${t('untitledDoc')}\n\n` } } });
-    successToast(t('docCreated'), { actions: [{ label: t('open'), onClick: () => router.push(artifactHref(projectId, a.artifact_id)) }] });
+    try {
+      const a = await create.mutateAsync({ folder_id: folderId, files: { 'index.md': { content: `# ${t('untitledDoc')}\n\n` } } });
+      successToast(t('docCreated'), { actions: [{ label: t('open'), onClick: () => router.push(artifactHref(projectId, a.artifact_id)) }] });
+    } catch { errorToast(t('docCreateFailed')); }
   };
   // One list, filtered here: a tab or a search changes what shows, not what is mounted, so no
   // card (or its live preview) remounts. A project at the list's page size may hold more than
@@ -115,10 +103,12 @@ export function ArtifactsGallery({ projectId }: { projectId: string }) {
   const viewerId = useAuth().user?.id;
   const query = q.trim().toLowerCase();
   const filtered = scope !== 'all' || !!query;
-  const all = useArtifacts(projectId, { scope: 'all' });
+  const all = useArtifacts(projectId, { scope: 'all', folder_id: folderId ?? (filtered ? undefined : 'root') });
   const paged = (all.data?.length ?? 0) >= LIST_PAGE;
-  const server = useArtifacts(paged && filtered ? projectId : null, { scope, q: query || undefined });
-  const list = paged && filtered ? server : all;
+  const server = useArtifacts(paged && filtered ? projectId : null, { scope, q: query || undefined, folder_id: folderId ?? undefined });
+  // Keep loaded cards while the first server-filtered page is in flight.
+  const useServer = paged && filtered && (server.data !== undefined || server.isError);
+  const list = useServer ? server : all;
   const cards = list.data ?? [];
   // An artifact sits in its bound space, else its agent's space, else Project-wide.
   // Spaces are Work in progress: with `chat` off every artifact is
@@ -128,54 +118,111 @@ export function ArtifactsGallery({ projectId }: { projectId: string }) {
   const { spaces, groups, spaceOf } = spaceScope(cards, config, spacesOn, (artifact) => artifact);
   const labels = new Map(groups.map((group) => [group.name, group.label]));
   const [space, setSpace] = useSpaceFilter(projectId);
-  const shown = (paged ? cards : cards.filter((a) => matches(a, scope, query, viewerId))).filter(
-    (artifact) => space === ALL_SPACES || spaceOf(artifact) === space,
+  const tSort = useTranslations('listSort');
+  const [sort, setSort] = useStoredSort<ArtifactSort>('kortix:artifacts-sort', ARTIFACT_SORTS, 'activity');
+  const sortLabel: Record<ArtifactSort, string> = {
+    activity: tSort('lastActivity'),
+    name: tSort('name'),
+    created: tSort('created'),
+  };
+  const shown = sortArtifacts(
+    (useServer ? cards : cards.filter((a) => matches(a, scope, query, viewerId))).filter(
+      (artifact) => space === ALL_SPACES || spaceOf(artifact) === space,
+    ),
+    sort,
   );
 
   return (
-    <div className="flex h-svh flex-col overflow-hidden">
-      <ProjectPageHeader title={t('title')} />
+    <div role="region" aria-label={t('title')} className="flex h-svh flex-col overflow-hidden">
+      {creatingFolder ? <ArtifactFolderEditor projectId={projectId} parent={currentFolder ?? null} onClose={() => setCreatingFolder(false)} /> : null}
+      <ProjectPageHeader
+        // In a folder the header is its path: Artifacts › parents › the folder (the h1), then its menu.
+        title={
+          !folderId
+            ? t('title')
+            : (currentFolder?.name ?? (folders.isError ? t('folderLoadFailed') : folders.isSuccess ? t('folderUnavailable') : ''))
+        }
+        breadcrumb={
+          folderId ? (
+            <nav aria-label={t('folderNavigation')} className="me-0.5 flex min-w-0 shrink items-center gap-2">
+              {/* A phone shows only the parent crumb: the open folder's name keeps the room. */}
+              <span className={`min-w-0 shrink items-center ${ancestors.length ? 'hidden sm:flex' : 'flex'}`}>
+                <ArtifactFolderCrumb projectId={projectId} folderId={null} name={t('title')} onOpen={() => setFolderId(null)} back={!ancestors.length} />
+              </span>
+              {ancestors.map((folder, index) => (
+                <span key={folder.folder_id} className={`min-w-0 shrink items-center gap-2 ${index === ancestors.length - 1 ? 'flex' : 'hidden sm:flex'}`}>
+                  <CaretRightIcon className="text-muted-foreground hidden size-3 shrink-0 sm:block" aria-hidden />
+                  <ArtifactFolderCrumb projectId={projectId} folderId={folder.folder_id} name={folder.name} onOpen={() => setFolderId(folder.folder_id)} back={index === ancestors.length - 1} />
+                </span>
+              ))}
+              <CaretRightIcon className="text-muted-foreground hidden size-3 shrink-0 sm:block" aria-hidden />
+            </nav>
+          ) : undefined
+        }
+        titleAccessory={
+          folderId && !currentFolder && !folders.isSuccess && !folders.isError ? (
+            <span role="status" aria-label={tCommon('loading')}><Loading className="size-3.5" /></span>
+          ) : currentFolder ? (
+            <span className="ms-0.5 flex shrink-0">
+              <ArtifactFolderActions folder={currentFolder} folders={allFolders} projectId={projectId} />
+            </span>
+          ) : undefined
+        }
+      >
+        <Button size="sm" variant="outline" className="gap-1.5" aria-label={t('newFolder')} onClick={() => setCreatingFolder(true)} disabled={!!folderId && !currentFolder}><FolderPlusIcon className="size-3.5" /><span className="sr-only sm:not-sr-only">{t('newFolder')}</span></Button>
+        <SortMenu
+          value={sort}
+          onValueChange={setSort}
+          options={ARTIFACT_SORTS.map((mode) => ({ value: mode, label: sortLabel[mode] }))}
+          label={tSort('sortBy', { mode: sortLabel[sort] })}
+        />
+        <Button size="sm" className="gap-1.5" onClick={newDoc} disabled={create.isPending || (!!folderId && !currentFolder)} aria-busy={create.isPending}>
+          {create.isPending ? <Loading className="size-3.5 shrink-0" /> : <PlusIcon className="size-3.5 shrink-0" />}
+          {t('newDoc')}
+        </Button>
+      </ProjectPageHeader>
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-8 pb-20 md:px-8">
+          {!folderId && folders.isError ? <ErrorState title={t('folderLoadFailed')} action={<Button variant="outline" size="sm" onClick={() => folders.refetch()}>{t('retry')}</Button>} /> : null}
+          {!filtered && childFolders.length ? <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">{childFolders.map(folder => <ArtifactFolderTile key={folder.folder_id} folder={folder} folders={allFolders} projectId={projectId} onOpen={() => setFolderId(folder.folder_id)} />)}</div> : null}
           <section className="flex flex-col gap-4">
             <div className="flex flex-col gap-3">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <Tabs value={scope} onValueChange={(v) => setScope(v as ArtifactListScope)}>
-                  <TabsList variant="segmented">
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                <Tabs className="min-w-0 overflow-x-auto" value={scope} onValueChange={(v) => setScope(v as ArtifactListScope)}>
+                  <TabsList variant="segmented" className="w-max">
                     {SCOPES.map((s) => (
-                      <TabsTrigger key={s} value={s}>
+                      <TabsTrigger key={s} value={s} id={`artifact-scope-${s}`} aria-controls="artifact-gallery-panel" className="px-1.5 sm:px-3">
                         {t(`scope.${s}`)}
                       </TabsTrigger>
                     ))}
                   </TabsList>
                 </Tabs>
-                {/* Search, then New: the Skills page's pair (an h-9 search and a secondary h-9 button). */}
-                <div className="flex w-full items-center gap-2 sm:w-auto">
-                  <InputGroupSearch className="min-w-0 flex-1 sm:w-64 sm:flex-none">
-                    <InputGroupSearchIcon>
-                      <MagnifyingGlassIcon />
-                    </InputGroupSearchIcon>
-                    <InputGroupSearchInput
-                      ref={searchRef}
-                      placeholder={t('search')}
-                      aria-label={t('search')}
-                      value={q}
-                      onChange={(e) => setQ(e.target.value)}
-                      variant="popover"
-                      size="sm"
-                    />
-                    <InputGroupSearchClear onClick={() => setQ('')} />
-                  </InputGroupSearch>
-                  <Button variant="secondary" className="shrink-0 gap-1.5" onClick={newDoc} disabled={create.isPending} aria-busy={create.isPending}>
-                    {create.isPending ? <Loading className="size-4 shrink-0" /> : <PlusIcon className="size-4" />}
-                    {t('newDoc')}
-                  </Button>
-                </div>
+                {/* The search, focused on arrival on desktop; "/" jumps back to it. */}
+                <InputGroupSearch className="w-full min-w-0 sm:w-64">
+                  <InputGroupSearchIcon>
+                    <MagnifyingGlassIcon />
+                  </InputGroupSearchIcon>
+                  <InputGroupSearchInput
+                    ref={searchRef}
+                    placeholder={t('search')}
+                    aria-label={t('search')}
+                    value={q}
+                    onChange={(e) => setQ(e.target.value)}
+                    variant="popover"
+                    size="sm"
+                  />
+                  <InputGroupSearchClear className="size-7" onClick={() => setQ('')} />
+                </InputGroupSearch>
               </div>
               <SpaceFilterTabs spaces={spaces} groups={groups} value={space} onValueChange={setSpace} />
             </div>
 
-            {list.isError ? (
+            <div id="artifact-gallery-panel" role="tabpanel" aria-labelledby={`artifact-scope-${scope}`} tabIndex={0}>
+            {folderId && folders.isError ? (
+              <ErrorState title={t('folderLoadFailed')} action={<Button size="sm" variant="outline" onClick={() => folders.refetch()}>{t('retry')}</Button>} />
+            ) : folderId && folders.isSuccess && !currentFolder ? (
+              <ErrorState title={t('folderUnavailable')} action={<Button size="sm" variant="outline" onClick={() => setFolderId(null)}>{t('title')}</Button>} />
+            ) : list.isError ? (
               <ErrorState
                 title={t('loadError')}
                 action={
@@ -190,16 +237,19 @@ export function ArtifactsGallery({ projectId }: { projectId: string }) {
                   <Skeleton key={i} className="aspect-[16/10] w-full rounded-lg" />
                 ))}
               </div>
-            ) : shown.length === 0 && !create.isPending ? (
+            ) : (<>
+              {shown.length === 0 && !create.isPending && paged && filtered && (server.isLoading || server.isPlaceholderData) ? (
+                <div role="status" aria-label={tCommon('loading')} className="flex justify-center py-12"><Loading className="size-5" /></div>
+              ) : shown.length === 0 && !create.isPending ? (
               <EmptyState
                 title={
                   q || scope !== 'all'
                     ? t('emptyFiltered')
                     : space !== ALL_SPACES
                       ? t('spaceEmpty', { space: spaceFilterLabel(space, spaces, t('projectWide')) })
-                      : t('empty')
+                      : folderId ? t('emptyFolder') : childFolders.length ? t('emptyUnfiled') : t('empty')
                 }
-                description={q || scope !== 'all' || space !== ALL_SPACES ? undefined : t('emptyHint')}
+                description={q || scope !== 'all' || space !== ALL_SPACES || folderId || childFolders.length ? undefined : t('emptyHint')}
                 action={
                   // Each empty view offers its way out: clear the filters, show every space, or
                   // start the first doc.
@@ -226,7 +276,7 @@ export function ArtifactsGallery({ projectId }: { projectId: string }) {
                   )
                 }
               />
-            ) : (
+              ) : null}
               <div ref={grid} className="grid grid-cols-1 gap-x-6 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
                 {/* The new doc while the server writes it: the click shows at once, then the page opens. */}
                 {create.isPending ? <CreatingCard /> : null}
@@ -235,6 +285,7 @@ export function ArtifactsGallery({ projectId }: { projectId: string }) {
                     key={artifact.artifact_id}
                     projectId={projectId}
                     artifact={artifact}
+                    folders={allFolders}
                     hidden={!shown.includes(artifact)}
                     space={spacesOn && space === ALL_SPACES ? labels.get(spaceOf(artifact)) : undefined}
                     current={spaceOf(artifact)}
@@ -242,252 +293,11 @@ export function ArtifactsGallery({ projectId }: { projectId: string }) {
                   />
                 ))}
               </div>
-            )}
+            </>)}
+            </div>
           </section>
         </div>
       </div>
     </div>
   );
 }
-
-/**
- * The grid's column width as `--card-w` on the grid: a card the tab or search
- * leaves out keeps exactly that width, so showing it again does not resize its
- * preview (a resized frame lays its page out again, and paints it half done).
- */
-function useColumnWidth() {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const node = ref.current;
-    if (!node) return;
-    const measure = () => {
-      const first = Number.parseFloat(getComputedStyle(node).gridTemplateColumns.split(' ')[0] ?? '');
-      if (first > 0) node.style.setProperty('--card-w', `${first}px`);
-    };
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(node);
-    return () => observer.disconnect();
-  });
-  return ref;
-}
-
-/** A card is the rounded preview, then a plain line under it: the name, "Updated … · visibility", the actions. */
-// No position here: a shown card is `relative` (its link's ::after covers it), a filtered-out one `fixed`.
-const CARD = 'group flex flex-col gap-2.5';
-const CARD_PREVIEW =
-  'bg-background group-hover:border-foreground/20 group-focus-within:border-foreground/20 relative aspect-[16/10] overflow-hidden rounded-lg border transition-colors';
-const CARD_FOOTER = 'flex items-start gap-2 px-0.5';
-
-function CreatingCard() {
-  const t = useTranslations('artifacts');
-  return (
-    <div className={`${CARD} relative`} aria-busy>
-      <div className={`${CARD_PREVIEW} grid place-items-center`}>
-        <Loading />
-      </div>
-      <div className={CARD_FOOTER}>
-        <span className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate text-sm font-medium">{t('untitledDoc')}</span>
-          <span className="text-muted-foreground truncate text-xs">{t('creating')}</span>
-        </span>
-      </div>
-    </div>
-  );
-}
-
-/** Memoized: a tab, a search or another card's change does not re-render it (the list keeps each artifact's identity). */
-const ArtifactCard = memo(function ArtifactCard({
-  projectId,
-  artifact,
-  hidden,
-  space,
-  current,
-  spaces,
-}: {
-  projectId: string;
-  artifact: Artifact;
-  hidden?: boolean;
-  /** The space chip: only while every space is shown. */
-  space?: string;
-  /** The space the artifact resolves to now (`PROJECT_WIDE_SPACE`: project-wide). */
-  current: string;
-  /** Where "Move to space" can bind it. Empty (spaces off, or none): no menu. */
-  spaces: ManifestSpace[];
-}) {
-  const t = useTranslations('artifacts');
-  const locale = useLocale();
-  const mutations = useArtifactMutations(projectId);
-  const [sharing, setSharing] = useState(false);
-  // Stop sharing deletes the artifact's comments: the confirm counts them first, as the viewer's does.
-  const commentsFlag = useFeatureFlag(projectId, 'artifact_comments').enabled;
-  const artifactsFlag = useFeatureFlag(projectId, 'artifacts').enabled;
-  const commentsOn = commentsFlag && artifactsFlag;
-  const removal = useArtifactUnshare(
-    commentsOn
-      ? async () => (await getArtifactCommentContext(projectId, artifact.artifact_id)).comment_count
-      : undefined,
-  );
-  const VisIcon = VISIBILITY_ICON[artifact.visibility];
-  const href = artifactHref(projectId, artifact.artifact_id);
-  const queryClient = useQueryClient();
-  const warm = () => void prefetchArtifact(queryClient, projectId, artifact.artifact_id).catch(() => {});
-  // Grouping only. A space keeps the owning agent; Project-wide clears both,
-  // or the agent's own space would still claim the artifact.
-  const moveTo = (target: string | null) =>
-    mutations.update.mutate(
-      { artifactId: artifact.artifact_id, space: target, ...(target === null ? { agent: null } : {}) },
-      { onSuccess: () => successToast(t('moved')), onError: () => errorToast(t('moveFailed')) },
-    );
-
-  return (
-    // A card the tab or search leaves out stays laid out at the column's width (`--card-w`), fixed
-    // behind the page (no grid cell, no scroll height), invisible and inert. Not `display: none`:
-    // its frame would lose its layout, and a different width would make showing it again resize
-    // the frame; both paint the page half done for a frame.
-    <div
-      className={hidden ? `${CARD} pointer-events-none fixed top-0 left-0 -z-10 w-(--card-w) opacity-0` : `${CARD} relative`}
-      inert={hidden}
-      aria-hidden={hidden || undefined}
-    >
-      <div className={CARD_PREVIEW}>
-        {artifact.view_url ? (
-          <ArtifactFrame
-            frameKey={artifactFrameKey(artifact)}
-            preview
-            src={artifact.view_url}
-            title={artifact.title}
-            className="pointer-events-none absolute top-0 left-0 h-[400%] w-[400%] origin-top-left scale-25 border-0"
-          />
-        ) : null}
-      </div>
-      <div className={CARD_FOOTER}>
-        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          {/* The whole card is this link (its ::after covers the card); the actions sit above it. */}
-          <Link
-            href={href}
-            className="truncate text-sm font-medium outline-none after:absolute after:inset-0 after:rounded-lg focus-visible:after:ring-2 focus-visible:after:ring-ring"
-            // Warm the viewer's reads before the click lands.
-            onPointerEnter={warm}
-            onFocus={warm}
-          >
-            {artifact.title}
-          </Link>
-          <span className="text-muted-foreground flex min-w-0 items-center gap-1.5 text-xs">
-            <span className="truncate">
-              {t('updated', { time: relativeTime(artifact.updated_at, locale) })}
-              {space ? ` · ${space}` : null}
-            </span>
-            <span aria-hidden>·</span>
-            <Hint label={t(`visibility.${artifact.visibility}`)} side="top" sideOffset={4}>
-              <span
-                role="img"
-                className="relative z-10 flex shrink-0"
-                aria-label={t(`visibility.${artifact.visibility}`)}
-              >
-                <VisIcon weight="fill" className="size-3.5" aria-hidden />
-              </span>
-            </Hint>
-            {artifact.pinned ? <PushPinIcon weight="fill" className="size-3.5 shrink-0" aria-label={t('pinned')} /> : null}
-            {/* Below the card link on purpose: a click opens the Artifact, and the viewer opens its comments while threads are open. */}
-            {artifact.open_thread_count ? (
-              <CountBadge
-                count={artifact.open_thread_count}
-                tone="waiting"
-                icon={<ChatCircleIcon aria-hidden />}
-                role="img"
-                aria-label={t('openComments', { count: artifact.open_thread_count })}
-              />
-            ) : null}
-          </span>
-        </span>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button size="icon-sm" variant="ghost" aria-label={t('actions')} className="text-muted-foreground relative z-10 -mt-0.5 -mr-1.5 shrink-0">
-              <DotsThreeIcon className="size-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={() => window.open(artifact.view_url, '_blank', 'noopener')}>
-              <ArrowSquareOutIcon /> {t('openNewTab')}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => mutations.pin.mutate({ artifactId: artifact.artifact_id, pinned: !artifact.pinned })}>
-              {artifact.pinned ? <PushPinSlashIcon /> : <PushPinIcon />} {artifact.pinned ? t('unpin') : t('pin')}
-            </DropdownMenuItem>
-            {artifact.can_manage ? (
-              <>
-                <DropdownMenuItem onSelect={() => setSharing(true)}>
-                  <ShareNetworkIcon /> {t('share')}
-                </DropdownMenuItem>
-                {spaces.length ? (
-                  <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>
-                      <StackSimpleIcon /> {t('moveTo')}
-                    </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent>
-                      <DropdownMenuRadioGroup
-                        value={current}
-                        onValueChange={(next) => {
-                          if (next !== current) moveTo(next === PROJECT_WIDE_SPACE ? null : next);
-                        }}
-                      >
-                        {spaces.map((target) => (
-                          <DropdownMenuRadioItem key={target.name} value={target.name}>
-                            {target.label || target.name}
-                          </DropdownMenuRadioItem>
-                        ))}
-                        <DropdownMenuSeparator />
-                        <DropdownMenuRadioItem value={PROJECT_WIDE_SPACE}>{t('projectWide')}</DropdownMenuRadioItem>
-                      </DropdownMenuRadioGroup>
-                    </DropdownMenuSubContent>
-                  </DropdownMenuSub>
-                ) : null}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem variant="destructive" onSelect={() => void removal.prepare()}>
-                  <XCircleIcon /> {t('remove')}
-                </DropdownMenuItem>
-              </>
-            ) : null}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-      {sharing ? <ShareArtifactDialog projectId={projectId} artifact={artifact} open onOpenChange={setSharing} /> : null}
-      <ConfirmDialog
-        open={removal.open}
-        onOpenChange={(open) => {
-          if (!open) removal.close();
-        }}
-        title={t('removeTitle')}
-        description={
-          <div className="space-y-3">
-            <p>{t('removeHint')}</p>
-            {removal.status === 'loading' ? <Loading className="size-4" /> : null}
-            {removal.status === 'error' ? (
-              <ErrorState
-                size="sm"
-                title={t('discussion.commentsLoadError')}
-                action={
-                  <Button size="sm" variant="outline" onClick={() => void removal.prepare()}>
-                    {t('discussion.retry')}
-                  </Button>
-                }
-              />
-            ) : null}
-            {removal.status === 'ready' && removal.count > 0 ? (
-              <p>{t('discussion.unshareComments', { count: removal.count })}</p>
-            ) : null}
-          </div>
-        }
-        confirmLabel={t('remove')}
-        confirmVariant="destructive"
-        isPending={mutations.remove.isPending}
-        confirmDisabled={removal.status !== 'ready'}
-        onConfirm={async () => {
-          await mutations.remove.mutateAsync(artifact.artifact_id);
-          removal.close();
-          successToast(t('removed'));
-        }}
-      />
-    </div>
-  );
-});

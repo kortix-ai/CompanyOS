@@ -38,7 +38,7 @@ import { Badge } from '@kortix/ui/badge';
 import { Button } from '@kortix/ui/button';
 import { Checkbox } from '@kortix/ui/checkbox';
 import { ConfirmDialog } from '@kortix/ui/confirm-dialog';
-import { InfoBanner } from '@kortix/ui/info-banner';
+import { Alert as BannerAlert, AlertTitle as BannerAlertTitle, AlertDescription as BannerAlertDescription, AlertActions as BannerAlertActions} from '@kortix/ui/alert';
 import { Input } from '@kortix/ui/input';
 import { Label } from '@kortix/ui/label';
 import Loading from '@kortix/ui/loading';
@@ -210,11 +210,11 @@ function InstructionText({ text }: { text: string }) {
  */
 function SchematicPanel({ schematic }: { schematic: StepSchematic }) {
   return (
-    <div className="border-border/60 bg-popover w-full overflow-hidden rounded-md border">
-      <div className="border-border/60 bg-muted/30 border-b px-3 py-2">
+    <div className="border-border bg-popover w-full overflow-hidden rounded-md border">
+      <div className="border-border bg-muted/30 border-b px-3 py-2">
         <p className="text-muted-foreground truncate text-xs font-medium">{schematic.title}</p>
       </div>
-      <div className="divide-border/40 divide-y">
+      <div className="divide-border divide-y">
         {schematic.rows.map((row) => (
           <div
             key={row.label}
@@ -222,7 +222,7 @@ function SchematicPanel({ schematic }: { schematic: StepSchematic }) {
           >
             <span className="text-muted-foreground min-w-0 truncate text-xs">{row.label}</span>
             {row.as === 'button' ? (
-              <span className="border-border/70 bg-secondary text-foreground shrink-0 rounded px-2 py-0.5 text-xs font-medium">
+              <span className="border-border bg-secondary text-foreground shrink-0 rounded px-2 py-0.5 text-xs font-medium">
                 {row.value ?? row.label}
               </span>
             ) : row.as === 'badge' ? (
@@ -266,9 +266,9 @@ function StepFigure({
         schematic ? (
           <SchematicPanel schematic={schematic} />
         ) : (
-          <div className="border-border/60 bg-muted/30 text-muted-foreground flex aspect-video w-full flex-col items-center justify-center gap-1 rounded-md border border-dashed px-4 text-center text-xs">
+          <div className="border-border bg-muted/30 text-muted-foreground flex aspect-video w-full flex-col items-center justify-center gap-1 rounded-md border border-dashed px-4 text-center text-xs">
             <span className="font-medium">{tI18nComplete.raw('textefff9994c52b')}</span>
-            <span className="text-muted-foreground/80">{alt}</span>
+            <span className="text-muted-foreground">{alt}</span>
           </div>
         )
       ) : (
@@ -277,7 +277,7 @@ function StepFigure({
           alt={alt}
           loading="lazy"
           onError={() => setMissing(true)}
-          className="border-border/60 w-full rounded-md border"
+          className="border-border w-full rounded-md border"
         />
       )}
     </figure>
@@ -290,7 +290,7 @@ function CopyRow({ label, value }: { label: string; value: string }) {
     <div className="space-y-1.5">
       <Label className="text-xs">{label}</Label>
       <div className="flex items-center gap-2">
-        <code className="border-border/60 bg-muted/30 min-w-0 flex-1 truncate rounded border px-3 py-2 font-mono text-xs">
+        <code className="border-border bg-muted/30 min-w-0 flex-1 truncate rounded border px-3 py-2 font-mono text-xs">
           {value}
         </code>
         <Button
@@ -323,12 +323,12 @@ function ClaimsTable({
 }) {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   return (
-    <div className="border-border/60 bg-popover overflow-hidden rounded-md border">
-      <div className="border-border/40 text-muted-foreground grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2 border-b px-4 py-2 text-xs font-medium">
+    <div className="border-border bg-popover overflow-hidden rounded-md border">
+      <div className="border-border text-muted-foreground grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2 border-b px-4 py-2 text-xs font-medium">
         <span>{tI18nComplete.raw('textdcd1d5223f73')}</span>
         <span>{tI18nComplete.raw('text20f25bdb24b4')}</span>
       </div>
-      <ul className="divide-border/40 divide-y">
+      <ul className="divide-border divide-y">
         {rows.map((row) => (
           <li
             key={row.name}
@@ -358,7 +358,7 @@ function ClaimsTable({
               </Button>
             </span>
             <span className="flex min-w-0 items-center gap-1.5">
-              <ArrowRight className="text-muted-foreground/60 size-3 shrink-0" />
+              <ArrowRight className="text-muted-foreground size-3 shrink-0" />
               <code className="text-foreground truncate font-mono text-xs">{row.source}</code>
               <Button
                 variant="ghost"
@@ -414,7 +414,7 @@ function SpValueRows({
   const entityRow = <CopyRow label={entityIdLabel} value={urls.entityId} />;
   const acsRow = <CopyRow label={acsLabel} value={urls.acsUrl} />;
   return (
-    <div className="border-border/60 bg-popover space-y-3 rounded-md border p-4">
+    <div className="border-border bg-popover space-y-3 rounded-md border p-4">
       {acsFirst ? acsRow : entityRow}
       {acsFirst ? entityRow : acsRow}
       {includeSignOnUrl && signOnUrl && (
@@ -457,23 +457,17 @@ function ProviderSelect({
       </p>
       {flow === 'scim' && !ssoConnected && (
         <div className="mt-6">
-          <InfoBanner
-            tone="info"
-            title={tI18nComplete.raw('text65716e73a7c3')}
-            action={
-              <Button asChild variant="outline" size="sm">
+          <BannerAlert variant="default" ><BannerAlertTitle>{tI18nComplete.raw('text65716e73a7c3')}</BannerAlertTitle><BannerAlertDescription>
+            {tI18nComplete.raw('text88f8c1416b7d')}
+          </BannerAlertDescription><BannerAlertActions>{<Button asChild variant="outline" size="sm">
                 <HubLink to={hubTarget(accountId, { tab: 'identity', setup: 'sso' })}>
                   {tI18nComplete.raw('text8bf926d1ef32')}
                 </HubLink>
-              </Button>
-            }
-          >
-            {tI18nComplete.raw('text88f8c1416b7d')}
-          </InfoBanner>
+              </Button>}</BannerAlertActions></BannerAlert>
         </div>
       )}
-      <div className="border-border/70 bg-card mt-8 overflow-hidden rounded-md border">
-        <div className="border-border/60 relative border-b">
+      <div className="border-border bg-card mt-8 overflow-hidden rounded-md border">
+        <div className="border-border relative border-b">
           <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2" />
           <Input
             value={query}
@@ -487,9 +481,9 @@ function ProviderSelect({
             key={g.id}
             type="button"
             onClick={() => onPick(g.id)}
-            className="group border-border/40 hover:bg-muted/40 flex w-full items-center gap-3.5 border-b px-4 py-3.5 text-left transition-colors last:border-b-0"
+            className="group border-border hover:bg-muted/40 flex w-full items-center gap-3.5 border-b px-4 py-3.5 text-left transition-colors last:border-b-0"
           >
-            <span className="border-border/60 bg-background flex size-10 shrink-0 items-center justify-center rounded-md border">
+            <span className="border-border bg-background flex size-10 shrink-0 items-center justify-center rounded-md border">
               <Image
                 src={PROVIDER_ICONS[g.id]}
                 alt=""
@@ -587,7 +581,7 @@ function MetadataInputStep({
                 'rounded-md border px-4 py-3 text-left transition-colors',
                 mode === m
                   ? 'border-foreground bg-popover'
-                  : 'border-border/60 bg-card hover:border-border text-muted-foreground',
+                  : 'border-border bg-card hover:border-border text-muted-foreground',
               )}
             >
               <span className={cn('block text-sm font-medium', mode === m && 'text-foreground')}>
@@ -599,7 +593,7 @@ function MetadataInputStep({
         }
       </div>
 
-      <div className="border-border/60 bg-popover space-y-1.5 rounded-md border p-4">
+      <div className="border-border bg-popover space-y-1.5 rounded-md border p-4">
         <Label htmlFor="sso-idp-metadata">
           {mode === 'url'
             ? tI18nComplete.raw('text98b2093683f0')
@@ -631,7 +625,7 @@ function MetadataInputStep({
         )}
       </div>
 
-      <div className="border-border/70 bg-popover flex items-center justify-between gap-3 rounded-md border py-3 pr-3 pl-4">
+      <div className="border-border bg-popover flex items-center justify-between gap-3 rounded-md border py-3 pr-3 pl-4">
         <span className="flex min-w-0 items-center gap-2.5">
           <span
             className={cn(
@@ -737,9 +731,9 @@ function ImportForm({
   if (alreadyConnected) {
     return (
       <div className="space-y-3">
-        <InfoBanner tone="info" title={tI18nComplete.raw('textbe03b81f11cb')}>
+        <BannerAlert variant="default" ><BannerAlertTitle>{tI18nComplete.raw('textbe03b81f11cb')}</BannerAlertTitle><BannerAlertDescription>
           {tI18nComplete.raw('text053d2dc26869')}
-        </InfoBanner>
+        </BannerAlertDescription></BannerAlert>
         <Button onClick={onDone} className="gap-1.5">
           {tI18nComplete.raw('textc75bd371076e')}
           <ArrowRight className="size-3.5 shrink-0" />
@@ -790,7 +784,7 @@ function ImportForm({
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
           <Label htmlFor="entra-federation-metadata">{tI18nComplete.raw('text57daca724d75')}</Label>
-          <div className="border-border/70 inline-flex overflow-hidden rounded-md border">
+          <div className="border-border inline-flex overflow-hidden rounded-md border">
             {(
               [
                 ['url', tI18nComplete.raw('text8d71559c9817')],
@@ -991,13 +985,13 @@ function ScimTokenStep({
 
   return (
     <div className="space-y-4">
-      <div className="border-border/60 bg-popover space-y-3 rounded-md border p-4">
+      <div className="border-border bg-popover space-y-3 rounded-md border p-4">
         <CopyRow label={tI18nComplete.raw('text097fe0b10cc3')} value={tenantUrl} />
         <p className="text-muted-foreground text-xs">{tI18nComplete.raw('text4755e88f3955')}</p>
       </div>
 
       {minted ? (
-        <div className="border-border/60 bg-popover space-y-3 rounded-md border p-4">
+        <div className="border-border bg-popover space-y-3 rounded-md border p-4">
           <CopyRow label={tI18nComplete.raw('textd1598dde2f63')} value={minted.secret} />
           <p className="text-muted-foreground text-xs">
             {tI18nComplete.raw('texta5d97cacb6f4')}
@@ -1010,11 +1004,11 @@ function ScimTokenStep({
       {!minted && (
         <div className="space-y-3">
           {priorTokens.length > 0 && (
-            <InfoBanner tone="info" title={tI18nComplete.raw('textcbe414dc8d0f')}>
+            <BannerAlert variant="default" ><BannerAlertTitle>{tI18nComplete.raw('textcbe414dc8d0f')}</BannerAlertTitle><BannerAlertDescription>
               {tI18nComplete.raw('text3bac8a95f83a')}
               {priorTokens[0].public_prefix}
               {tI18nComplete.raw('textc41427dae9e4')}
-            </InfoBanner>
+            </BannerAlertDescription></BannerAlert>
           )}
           <div className="flex flex-wrap items-end gap-3">
             <div className="min-w-56 space-y-1.5">
@@ -1043,7 +1037,7 @@ function ScimTokenStep({
 
       {(minted || priorTokens.length > 0) && connectContent && connectContent.length > 0 && (
         <div className="space-y-4">
-          <div className="border-border/60 border-t pt-4">
+          <div className="border-border border-t pt-4">
             <h4 className="text-foreground text-sm font-semibold">
               {tI18nComplete.raw('textf3d75361a203')} {providerName}
             </h4>
@@ -1096,7 +1090,7 @@ function ScimValuesPanel({
 }) {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   return (
-    <div className="border-border/70 bg-popover space-y-3 rounded-md border p-4">
+    <div className="border-border bg-popover space-y-3 rounded-md border p-4">
       <p className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium">
         <KeyRound className="size-3.5 shrink-0" />
         {tI18nComplete.raw('textc09407a43df3')}
@@ -1158,7 +1152,7 @@ function SsoTestStatusPanel({
   );
 
   return (
-    <div className="border-border/70 bg-popover space-y-3 rounded-md border p-4">
+    <div className="border-border bg-popover space-y-3 rounded-md border p-4">
       <div className="flex items-center justify-between gap-2">
         <p className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium">
           <span className="bg-kortix-green relative flex size-1.5 shrink-0 rounded-full">
@@ -1248,7 +1242,7 @@ function ProvisionedStatusPanel({
   const freshness = scimSyncFreshness(lastSyncAt);
 
   return (
-    <div className="border-border/70 bg-popover space-y-3 rounded-md border p-4">
+    <div className="border-border bg-popover space-y-3 rounded-md border p-4">
       <div className="flex items-center justify-between gap-2">
         <p className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium">
           <span className="bg-kortix-green relative flex size-1.5 shrink-0 rounded-full">
@@ -1298,7 +1292,7 @@ function ProvisionedStatusPanel({
         <Skeleton className="h-12 w-full rounded-md" />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
-          <div className="border-border/60 bg-background flex items-center gap-3 rounded-md border p-3">
+          <div className="border-border bg-background flex items-center gap-3 rounded-md border p-3">
             <Users className="text-muted-foreground size-4 shrink-0" />
             <div>
               <p className="text-foreground text-lg leading-none font-semibold tabular-nums">
@@ -1309,7 +1303,7 @@ function ProvisionedStatusPanel({
               </p>
             </div>
           </div>
-          <div className="border-border/60 bg-background flex items-center gap-3 rounded-md border p-3">
+          <div className="border-border bg-background flex items-center gap-3 rounded-md border p-3">
             <ShieldCheck className="text-muted-foreground size-4 shrink-0" />
             <div>
               <p className="text-foreground text-lg leading-none font-semibold tabular-nums">
@@ -1380,7 +1374,7 @@ function StepBody({
       {showScimValuesPanel && <ScimValuesPanel tenantUrl={scimTenantUrl} minted={scimMinted} />}
 
       {(step.where || step.menuPath) && (
-        <div className="border-border/60 bg-muted/20 flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-md border px-3 py-2">
+        <div className="border-border bg-muted/20 flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-md border px-3 py-2">
           {step.where && (
             <Badge variant="outline" size="xs" className="shrink-0 gap-1 font-medium">
               {step.where === 'idp' ? (
@@ -1429,15 +1423,15 @@ function StepBody({
       {step.showSpValues && <SpValueRows urls={spUrls} />}
 
       {step.success && (
-        <InfoBanner tone="success" title={tI18nComplete.raw('textb274aca9dee1')}>
+        <BannerAlert variant="success" ><BannerAlertTitle>{tI18nComplete.raw('textb274aca9dee1')}</BannerAlertTitle><BannerAlertDescription>
           {step.success}
-        </InfoBanner>
+        </BannerAlertDescription></BannerAlert>
       )}
 
       {step.warning && (
-        <InfoBanner tone="warning" title={tI18nComplete.raw('text4f9baa5ecfd7')}>
+        <BannerAlert variant="warning" ><BannerAlertTitle>{tI18nComplete.raw('text4f9baa5ecfd7')}</BannerAlertTitle><BannerAlertDescription>
           {step.warning}
-        </InfoBanner>
+        </BannerAlertDescription></BannerAlert>
       )}
 
       {step.note && <p className="text-muted-foreground text-xs">{step.note}</p>}
@@ -1508,7 +1502,7 @@ function StepBody({
       ) : (
         // Vercel-style completion bar: the step's outcome as a checkable
         // statement + Continue.
-        <div className="border-border/70 bg-popover flex items-center justify-between gap-3 rounded-md border py-3 pr-3 pl-4">
+        <div className="border-border bg-popover flex items-center justify-between gap-3 rounded-md border py-3 pr-3 pl-4">
           <span className="flex min-w-0 items-center gap-2.5">
             <span className="bg-kortix-green/15 flex size-6 shrink-0 items-center justify-center rounded-full">
               <Check className="text-kortix-green size-3.5" />
@@ -1784,7 +1778,7 @@ function WizardCore({ accountId, flow }: { accountId: string; flow: Flow }) {
               onFinish={finish}
             />
           </div>
-          <div className="border-border/40 mt-8 flex items-center justify-between gap-3 border-t pt-4">
+          <div className="border-border mt-8 flex items-center justify-between gap-3 border-t pt-4">
             {activeStep > 0 ? (
               <Button
                 variant="ghost"

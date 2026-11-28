@@ -5,15 +5,18 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import { SidebarProvider } from '../../primitives/sidebar';
-import type { ChangeRequest, SessionPrompt, SessionTurnOutcome } from '@kortix/sdk';
+import type { ChangeRequest, CreateSessionPromptInput, SessionPrompt, SessionSentPrompt, SessionTurnOutcome } from '@kortix/sdk';
 import { defaultUiMessages as enMessages } from '../../i18n';
 import { TestUiHost } from '../../test-utils/ui-host';
 import { sessionAuditKey } from '../panel/session-audit-shared';
 
 const ROUTE = { id: 'project-fixture', sessionId: 'project-session-fixture' };
 import { TurnErrorDisplay } from '../status/session-error-banner';
+import type { SessionChatInputProps } from '../composer/composer';
 
 const realSdk = await import('@kortix/sdk/react');
+const { KortixWorkspaceProvider } = realSdk;
+const { configureKortix } = await import('@kortix/sdk');
 const baseFixtureMessages = [
   {
     info: { id: 'user-fixture', role: 'user', time: { created: 1 } },
@@ -36,6 +39,13 @@ const userFixture = (id: string, text: string) => ({
   parts: [{ id: `${id}-text`, type: 'text', text }],
 });
 let inboxPrompts: SessionPrompt[] = [];
+let enqueuePrompt = async (_input: CreateSessionPromptInput): Promise<unknown> => undefined;
+let readInboxPrompts = async (): Promise<{ prompts: SessionPrompt[]; sent?: SessionSentPrompt[] }> => ({ prompts: [] });
+const rootSdk = await import('@kortix/sdk');
+mock.module('@kortix/sdk', () => ({
+  ...rootSdk,
+  listSessionPrompts: () => readInboxPrompts(),
+}));
 let busy = false;
 let persistedOutcome: SessionTurnOutcome = {};
 let auditPending = false;
@@ -46,7 +56,7 @@ let agentCommandsData: { name: string }[] | undefined = [];
 /** The options the last render passed to `useRuntimeAgents`. */
 let runtimeAgentsArgs: { directory?: string; projectId?: string | null } | undefined;
 /** The props the last render handed the composer — the host-wire observables. */
-let composerProps: { commandsResolved?: boolean } | undefined;
+let composerProps: { commandsResolved?: boolean; onSend?: SessionChatInputProps['onSend']; onModelChange?: SessionChatInputProps['onModelChange'] } | undefined;
 mock.module('@kortix/sdk/react', () => ({
   ...realSdk,
   useSessionTurnOutcome: () => persistedOutcome,
@@ -72,7 +82,7 @@ mock.module('@kortix/sdk/react', () => ({
   useRuntimeSessions: () => ({ data: [] }),
   useRuntimeConfig: () => ({ data: {} }),
   useProjectConfig: () => ({}),
-  useSessionPrompts: () => ({ prompts: inboxPrompts }),
+  useSessionPrompts: () => ({ prompts: inboxPrompts, refetch: async () => {}, enqueue: (input: CreateSessionPromptInput) => enqueuePrompt(input) }),
   useSessionMessageAuthors: () => ({ data: undefined }),
   useFeatureFlag: () => ({ enabled: true, isLoading: false }),
   useSessionWorking: () => ({
@@ -99,6 +109,8 @@ mock.module('../composer/composer', () => ({
     inputSlot?: React.ReactNode;
     lockForApproval?: boolean;
     commandsResolved?: boolean;
+    onSend?: SessionChatInputProps['onSend'];
+    onModelChange?: SessionChatInputProps['onModelChange'];
   }) => {
     composerProps = props;
     return (
@@ -320,6 +332,61 @@ describe('SessionChat transcript rows', () => {
     }
   });
 
+  test.each(['queued', 'failed', 'missing', 'delivered'] as const)('a lost queue ACK waits for the inbox verdict: %s', async (state) => {
+    const { runComposerSend, captureAttachmentSubmission } = await import('../composer/attachment-submission');
+    let releaseLookup!: (result: { prompts: SessionPrompt[]; sent?: SessionSentPrompt[] }) => void;
+    let lookupStarted!: () => void;
+    const started = new Promise<void>((resolve) => { lookupStarted = resolve; });
+    const verdict = new Promise<{ prompts: SessionPrompt[]; sent?: SessionSentPrompt[] }>((resolve) => { releaseLookup = resolve; });
+    let queuedInput!: CreateSessionPromptInput;
+    enqueuePrompt = async (input) => {
+      queuedInput = input;
+      throw new Error('synthetic lost ACK');
+    };
+    readInboxPrompts = () => { lookupStarted(); return verdict; };
+    const controller = {
+      attachments: [],
+      reclaim: () => {},
+      submit: () => {},
+      retry: () => {},
+      forget: () => {},
+      whenReady: async () => [],
+    };
+    const submission = captureAttachmentSubmission([], controller)!;
+    const states: string[] = [];
+    try {
+      renderChat();
+      const sent = runComposerSend({
+        submission,
+        controller,
+        active: new Set(),
+        send: () => composerProps!.onSend!('synthetic queued prompt'),
+        onSent: () => states.push('accepted'),
+        onFailed: () => states.push('restored'),
+      });
+      await started;
+      // Give the old synchronous failure path time to restore the draft.
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(states).toEqual([]);
+      // `delivered`: the agent took the prompt before the lookup ran, so it
+      // left `prompts` and is listed in `sent` under this send's wire id.
+      releaseLookup(state === 'delivered'
+        ? { prompts: [], sent: [{ message_id: queuedInput.messageId, prompt_id: 'synthetic-prompt' } as SessionSentPrompt] }
+        : { prompts: state === 'missing' ? [] : [{
+          prompt_id: 'synthetic-prompt',
+          client_message_id: queuedInput.clientMessageId,
+          state,
+        } as SessionPrompt] });
+      await sent;
+      expect(states).toEqual([state === 'queued' || state === 'delivered' ? 'accepted' : 'restored']);
+    } finally {
+      releaseLookup?.({ prompts: [] });
+      enqueuePrompt = async () => undefined;
+      readInboxPrompts = async () => ({ prompts: [] });
+    }
+  });
+
   test('a mounted session shows the user and assistant text without a busy row when idle', () => {
     busy = false;
     const markup = renderChat();
@@ -328,13 +395,34 @@ describe('SessionChat transcript rows', () => {
     expect(markup).not.toContain('data-testid="session-busy-indicator"');
   });
 
-  test('a working session renders the busy row', () => {
+  test('a working session whose answer has no words yet renders the busy row', () => {
+    // The words arriving are the busy signal (no busy row under them,
+    // #12547); a working turn with no open text block still shows it.
     busy = true;
-    const markup = renderChat();
-    expect(markup).toContain('data-testid="session-busy-indicator"');
-    expect(markup).toContain('Thinking');
-    busy = false;
+    fixtureMessages = [
+      baseFixtureMessages[0],
+      {
+        info: {
+          id: 'assistant-fixture',
+          role: 'assistant',
+          parentID: 'user-fixture',
+          agent: 'build',
+          time: { created: 2 },
+        },
+        // No text part: the reply has not started; nothing streams.
+        parts: [],
+      },
+    ];
+    try {
+      const markup = renderChat();
+      expect(markup).toContain('data-testid="session-busy-indicator"');
+      expect(markup).toContain('Thinking');
+    } finally {
+      busy = false;
+      fixtureMessages = baseFixtureMessages;
+    }
   });
+
 
   test('a no_reply prompt shows its bubble with no Queued, Sending or Thinking', () => {
     const ask = 'Which region?';
@@ -551,20 +639,23 @@ describe('SessionChat moved turn sections', () => {
     },
   ];
 
-  test('a settled turn shows the Worked row, the hoisted show card and the final text', () => {
+  test('a settled turn shows the Worked row, then the agent\'s words, the hoisted show card and the final text (KRTX-5238)', () => {
     fixtureMessages = foldTurn('user-fold');
     try {
       const markup = renderChat();
       expect(markup).toContain('Worked for 2m 14s');
       expect(markup).toContain('Synthetic Deliverable');
       expect(markup).toContain('Here is the synthetic final answer.');
-      expect(markup).not.toContain('Let me check the synthetic config.');
+      // The agent's words never fold: only its steps do.
+      expect(markup).toContain('Let me check the synthetic config.');
       expect(markup).not.toContain('group/burst');
-      // Order: row → deliverable → final text.
+      // Order: row → words → deliverable → final text, as they were said.
       const row = markup.indexOf('Worked for 2m 14s');
+      const words = markup.indexOf('Let me check the synthetic config.');
       const card = markup.indexOf('Synthetic Deliverable');
       const final = markup.indexOf('Here is the synthetic final answer.');
-      expect(row).toBeLessThan(card);
+      expect(row).toBeLessThan(words);
+      expect(words).toBeLessThan(card);
       expect(card).toBeLessThan(final);
     } finally {
       fixtureMessages = baseFixtureMessages;
@@ -839,4 +930,133 @@ describe('SessionChat agent roster source', () => {
     const args = runtimeAgentsArgs as { projectId?: string | null } | undefined;
     expect(args?.projectId).toBe('project-fixture');
   });
+});
+
+// A thread mounts SessionChat with the runtime id (`sessionId`) and the durable
+// id (`projectSessionId`). The project API accepts only the durable one, so a
+// composer pick must save to it, never to the runtime id.
+describe('SessionChat model pick', () => {
+  test('a composer pick saves to the durable session, not the runtime session', async () => {
+    const writes: string[] = [];
+    const originalFetch = globalThis.fetch;
+    configureKortix({ backendUrl: 'http://synthetic.local/v1', getToken: async () => 'synthetic-token' });
+    globalThis.fetch = Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init);
+      if (request.method === 'PUT') writes.push(new URL(request.url).pathname);
+      return Response.json({ model: 'kortix/model-b', applied_live: true });
+    }, { preconnect: originalFetch.preconnect });
+    try {
+      renderToStaticMarkup(
+        <QueryClientProvider client={new QueryClient()}>
+          <IntlTestProvider locale="en" messages={enMessages} onError={() => {}}>
+            <TestUiHost params={ROUTE} viewerId="viewer-1">
+              <KortixWorkspaceProvider projectId="project-fixture">
+                <SidebarProvider>
+                  <SessionChat sessionId="ses_runtime_fixture" projectId="project-fixture" projectSessionId="project-session-fixture" />
+                </SidebarProvider>
+              </KortixWorkspaceProvider>
+            </TestUiHost>
+          </IntlTestProvider>
+        </QueryClientProvider>,
+      );
+      composerProps?.onModelChange?.({ providerID: 'kortix', modelID: 'model-b' });
+      for (let i = 0; i < 50 && writes.length === 0; i++) await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(writes).toEqual(['/v1/workspaces/project-fixture/sessions/project-session-fixture/model']);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+test('a confirmed model pick clears a stale provider failure from the mounted transcript', async () => {
+  const { Window } = await import('happy-dom');
+  const browser = new Window();
+  Object.defineProperty(globalThis, 'window', { value: browser, configurable: true });
+  Object.defineProperty(globalThis, 'document', { value: browser.document, configurable: true });
+  for (const name of ['Element', 'HTMLElement', 'Node', 'ShadowRoot']) {
+    Object.defineProperty(globalThis, name, { value: Reflect.get(browser, name), configurable: true });
+  }
+  const { act, create } = await import('react-test-renderer');
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const originalFetch = globalThis.fetch;
+  configureKortix({ backendUrl: 'http://synthetic.local/v1', getToken: async () => 'synthetic-token' });
+  globalThis.fetch = Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    return Response.json(request.method === 'PUT' ? { model: 'kortix/model-b', applied_live: true } : { turns: {}, models: [], providers: [], sessions: [], prompts: [], accountDefault: null, projectDefault: null, platformDefault: 'kortix/model-a', agentDefaults: {}, freeTier: false });
+  }, { preconnect: originalFetch.preconnect });
+  fixtureMessages = [
+    baseFixtureMessages[0],
+    { info: { ...baseFixtureMessages[1].info, time: { created: 2, completed: 3 }, error: { name: 'APIError', data: { message: 'synthetic provider exhausted' } } }, parts: [] },
+  ];
+  persistedOutcome = { recent_failures: [{ message_id: 'user-fixture', ended_at: new Date(3).toISOString(), error: { name: 'Error', message: 'synthetic provider exhausted' } }] };
+  const client = new QueryClient();
+  const tree = <QueryClientProvider client={client}><IntlTestProvider locale="en" messages={enMessages} onError={() => {}}><TestUiHost params={ROUTE} viewerId="viewer-1"><KortixWorkspaceProvider projectId="project-fixture"><SidebarProvider><SessionChat sessionId="ses_runtime_fixture" projectId="project-fixture" projectSessionId="project-session-fixture" /></SidebarProvider></KortixWorkspaceProvider></TestUiHost></IntlTestProvider></QueryClientProvider>;
+  let mounted: ReturnType<typeof create> | undefined;
+  try {
+    await act(async () => { mounted = create(tree); });
+    expect(JSON.stringify(mounted?.toJSON())).toContain('synthetic provider exhausted');
+    await act(async () => { composerProps?.onModelChange?.({ providerID: 'kortix', modelID: 'model-b' }); });
+    expect(JSON.stringify(mounted?.toJSON())).not.toContain('synthetic provider exhausted');
+  } finally {
+    await act(async () => mounted?.unmount());
+    client.clear();
+    globalThis.fetch = originalFetch;
+    fixtureMessages = baseFixtureMessages;
+    persistedOutcome = {};
+  }
+});
+
+test('a late model save preserves a newer composer send failure', async () => {
+  const { Window } = await import('happy-dom');
+  const browser = new Window();
+  Object.defineProperty(globalThis, 'window', { value: browser, configurable: true });
+  Object.defineProperty(globalThis, 'document', { value: browser.document, configurable: true });
+  for (const name of ['Element', 'HTMLElement', 'Node', 'ShadowRoot']) {
+    Object.defineProperty(globalThis, name, { value: Reflect.get(browser, name), configurable: true });
+  }
+  const { act, create } = await import('react-test-renderer');
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const originalFetch = globalThis.fetch;
+  configureKortix({ backendUrl: 'http://synthetic.local/v1', getToken: async () => 'synthetic-token' });
+  const save = Promise.withResolvers<Response>();
+  const saveStarted = Promise.withResolvers<void>();
+  globalThis.fetch = Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    if (request.method === 'PUT') { saveStarted.resolve(); return save.promise; }
+    return Response.json(request.method === 'PUT' ? { model: 'kortix/model-b', applied_live: true } : { turns: {}, models: [], providers: [], sessions: [], prompts: [], accountDefault: null, projectDefault: null, platformDefault: 'kortix/model-a', agentDefaults: {}, freeTier: false });
+  }, { preconnect: originalFetch.preconnect });
+  fixtureMessages = [
+    baseFixtureMessages[0],
+    { info: { ...baseFixtureMessages[1].info, time: { created: 2, completed: 3 }, error: { name: 'APIError', data: { message: 'synthetic provider exhausted' } } }, parts: [] },
+  ];
+  persistedOutcome = { recent_failures: [{ message_id: 'user-fixture', ended_at: new Date(3).toISOString(), error: { name: 'Error', message: 'synthetic provider exhausted' } }] };
+  const client = new QueryClient();
+  const tree = <QueryClientProvider client={client}><IntlTestProvider locale="en" messages={enMessages} onError={() => {}}><TestUiHost params={ROUTE} viewerId="viewer-1"><KortixWorkspaceProvider projectId="project-fixture"><SidebarProvider><SessionChat sessionId="ses_runtime_fixture" projectId="project-fixture" projectSessionId="project-session-fixture" /></SidebarProvider></KortixWorkspaceProvider></TestUiHost></IntlTestProvider></QueryClientProvider>;
+  let mounted: ReturnType<typeof create> | undefined;
+  try {
+    await act(async () => { mounted = create(tree); });
+    expect(JSON.stringify(mounted?.toJSON())).toContain('synthetic provider exhausted');
+    await act(async () => {
+      composerProps?.onModelChange?.({ providerID: 'kortix', modelID: 'model-b' });
+      await saveStarted.promise;
+    });
+    enqueuePrompt = async () => { throw new Error('synthetic newer send failure'); };
+    await act(async () => {
+      await Promise.resolve(composerProps?.onSend?.('synthetic second prompt', [])).catch(() => {});
+    });
+    expect(JSON.stringify(mounted?.toJSON())).toContain('synthetic newer send failure');
+    await act(async () => {
+      save.resolve(Response.json({ model: 'kortix/model-b', applied_live: true }));
+    });
+    expect(JSON.stringify(mounted?.toJSON())).toContain('synthetic newer send failure');
+    expect(JSON.stringify(mounted?.toJSON())).not.toContain('synthetic provider exhausted');
+  } finally {
+    await act(async () => mounted?.unmount());
+    save.resolve(Response.json({ model: 'kortix/model-b', applied_live: true }));
+    enqueuePrompt = async () => undefined;
+    client.clear();
+    globalThis.fetch = originalFetch;
+    fixtureMessages = baseFixtureMessages;
+    persistedOutcome = {};
+  }
 });

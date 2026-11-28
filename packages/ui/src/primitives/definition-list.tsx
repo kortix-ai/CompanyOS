@@ -29,7 +29,7 @@ export interface DefinitionListProps {
 
 export function DefinitionList({ dividers, className, children }: DefinitionListProps) {
   return (
-    <dl className={cn(dividers && 'divide-border border-border/60 divide-y border-y', className)}>
+    <dl className={cn(dividers && 'divide-border border-border divide-y border-y', className)}>
       {children}
     </dl>
   );
@@ -47,7 +47,7 @@ export function DefinitionRow({ label, labelWidth = 110, children, title }: Defi
   return (
     <div className="flex items-baseline gap-6 py-2.5">
       <dt
-        className="text-muted-foreground/70 shrink-0 text-xs font-medium"
+        className="text-muted-foreground shrink-0 text-xs font-medium"
         style={{ width: labelWidth }}
       >
         {label}

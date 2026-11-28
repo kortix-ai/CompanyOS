@@ -2,8 +2,8 @@
  * The info panel: the open session at a glance, docked left or right.
  *
  * Title, state, context use, model, agent, the session itself and its
- * forwarded ports — the column opencode and the web's session panel keep
- * beside the chat. It is a module (`layout/ui-prefs.ts`, `/info`, `Alt+I`):
+ * forwarded ports — the column the web's session panel keeps beside the
+ * chat. It is a module (`layout/ui-prefs.ts`, `/info`, `Alt+I`):
  * off until you turn it on.
  *
  * `session-view.tsx` renders it, because it reads the session's one
@@ -27,6 +27,7 @@ import { useMemo } from 'react';
 
 import { contextReading } from '../lib/context-usage.ts';
 import { relativeAge } from '../lib/relative-time.ts';
+import { clip } from '../lib/text.ts';
 import { glyph, theme } from '../theme.ts';
 
 /** Columns the panel takes, its left or right rule included. */
@@ -58,10 +59,6 @@ function Section({ label, lines }: { label: string; lines: readonly string[] }) 
       ))}
     </box>
   );
-}
-
-function clip(text: string, max: number): string {
-  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 
 export function InfoPanel({
@@ -147,7 +144,7 @@ export function InfoPanel({
       />
       <Section
         label="Model"
-        lines={[clip(model?.modelName ?? used?.model ?? 'project default', inner)]}
+        lines={[clip(model?.modelName ?? used?.model ?? 'workspace default', inner)]}
       />
       <Section
         label="Session"

@@ -1,10 +1,11 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, setSystemTime, test } from 'bun:test'
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { KortixToolResult } from '@kortix/api-contract/kortix-tool-card'
 import { PLATFORM_TOOLS, loadTools, runTool } from '@/services/tools/host'
-import { runKortix } from '@/services/tools/platform/platform'
+import { adminHref, runKortix } from '@/services/tools/platform/platform'
+import { isWorkspaceSettingsSection, workspaceSettingsPath } from '@kortix/shared/workspace-settings'
 
 /**
  * The My Kortix platform tools (services/tools/platform/kortix_*.ts) at their
@@ -61,7 +62,7 @@ describe('kortix_agents', () => {
     const result = await run('kortix_agents', { action: 'list' })
     expect(result.ok).toBe(true)
     expect(result.card.title).toBe('2 agents')
-    expect(result.card.rows?.[0]).toEqual({ title: 'researcher', detail: 'Digs into a topic', href: '/projects/proj_1/customize/agents/researcher' })
+    expect(result.card.rows?.[0]).toEqual({ title: 'researcher', detail: 'Digs into a topic', href: '/workspaces/proj_1/admin/agents/researcher' })
     expect(result.card.rows?.[1]?.badge).toBe('built in')
     // My Kortix has no agent page (the project home starts it): its row links nowhere.
     expect(result.card.rows?.[1]?.href).toBeUndefined()
@@ -69,12 +70,59 @@ describe('kortix_agents', () => {
 
   test('create: sends the whole block in a file (the CLI refuses `--file -`) and shows every new setting', async () => {
     fakeKortix(`'agents config writer --json') echo '{"kortix_error":{"kind":"failed","status":404,"message":"No agent writer"}}' >&2; exit 1 ;;
-  'agents config writer --file '*' --json') cp "$5" ${JSON.stringify(join('$BIN', 'stdin.json'))}; echo '{"ok":true,"agent":"writer","block":{"description":"Writes posts","behavior":{"prompt":"You write."},"connectors":["gmail"]}}' ;;`.replaceAll('$BIN', bin))
+  'agents config writer --file '*' --json') cp "$5" ${JSON.stringify(join('$BIN', 'stdin.json'))}; echo '{"ok":true,"agent":"writer","block":{"description":"Writes posts","behavior":{"prompt":"You write.","mode":"subagent","hidden":true},"connectors":["gmail"]}}' ;;`.replaceAll('$BIN', bin))
     const result = await run('kortix_agents', { action: 'create', name: 'writer', description: 'Writes posts', instructions: 'You write.', connectors: ['gmail'] })
     expect(result.card.title).toBe('Created writer')
     // The PUT schema has no top-level `description`: it lives in `behavior` with the prompt.
-    expect(JSON.parse(readFileSync(join(bin, 'stdin.json'), 'utf8'))).toEqual({ behavior: { prompt: 'You write.', description: 'Writes posts' }, connectors: ['gmail'] })
+    // KRTX-4810: an agent My Kortix creates is a subagent, hidden from the pickers, until the person promotes it.
+    expect(JSON.parse(readFileSync(join(bin, 'stdin.json'), 'utf8'))).toEqual({ behavior: { prompt: 'You write.', description: 'Writes posts', mode: 'subagent', hidden: true }, connectors: ['gmail'] })
     expect(result.card.changes).toContainEqual({ field: 'connectors', before: null, after: 'gmail' })
+    expect(result.card.changes).toContainEqual({ field: 'mode', before: null, after: 'subagent' })
+  })
+
+  test('create: omitted tools mean every tool, and the card says so; listed tools do not', async () => {
+    fakeKortix(`'agents config digest --json') echo '{"kortix_error":{"kind":"failed","status":404,"message":"No agent digest"}}' >&2; exit 1 ;;
+  'agents config digest --file '*' --json') echo '{"ok":true,"agent":"digest","block":{"connectors":["notion"]}}' ;;
+  'agents config reader --json') echo '{"kortix_error":{"kind":"failed","status":404,"message":"No agent reader"}}' >&2; exit 1 ;;
+  'agents config reader --file '*' --json') echo '{"ok":true,"agent":"reader","block":{"tools":["read"]}}' ;;`)
+    const open = await run('kortix_agents', { action: 'create', name: 'digest', description: 'Ticket digest', connectors: ['notion'] })
+    expect(open.card.subtitle).toBe('Saved to the workspace settings. Tools: every tool (none were listed).')
+    const listed = await run('kortix_agents', { action: 'create', name: 'reader', description: 'Reads', tools: ['read'] })
+    expect(listed.card.subtitle).toBe('Saved to the workspace settings.')
+  })
+
+  test.each(['subagent', 'primary', 'all'] as const)('create: explicit %s role controls picker visibility', async (mode) => {
+    fakeKortix(`'agents config explicit-writer --json') echo '{"kortix_error":{"kind":"failed","status":404,"message":"No agent explicit-writer"}}' >&2; exit 1 ;;
+  'agents config explicit-writer --file '*' --json') cp "$5" ${JSON.stringify(join(bin, 'explicit.json'))}; echo '{"ok":true,"agent":"explicit-writer","block":{}}' ;;`)
+    const result = await run('kortix_agents', { action: 'create', name: 'explicit-writer', description: 'Explicit role', mode })
+    expect(result.ok).toBe(true)
+    expect(JSON.parse(readFileSync(join(bin, 'explicit.json'), 'utf8'))).toEqual({
+      behavior: { description: 'Explicit role', mode, ...(mode === 'subagent' ? { hidden: true } : {}) },
+    })
+  })
+
+  // Agent Evals on dev: promoted to primary, a helper kept `hidden: true` and never showed in the picker.
+  test('update: making a hidden helper primary clears hidden and keeps its instructions', async () => {
+    fakeKortix(`'agents config support-replies --json') echo '{"block":{"behavior":{"prompt":"Never send anything.","mode":"subagent","hidden":true}}}' ;;
+  'agents config support-replies --file '*' --json') cp "$5" ${JSON.stringify(join('$BIN', 'promote.json'))}; echo '{"ok":true,"agent":"support-replies","block":{}}' ;;`.replaceAll('$BIN', bin))
+    expect((await run('kortix_agents', { action: 'update', name: 'support-replies', mode: 'primary', model: 'kortix/glm-5.3-flash' })).ok).toBe(true)
+    expect(JSON.parse(readFileSync(join(bin, 'promote.json'), 'utf8'))).toEqual({ behavior: { prompt: 'Never send anything.', mode: 'primary', model: 'kortix/glm-5.3-flash' } })
+  })
+
+  test('create: the person asked for a primary agent — no subagent default, nothing hidden', async () => {
+    fakeKortix(`'agents config primary-writer --json') echo '{"kortix_error":{"kind":"failed","status":404,"message":"No agent primary-writer"}}' >&2; exit 1 ;;
+  'agents config primary-writer --file '*' --json') cp "$5" ${JSON.stringify(join('$BIN', 'primary.json'))}; echo '{"ok":true,"agent":"primary-writer","block":{}}' ;;`.replaceAll('$BIN', bin))
+    const result = await run('kortix_agents', { action: 'create', name: 'primary-writer', description: 'Writes posts', mode: 'primary' })
+    expect(result.ok).toBe(true)
+    expect(JSON.parse(readFileSync(join(bin, 'primary.json'), 'utf8'))).toEqual({ behavior: { description: 'Writes posts', mode: 'primary' } })
+  })
+
+  test('update: the role defaults never fire — an existing agent keeps its declared mode and pickers choice', async () => {
+    fakeKortix(`'agents config writer --json') echo '{"block":{"behavior":{"prompt":"Old.","mode":"primary"}}}' ;;
+  'agents config writer --file '*' --json') cp "$5" ${JSON.stringify(join('$BIN', 'updated.json'))}; echo '{"ok":true,"agent":"writer","block":{"behavior":{"prompt":"New.","mode":"primary"}}}' ;;`.replaceAll('$BIN', bin))
+    const result = await run('kortix_agents', { action: 'update', name: 'writer', instructions: 'New.' })
+    expect(result.ok).toBe(true)
+    expect(JSON.parse(readFileSync(join(bin, 'updated.json'), 'utf8'))).toEqual({ behavior: { prompt: 'New.', mode: 'primary' } })
   })
 
   test('update sends back only the keys the PUT accepts, and shows what changed', async () => {
@@ -89,7 +137,8 @@ describe('kortix_agents', () => {
     fakeKortix(`'models ls --json') echo '{"models":{"deepseek-v4.1-flash":{"name":"DeepSeek V4.1 Flash","provider":"kortix","enabled":true,"reasoning":false,"limit":{"context":1000000},"cost":{"input":0.1,"output":0.4},"free":true},"openai/gpt-6":{"name":"GPT-6","provider":"openai","provider_name":"OpenAI","enabled":true,"reasoning":true,"attachment":true,"limit":{"context":400000},"cost":{"input":5,"output":20}},"kimi-k3":{"name":"Kimi K3","provider":"kortix","enabled":false},"anthropic/claude-x":{"name":"Claude X","provider":"anthropic","enabled":true,"available":false}},"catalog":{"glm-6":{"availability":"plan"}},"defaultModel":"deepseek-v4.1-flash","platformFeePercent":10,"claudeSubscription":{"providerId":"claude-agent","name":"Claude","connected":true,"models":[{"id":"claude-agent/claude-opus","name":"Claude Opus","description":"Deep work","limit":{"context":200000,"output":32000},"efforts":["low","high"],"requires":"claude_subscription","connected":true}]}}' ;;`)
     const result = await run('kortix_agents', { action: 'models' })
     expect(result.ok).toBe(true)
-    expect(result.card.title).toBe('3 models')
+    expect(result.card.title).toBe('3 models you can run')
+    expect(result.card.subtitle).toBe('3 offered in this workspace; 1 need a provider connected first.')
     // The default first; a model the project turned off, or one this person cannot reach, is left out.
     expect(result.card.rows).toEqual([
       { title: 'DeepSeek V4.1 Flash', detail: 'kortix/deepseek-v4.1-flash · fast · 1M context', badge: 'default' },
@@ -98,6 +147,11 @@ describe('kortix_agents', () => {
     ])
     expect(result.data).toMatchObject({
       default: 'kortix/deepseek-v4.1-flash',
+      default_runnable: true,
+      // offered is the enabled set `kortix models ls` counts: the one off model is out, the unreachable one is in.
+      offered: 3,
+      runnable: 3,
+      not_runnable: [{ id: 'kortix/anthropic/claude-x', name: 'Claude X', needs: 'a anthropic key (kortix providers set anthropic)' }],
       models: [
         { id: 'kortix/deepseek-v4.1-flash', name: 'DeepSeek V4.1 Flash', good_for: ['fast'], context: 1000000, default: true },
         { id: 'claude-agent/claude-opus', provider: 'Claude subscription', good_for: ['reasoning'] },
@@ -107,6 +161,24 @@ describe('kortix_agents', () => {
     // No price, cost, fee or "free" reaches the model or the card.
     expect(JSON.stringify(result)).not.toMatch(/cost|price|fee|free|\$/i)
     expect(argvs()).toEqual(['models ls --json'])
+  })
+
+  test('models: an offered default this person cannot run is still named, with default_runnable false', async () => {
+    fakeKortix(`'models ls --json') echo '{"models":{"codex/gpt-x":{"name":"GPT X","provider":"codex","enabled":true,"available":false,"availability":"login"},"kimi-k3":{"name":"Kimi K3","provider":"kortix","enabled":true},"glm-6":{"name":"GLM 6","provider":"kortix","enabled":false}},"defaultModel":"codex/gpt-x"}' ;;`)
+    const result = await run('kortix_agents', { action: 'models' })
+    expect(result.ok).toBe(true)
+    expect(result.card.title).toBe('1 model you can run')
+    expect(result.data).toMatchObject({
+      default: 'kortix/codex/gpt-x',
+      default_runnable: false,
+      offered: 2,
+      runnable: 1,
+      models: [{ id: 'kortix/kimi-k3', default: false }],
+      not_runnable: [{ id: 'kortix/codex/gpt-x', needs: 'a ChatGPT login (kortix providers login openai)' }],
+    })
+    // A model the workspace turned off appears nowhere.
+    expect(JSON.stringify(result)).not.toContain('glm-6')
+    expect((result.data as { note: string }).note).toContain('The workspace default is not runnable for this person')
   })
 
   test('a refusal names who can grant it, read from the project members', async () => {
@@ -119,7 +191,7 @@ describe('kortix_agents', () => {
     expect(result.error?.kind).toBe('denied')
     expect(result.error?.message).toContain('project.agent.update')
     expect(result.error?.grantors).toEqual([
-      { name: 'Sam', role: 'project manager' },
+      { name: 'Sam', role: 'manager' },
       { name: 'ada@example.com', role: 'owner' },
     ])
     expect(result.card.subtitle).toBe('Sam, ada@example.com can grant it.')
@@ -127,11 +199,76 @@ describe('kortix_agents', () => {
 })
 
 describe('kortix_connectors', () => {
+  // QualiLoop on dev, 59 calls: `connectors ls --json` prints `connectors`, the tool read `profiles`,
+  // so every card said "0 connectors" and My Kortix told the person nothing was connected.
+  test('list: one row per connector the CLI prints, with its state in words', async () => {
+    fakeKortix(`'connectors ls --json') echo '{"connectors":[{"state":"needs_account","state_reason":"no account connected","slug":"gmail","name":"Gmail","provider":"mcp","status":"needs_auth","accounts":[]},{"state":"connected","slug":"notion","name":"Notion","provider":"mcp","status":"active","accounts":[{"id":"acc_1"}]},{"state":"error","state_reason":"its tools could not be loaded","slug":"crm","name":"CRM","provider":"openapi","status":"active","accounts":[{"id":"acc_2"}]}]}' ;;`)
+    const result = await run('kortix_connectors', { action: 'list' })
+    expect(result.card.title).toBe('3 connectors')
+    expect(result.card.rows).toEqual([
+      { title: 'Gmail', detail: 'gmail', badge: 'not signed in' },
+      { title: 'Notion', detail: 'notion', badge: 'connected' },
+      { title: 'CRM', detail: 'crm', badge: 'error: its tools could not be loaded' },
+    ])
+  })
+
+  // QualiLoop on dev: connect before add answered "not a supported connect connector" (17 calls).
+  test('connect on a connector the workspace has not added says to add it first', async () => {
+    fakeKortix(`'connectors connect gmail --owner me') echo '{"kortix_error":{"kind":"failed","status":404,"message":"not a supported connect connector"}}' >&2; exit 1 ;;`)
+    const result = await run('kortix_connectors', { action: 'connect', slug: 'gmail' })
+    expect(result.card.title).toBe('gmail is not added yet')
+    expect(result.error?.message).toContain('Add it first')
+  })
+
+  // secret-request on three models (2026-11-28): the models ran `kortix secrets request` in the shell and
+  // copied its ~600-character link by hand. Kimi cut it short (a dead link); GLM left it out of the reply.
+  test('secret: the save link is the card action, from the CLI, never copied by the model', async () => {
+    fakeKortix(`'secrets request ACME_API_KEY --json') echo '{"url":"https://kortix.example.test/secret-intake/ksl_abc","names":["ACME_API_KEY"],"scope":"runtime","expires_at":"2026-12-05T10:00:00.000Z","withheld":[]}' ;;`)
+    const result = await run('kortix_connectors', { action: 'secret', names: ['acme_api_key'] })
+    expect(result.card.status).toBe('needs_you')
+    expect(result.card.title).toBe('Save ACME_API_KEY')
+    expect(result.card.links).toEqual([{ label: 'Save the key', href: 'https://kortix.example.test/secret-intake/ksl_abc' }])
+    expect(result.card.subtitle).toContain('never in chat')
+    expect(argvs()).toEqual(['secrets request ACME_API_KEY --json'])
+  })
+
+  test('secret: a key only a connector spends is minted with --scope connector, and a withheld name is said', async () => {
+    fakeKortix(`'secrets request STRIPE_KEY --scope connector --json') echo '{"url":"https://kortix.example.test/secret-intake/ksl_x","names":["STRIPE_KEY"],"scope":"connector","expires_at":"2026-12-05T10:00:00.000Z","withheld":[{"name":"STRIPE_KEY"}]}' ;;`)
+    const result = await run('kortix_connectors', { action: 'secret', names: 'STRIPE_KEY', for_connector: true })
+    expect(result.card.links?.[0]?.href).toBe('https://kortix.example.test/secret-intake/ksl_x')
+    expect(result.card.subtitle).toContain('This session will not receive STRIPE_KEY')
+  })
+
+  test('secret without a name asks which key', async () => {
+    fakeKortix('')
+    const result = await run('kortix_connectors', { action: 'secret' })
+    expect(result.error?.message).toContain('Pass names')
+    expect(argvs().filter(Boolean)).toEqual([])
+  })
+
   test('connect: the sign-in link is the card action and the person must act', async () => {
     fakeKortix(`'connectors connect gmail --owner me') echo 'Open this link to sign in: https://auth.example.com/connect?x=1' ;;`)
     const result = await run('kortix_connectors', { action: 'connect', slug: 'gmail' })
     expect(result.card.status).toBe('needs_you')
     expect(result.card.links).toEqual([{ label: 'Sign in', href: 'https://auth.example.com/connect?x=1' }])
+  })
+
+  // An e2e run on dev: "watch my Gmail" posted a private card, then a shared
+  // one, because a trigger runs only on the workspace's shared sign-in.
+  test('connect for a trigger mints ONE shared sign-in, never a private one first', async () => {
+    fakeKortix(`'connectors connect gmail --owner project') echo 'Open this link to sign in: https://auth.example.com/connect?shared=1' ;;`)
+    const result = await run('kortix_connectors', { action: 'connect', slug: 'gmail', for_trigger: true })
+    expect(result.card.subtitle).toBe('Everyone in the workspace will use this sign-in, so triggers can run on it.')
+    expect(result.card.links).toEqual([{ label: 'Sign in', href: 'https://auth.example.com/connect?shared=1' }])
+    expect(argvs()).toEqual(['connectors connect gmail --owner project'])
+  })
+
+  test('connect for a trigger that the person may not share is refused, with no private card', async () => {
+    fakeKortix(`'connectors connect gmail --owner project') echo '{"kortix_error":{"kind":"denied","message":"forbidden","status":403}}' >&2; exit 1 ;;
+  ${ROSTER}`)
+    const result = await run('kortix_connectors', { action: 'connect', slug: 'gmail', for_trigger: true })
+    expect(result.card.status).toBe('denied')
+    expect(argvs().filter((line) => line.startsWith('connectors connect'))).toEqual(['connectors connect gmail --owner project'])
   })
 })
 
@@ -139,13 +276,21 @@ describe('kortix_schedules', () => {
   test('create without an agent is a reminder to this session; with one, each run starts its session', async () => {
     // Each schedule value is one --flag=value word, so it can never read as an option (CWE-88).
     fakeKortix(`'triggers add Check the report --runtime --in=2h') echo 'trigger.abc123' ;;
-  'triggers add Send the summary --runtime --cron=0 9 * * 1 --timezone=Europe/Berlin --agent=researcher') echo 'Created trigger.def456' ;;`)
+  'triggers add Send the summary --runtime --cron=0 9 * * 1 --timezone=Europe/Berlin --agent=researcher') echo 'Created trigger.def456' ;;
+  'triggers pause trigger.def456') echo 'Paused trigger.def456 (paused)' ;;`)
     const reminder = await run('kortix_schedules', { action: 'create', prompt: 'Check the report', in: '2h' })
     expect(reminder.card.title).toBe('Reminder set: in 2h')
     expect(reminder.data).toMatchObject({ id: 'trigger.abc123', agent: null })
     const weekly = await run('kortix_schedules', { action: 'create', prompt: 'Send the summary', cron: '0 9 * * 1', timezone: 'Europe/Berlin', agent: 'researcher' })
-    expect(weekly.data).toMatchObject({ id: 'trigger.def456', agent: 'researcher' })
-    expect(argvs()).toHaveLength(2)
+    // An agent's schedule is saved paused until it is tested; a reminder to this session stays live.
+    expect(weekly.data).toMatchObject({ id: 'trigger.def456', agent: 'researcher', state: 'paused' })
+    expect(weekly.card.title).toBe('Saved paused: researcher, cron 0 9 * * 1')
+    expect(weekly.card.rows).toEqual([{ title: 'Not running yet', detail: 'Test it with run_now, then resume it to put it live' }])
+    expect(argvs()).toEqual([
+      'triggers add Check the report --runtime --in=2h',
+      'triggers add Send the summary --runtime --cron=0 9 * * 1 --timezone=Europe/Berlin --agent=researcher',
+      'triggers pause trigger.def456',
+    ])
   })
 
   test('an option-shaped id never reaches the CLI, so pause cannot fall through to the project-wide switch (CWE-88)', async () => {
@@ -200,6 +345,32 @@ describe('kortix_schedules', () => {
     expect((await run('kortix_schedules', { action: 'run_now', id: 'automation.bbbbbbbbbbbb' })).ok).toBe(true)
     expect((await run('kortix_schedules', { action: 'remove', id: 'automation.bbbbbbbbbbbb' })).ok).toBe(true)
     expect(argvs()).toEqual(['loops rm reminder.aaaaaaaaaaaa', 'triggers run automation.bbbbbbbbbbbb', 'triggers rm automation.bbbbbbbbbbbb'])
+  })
+
+  test('read: the latest answer is the newest text block of the root thread (kortix.session/2)', async () => {
+    const log = {
+      schema: 'kortix.session/2',
+      source: 'log',
+      session_id: 'ses_2',
+      threads: [
+        {
+          thread_id: 'root',
+          messages: [
+            { role: 'user', blocks: [{ type: 'text', text: 'how is intake doing?' }] },
+            { role: 'assistant', blocks: [{ type: 'reasoning', text: 'thinking about it' }, { type: 'text', text: 'Intake ran 4 passes.' }] },
+            { role: 'assistant', blocks: [{ type: 'reasoning', text: 'checking' }, { type: 'tool_call', name: 'bash', result: { content: [{ type: 'text', text: 'tool output' }] } }] },
+            { role: 'assistant', blocks: [{ type: 'text', text: 'Intake is healthy.' }] },
+            { role: 'assistant', blocks: [{ type: 'tool_call', name: 'bash', result: { content: [{ type: 'text', text: 'later tool output' }] } }] },
+          ],
+        },
+        { thread_id: 'sub', parent_thread_id: 'root', messages: [{ role: 'assistant', blocks: [{ type: 'text', text: 'a subagent report' }] }] },
+      ],
+    }
+    fakeKortix(`'sessions log ses_2 --limit 20 --json') echo '${JSON.stringify(log)}' ;;`)
+    const result = await run('kortix_sessions', { action: 'read', session_id: 'ses_2' })
+    expect(result.ok).toBe(true)
+    expect(result.card.title).toBe('Latest answer')
+    expect((result.data as { answer: string }).answer).toBe('Intake is healthy.')
   })
 
   test('message text that starts with "-" goes as --prompt=<text>, never as an option', async () => {
@@ -316,6 +487,8 @@ describe('kortix_schedules follow-through', () => {
     // The example is a whole call the model can copy.
     const example = missing.error!.message.slice(missing.error!.message.indexOf('{'))
     expect(JSON.parse(example)).toMatchObject({ action: 'follow_up', in: '4d' })
+    // The card is the person's: the model's instructions and example never reach it.
+    expect(missing.card).toEqual({ title: 'The agent left out a required detail', status: 'error' })
     expect((await run('kortix_schedules', { action: 'wake_on', on: 'cr_merged', cr: '42' })).error?.message).toContain('{"action":"wake_on"')
     expect(argvs()).toHaveLength(2)
   })
@@ -363,13 +536,29 @@ describe('kortix_schedules follow-through', () => {
     expect(result.card.rows?.map((row) => row.detail)).toEqual(['Follow-up · every 3h · next 2026-10-31 15:00 UTC', 'Wakes when change request 42 merges', '0 9 * * 1 · next 2026-11-02 09:00 UTC'])
   })
 
-  test('remove routes by id: reminder.<id> → kortix loops, trigger.<id> → kortix triggers, a kortix.yaml slug → --apply; delete is an alias; pause and resume work for loops', async () => {
+  test('list with one unreadable source: the card says which in plain words, the reason goes to the model in data.errors', async () => {
+    fakeKortix(`'triggers ls --json') echo '{"triggers":[],"runtime":[]}' ;;`)
+    const result = await run('kortix_schedules', { action: 'list' })
+    expect(result.card.subtitle).toBe("This session's follow-ups could not be read.")
+    expect(typeof (result.data as { errors?: { follow_ups?: unknown } }).errors?.follow_ups).toBe('string')
+  })
+
+  test('an automate argument check reads as an incomplete call on the card', async () => {
+    fakeKortix('')
+    const result = await run('kortix_schedules', { action: 'automate', name: 'Not A Slug', on: 'schedule', every: '1d', agent: 'writer', prompt: 'x' })
+    expect(result.card).toEqual({ title: 'The agent left out a required detail', status: 'error' })
+    expect(result.error?.message).toContain('`name` is a short id')
+  })
+
+  test('remove routes by id: reminder.<id> → kortix loops, trigger.<id> → kortix triggers, a kortix.yaml slug → --apply (remove, pause and resume); delete is an alias; pause and resume work for loops', async () => {
     fakeKortix(`'loops rm reminder.aaaaaaaaaaaa') echo 'Removed' ;;
   'triggers rm trigger.cccccccccccc') echo 'Removed' ;;
   'triggers rm weekly-digest --apply') echo 'Removed' ;;
   'loops pause reminder.aaaaaaaaaaaa') echo 'Paused' ;;
   'loops resume reminder.aaaaaaaaaaaa') echo 'Resumed' ;;
-  'loops run reminder.aaaaaaaaaaaa') echo 'Sent' ;;`)
+  'loops run reminder.aaaaaaaaaaaa') echo 'Sent' ;;
+  'triggers pause weekly-digest --apply') echo 'Disabled' ;;
+  'triggers resume weekly-digest --apply') echo 'Enabled' ;;`)
     expect((await run('kortix_schedules', { action: 'remove', id: 'reminder.aaaaaaaaaaaa' })).card.title).toBe('Removed')
     const alias = await run('kortix_schedules', { action: 'delete', id: 'trigger.cccccccccccc' })
     expect(alias.action).toBe('delete')
@@ -378,6 +567,8 @@ describe('kortix_schedules follow-through', () => {
     await run('kortix_schedules', { action: 'pause', id: 'reminder.aaaaaaaaaaaa' })
     await run('kortix_schedules', { action: 'resume', id: 'reminder.aaaaaaaaaaaa' })
     await run('kortix_schedules', { action: 'run_now', id: 'reminder.aaaaaaaaaaaa' })
+    expect((await run('kortix_schedules', { action: 'pause', id: 'weekly-digest' })).ok).toBe(true)
+    expect((await run('kortix_schedules', { action: 'resume', id: 'weekly-digest', force: true })).ok).toBe(true)
     expect(argvs()).toEqual([
       'loops rm reminder.aaaaaaaaaaaa',
       'triggers rm trigger.cccccccccccc',
@@ -385,6 +576,8 @@ describe('kortix_schedules follow-through', () => {
       'loops pause reminder.aaaaaaaaaaaa',
       'loops resume reminder.aaaaaaaaaaaa',
       'loops run reminder.aaaaaaaaaaaa',
+      'triggers pause weekly-digest --apply',
+      'triggers resume weekly-digest --apply',
     ])
   })
 
@@ -392,7 +585,7 @@ describe('kortix_schedules follow-through', () => {
     fakeKortix(`'loop ${TEXT} --every=4h --json') echo '✗ Loops is not enabled for this project. Enable it in Settings → Feature flags.' >&2; echo '  Turn it on: kortix projects features enable reminders' >&2; exit 1 ;;`)
     const result = await run('kortix_schedules', { action: 'follow_up', text: TEXT, every: '4h' })
     expect(result.ok).toBe(false)
-    expect(result.error?.message).toBe('Loops is not enabled for this project. Enable it in Settings → Feature flags. Ask the person or a project admin to turn it on.')
+    expect(result.error?.message).toBe('Loops is not enabled for this project. Enable it in Settings → Feature flags. Ask the person or a workspace admin to turn it on.')
   })
 })
 
@@ -405,10 +598,70 @@ describe('kortix_people and kortix_access', () => {
     expect(result.card.changes).toEqual([{ field: 'role', before: 'owner', after: 'member' }])
   })
 
+  // Agent Evals on dev: set_role said "not a member" and invite said "already invited", so an invited
+  // person's role could not change through the tool.
+  test('set_role on someone only invited replaces the invitation; remove cancels it', async () => {
+    fakeKortix(`${ROSTER}
+  'access pending --json') echo '{"pending":[{"invite_id":"inv_9","email":"sam.reyes@example.test","project_role":"member","invite_expired":false}]}' ;;
+  'access cancel inv_9') echo 'Cancelled' ;;
+  'access invite sam.reyes@example.test --role manager --json') echo '{"email_sent":true}' ;;`)
+    const changed = await run('kortix_people', { action: 'set_role', who: 'sam.reyes@example.test', role: 'manager' })
+    expect(changed.card.title).toBe("sam.reyes@example.test's invitation is now as manager")
+    expect(changed.card.changes).toEqual([{ field: 'role', before: 'member', after: 'manager' }])
+    expect(argvs().filter((a) => a.startsWith('access cancel') || a.startsWith('access invite'))).toEqual(['access cancel inv_9', 'access invite sam.reyes@example.test --role manager --json'])
+    const removed = await run('kortix_people', { action: 'remove', who: 'sam.reyes@example.test' })
+    expect(removed.card.title).toBe("Cancelled sam.reyes@example.test's invitation")
+  })
+
   test('who_can_grant lists the managers', async () => {
     fakeKortix(ROSTER)
     const result = await run('kortix_access', { action: 'who_can_grant' })
     expect(result.card.rows?.map((row) => row.title)).toEqual(['Sam', 'ada@example.com'])
+    expect(result.card.links).toEqual([{ label: 'Members', href: '/workspaces/proj_1/admin/members' }])
+  })
+
+  test('me: one workspace role row, the workspace title, the older JSON fields kept', async () => {
+    fakeKortix(`'whoami --json') echo '{"user_id":"u_ada","email":"ada@example.com","accounts":[{"account_id":"a_1","role":"owner"}]}' ;;
+  ${ROSTER}`)
+    const result = await run('kortix_access', { action: 'me' })
+    expect(result.card.title).toBe('You manage this workspace')
+    expect(result.card.rows).toEqual([
+      { title: 'Signed in as', detail: 'ada@example.com' },
+      { title: 'Workspace role', detail: 'owner' },
+    ])
+    expect(result.data).toMatchObject({ workspace_role: 'owner', account_role: 'owner', project_role: 'manager', workspace_id: 'proj_1', project_id: 'proj_1' })
+  })
+
+  test('me: a member reads as a member of this workspace', async () => {
+    fakeKortix(`'whoami --json') echo '{"user_id":"u_me","email":"lee@example.com","accounts":[{"account_id":"a_1","role":"member"}]}' ;;
+  ${ROSTER}`)
+    const result = await run('kortix_access', { action: 'me' })
+    expect(result.card.title).toBe('You are a member of this workspace')
+    expect(result.card.rows).toContainEqual({ title: 'Workspace role', detail: 'member' })
+    expect(JSON.stringify(result.card)).not.toMatch(/Account role|Project role/)
+  })
+
+  // QualiLoop on dev, 19 calls: `access pending --json` prints `pending` with `project_role`, the tool
+  // read `invites`, so every card said "0 open invitations" and My Kortix invited the same person again.
+  test('pending: one row per open invitation the CLI prints, with its role', async () => {
+    fakeKortix(`'access pending --json') echo '{"pending":[{"invite_id":"inv_1","email":"sam@example.com","project_role":"member","invited_by_email":"ada@example.com","invite_expires_at":"2026-12-09T15:22:04.661Z","invite_expired":false}]}' ;;`)
+    const result = await run('kortix_people', { action: 'pending' })
+    expect(result.card.title).toBe('1 open invitation')
+    expect(result.card.rows).toEqual([{ title: 'sam@example.com', badge: 'member' }])
+  })
+
+  test('people list shows one workspace role per person', async () => {
+    fakeKortix(ROSTER)
+    const result = await run('kortix_people', { action: 'list' })
+    expect(result.card.rows?.map((row) => row.badge)).toEqual(['manager', 'owner', 'member'])
+  })
+
+  test('every Settings link a tool prints is the registry path (workspaceSettingsPath)', () => {
+    const env = { KORTIX_PROJECT_ID: 'proj_1' } as Parameters<typeof adminHref>[0]
+    for (const section of ['members', 'connectors', 'triggers', 'models', 'feature-flags', 'secrets', 'skills'] as const) {
+      expect(isWorkspaceSettingsSection(section)).toBe(true)
+      expect(adminHref(env, section)).toBe(workspaceSettingsPath('proj_1', section))
+    }
   })
 })
 
@@ -417,15 +670,98 @@ describe('kortix_change_requests', () => {
   const SHOW = `'cr show 3 --json') echo '{"change_request":${CR},"merge_preview":{"can_merge":true,"can_fast_forward":true,"conflicts":[],"is_up_to_date":false}}' ;;`
 
   test('list: the open change requests with number, title, author and status, each linked to Review', async () => {
-    fakeKortix(`'cr ls --status=open --json') echo '{"change_requests":[${CR}]}' ;;
+    fakeKortix(`'cr ls --status=open --limit=50 --json') echo '{"change_requests":[${CR}],"next_cursor":null}' ;;
   ${ROSTER}`)
     const result = await run('kortix_change_requests', { action: 'list' })
     expect(result.ok).toBe(true)
     expect(result.card.title).toBe('1 open change request')
-    expect(result.card.rows).toEqual([{ title: '#3 Upgrade the manifest', detail: 'Sam', badge: 'open', href: '/projects/proj_1/review?id=cr%3Acr-uuid-3' }])
+    expect(result.card.rows).toEqual([{ title: '#3 Upgrade the manifest', detail: 'Sam', badge: 'open', href: '/workspaces/proj_1/inbox?view=review&id=cr%3Acr-uuid-3' }])
     expect(result.data).toEqual({
       change_requests: [{ number: 3, cr_id: 'cr-uuid-3', title: 'Upgrade the manifest', author: 'Sam', status: 'open', from: 'kortix/session-a', into: 'main', session_id: 'ses_9', opened_at: '2026-10-30T09:00:00.000Z' }],
+      count: 1,
+      truncated: false,
+      next_cursor: null,
     })
+  })
+
+  /** A fake `kortix cr ls` over `total` merged change requests, newest first, as the real CLI pages them. */
+  function pagedCrList(total: number, honorsLimit: boolean, titlePad = 0) {
+    const rows = join(bin, 'rows.json')
+    writeFileSync(
+      rows,
+      JSON.stringify(
+        Array.from({ length: total }, (_, i) => {
+          const number = total - i
+          return { cr_id: `cr-${number}`, number, title: `Change ${number}${'x'.repeat(titlePad)}`, status: 'merged', base_ref: 'refs/heads/main', head_ref: `refs/heads/b-${number}`, created_by: 'u_sam', created_at: '2026-10-30T09:00:00.000Z' }
+        }),
+      ),
+    )
+    // bun answers as the CLI does: one page and next_cursor (honorsLimit), or every row (a CLI before --limit).
+    const page = join(bin, 'page.ts')
+    writeFileSync(
+      page,
+      `const all = JSON.parse(await Bun.file(${JSON.stringify(rows)}).text())
+const arg = (name) => process.argv.find((a) => a.startsWith('--' + name + '='))?.split('=')[1]
+if (!${honorsLimit}) { console.log(JSON.stringify({ change_requests: all })); process.exit(0) }
+const limit = Number(arg('limit')); const cursor = arg('cursor')
+const rest = cursor ? all.filter((cr) => cr.number < Number(cursor)) : all
+const rowsOut = rest.slice(0, limit)
+console.log(JSON.stringify({ change_requests: rowsOut, next_cursor: rest.length > limit ? String(rowsOut.at(-1).number) : null }))
+`,
+    )
+    fakeKortix(`'cr ls --status=merged '*'--json') ${JSON.stringify(process.execPath)} ${JSON.stringify(page)} "$@" ;;
+  ${ROSTER}`)
+  }
+
+  test('list over 998 change requests with long titles: each page is valid JSON under the output bound, and the cursor walks all of them once', async () => {
+    pagedCrList(998, true, 300)
+    const seen: number[] = []
+    let cursor: string | null = null
+    let pages = 0
+    do {
+      const raw = await runTool(
+        { ...PLATFORM_TOOLS.kortix_change_requests!, name: 'kortix_change_requests' },
+        { action: 'list', status: 'merged', limit: 100, ...(cursor ? { cursor } : {}) },
+        { sessionId: 'ses_1', agent: 'meta', directory: bin, env: env(), signal: new AbortController().signal },
+      )
+      // Under the 50 KB bound runTool cuts at: the model always gets parseable JSON.
+      expect(raw).not.toContain('[Output truncated')
+      expect(raw.length).toBeLessThan(50_000)
+      const result = JSON.parse(raw) as KortixToolResult
+      const data = result.data as { change_requests: Array<{ number: number; title: string }>; count: number; truncated: boolean; next_cursor: string | null }
+      expect(data.count).toBe(data.change_requests.length)
+      expect(data.change_requests.every((cr) => cr.title.length <= 200)).toBe(true)
+      seen.push(...data.change_requests.map((cr) => cr.number))
+      expect(data.truncated).toBe(data.next_cursor !== null)
+      cursor = data.next_cursor
+      pages += 1
+    } while (cursor && pages < 40)
+    // Long titles fill the byte budget before 100 rows: more pages, never a cut JSON.
+    expect(pages).toBeGreaterThan(10)
+    expect(seen).toEqual(Array.from({ length: 998 }, (_, i) => 998 - i))
+  })
+
+  test('list defaults to 50, caps limit at 100, and cuts a CLI that ignores --limit to the page', async () => {
+    pagedCrList(998, false)
+    const first = await run('kortix_change_requests', { action: 'list', status: 'merged' })
+    const data = first.data as { change_requests: Array<{ number: number }>; truncated: boolean; next_cursor: string | null; note?: string }
+    expect(data.change_requests).toHaveLength(50)
+    expect(data).toMatchObject({ truncated: true, next_cursor: '949' })
+    expect(data.note).toContain('next_cursor')
+    expect(first.card.title).toBe('50 merged change requests, newest first; more on the next page')
+    const next = await run('kortix_change_requests', { action: 'list', status: 'merged', limit: 500, cursor: '949' })
+    const page2 = next.data as { change_requests: Array<{ number: number }>; next_cursor: string | null }
+    expect(page2.change_requests).toHaveLength(100)
+    expect(page2.change_requests[0]!.number).toBe(948)
+    expect(page2.next_cursor).toBe('849')
+    expect(argvs().filter((argv) => argv.startsWith('cr ls'))).toEqual(['cr ls --status=merged --limit=50 --json', 'cr ls --status=merged --limit=100 --cursor=949 --json'])
+  })
+
+  test('list refuses a cursor that is not a next_cursor', async () => {
+    fakeKortix(ROSTER)
+    const result = await run('kortix_change_requests', { action: 'list', cursor: 'abc' })
+    expect(result.ok).toBe(false)
+    expect(argvs().filter((argv) => argv.startsWith('cr ls'))).toEqual([])
   })
 
   test('get: the summary, how many files it changes and whether it can merge', async () => {
@@ -442,7 +778,7 @@ describe('kortix_change_requests', () => {
       { title: 'Status', badge: 'open' },
     ])
     expect(result.data).toMatchObject({ number: 3, files_changed: 2, additions: 3, deletions: 1, can_merge: true, conflicts: [] })
-    expect(result.card.links).toContainEqual({ label: 'Session that made it', href: '/projects/proj_1/sessions/ses_9' })
+    expect(result.card.links).toContainEqual({ label: 'Session that made it', href: '/workspaces/proj_1/sessions/ses_9' })
   })
 
   test('merge: an open one merges with its message as --message=<text>; a closed one is refused before any merge', async () => {
@@ -482,20 +818,57 @@ describe('kortix_change_requests', () => {
 })
 
 describe('kortix_usage', () => {
-  test('summary reads this project\'s usage, speaks in credits and never converts a price itself', async () => {
-    fakeKortix(`'billing costs --project proj_1 --since '*' --json') echo '{"totals":{"total_cost":12.5},"credits":{"total":"1,250","previous":"900","llm":"1,000","compute":"250"}}' ;;`)
+  // The per-workspace roll-up, once per window: the account summary's daily series and
+  // model breakdown ran past the API's 25 s deadline on a busy workspace (KRTX-4877).
+  beforeEach(() => setSystemTime(new Date('2026-11-13T12:00:00.000Z')))
+  afterEach(() => setSystemTime())
+
+  test('summary reads this workspace\'s credits for the window and the one before, never the account summary, and never converts a price itself', async () => {
+    fakeKortix(`'billing costs --by workspace --project proj_1 --since 2026-11-06T12:00:00.000Z --until 2026-11-13T12:00:00.000Z --json') echo '{"projects":[{"total_cost":12.5,"credits":{"total":"1,250","llm":"1,000","compute":"250"}}]}' ;;
+  'billing costs --by workspace --project proj_1 --since 2026-10-30T12:00:00.000Z --until 2026-11-06T12:00:00.000Z --json') echo '{"projects":[{"total_cost":9,"credits":{"total":"900","llm":"700","compute":"200"}}]}' ;;`)
     const result = await run('kortix_usage', { action: 'summary', days: 7 })
     expect(result.card.title).toBe('1,250 credits in the last 7 days')
+    expect(result.card.subtitle).toBe('900 credits in the 7 days before.')
     expect(result.card.rows).toEqual([
       { title: 'AI models', detail: '1,000 credits' },
       { title: 'Computers', detail: '250 credits' },
     ])
     expect(JSON.stringify(result.card)).not.toContain('$')
+    expect(argvs()).toHaveLength(2)
+  })
+
+  test('summary of a workspace with no spend says 0, not an error', async () => {
+    fakeKortix(`'billing costs --by workspace --project proj_1 --since '*' --json') echo '{"projects":[]}' ;;`)
+    const result = await run('kortix_usage', { action: 'summary' })
+    expect(result.ok).toBe(true)
+    expect(result.card.title).toBe('0 credits in the last 30 days')
+    expect(result.card.subtitle).toBe('0 credits in the 30 days before.')
+    expect(result.card.rows).toEqual([])
+  })
+
+  test('balance: the credits left now and the plan, whole credits, no price', async () => {
+    fakeKortix(`'billing status --json') echo '{"plan":{"label":"Credits","monthly_usd":0},"credits":{"total":8122.53,"monthly":4220.95,"extra":3901.57,"expires_at":"2026-12-25T13:36:17.820Z","can_run":true}}' ;;`)
+    const result = await run('kortix_usage', { action: 'balance' })
+    expect(result.card.title).toBe('8,122 credits left')
+    expect(result.card.subtitle).toBe('Credits plan.')
+    expect(result.card.rows).toEqual([
+      { title: "This month's credits", detail: '4,220 credits, until 2026-12-25' },
+      { title: 'Extra credits', detail: '3,901 credits' },
+    ])
+    expect(JSON.stringify(result)).not.toContain('monthly_usd')
+    expect(JSON.stringify(result.card)).not.toContain('$')
+  })
+
+  test('balance with no credits left says work is paused', async () => {
+    fakeKortix(`'billing status --json') echo '{"plan":{"label":"Free"},"credits":{"total":0,"can_run":false}}' ;;`)
+    const result = await run('kortix_usage', { action: 'balance' })
+    expect(result.card.title).toBe('0 credits left')
+    expect(result.card.rows).toContainEqual({ title: 'Work is paused', detail: 'No credits left to run agents.' })
   })
 })
 
 describe('kortix_schedules automations', () => {
-  test('automate: a connector event becomes one live kortix.yaml trigger with its filter, one session per thread, a cap and a model, each as --flag=value', async () => {
+  test('automate: a connector event becomes one paused kortix.yaml trigger with its filter, one session per thread, a cap and a model, each as --flag=value', async () => {
     fakeKortix(`'triggers add issue-triage '*' --apply') printf 'Added issue-triage (live)\\n' ;;`)
     const result = await run('kortix_schedules', {
       action: 'automate',
@@ -512,13 +885,13 @@ describe('kortix_schedules automations', () => {
       model: 'kortix/deepseek-v4.1-flash',
     })
     expect(result.ok).toBe(true)
-    expect(result.card.title).toBe('Automation set: issue-triage')
+    expect(result.card.title).toBe('Automation saved, paused: issue-triage')
     expect(result.card.subtitle).toBe('triage runs on GITHUB_ISSUE_OPENED on github, one session per key')
     expect(argvs()).toEqual([
       'triggers add issue-triage --type=event --prompt=If this is not a real bug report, stop: do nothing and send no message. Otherwise label {{ event.data.title }}. ' +
         '--agent=triage --connector=github --event=GITHUB_ISSUE_OPENED --model=kortix/deepseek-v4.1-flash --config-json={"repo":"acme/site"} ' +
         '--filter=event.data.action:in=opened,reopened --filter=event.data.sender:not=kortix-bot --filter=event.data.draft:exists=false ' +
-        '--session-key={{ event.data.number }} --max-runs-per-day=20 --apply',
+        '--session-key={{ event.data.number }} --max-runs-per-day=20 --disabled --apply',
     ])
   })
 
@@ -531,7 +904,7 @@ describe('kortix_schedules automations', () => {
     expect(hook.card.rows).toContainEqual({ title: 'Webhook URL', detail: 'https://api.example.test/v1/webhooks/proj_1/form-leads' })
     const weekly = await run('kortix_schedules', { action: 'automate', name: 'weekly-digest', on: 'schedule', every: '1d', agent: 'writer', prompt: 'Write the digest.' })
     expect(weekly.ok).toBe(true)
-    expect(argvs()[1]).toBe('triggers add weekly-digest --type=cron --prompt=Write the digest. --agent=writer --every=1d --apply')
+    expect(argvs()[1]).toBe('triggers add weekly-digest --type=cron --prompt=Write the digest. --agent=writer --every=1d --disabled --apply')
   })
 
   test('automate refuses a bad name, source, filter, option-shaped value, missing source field or cap before any command runs (CWE-88)', async () => {
@@ -608,6 +981,23 @@ describe('kortix_schedules automations', () => {
 })
 
 describe('kortix_schedules automate tolerance', () => {
+  // QualiLoop e2e on dev: an automation with no agent ran My Kortix, and every run failed
+  // ("My Kortix cannot start another My Kortix session").
+  test('an automation names the agent that does the work; with none it is refused before any command', async () => {
+    fakeKortix(``)
+    const result = await run('kortix_schedules', { action: 'automate', name: 'digest', on: 'schedule', cron: '0 9 * * 1-5', prompt: 'Write the digest.' })
+    expect(result.error?.kind).toBe('invalid')
+    expect(result.error?.message).toContain('worker')
+    expect(argvs()).toEqual([''])
+  })
+
+  test('pause, resume, remove and run_now take the name automate used when id is missing', async () => {
+    fakeKortix(`'triggers resume weekday-digest --apply') printf 'Resumed\\n' ;;`)
+    const result = await run('kortix_schedules', { action: 'resume', name: 'weekday-digest', force: true })
+    expect(result.ok).toBe(true)
+    expect(argvs()).toEqual(['triggers resume weekday-digest --apply'])
+  })
+
   test('a missing `on` is read from the fields the call gave: secret_env is a webhook, connector + event a connector event, app an App event, cron or every a schedule', async () => {
     fakeKortix(`'triggers add '*' --apply') printf 'Added (live)\\n' ;;`)
     const calls_ = [
@@ -617,21 +1007,24 @@ describe('kortix_schedules automate tolerance', () => {
       { args: { every: '1d' }, type: 'cron' },
     ]
     for (const [i, c] of calls_.entries()) {
-      const result = await run('kortix_schedules', { action: 'automate', name: `a${i}`, prompt: 'Go.', ...c.args })
+      const result = await run('kortix_schedules', { action: 'automate', name: `a${i}`, agent: 'worker', prompt: 'Go.', ...c.args })
       expect({ i, ok: result.ok }).toEqual({ i, ok: true })
       expect(argvs()[i]).toContain(`--type=${c.type}`)
     }
     // Nothing to read it from: still refused, before any command.
-    expect((await run('kortix_schedules', { action: 'automate', name: 'a9', prompt: 'Go.' })).error?.kind).toBe('invalid')
+    expect((await run('kortix_schedules', { action: 'automate', name: 'a9', agent: 'worker', prompt: 'Go.' })).error?.kind).toBe('invalid')
     expect(argvs()).toHaveLength(4)
   })
 
   test('a webhook secret that is missing or stored for agents: the result carries a link where the person saves it for webhooks', async () => {
     fakeKortix(`'triggers add form-leads '*' --apply') echo '{"kortix_error":{"kind":"invalid","status":422,"message":"Webhook secret is not configured for webhooks (webhook_secret_delivery_mismatch)"}}' >&2; exit 1 ;;
   'secrets request FORM_SECRET --scope=connector') printf '\\n  Hand this link to whoever has the value (FORM_SECRET)\\n  https://app.example.test/secret-intake/ksl_abc123\\n' ;;`)
-    const result = await run('kortix_schedules', { action: 'automate', name: 'form-leads', on: 'webhook', secret_env: 'FORM_SECRET', prompt: 'Draft a reply.' })
+    const result = await run('kortix_schedules', { action: 'automate', name: 'form-leads', on: 'webhook', secret_env: 'FORM_SECRET', agent: 'sales', prompt: 'Draft a reply.' })
     expect(result.ok).toBe(false)
     expect(result.card.title).toBe('FORM_SECRET needs saving for webhooks')
+    // The person saves it from the card: one link, a plain note, no model instruction.
+    expect(result.card.links).toEqual([{ label: 'Save secret', href: 'https://app.example.test/secret-intake/ksl_abc123' }])
+    expect(result.card.subtitle).toBe('Save the value on the linked page. It never passes through chat.')
     expect(result.error?.message).toContain('https://app.example.test/secret-intake/ksl_abc123')
     expect((result as { data?: { secret_intake_url?: string } }).data?.secret_intake_url).toBe('https://app.example.test/secret-intake/ksl_abc123')
     expect(argvs()[1]).toBe('secrets request FORM_SECRET --scope=connector')
@@ -643,7 +1036,7 @@ describe('kortix_schedules automate: an App as the event source', () => {
     fakeKortix(`'triggers add hn-watch-tick '*' --apply') printf 'Added hn-watch-tick (live)\\n' ;;`)
     const tick = await run('kortix_schedules', { action: 'automate', name: 'hn-watch-tick', on: 'schedule', every: '15m', target_app: 'hn-watch', target_path: '/tick' })
     expect(tick.ok).toBe(true)
-    expect(argvs()).toEqual(['triggers add hn-watch-tick --type=cron --target-app=hn-watch --target-path=/tick --every=15m --apply'])
+    expect(argvs()).toEqual(['triggers add hn-watch-tick --type=cron --target-app=hn-watch --target-path=/tick --every=15m --disabled --apply'])
     expect(tick.card.subtitle).toBe('Calls the App hn-watch (/tick) on every 15m')
     for (const bad of [{ target_app: '--all' }, { target_app: 'hn-watch', target_path: 'tick' }, { target_app: 'hn-watch', agent: 'writer' }]) {
       const result = await run('kortix_schedules', { action: 'automate', name: 'x', on: 'schedule', every: '15m', ...bad })
@@ -659,11 +1052,11 @@ describe('kortix_schedules automate: an App as the event source', () => {
   'triggers add status-work '*' --apply') printf 'Added status-work (live)\\n' ;;`)
     const woken = await run('kortix_schedules', { action: 'wake_on', text: TEXT, on: 'app_event', app: 'github-status', expect_event_within: '1h' })
     expect(woken.ok).toBe(true)
-    const work = await run('kortix_schedules', { action: 'automate', name: 'status-work', on: 'app_event', app: 'github-status', prompt: 'Status changed.', expect_event_within: '1h' })
+    const work = await run('kortix_schedules', { action: 'automate', name: 'status-work', on: 'app_event', app: 'github-status', agent: 'worker', prompt: 'Status changed.', expect_event_within: '1h' })
     expect(work.ok).toBe(true)
     expect(argvs()).toEqual([
       `triggers add ${TEXT} --on=app --app=github-status --expect-event-within=1h --json`,
-      'triggers add status-work --type=app --prompt=Status changed. --app=github-status --expect-event-within=1h --apply',
+      'triggers add status-work --type=app --prompt=Status changed. --agent=worker --app=github-status --expect-event-within=1h --apply',
     ])
     for (const bad of [
       { action: 'wake_on', text: TEXT, on: 'cr_merged', cr: '42', expect_event_within: '1h' },
@@ -696,5 +1089,206 @@ describe('runKortix', () => {
     chmodSync(join(bin, 'kortix'), 0o755)
     const result = await runKortix(['schedules', 'create', '--json'], { env: env() }, 'x'.repeat(1024 * 1024))
     expect(result.code).toBe(3)
+  })
+})
+
+describe('a failure card carries no text written for the model', () => {
+  test('fail(): an argument check reads as an incomplete call, a note shows, the message never does', async () => {
+    const { fail } = await import('@/services/tools/platform/platform')
+    const context = { env: {} }
+    const question = await fail('kortix_agents', 'create', 'Which agent?', { kind: 'invalid', message: 'Pass `name`.' }, context)
+    expect(question.card).toEqual({ title: 'The agent left out a required detail', status: 'error' })
+    expect(question.error).toEqual({ kind: 'invalid', message: 'Pass `name`.' })
+    const unknown = await fail('kortix_agents', 'nope', 'Unknown action', { kind: 'invalid', message: 'Use one of: list.' }, context)
+    expect(unknown.card.title).toBe('The agent left out a required detail')
+    // A server refusal of a well-formed call keeps its own title.
+    const conflict = await fail('kortix_agents', 'create', 'Could not create the agent', { kind: 'invalid', message: 'name taken (409)' }, context)
+    expect(conflict.card).toEqual({ title: 'Could not create the agent', status: 'error' })
+    const noted = await fail('kortix_memory', 'list', 'Memory is off in this workspace', { kind: 'failed', message: 'model text', note: 'Files is off.' }, context)
+    expect(noted.card).toEqual({ title: 'Memory is off in this workspace', subtitle: 'Files is off.', status: 'error' })
+  })
+})
+
+// The fields each tool reads, as the CLI really prints them (a static audit of every call
+// after QualiLoop showed two cards that always said 0).
+describe('CLI output shapes', () => {
+  test('connectors find: an app is "added" only when it is installed as a slug', async () => {
+    fakeKortix(`'connectors catalog mail --limit 8 --json') echo '{"items":[{"id":"kortix:gmail","name":"Gmail","installed":["gmail"]},{"id":"composio:outlook","name":"Outlook Mail","installed":[]}],"total":2}' ;;`)
+    const result = await run('kortix_connectors', { action: 'find', query: 'mail' })
+    expect(result.card.rows?.map((row) => row.badge)).toEqual(['added', undefined])
+  })
+
+  test('connectors add of an installed app exits 3 with its JSON: already added, not a failure', async () => {
+    fakeKortix(`'connectors catalog install kortix:gmail --json') echo '{"slug":"gmail","existing":true,"next":"connect"}'; exit 3 ;;`)
+    const result = await run('kortix_connectors', { action: 'add', app: 'kortix:gmail' })
+    expect(result.ok).toBe(true)
+    expect(result.card.title).toBe('gmail is already added')
+    expect(argvs()).toEqual(['connectors catalog install kortix:gmail --json'])
+  })
+
+  test('access me: whoami names the person in user_email', async () => {
+    fakeKortix(`'whoami --json') echo '{"user_id":"u_ada","user_email":"ada@example.com","accounts":[{"account_id":"a_1","role":"owner"}]}' ;;
+  ${ROSTER}`)
+    const result = await run('kortix_access', { action: 'me' })
+    expect(result.card.rows).toContainEqual({ title: 'Signed in as', detail: 'ada@example.com' })
+    expect(result.data).toMatchObject({ email: 'ada@example.com' })
+  })
+
+  test('sessions list: the work state is board_state, not the computer state', async () => {
+    fakeKortix(`'sessions ls --json') echo '[{"session_id":"s_working_1","title":"Draft","status":"running","runtime_status":"active","board_state":"working"},{"session_id":"s_idle_2","title":"Done","status":"running","runtime_status":"active","board_state":"completed"},{"session_id":"s_ask_3","title":"Ask","status":"running","runtime_status":"active","board_state":"needs_input"}]' ;;`)
+    const result = await run('kortix_sessions', { action: 'list' })
+    expect(result.card.subtitle).toBe('1 working right now')
+    expect(result.card.rows?.map((row) => row.badge)).toEqual(['working', 'completed', 'needs you'])
+  })
+
+  test('usage top_sessions: credits per session and who started it; no price in data', async () => {
+    fakeKortix(`'billing costs --by session '*) echo '{"sessions":[{"session_id":"abcd1234-0000","project_name":"Ops","owner_name":"Ada","total_cost":1.25,"llm_cost":1,"compute_cost":0.25,"credits":{"total":"125","llm":"100","compute":"25"}}]}' ;;`)
+    const result = await run('kortix_usage', { action: 'top_sessions', days: 7 })
+    expect(result.card.rows?.[0]).toMatchObject({ title: 'Session abcd1234', detail: 'Started by Ada', badge: '125 credits' })
+    expect(JSON.stringify(result.data)).not.toMatch(/_cost/)
+  })
+
+  test('schedules list: a kortix.yaml trigger shows its every, run-at or event, and auto-pause reads paused', async () => {
+    fakeKortix(`'triggers ls --json') echo '{"triggers":[{"slug":"digest","name":"digest","type":"schedule","every_seconds":3600,"enabled":true,"auto_paused_at":null},{"slug":"once","name":"once","type":"schedule","run_at":"2026-12-01T09:00:00.000Z","enabled":true},{"slug":"mail","name":"mail","type":"event","event":{"connector":"gmail","type":"new_message"},"enabled":true,"auto_paused_at":"2026-11-26T10:00:00.000Z"}],"runtime":[]}' ;;
+  'loops ls --json') echo '{"reminders":[]}' ;;`)
+    const result = await run('kortix_schedules', { action: 'list' })
+    const rows = (result.data as { schedules: Array<{ id: string; schedule: string | null; state: string }> }).schedules
+    expect(rows.map((row) => [row.id, row.schedule, row.state])).toEqual([
+      ['digest', 'every 3600s', 'active'],
+      ['once', 'once at 2026-12-01 09:00 UTC', 'active'],
+      ['mail', 'Wakes when gmail sends new_message', 'paused'],
+    ])
+  })
+})
+
+test('kortix_agents create: a one-item ["all"] or ["none"] grant is written as the word kortix.yaml accepts', async () => {
+  fakeKortix(`'agents config helper --json') echo '{"kortix_error":{"kind":"failed","status":404,"message":"No agent helper"}}' >&2; exit 1 ;;
+  'agents config helper --file '*' --json') cp "$5" ${JSON.stringify(join('$BIN', 'block.json'))}; echo '{"ok":true,"agent":"helper","block":{}}' ;;`.replaceAll('$BIN', bin))
+  await run('kortix_agents', { action: 'create', name: 'helper', description: 'Helps', instructions: 'Help.', skills: ['all'], secrets: ['none'], connectors: ['gmail'] })
+  expect(JSON.parse(readFileSync(join(bin, 'block.json'), 'utf8'))).toMatchObject({ skills: 'all', secrets: 'none', connectors: ['gmail'] })
+})
+
+describe('kortix_people invite', () => {
+  test('an open invitation for the address is reused: nothing is sent, and the card says so', async () => {
+    fakeKortix(`'access pending --json') echo '{"pending":[{"invite_id":"inv_1","email":"Sam@example.com","project_role":"member","invite_expired":false}]}' ;;`)
+    const result = await run('kortix_people', { action: 'invite', email: 'sam@example.com', role: 'member' })
+    expect(result.card.title).toBe('sam@example.com already has an open invitation')
+    expect(argvs()).toEqual(['access pending --json'])
+  })
+
+  test('an invitation that sent its email reads as sent', async () => {
+    fakeKortix(`'access pending --json') echo '{"pending":[]}' ;;
+  'access invite sam@example.com --role member --json') echo '{"status":"invited","email_sent":true}' ;;`)
+    const result = await run('kortix_people', { action: 'invite', email: 'sam@example.com', role: 'member' })
+    expect(result.card.title).toBe('Invited sam@example.com')
+  })
+
+  // The audit: with no email provider the API answers email_sent false and an invite_url; the card said "Invited" and the link was lost.
+  test('an invitation with no email sent says so and carries the link the person shares', async () => {
+    fakeKortix(`'access pending --json') echo '{"pending":[]}' ;;
+  'access invite sam@example.com --role member --json') echo '{"status":"invited","email_sent":false,"email_skip_reason":"no email provider","invite_url":"https://app.example.com/invite/tok_1"}' ;;`)
+    const result = await run('kortix_people', { action: 'invite', email: 'sam@example.com', role: 'member' })
+    expect(result.card.title).toBe('Invited sam@example.com, but no email was sent')
+    expect(result.card.status).toBe('needs_you')
+    expect(result.card.links?.[0]).toEqual({ label: 'Invitation link', href: 'https://app.example.com/invite/tok_1' })
+  })
+})
+
+test('kortix_connectors add: the card names the next step the install returns', async () => {
+  fakeKortix(`'connectors catalog install curated/docs --json') echo '{"slug":"docs","next":"ready"}' ;;
+  'connectors catalog install composio:stripe --json') echo '{"slug":"stripe","next":"credential"}' ;;
+  'connectors catalog install curated/broken --json') echo '{"slug":"broken","next":"fix","error":"its tools could not be loaded"}' ;;`)
+  expect((await run('kortix_connectors', { action: 'add', app: 'curated/docs' })).card.subtitle).toBe('Ready: it needs no sign-in.')
+  expect((await run('kortix_connectors', { action: 'add', app: 'composio:stripe' })).card.subtitle).toContain('it needs a key')
+  expect((await run('kortix_connectors', { action: 'add', app: 'curated/broken' })).card.subtitle).toBe('It does not work yet: its tools could not be loaded.')
+})
+
+test('kortix_connectors find: an app whose access Kortix knows says what its sign-in lets agents do', async () => {
+  fakeKortix(`'connectors catalog gmail --limit 8 --json') echo '{"items":[{"id":"kortix:gmail","name":"Gmail","description":"Read, search, send and organize email.","access":"Read, search, send, label and archive mail.","installed":[]},{"id":"composio:gmail","name":"Gmail (Composio)","description":"Email.","installed":[]}]}' ;;`)
+  const result = await run('kortix_connectors', { action: 'find', query: 'gmail' })
+  expect(result.card.rows?.[0]?.detail).toBe('Read, search, send and organize email. Signing in lets agents: Read, search, send, label and archive mail.')
+  expect(result.card.rows?.[1]?.detail).toBe('Email.')
+})
+
+test('kortix_schedules runs: an agent schedule is read by its runtime id, as create returned it', async () => {
+  fakeKortix(`'triggers runs trigger.d2ef47e4b15e --limit=20 --json') echo '{"runs":[{"status":"fired","run_status":"completed","session_id":"s_1","started_at":"2026-11-27T01:53:00.000Z"}]}' ;;`)
+  const result = await run('kortix_schedules', { action: 'runs', id: 'trigger.d2ef47e4b15e' })
+  expect(result.ok).toBe(true)
+  expect(result.card.title).toBe('trigger.d2ef47e4b15e: 1 recent runs')
+})
+
+// QualiLoop e2e on dev: automations went live after one matching sample, or after a change with no new test.
+test('kortix_schedules resume: a filtered automation goes live only after a sample that runs and one that is skipped', async () => {
+  fakeKortix(`'triggers show mail-triage --json') echo '{"type":"event","filter":{"event.data.subject":{"prefix":"Invoice"}}}' ;;
+  'triggers fire mail-triage --dry-run --payload={"event":{"data":{"subject":"Invoice 7"}}} --json') echo '{"filter_matches":true,"rendered_prompt":"Go"}' ;;
+  'triggers fire mail-triage --dry-run --payload={"event":{"data":{"subject":"Hello"}}} --json') echo '{"filter_matches":false,"rendered_prompt":"Go"}' ;;
+  'triggers resume mail-triage --apply') echo 'Enabled' ;;`)
+  const refused = await run('kortix_schedules', { action: 'resume', id: 'mail-triage' })
+  expect(refused.card.title).toBe('Test it before it goes live')
+  await run('kortix_schedules', { action: 'test', name: 'mail-triage', payload: { event: { data: { subject: 'Invoice 7' } } } })
+  expect((await run('kortix_schedules', { action: 'resume', id: 'mail-triage' })).error?.message).toContain('should be skipped')
+  await run('kortix_schedules', { action: 'test', name: 'mail-triage', payload: { event: { data: { subject: 'Hello' } } } })
+  expect((await run('kortix_schedules', { action: 'resume', id: 'mail-triage' })).ok).toBe(true)
+  expect(argvs().filter((a) => a.startsWith('triggers resume'))).toEqual(['triggers resume mail-triage --apply'])
+})
+
+// Agent Evals on dev: a weekday automation with no filter went live after a dry run, which always matches.
+test('kortix_schedules resume: an automation with no filter goes live only after a run_now run succeeded, not after a dry run', async () => {
+  setSystemTime(new Date('2026-11-27T13:00:00.000Z'))
+  fakeKortix(`'triggers show cr-daily --json') echo '{"type":"cron","filter":null}' ;;
+  'triggers fire cr-daily --dry-run --payload={} --json') echo '{"filter_matches":true,"rendered_prompt":"Go"}' ;;
+  'triggers run cr-daily --wait=0') echo 'Fired' ;;
+  'triggers runs cr-daily --limit=5 --json') echo '{"runs":[{"status":"fired","run_status":"succeeded","started_at":"2026-11-27T13:00:03.000Z"}]}' ;;
+  'triggers resume cr-daily --apply') echo 'Enabled' ;;`)
+  await run('kortix_schedules', { action: 'test', name: 'cr-daily', payload: {} })
+  const refused = await run('kortix_schedules', { action: 'resume', id: 'cr-daily' })
+  expect(refused.error?.message).toContain('A dry run shows nothing')
+  await run('kortix_schedules', { action: 'run_now', id: 'cr-daily' })
+  expect((await run('kortix_schedules', { action: 'resume', id: 'cr-daily' })).ok).toBe(true)
+  setSystemTime()
+})
+
+describe('kortix_schedules resume after run_now', () => {
+  beforeEach(() => setSystemTime(new Date('2026-11-27T13:00:00.000Z')))
+  afterEach(() => setSystemTime())
+  const schedule = (runs: string) =>
+    fakeKortix(`'triggers run trigger.dddddddddddd') echo 'Fired' ;;
+  'triggers runs trigger.dddddddddddd --limit=5 --json') echo '${runs}' ;;
+  'triggers resume trigger.dddddddddddd') echo 'Resumed' ;;`)
+
+  test('an agent schedule from create goes live after its run_now run succeeded', async () => {
+    schedule('{"runs":[{"status":"fired","run_status":"succeeded","started_at":"2026-11-27T13:00:04.000Z"}]}')
+    expect((await run('kortix_schedules', { action: 'resume', id: 'trigger.dddddddddddd' })).error?.message).toContain('run_now')
+    const started = await run('kortix_schedules', { action: 'run_now', id: 'trigger.dddddddddddd' })
+    expect(started.card.subtitle).toContain('Read runs for its outcome')
+    expect((await run('kortix_schedules', { action: 'resume', id: 'trigger.dddddddddddd' })).ok).toBe(true)
+  })
+
+  // QualiLoop journeys on dev: schedules were resumed while the test ran, and after it failed.
+  test('a test run still running, failed, or not there yet keeps it paused', async () => {
+    for (const [runs, says] of [
+      ['{"runs":[{"status":"fired","run_status":"running","started_at":"2026-11-27T13:00:04.000Z"}]}', 'still running'],
+      ['{"runs":[{"status":"fired","run_status":"failed","run_error":"cannot read /Company/Clients","started_at":"2026-11-27T13:00:04.000Z"}]}', 'cannot read /Company/Clients'],
+      ['{"runs":[{"status":"fired","run_status":"succeeded","started_at":"2026-11-26T09:00:00.000Z"}]}', 'has not shown up yet'],
+    ] as const) {
+      schedule(runs)
+      await run('kortix_schedules', { action: 'run_now', id: 'trigger.dddddddddddd' })
+      const refused = await run('kortix_schedules', { action: 'resume', id: 'trigger.dddddddddddd' })
+      expect(refused.ok).toBe(false)
+      expect(refused.error?.message).toContain(says)
+    }
+    expect(argvs().filter((a) => a.startsWith('triggers resume'))).toEqual([])
+  })
+
+  // The run settles minutes after its session ends: a finished session counts, a running one does not.
+  test('a run still marked running counts once its session completed', async () => {
+    for (const [state, ok] of [['completed', true], ['working', false], ['failed', false]] as const) {
+      fakeKortix(`'triggers run trigger.dddddddddddd') echo 'Fired' ;;
+  'triggers runs trigger.dddddddddddd --limit=5 --json') echo '{"runs":[{"status":"fired","run_status":"running","session_id":"s_9","started_at":"2026-11-27T13:00:04.000Z"}]}' ;;
+  'sessions show s_9 --json') echo '{"session_id":"s_9","board_state":"${state}"}' ;;
+  'triggers resume trigger.dddddddddddd') echo 'Resumed' ;;`)
+      await run('kortix_schedules', { action: 'run_now', id: 'trigger.dddddddddddd' })
+      expect((await run('kortix_schedules', { action: 'resume', id: 'trigger.dddddddddddd' })).ok).toBe(ok)
+    }
   })
 })

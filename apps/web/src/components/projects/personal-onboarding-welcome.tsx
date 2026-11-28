@@ -3,7 +3,8 @@ import { safeGetItem, safeSetItem } from '@kortix/ui/internal/lib/storage/manage
 
 
 import { EnvelopeIcon, PhoneIcon, XIcon } from '@phosphor-icons/react';
-import { m, useReducedMotion } from 'motion/react';
+import { m } from 'motion/react';
+import { useReducedMotion } from '@kortix/ui/internal/hooks/use-reduced-motion';
 import { useTranslations } from '@/i18n/use-translations';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -99,7 +100,7 @@ export function PersonalOnboardingWelcome({ projectId }: { projectId?: string } 
           'w-[min(22.5rem,calc(100vw-2rem))]',
         )}
       >
-        <Card className="bg-popover border-border/60 border shadow-lg">
+        <Card className="bg-popover border-border border shadow-md">
           <CardHeader>
             <m.div
               initial={motionOff ? false : { opacity: 0, transform: 'translateY(6px)' }}

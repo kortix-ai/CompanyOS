@@ -319,36 +319,14 @@ agents:
     expect(valid).toBe(true);
   });
 
-  test('kortix_permissions rejects a non-grantable action, same enum', () => {
+  test('kortix_permissions rejects an unknown action, same enum', () => {
     const { errorPaths } = summarize(`
 default_agent: w
 agents:
   w:
-    kortix_permissions: [billing.read]
+    kortix_permissions: [billing.not_an_action]
 `);
     expect(errorPaths).toContain('agents.w.kortix_permissions[0]');
-  });
-
-  test('workspace accepts the declared enum', () => {
-    for (const w of ['runtime', 'read', 'branch']) {
-      const { valid } = summarize(`
-default_agent: a
-agents:
-  a:
-    workspace: ${w}
-`);
-      expect(valid).toBe(true);
-    }
-  });
-
-  test('an unknown workspace value is rejected', () => {
-    const { errorPaths } = summarize(`
-default_agent: w
-agents:
-  w:
-    workspace: everywhere
-`);
-    expect(errorPaths).toContain('agents.w.workspace');
   });
 });
 

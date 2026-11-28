@@ -31,6 +31,7 @@ import {
   type SandboxIngressRoute,
 } from '../platform/providers';
 import { recoverTurnsAfterRuntimeRestart } from '../projects/session-lifecycle/runtime-restart-recovery';
+import { isPlatinumNotRunningVerdict } from '../shared/platinum-not-running';
 import { setBounded } from '../shared/bounded-cache';
 import { db } from '../shared/db';
 import { isUuid } from '../shared/validate';
@@ -96,7 +97,7 @@ function previewLinkKey(sandboxId: string, request: SandboxIngressRequest): stri
   const transport = request.transport ?? 'http';
   // `path` only ever changes a provider's resolved ingress on the websocket
   // route (Platinum's routeIngress picks AGENT_PORT vs request.port, and sets
-  // `websocket`, based on classifyPtyWebSocketPath(request.path) — but only
+  // `websocket`, based on isPtyWebSocketPath(request.path) — but only
   // when transport === 'websocket'). Every provider's http resolveIngress
   // ignores `path` entirely, so folding it into the key there only fragments
   // the cache (one entry per distinct HTTP path instead of per port). Keep it
@@ -253,7 +254,7 @@ function setCachedServiceKey(sandboxId: string, key: string | null): void {
 
 /**
  * Resolve the service key for `sandboxId` — cached, falling back to a row fetch.
- * Used by callers (e.g. opencode-mapping) that need only the key, not the row.
+ * Used by callers (e.g. runtime-session-mapping) that need only the key, not the row.
  */
 export async function resolveServiceKey(sandboxId: string): Promise<string | null> {
   const cached = getCachedServiceKey(sandboxId);
@@ -368,7 +369,7 @@ export async function buildSandboxUpstreamHeaders(opts: {
 
 // ── Lifecycle side-effects ─────────────────────────────────────────────────
 
-export async function wakeSandbox(externalId: string): Promise<void> {
+export async function wakeSandbox(externalId: string, wakeReason?: unknown): Promise<void> {
   try {
     const record = await loadSandbox(externalId);
     if (!record) return;
@@ -396,9 +397,15 @@ export async function wakeSandbox(externalId: string): Promise<void> {
       typeof provider.getStatus === 'function'
         ? await provider.getStatus(externalId).catch(() => 'unknown' as const)
         : ('unknown' as const);
-    await provider.ensureRunning(externalId);
+    await provider.ensureRunning(externalId, wakeReason);
     console.log(`[PREVIEW] Wake-up triggered for sandbox ${externalId}`);
-    if (before === 'stopped') {
+    // The control plane can contradict its own GET: it answered `running` for
+    // a box whose expose/exec it refused with the not-running verdict (one
+    // prod box, over an hour). When the wake carries that verdict, the box
+    // WAS stopped no matter what `before` read — and ensureRunning just
+    // started it — so every turn open on it is over and recovery fires here
+    // exactly as it does for a GET that honestly said `stopped`.
+    if (before === 'stopped' || isPlatinumNotRunningVerdict(wakeReason)) {
       await recoverTurnsAfterRuntimeRestart({
         sandboxId: record.sandboxId,
         sessionId: record.sessionId,
@@ -447,7 +454,7 @@ export async function markSandboxUsed(sandboxId: string): Promise<void> {
       .set({ lastUsedAt: now, updatedAt: now })
       .where(eq(sessionSandboxes.sandboxId, row.sandboxId));
 
-    // Passive proxy traffic (an open tab polling opencode, a background stream
+    // Passive proxy traffic (an open tab polling the runtime, a background stream
     // reconnect) must NOT heal a deliberately-stopped box back to active —
     // that resurrection is what produced 1,597 phantom-active compute rows.
     // `deadline_at > now()` is the gate, and it strictly beats the
@@ -466,26 +473,28 @@ export async function markSandboxUsed(sandboxId: string): Promise<void> {
     // running for hours after its last turn (KRTX-378) and the DB-only
     // stuck-session reconcile could not catch it while the traffic kept
     // bumping `updated_at`.
+    //
+    // Both writes are named transitions (status-transitions.ts): the heal is a
+    // compare-and-set on `stopped|error`, so a row a concurrent delete
+    // archived, or a restart claimed for `provisioning`, after the read above
+    // is never revived. The session write only refreshes a session that
+    // already reads `running` (`touch`): traffic never undoes a park, a
+    // failure, a provisioning claim, or a tombstone.
+    // Loaded on first use: this module is on the hot proxy path and keeps the
+    // projects surface out of its import graph.
+    const { transitionSandbox, transitionSession } = await import('../projects/surface');
     let boxIsRunning = !['error', 'stopped'].includes(row.status);
     if (['error', 'stopped'].includes(row.status)) {
-      const healed = await db
-        .update(sessionSandboxes)
-        .set({ status: 'active', lastUsedAt: now, updatedAt: now })
-        .where(
-          and(
-            eq(sessionSandboxes.sandboxId, row.sandboxId),
-            gt(sessionSandboxes.deadlineAt, now),
-          ),
-        )
-        .returning({ sandboxId: sessionSandboxes.sandboxId });
-      boxIsRunning = healed.length > 0;
+      const healed = await transitionSandbox('heal', row.sandboxId, {
+        at: now,
+        columns: { lastUsedAt: now },
+        guard: gt(sessionSandboxes.deadlineAt, now),
+      });
+      boxIsRunning = healed !== null;
     }
 
     if (boxIsRunning) {
-      await db
-        .update(projectSessions)
-        .set({ status: 'running', updatedAt: now })
-        .where(eq(projectSessions.sessionId, row.sessionId));
+      await transitionSession('touch', row.sessionId, { at: now });
     }
   } catch (err) {
     sandboxTouchCache.delete(sandboxId);
@@ -506,10 +515,9 @@ export async function markSandboxErrored(externalId: string): Promise<void> {
       .orderBy(...preferredSandboxOrder())
       .limit(1);
     if (!row) return;
-    await db
-      .update(sessionSandboxes)
-      .set({ status: 'error', updatedAt: new Date() })
-      .where(eq(sessionSandboxes.sandboxId, row.sandboxId));
+    const { transitionSandbox } = await import('../projects/surface');
+    const errored = await transitionSandbox('proxyError', row.sandboxId);
+    if (!errored) return;
     console.warn(`[PREVIEW] Auto-marked session sandbox ${row.sandboxId} (external: ${externalId}) as error after all retries failed`);
   } catch (err) {
     console.warn('[PREVIEW] Failed to auto-mark sandbox as error:', err);

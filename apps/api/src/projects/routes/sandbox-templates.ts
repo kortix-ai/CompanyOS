@@ -6,6 +6,7 @@ import {
   deleteSandboxImage,
   kickRoutedPreBuild,
   listSandboxTemplates,
+  reconcileProjectTemplates,
   templateBuildProviders,
 } from '../../snapshots/builder';
 import { sessionDefaultSlug } from '../../snapshots/sandbox-status';
@@ -17,15 +18,19 @@ import {
 } from '../../snapshots/templates';
 import { parseResidentialProxy, type SandboxResidentialProxy } from '@kortix/shared/sandbox';
 import { createRoute, z } from '@hono/zod-openapi';
+import type { Context } from 'hono';
 import { loadProjectForUser, assertProjectCapability } from '../lib/access';
 import { SandboxTemplateSchema, projectsApp } from '../lib/app';
 import { loadGitProject } from '../lib/git';
-import { allowStaleMirrorReads } from '../git/mirror';
+import { allowStaleMirrorReads, refreshMirror } from '../git/mirror';
 import { serializeTemplate } from '../lib/serializers';
 import { templateProviderObservation } from '../lib/template-provider-observation';
 import { readJsonObject } from '../../shared/http-body';
 import { rethrowDatabaseError } from '../../shared/database-errors';
+import { isPlatformAdmin } from '../../shared/platform-roles';
+import { isProjectSessionPrincipal } from '../../iam/agent-scope';
 import { uniqueViolationConstraint } from '../../shared/postgres-errors';
+import { workspaceIdParam } from '../../shared/route-params';
 
 export function registerSandboxTemplatesRoutes(): void {
   // ─── Template CRUD ─────────────────────────────────────────────────────────
@@ -38,12 +43,12 @@ export function registerSandboxTemplatesRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/sandbox-templates',
+      path: '/{workspaceId}/sandbox-templates',
       tags: ['sandboxes'],
       summary: 'List sandbox templates',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string() }),
+          params: z.object({ workspaceId: z.string() }),
         },
       responses: {
           200: json(z.array(SandboxTemplateSchema), 'Sandbox templates'),
@@ -51,7 +56,7 @@ export function registerSandboxTemplatesRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
     // A page view: serve the warm git mirror, refresh it behind the response.
@@ -79,12 +84,12 @@ export function registerSandboxTemplatesRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post',
-      path: '/{projectId}/sandbox-templates',
+      path: '/{workspaceId}/sandbox-templates',
       tags: ['sandboxes'],
       summary: 'Create a sandbox template',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string() }),
+          params: z.object({ workspaceId: z.string() }),
           body: { content: { 'application/json': { schema: lenientBody({
               slug: z.string().openapi({ description: 'Template slug.' }),
               name: z.string().optional().openapi({ description: 'Display name.' }),
@@ -105,7 +110,7 @@ export function registerSandboxTemplatesRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
     // Capability gate: rebuilding snapshots/templates re-provisions infra. Gated on
@@ -182,12 +187,12 @@ export function registerSandboxTemplatesRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'patch',
-      path: '/{projectId}/sandbox-templates/{templateId}',
+      path: '/{workspaceId}/sandbox-templates/{templateId}',
       tags: ['sandboxes'],
       summary: 'Update a sandbox template',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string(), templateId: z.string() }),
+          params: z.object({ workspaceId: z.string(), templateId: z.string() }),
           body: { content: { 'application/json': { schema: lenientBody({
               name: z.string().optional().openapi({ description: 'Display name.' }),
               image: z.string().optional().openapi({ description: 'Container image.' }),
@@ -207,7 +212,7 @@ export function registerSandboxTemplatesRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const templateId = c.req.param('templateId');
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -280,12 +285,12 @@ export function registerSandboxTemplatesRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'delete',
-      path: '/{projectId}/sandbox-templates/{templateId}',
+      path: '/{workspaceId}/sandbox-templates/{templateId}',
       tags: ['sandboxes'],
       summary: 'Delete a sandbox template',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string(), templateId: z.string() }),
+          params: z.object({ workspaceId: z.string(), templateId: z.string() }),
         },
       responses: {
           200: json(z.any(), 'OK'),
@@ -293,7 +298,7 @@ export function registerSandboxTemplatesRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const templateId = c.req.param('templateId');
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -326,26 +331,70 @@ export function registerSandboxTemplatesRoutes(): void {
   },
   );
 
+  // POST /v1/projects/:projectId/sandbox-templates/reconcile — read kortix.yaml
+  // at the base branch's CURRENT tip and start a build of every project
+  // template whose image is missing or failed. `kortix ship` calls it after
+  // its push: a push straight to a linked GitHub repository reaches no other
+  // build trigger (project create read the tip before the push; only a
+  // change-request merge reconciles afterwards).
+
+  projectsApp.openapi(
+    createRoute({
+      method: 'post',
+      path: '/{workspaceId}/sandbox-templates/reconcile',
+      tags: ['sandboxes'],
+      summary: 'Build every project sandbox template whose image is missing',
+      ...auth,
+      request: {
+        params: z.object({ workspaceId: z.string() }),
+      },
+      responses: {
+        200: json(z.any(), 'Each project template and what each provider holds'),
+        ...errors(403, 404, 502, 503),
+      },
+    }),
+    async (c: Context) => {
+      const projectId = workspaceIdParam(c);
+      const loaded = await loadProjectForUser(c, projectId, 'read');
+      if (!loaded) return c.json({ error: 'Not found' }, 404);
+      await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_SANDBOX_WRITE);
+      if (templateBuildProviders().length === 0) {
+        return c.json({ error: 'No sandbox template provider is enabled' }, 503);
+      }
+      const project = await loadGitProject(loaded);
+      try {
+        // The push this follows went to the upstream, not through Kortix: fetch it.
+        await refreshMirror(project, true);
+      } catch (err) {
+        rethrowDatabaseError(err);
+        const message = err instanceof Error ? err.message : String(err);
+        return c.json({ error: `Could not read the repository: ${message}` }, 502);
+      }
+      const result = await reconcileProjectTemplates(project, { accountId: loaded.row.accountId, source: 'manual' });
+      return c.json({ templates: result.templates, started: result.rebuilt }, 200);
+    },
+  );
+
   // POST /v1/projects/:projectId/sandbox-templates/:templateId/build — trigger
   // a build (fire-and-forget). Returns 202.
 
   projectsApp.openapi(
     createRoute({
       method: 'post',
-      path: '/{projectId}/sandbox-templates/{templateId}/build',
+      path: '/{workspaceId}/sandbox-templates/{templateId}/build',
       tags: ['sandboxes'],
       summary: 'Build a sandbox template',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string(), templateId: z.string() }),
+          params: z.object({ workspaceId: z.string(), templateId: z.string() }),
         },
       responses: {
           202: json(z.any(), 'OK'),
-          ...errors(404, 503),
+          ...errors(403, 404, 503),
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const templateId = c.req.param('templateId');
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -358,6 +407,17 @@ export function registerSandboxTemplatesRoutes(): void {
     if (!row) return c.json({ error: 'Not found' }, 404);
     if (row.projectId !== null && row.projectId !== projectId) {
       return c.json({ error: 'Not found' }, 404);
+    }
+    // A shared platform row is not this project's to build — the same
+    // shared-row refusal the rebuild route enforces (KRTX-4465). Only a
+    // PERSON acting as a platform admin owns the platform image: an agent
+    // session carries its launcher's userId, so the session-principal
+    // predicate rides next to isPlatformAdmin. Building it here would let a
+    // project-scoped caller force the platform-owned default image build on
+    // every enabled provider and mutate the shared row's build state; the
+    // platform's own startup pre-build owns that image.
+    if (row.isShared && (isProjectSessionPrincipal(c) || !(await isPlatformAdmin(c.get('userId'))))) {
+      return c.json({ error: 'Shared platform templates cannot be built from a project.', code: 'TEMPLATE_SHARED' }, 403);
     }
 
     const project = await loadGitProject(loaded);

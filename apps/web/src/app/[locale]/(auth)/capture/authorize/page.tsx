@@ -4,20 +4,32 @@ import {
   useApproveCaptureDevice,
   useCaptureDeviceGrant,
   useDenyCaptureDevice,
+  useNow,
 } from '@kortix/sdk/react';
 import { useSearchParams } from 'next/navigation';
 import { useRouter } from '@/lib/navigation/use-identity-router';
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useState } from 'react';
+
+import Link from 'next/link';
 
 import { Button } from '@kortix/ui/button';
+import { EntityAvatar } from '@kortix/ui/entity-avatar';
 import { Input } from '@kortix/ui/input';
-import Loading from '@kortix/ui/loading';
 import { RadioGroup, RadioGroupItem } from '@kortix/ui/radio-group';
 import { AuthFrame } from '@kortix/ui/internal/auth/auth-card-shell';
 import { AuthPendingScreen, AuthStatusScreen } from '@kortix/ui/internal/auth/auth-consent';
-import { ErrorStrip, FieldLabel, Rise, StepHeader } from '@kortix/ui/internal/auth/auth-primitives';
+import {
+  ApproveDenyActions,
+  DeviceCodeHeader,
+  FieldLabel,
+  Rise,
+  StepHeader,
+} from '@kortix/ui/internal/auth/auth-primitives';
 import { deviceOs } from '@kortix/ui/internal/capture/use-capture-area';
+import { useWorkspaceDirectory } from '@kortix/ui/workspace/sidebar/use-workspace-directory';
 import { useAuth } from '@/features/providers/auth-provider';
+import { useSignedOutRedirect } from '@/lib/auth/use-signed-out-redirect';
+import { formatClock } from '@/lib/format-clock';
 import { useTranslations } from '@/i18n/use-translations';
 
 export default function CaptureAuthorizePage() {
@@ -31,41 +43,58 @@ export default function CaptureAuthorizePage() {
 /**
  * The person half of the Kortix Capture device sign-in (RFC 8628). The desktop
  * app shows a code and opens `/capture/authorize?user_code=…`; the signed-in
- * member checks the code and picks one of their accounts with Capture on
- * (Capture's tenant). The device then records into that account as this member.
+ * member checks the code and picks one of their workspaces with Capture on.
+ * Capture's tenant is the workspace's account, so the choice is sent as its
+ * `account_id`. The device then records into that workspace as this member.
+ * With no workspace at all, the person creates or joins one first.
  */
 function CaptureAuthorize() {
   const t = useTranslations('capture.authorize');
+  const tWorkspaces = useTranslations('workspaces.capture');
   const router = useRouter();
   const params = useSearchParams();
   const userCode = params.get('user_code')?.trim().toUpperCase() ?? '';
   const { user, isLoading: authLoading } = useAuth();
   const [typedCode, setTypedCode] = useState('');
 
-  useEffect(() => {
-    if (!authLoading && !user) {
-      const back = `/capture/authorize${userCode ? `?user_code=${encodeURIComponent(userCode)}` : ''}`;
-      router.replace(`/auth?returnUrl=${encodeURIComponent(back)}`);
-    }
-  }, [user, authLoading, router, userCode]);
+  useSignedOutRedirect();
 
   const grant = useCaptureDeviceGrant(user ? userCode : null);
   const approve = useApproveCaptureDevice();
   const deny = useDenyCaptureDevice();
   const accounts = grant.data?.accounts ?? [];
+  // One row per workspace whose account has Capture on, by the workspace's
+  // own name and icon. An account with no project is not a workspace.
+  const directory = useWorkspaceDirectory();
+  const captureAccountIds = new Set(accounts.map((account) => account.account_id));
+  const workspaces = directory.openable.filter((row) => captureAccountIds.has(row.accountId));
   const [picked, setPicked] = useState<string | null>(null);
-  const accountId = picked ?? (accounts.length === 1 ? accounts[0]!.account_id : null);
-  const approvedAccount = accounts.find(
-    (account) => account.account_id === (grant.data?.account_id ?? accountId),
-  );
+  const pickedRow =
+    workspaces.find((row) => row.workspaceId === picked) ?? (workspaces.length === 1 ? workspaces[0] : null);
+  const accountId = pickedRow?.accountId ?? null;
+  const approvedAccountId = grant.data?.account_id ?? accountId;
+  const approvedWorkspace = directory.openable.find((row) => row.accountId === approvedAccountId);
+  const approvedAccount = approvedWorkspace
+    ? { name: approvedWorkspace.project.name }
+    : accounts.find((account) => account.account_id === approvedAccountId);
 
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, []);
+  const now = useNow();
 
   if (authLoading || !user) return <AuthPendingScreen />;
+
+  if (!directory.loading && directory.openable.length === 0) {
+    return (
+      <AuthStatusScreen
+        title={tWorkspaces('noWorkspaceTitle')}
+        description={tWorkspaces('noWorkspaceBody')}
+        action={
+          <Button asChild size="lg" className="w-full">
+            <Link href="/workspaces">{tWorkspaces('openChooser')}</Link>
+          </Button>
+        }
+      />
+    );
+  }
 
   if (!userCode) {
     return (
@@ -130,9 +159,6 @@ function CaptureAuthorize() {
     return <AuthStatusScreen title={t('deniedTitle')} description={t('deniedDescription')} />;
   }
 
-  const busy = approve.isPending || deny.isPending;
-  const minutes = Math.floor(remaining / 60);
-  const seconds = remaining % 60;
   const device = [info.device.name, deviceOs(info.device)].filter(Boolean).join(' · ');
 
   return (
@@ -143,14 +169,7 @@ function CaptureAuthorize() {
 
       <Rise delay={0.06}>
         <div className="space-y-5">
-          <div className="flex items-center justify-between gap-3 rounded-md border px-3.5 py-3">
-            <span className="text-foreground font-mono text-lg font-medium tracking-widest tabular-nums">
-              {info.user_code}
-            </span>
-            <span className="text-muted-foreground font-mono text-xs tabular-nums">
-              {minutes}:{seconds.toString().padStart(2, '0')}
-            </span>
-          </div>
+          <DeviceCodeHeader code={info.user_code} countdown={formatClock(remaining)} />
 
           <div className="space-y-1">
             {device ? <p className="text-foreground text-sm">{device}</p> : null}
@@ -162,17 +181,27 @@ function CaptureAuthorize() {
           </div>
 
           <div className="space-y-3">
-            <p className="text-muted-foreground text-sm font-medium">{t('accountLabel')}</p>
-            {accounts.length === 0 ? (
-              <p className="text-muted-foreground text-xs text-pretty">{t('noAccounts')}</p>
+            <p className="text-foreground text-sm font-medium">{tWorkspaces('workspaceLabel')}</p>
+            {workspaces.length === 0 ? (
+              <p className="text-muted-foreground text-xs text-pretty">{tWorkspaces('noCaptureWorkspace')}</p>
             ) : (
-              <RadioGroup value={accountId ?? ''} onValueChange={setPicked}>
-                {accounts.map((account) => (
+              <RadioGroup value={pickedRow?.workspaceId ?? ''} onValueChange={setPicked}>
+                {workspaces.map((row) => (
                   <RadioGroupItem
-                    key={account.account_id}
-                    value={account.account_id}
+                    key={row.workspaceId}
+                    value={row.workspaceId}
                     variant="outline"
-                    label={account.name}
+                    label={
+                      <span className="flex min-w-0 items-center gap-2">
+                        <EntityAvatar
+                          label={row.project.name}
+                          glyph={row.project.icon_glyph}
+                          emoji={row.project.icon}
+                          size="xs"
+                        />
+                        <span className="truncate">{row.project.name}</span>
+                      </span>
+                    }
                   />
                 ))}
               </RadioGroup>
@@ -182,34 +211,22 @@ function CaptureAuthorize() {
           <p className="text-muted-foreground text-xs text-pretty">{t('notice')}</p>
           <p className="text-foreground text-xs font-medium text-pretty">{t('ownCodeOnly')}</p>
 
-          <div className="space-y-3">
-            {approve.error ? <ErrorStrip message={approve.error.message} /> : null}
-            {deny.error ? <ErrorStrip message={deny.error.message} /> : null}
-            <Button
-              size="lg"
-              className="w-full"
-              onClick={() =>
-                accountId &&
-                void approve
-                  .mutateAsync({ userCode: info.user_code, accountId })
-                  .catch(() => undefined)
-              }
-              disabled={busy || !accountId}
-            >
-              {approve.isPending ? <Loading className="size-4 shrink-0" /> : null}
-              {t('approve')}
-            </Button>
-            <Button
-              variant="outline"
-              size="lg"
-              className="text-destructive border-destructive/30 hover:bg-destructive/5 hover:text-destructive focus-visible:ring-destructive/35 w-full"
-              onClick={() => void deny.mutateAsync(info.user_code).catch(() => undefined)}
-              disabled={busy}
-            >
-              {deny.isPending ? <Loading className="text-destructive! size-4 shrink-0" /> : null}
-              {t('deny')}
-            </Button>
-          </div>
+          <ApproveDenyActions
+            approveLabel={t('approve')}
+            denyLabel={t('deny')}
+            onApprove={() =>
+              accountId &&
+              void approve
+                .mutateAsync({ userCode: info.user_code, accountId })
+                .catch(() => undefined)
+            }
+            onDeny={() => void deny.mutateAsync(info.user_code).catch(() => undefined)}
+            approvePending={approve.isPending}
+            denyPending={deny.isPending}
+            approveError={approve.error?.message ?? null}
+            denyError={deny.error?.message ?? null}
+            approveDisabled={!accountId}
+          />
         </div>
       </Rise>
     </AuthFrame>

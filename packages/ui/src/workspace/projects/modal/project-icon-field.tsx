@@ -2,7 +2,8 @@
 
 import { useTranslations } from '../../../i18n';
 import { SmileyIcon } from '@phosphor-icons/react';
-import { AnimatePresence, m, useReducedMotion } from 'motion/react';
+import { AnimatePresence, m } from 'motion/react';
+import { useReducedMotion } from '../../../internal/hooks/use-reduced-motion';
 import { useState } from 'react';
 
 import { Button } from '../../../primitives/button';
@@ -50,7 +51,7 @@ const SWAP_REDUCED = {
  * `icon` / `icon_glyph` was NOT just written, so modelling the value as one
  * field rather than two is what makes it impossible for a host to construct a
  * state (and therefore a request) that sets both, or that clears one without
- * the other reflecting it. `NewWorkspacePage` (`/new`, create) and
+ * the other reflecting it. `NewWorkspacePage` (`/workspaces/new`, create) and
  * `GeneralProjectCard` (workspace Settings, edit — `settings-view.tsx`) hold
  * exactly this type as their icon state and pass it straight through.
  */
@@ -70,7 +71,7 @@ function resolveGlyphFace(glyph: GlyphSelection | null) {
   return GlyphComponent ? { GlyphComponent, name: glyph.name, color: glyph.color } : null;
 }
 
-/** Icon trigger for `/new`'s create form and workspace Settings' edit
+/** Icon trigger for `/workspaces/new`'s create form and workspace Settings' edit
  *  section. Sits beside the name input and opens the Emoji/Icon picker in a
  *  popover. Controlled: the host owns the icon so it can send it with its
  *  payload (create) or diff it against the stored project (edit), and reset
@@ -82,15 +83,18 @@ export function ProjectIconField({
   onClear,
   disabled,
   triggerClassName,
+  ariaLabel,
   fallbackLabel,
   align = 'start',
 }: {
   /**
-   * Sizing override for the trigger. `/new` renders this as the page's own
+   * Sizing override for the trigger. `/workspaces/new` renders this as the page's own
    * `size-12` subject above the name field; everywhere else it sits inline
    * beside a `size="sm"` input and keeps the `size-9` default that matches it.
    */
   triggerClassName?: string;
+  /** Accessible name when this picker edits an entity other than a workspace. */
+  ariaLabel?: string;
   /**
    * What the unset face shows instead of the generic smiley: the workspace's
    * own initial, through `EntityAvatar`, chalk colour and all — the same tile
@@ -104,7 +108,7 @@ export function ProjectIconField({
   fallbackLabel?: string;
   /**
    * Where the picker hangs relative to the trigger. Defaults to `start` —
-   * `/new` and the create modal put the trigger on the leading edge of its
+   * `/workspaces/new` and the create modal put the trigger on the leading edge of its
    * row, so `center`/`end` would push a ~278px popover past the edge.
    * Settings' Icon row passes `end` because the control sits on the trailing
    * side of a `SettingsRow`.
@@ -129,7 +133,7 @@ export function ProjectIconField({
    * field offers a remove control at all — so "can this field clear?" is a host
    * decision expressed in the type, not a runtime flag.
    *
-   * `/new` deliberately does not pass it: there is nothing saved to undo
+   * `/workspaces/new` deliberately does not pass it: there is nothing saved to undo
    * there, and the trigger already stays live so you reopen it and switch.
    * Workspace Settings does, because an existing project's icon IS saved, and
    * without this there would be no way to ever take one back off.
@@ -142,10 +146,9 @@ export function ProjectIconField({
   const reduceMotion = useReducedMotion();
 
   // Adjusting state during render: React's documented alternative to an effect
-  // for "reset state when a prop changes". Radix drives `open` through
-  // useControllableState, where a CONTROLLED prop that changes value on
-  // re-render is simply recomputed and fires nothing — onOpenChange only runs
-  // from setValue. So the `open && !disabled` guard below would close the
+  // for "reset state when a prop changes". The popover root fires
+  // `onOpenChange` only for changes it makes itself; a CONTROLLED `open` that
+  // changes on re-render fires nothing. So the `open && !disabled` guard below would close the
   // popover when `disabled` goes true without ever telling us, leaving local
   // `open` stuck at true; the next time `disabled` went false the guard would
   // re-evaluate to true and the picker would reopen with no user action. Task 7
@@ -168,26 +171,13 @@ export function ProjectIconField({
     // Button already stops a click reaching us (a disabled button fires none,
     // and button.tsx adds disabled:pointer-events-none).
     //
-    // `modal` is what makes the picker scrollable with a wheel or trackpad.
     // In workspace Settings this field renders inside `CustomizeSectionWrapper`
-    // -> `customize-panel.tsx`'s `Modal`, a Radix Dialog, and Radix wraps the
-    // dialog's OVERLAY in react-remove-scroll with
-    // `shards: [contentRef]` (react-dialog dist/index.mjs:110). That side-car
-    // installs a non-passive `wheel` listener on `document` and calls
-    // preventDefault() on every wheel whose target is neither inside the
-    // overlay's React subtree nor inside the content shard. A popover portals
-    // to document.body, so it is in neither: the picker's own overflow-y-auto
-    // viewport never received the scroll. Dragging its scrollbar still worked,
-    // which is what made the bug read as "only the scrollbar responds" — a
-    // scrollbar drag is a pointer gesture, not a wheel event.
-    //
-    // `modal` makes Radix wrap THIS popover's content in its own RemoveScroll
-    // (react-popover dist/index.mjs:134). react-remove-scroll keeps one
-    // module-level `lockStack`, and its `shouldPrevent` returns early for any
-    // lock that is not the last one pushed — so while the picker is open the
-    // dialog's lock stands down and the picker's own lock takes over, with the
-    // popover content as its container. Its boundary logic then walks into the
-    // emoji viewport, finds scroll left to give, and lets the wheel through.
+    // -> `customize-panel.tsx`'s `Modal`. The picker must scroll with a wheel
+    // or trackpad there. The modal locks page scroll with `overflow: hidden`
+    // on the document and cancels no wheel event, so the picker's own
+    // overflow-y-auto viewport receives the wheel. `modal` on the popover
+    // traps focus in the picker and blocks pointer input outside it while it
+    // is open.
     //
     // Rejected alternative: portalling the popover into the dialog's content
     // element (PopoverContent already accepts `container`). ModalContent is
@@ -198,12 +188,12 @@ export function ProjectIconField({
     // 240.31px of the picker, including the point the wheel was aimed at.
     // `modal` leaves the popover's geometry byte-identical to before.
     //
-    // On `/new` this field has no Dialog ancestor at all, so the bug above
+    // On `/workspaces/new` this field has no Dialog ancestor at all, so the bug above
     // cannot occur there — `modal` is simply inert in that host, not wrong.
     <Popover open={open && !disabled} onOpenChange={setOpen} modal>
       <PopoverTrigger asChild>
         <Button
-          // On `/new` the field renders inside that page's <form>, where a
+          // On `/workspaces/new` the field renders inside that page's <form>, where a
           // missing `type="button"` would submit it on click. Workspace
           // Settings has no surrounding <form>, so this is a no-op there —
           // still correct to keep, since a shared control should not assume
@@ -223,11 +213,11 @@ export function ProjectIconField({
           // that it stays live after a pick, so you reopen it and switch.
           disabled={disabled}
           aria-label={
-            emoji
+            ariaLabel ?? (emoji
               ? tI18nComplete('text13447731697e', { value0: emoji })
               : glyphFace
                 ? tI18nComplete('text13447731697e', { value0: glyphFace.name })
-                : tI18nComplete.raw('text39a1c11af6d3')
+                : tI18nComplete.raw('text39a1c11af6d3'))
           }
           // size-9 matches the sibling name Input (`size="sm"` => h-9), which is
           // what the field has to line up with. That is 33.11px, under the 40px
@@ -331,7 +321,7 @@ export function ProjectIconField({
         Width: the emoji grid's exact width. 12 columns of `size-8` cells in rows
         padded `px-3` is 12*8 + 2*3 = 102 `--spacing` units; `+2px` is the 1px
         border per side. The Icons tab fills the same width with 10 columns.
-        p-0 because each panel owns its padding. Radix gives the content
+        p-0 because each panel owns its padding. The popover gives the content
         role="dialog", so it carries a label.
       */}
       <PopoverContent

@@ -36,12 +36,12 @@ import {
 import { Type } from 'typebox'
 import { apiErrorMessage, BOARD_STATE_BADGE, callApi, errorKind, failure, sessionPath, toolReturn, type ControlPlane, type MultiAgentToolResult } from './control-plane'
 
-export const SEND_MESSAGE_TOOL = 'send_message'
-export const LIST_AGENTS_TOOL = 'list_agents'
+const SEND_MESSAGE_TOOL = 'send_message'
+const LIST_AGENTS_TOOL = 'list_agents'
 export const MESSAGING_TOOLS = [SEND_MESSAGE_TOOL, LIST_AGENTS_TOOL] as const
 
 /** What the messaging tools need from the runtime. */
-export interface MessagingHost {
+interface MessagingHost {
   /** The API with this session's token, or null without a control plane. */
   controlPlane(): ControlPlane | null
 }
@@ -201,7 +201,7 @@ function continuesLine(to: ReachableAgent | null): string {
 
 // ── list_agents ───────────────────────────────────────────────────────────
 
-export async function listAgents(host: MessagingHost, params: ListParams, signal?: AbortSignal): Promise<MultiAgentToolResult> {
+async function listAgents(host: MessagingHost, params: ListParams, signal?: AbortSignal): Promise<MultiAgentToolResult> {
   const scope: ReachableScope = params.scope === 'mine' ? 'mine' : 'project'
   const plane = host.controlPlane()
   if (!plane) return failure('list_agents', scope, 'No sessions to reach', { kind: 'failed', message: NO_CONTROL_PLANE })
@@ -223,7 +223,8 @@ export async function listAgents(host: MessagingHost, params: ListParams, signal
     action: scope,
     card: {
       title: agents.length === 0 ? 'No other sessions to reach' : `${agents.length} ${agents.length === 1 ? 'session' : 'sessions'} you can reach`,
-      subtitle: [reachable?.self ? `This session is ${reachable.self.handle}.` : null, working ? `${working} working.` : null].filter(Boolean).join(' ') || undefined,
+      // The person reads the card: how many work now, not this session's own handle (the model reads `self` in `data`).
+      subtitle: working ? `${working} working` : undefined,
       status: 'done',
       rows: agents.map(agentRow),
     },
@@ -253,6 +254,6 @@ function agentRow(agent: ReachableAgent): KortixCardRow {
     title: agent.handle,
     ...(detail.length ? { detail: detail.join(' · ') } : {}),
     badge: BOARD_STATE_BADGE[agent.state] ?? agent.state,
-    href: `/projects/${agent.project_id}/sessions/${agent.session_id}`,
+    href: `/workspaces/${agent.project_id}/sessions/${agent.session_id}`,
   }
 }

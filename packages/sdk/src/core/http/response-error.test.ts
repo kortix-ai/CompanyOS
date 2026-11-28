@@ -11,7 +11,7 @@
  */
 import { describe, expect, test } from 'bun:test';
 import { configureKortix } from './config';
-import { handleErrorResponse } from './response-error';
+import { handleErrorResponse, isReportedWriteFailure } from './response-error';
 import { ApiError } from './api/errors';
 
 function response(status: number, body: unknown): Response {
@@ -75,6 +75,34 @@ describe('handleErrorResponse · connectors_provider_unavailable 503', () => {
   });
 });
 
+describe('handleErrorResponse · provider_auth_unavailable 503', () => {
+  test('a provider outage on a sign-in start is SILENT to onError and keeps its message and code', async () => {
+    errors.length = 0;
+    const result = await handleErrorResponse(
+      response(503, {
+        error: 'ChatGPT sign-in is temporarily unavailable. Try again in a moment.',
+        code: 'provider_auth_unavailable',
+      }),
+      signal,
+      true,
+      undefined,
+      'POST',
+    );
+    expect(result.error).toMatchObject({
+      code: 'provider_auth_unavailable',
+      message: 'ChatGPT sign-in is temporarily unavailable. Try again in a moment.',
+    });
+    expect(errors).toHaveLength(0);
+    expect(result.error && isReportedWriteFailure(result.error)).toBe(false);
+  });
+
+  test('the code on another status still reports', async () => {
+    errors.length = 0;
+    await handleErrorResponse(response(502, { error: 'x', code: 'provider_auth_unavailable' }), signal, true, undefined, 'POST');
+    expect(errors).toHaveLength(1);
+  });
+});
+
 describe('handleErrorResponse · approval expired 409', () => {
   test('the body code reaches ApiError.code, so a host can tell an expired approval apart', async () => {
     const result = await handleErrorResponse(
@@ -85,5 +113,22 @@ describe('handleErrorResponse · approval expired 409', () => {
     expect(result.error).toBeInstanceOf(ApiError);
     expect((result.error as ApiError).status).toBe(409);
     expect((result.error as ApiError).code).toBe('APPROVAL_EXPIRED');
+  });
+});
+
+// A write the SDK sends again reports its final failure itself
+// (drives.ts uploadDriveFile): the same rule the request layer applies.
+describe('isReportedWriteFailure', () => {
+  test('an HTTP refusal and a dropped connection are reported', () => {
+    expect(isReportedWriteFailure(new ApiError('no', { status: 403, data: { message: 'no' } }))).toBe(true);
+    expect(isReportedWriteFailure(new ApiError('Failed to fetch', { name: 'TypeError' }))).toBe(true);
+  });
+
+  test('a timeout, a signed-out caller, an abort and an expected response are not', () => {
+    expect(isReportedWriteFailure(new ApiError('Request timed out after 30s', { code: 'TIMEOUT' }))).toBe(false);
+    expect(isReportedWriteFailure(new ApiError('Not authenticated', { code: 'NO_SESSION' }))).toBe(false);
+    expect(isReportedWriteFailure(new ApiError('Request aborted', { name: 'AbortError', code: 'ABORTED' }))).toBe(false);
+    const deadline = { message: 'Request exceeded the 25s server processing deadline' };
+    expect(isReportedWriteFailure(new ApiError(deadline.message, { status: 503, data: deadline }))).toBe(false);
   });
 });

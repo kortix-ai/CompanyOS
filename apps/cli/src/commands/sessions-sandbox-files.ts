@@ -15,6 +15,7 @@ import { toSandboxAbsolutePath } from '@kortix/sdk';
 
 import { kortixFromAuth, withKortixScope } from '../api/sdk.ts';
 import type { Auth } from '../api/auth.ts';
+import { splitHelp } from '../command-argv.ts';
 import { emitJson, surfaceApiError, takeFlagBool, takeFlagValue, fail } from '../command-helpers.ts';
 import { confirm } from '../prompts.ts';
 import { C, help, pad, status } from '../style.ts';
@@ -47,7 +48,7 @@ Options:
   --content                \`find\` searches contents instead of filenames.
   --limit <N>              \`find\` result cap (filename search only).
   -y, --yes                Skip the \`rm\` confirmation.
-  --project <id>           Operate on this project id (default: linked).
+  --workspace <id>         Operate on this workspace id (default: linked).
   --host <name>            Operate against a non-default Kortix host.
   --json                   Machine-readable output.
   -h, --help               Show this help.
@@ -71,11 +72,9 @@ async function readStdin(): Promise<Blob> {
 }
 
 export async function runSessionsFiles(argv: string[]): Promise<number> {
+  const helped = splitHelp(argv, FILES_HELP);
+  if (helped !== null) return helped;
   const rest = [...argv];
-  if (rest.includes('-h') || rest.includes('--help')) {
-    process.stdout.write(FILES_HELP);
-    return 0;
-  }
 
   let projectArg: string | undefined;
   let hostArg: string | undefined;
@@ -85,7 +84,7 @@ export async function runSessionsFiles(argv: string[]): Promise<number> {
   let assumeYes = false;
   let json = false;
   try {
-    projectArg = takeFlagValue(rest, ['--project']);
+    projectArg = takeFlagValue(rest, ['--project', '--workspace']);
     hostArg = takeFlagValue(rest, ['--host']);
     from = takeFlagValue(rest, ['--from']);
     limitArg = takeFlagValue(rest, ['--limit']);

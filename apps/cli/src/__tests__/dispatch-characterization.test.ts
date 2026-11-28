@@ -100,14 +100,6 @@ describe('root dispatch characterization (KRTX-1341)', () => {
     expect(asSkills.stderr).toContain('unknown subcommand "frobnicate"');
   });
 
-  test('`registry` keeps the developer-command warning on stderr in front of its help', async () => {
-    const result = await runCli(['registry', '--help']);
-    expect(result.code).toBe(0);
-    expect(result.stderr).toContain('developer command:');
-    expect(result.stderr).toContain('kortix marketplace');
-    expect(result.stdout).toContain('Usage: kortix registry');
-  });
-
   test('unknown-command suggestions keep the first-wins tie order of the old candidate list', async () => {
     // Each needle below ties at the same edit distance between two (or three)
     // real command names; the winner is the one that comes FIRST in the old
@@ -133,6 +125,6 @@ describe('root dispatch characterization (KRTX-1341)', () => {
     expect(result.code).toBe(2);
     expect(result.stderr).toContain('unknown command `zersons`');
     expect(result.stderr).not.toContain('Did you mean');
-    expect(result.stderr).toContain('kortix init <name>');
+    expect(result.stderr).toContain('kortix workspaces create <name>');
   });
 });

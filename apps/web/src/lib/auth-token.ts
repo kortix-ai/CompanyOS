@@ -4,11 +4,8 @@ import { browserDocumentIdentity } from '@/lib/auth/browser-document';
  *
  * Provides Supabase JWT authentication for all requests.
  *
- * `getAuthToken()` is the unified getter: returns the Supabase JWT.
+ * `getSupabaseAccessToken()` is the unified getter: returns the Supabase JWT.
  * Use it anywhere you need to authenticate against the sandbox proxy.
- *
- * `getSupabaseAccessToken()` is kept for callers that specifically need the
- * Supabase JWT (e.g. platform API calls that go through Supabase auth).
  *
  * **Deduplication**: Multiple callers (SSE, health check, session fetch, etc.)
  * all call getSupabaseAccessToken() on page load simultaneously. Without
@@ -306,9 +303,10 @@ async function fetchToken(force = false): Promise<string | null> {
       // has already expired — it does not refresh here. Handing that dead
       // token to a caller produces a 401; on surfaces with no 401-recovery
       // (e.g. the PTY WebSocket) that becomes an endless 1006 reconnect loop.
-      // So an expired-but-present session must be refreshed explicitly — the
-      // old code only refreshed when the session was entirely null.
-      if (attempt <= 1) {
+      // So an expired-but-present session must be refreshed explicitly. With
+      // no stored session there is nothing to refresh: refreshSession() can
+      // only fail with AuthSessionMissingError (Better Stack 18213af0).
+      if (session && attempt <= 1) {
         const {
           data: { session: refreshed },
         } = await supabase.auth.refreshSession();
@@ -325,22 +323,4 @@ async function fetchToken(force = false): Promise<string | null> {
   }
 
   return null;
-}
-
-/**
- * Unified auth token getter.
- *
- * Returns the Supabase JWT. All requests go through kortix-api which
- * authenticates via Supabase JWT — no additional sandbox lock/key needed.
- */
-export async function getAuthToken(): Promise<string | null> {
-  return getSupabaseAccessToken();
-}
-
-export async function getAuthTokenWithRetry(options?: {
-  attempts?: number;
-  baseDelayMs?: number;
-  invalidateBetweenAttempts?: boolean;
-}): Promise<string | null> {
-  return getSupabaseAccessTokenWithRetry(options);
 }

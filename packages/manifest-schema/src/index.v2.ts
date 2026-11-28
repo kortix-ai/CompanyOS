@@ -26,7 +26,6 @@ import {
   selectedKortixTools,
   TOOL_NAME_RE,
   V2_RUNTIME_VALUES,
-  WORKSPACE_MODES_V2,
   isEveryGrant,
 } from './constants';
 
@@ -39,46 +38,6 @@ import { isMyKortixAgentName } from '@kortix/shared/my-kortix-agent';
 
 /** Full OpenCode `AgentConfig.mode` parity — https://opencode.ai/config.json `$defs.AgentConfig`. */
 export type AgentModeV2 = 'primary' | 'subagent' | 'all';
-
-/** What an agent's sessions get in `/workspace`. */
-export interface AgentWorkspaceV2 {
-  /** Check out the project repository. Default false. */
-  project_repository?: boolean;
-}
-
-export type ProjectRepositoryResult =
-  | { ok: true; value: boolean; legacyRead: boolean }
-  | { ok: false; path: string; message: string };
-
-/**
- * Resolve `agents.<name>.workspace.project_repository`. The legacy string form
- * `workspace: runtime|read|branch` still reads (`branch` = true). An omitted
- * value is false: an agent opts in to the checkout. `legacyRead` is the legacy
- * `workspace: read`.
- */
-export function resolveProjectRepository(entry: Record<string, unknown>): ProjectRepositoryResult {
-  const workspace = entry.workspace;
-  if (workspace === undefined) return { ok: true, value: false, legacyRead: false };
-  if (typeof workspace === 'string') {
-    const mode = workspace.trim();
-    if (!(WORKSPACE_MODES_V2 as readonly string[]).includes(mode)) {
-      return {
-        ok: false,
-        path: 'workspace',
-        message: `must be a map ({ project_repository: true|false }) or one of: ${WORKSPACE_MODES_V2.join(', ')} (got "${mode || 'unset'}").`,
-      };
-    }
-    return { ok: true, value: mode === 'branch', legacyRead: mode === 'read' };
-  }
-  if (!isTable(workspace)) return { ok: false, path: 'workspace', message: 'must be a map ({ project_repository: true|false }).' };
-  const extra = Object.keys(workspace).find((key) => key !== 'project_repository');
-  if (extra) return { ok: false, path: `workspace.${extra}`, message: 'is not a workspace key (allowed: project_repository).' };
-  const value = workspace.project_repository;
-  if (value !== undefined && typeof value !== 'boolean') {
-    return { ok: false, path: 'workspace.project_repository', message: 'must be a boolean.' };
-  }
-  return { ok: true, value: value ?? false, legacyRead: false };
-}
 
 /** The values `runtime:` accepts. It selects nothing since 2026-10-23: every new
  *  session runs pi. `opencode` validates with a deprecation warning. */
@@ -567,9 +526,11 @@ export function validateTriggerAgentRefsV2(
 ): void {
   if (!Array.isArray(node)) return;
   node.forEach((entry, i) => {
-    if (!isTable(entry) || entry.agent === undefined || entry.agent === null) return;
-    const where = `${path}[${i}].agent`;
-    if (typeof entry.agent !== 'string' || !entry.agent.trim()) {
+    if (!isTable(entry)) return;
+    const run = isTable(entry.run) ? entry.run : entry;
+    if (run.agent === undefined || run.agent === null) return;
+    const where = `${path}[${i}]${run === entry ? '' : '.run'}.agent`;
+    if (typeof run.agent !== 'string' || !run.agent.trim()) {
       issues.push({
         path: where,
         message: 'agent must be a non-empty string naming a declared agent.',
@@ -577,7 +538,7 @@ export function validateTriggerAgentRefsV2(
       });
       return;
     }
-    const name = entry.agent.trim();
+    const name = run.agent.trim();
     // `default` is the runtime's "the default agent" sentinel; `mykortix` (and its old `meta`) is My Kortix.
     if (!agentNames.includes(name) && name !== 'default' && !isMyKortixAgentName(name)) {
       issues.push({

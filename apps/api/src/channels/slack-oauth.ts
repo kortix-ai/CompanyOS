@@ -1,10 +1,11 @@
 import { createRoute, z } from '@hono/zod-openapi';
 import { eq } from 'drizzle-orm';
-import { projects } from '@kortix/db';
 import { db } from '../shared/db';
 import { config } from '../config';
 import { slackOauthMode } from './slack-oauth-mode';
 import { saveSlackOauthInstall } from './install-store';
+import { linkedSlackProject, moveSlackLink } from './slack/link';
+import { logger } from '../lib/logger';
 import { chatUser, linkChatIdentity } from './core/identity';
 import {
   frontendBase,
@@ -15,6 +16,7 @@ import {
 import { reconcileChannelConnectors } from '../connectors/sync';
 import { makeOpenApiApp, errors } from '../openapi';
 import { signChannelState, verifyChannelState } from './core/signed-state';
+import { projectsView } from '../workspaces/rows';
 
 const STATE_TTL_MS = 10 * 60 * 1000;
 
@@ -141,9 +143,9 @@ export async function completeSlackOauthInstall(input: {
   let project: { projectId: string } | undefined;
   try {
     [project] = await db
-      .select({ projectId: projects.projectId })
-      .from(projects)
-      .where(eq(projects.projectId, payload.projectId))
+      .select({ projectId: projectsView.projectId })
+      .from(projectsView)
+      .where(eq(projectsView.projectId, payload.projectId))
       .limit(1);
   } catch (err) {
     console.error('[slack-oauth] project lookup failed', {
@@ -154,6 +156,15 @@ export async function completeSlackOauthInstall(input: {
     return done({ error: 'project_lookup_failed' });
   }
   if (!project) return done({ error: 'project_not_found' });
+
+  // One Slack workspace, one Kortix workspace: an install moves the link.
+  // Slack lets any member install or re-consent an app the workspace allows,
+  // so taking the link from the Kortix workspace that holds it needs a Slack
+  // admin or owner. Checked before anything is saved: a refused install
+  // changes nothing.
+  if (!(await mayTakeSlackLink(tokenJson.team.id, payload.projectId, tokenJson.access_token, tokenJson.authed_user?.id))) {
+    return done({ error: 'slack_link_held_by_another_workspace' });
+  }
 
   try {
     await saveSlackOauthInstall({
@@ -170,6 +181,19 @@ export async function completeSlackOauthInstall(input: {
       error: (err as Error).message,
     });
     return done({ error: 'slack_install_save_failed' });
+  }
+  // Installing here moves the link here: the Kortix workspaces that held it
+  // lose their Slack connector (`mayTakeSlackLink` allowed it above).
+  try {
+    await moveSlackLink(tokenJson.team.id, payload.projectId);
+  } catch (err) {
+    // The connector gate still refuses the old workspaces, so a failed detach
+    // never shares the token; the next event heals it (`linkedSlackProject`).
+    logger.error('[slack-oauth] moving the Slack link failed', {
+      projectId: payload.projectId,
+      workspaceId: tokenJson.team.id,
+      error: (err as Error).message,
+    });
   }
 
   // Seed the installer's identity so the admin who just connected is linked
@@ -203,6 +227,32 @@ export async function completeSlackOauthInstall(input: {
   return done({ success: '1' });
 }
 
+/**
+ * May this install take the Slack workspace's link? Yes when no other active
+ * Kortix workspace holds it, or when Slack says the person who consented is
+ * an admin or owner of the Slack workspace. Fails closed.
+ */
+async function mayTakeSlackLink(
+  teamId: string,
+  projectId: string,
+  token: string,
+  consentingUserId: string | undefined,
+): Promise<boolean> {
+  const holder = await linkedSlackProject(teamId);
+  if (!holder || holder === projectId) return true;
+  if (!consentingUserId) return false;
+  try {
+    const res = await fetch(`https://slack.com/api/users.info?user=${encodeURIComponent(consentingUserId)}`, {
+      headers: { authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(5_000),
+    });
+    const body = (await res.json()) as { ok?: boolean; user?: { is_admin?: boolean; is_owner?: boolean; is_primary_owner?: boolean } };
+    return Boolean(body.ok && (body.user?.is_admin || body.user?.is_owner || body.user?.is_primary_owner));
+  } catch {
+    return false;
+  }
+}
+
 /** Link the installer's Slack user to `userId` unless it is linked to someone else. */
 export async function seedInstallerIdentity(input: {
   teamId: string;
@@ -228,7 +278,7 @@ function dashboardUrl(qs: Record<string, string | undefined>): string {
   // which is too fragile as an external OAuth landing target.
   if (qs.projectId) params.set('customize', 'connectors');
   return qs.projectId
-    ? `${base}/projects/${qs.projectId}?${params.toString()}`
+    ? `${base}/workspaces/${qs.projectId}?${params.toString()}`
     : `${base}/?${params.toString()}`;
 }
 

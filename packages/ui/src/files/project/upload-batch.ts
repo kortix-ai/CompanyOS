@@ -91,6 +91,20 @@ export function uploadedFraction(
   return sent / total;
 }
 
+const TRAY_RANK = { uploading: 0, error: 1, queued: 2, done: 3 } as const;
+
+/**
+ * Tray rows in reading order: files going up now, then failures with their
+ * Retry (in view, not under a long queue), then files waiting, then finished
+ * files. Stable inside each group, so a second batch queues under the first.
+ */
+export function trayOrder<T extends { status: keyof typeof TRAY_RANK }>(uploads: readonly T[]): T[] {
+  return uploads
+    .map((u, i) => ({ u, i }))
+    .sort((a, b) => TRAY_RANK[a.u.status] - TRAY_RANK[b.u.status] || a.i - b.i)
+    .map(({ u }) => u);
+}
+
 /** Files sent at once. Enough to fill the pipe, few enough not to starve the listing. */
 export const UPLOAD_CONCURRENCY = 4;
 
@@ -154,4 +168,26 @@ export function rowDragIntent(
   if (types.includes(options.moveMime)) return options.canMove ? 'move' : null;
   if (types.includes('Files')) return options.canUpload ? 'upload' : null;
   return null;
+}
+
+/**
+ * Paths of listing rows the server does not have yet: uploads queued or
+ * running, and files still being created (a pending row the server has not
+ * confirmed, i.e. without `seen`). The grid shows a spinner on these and
+ * defers their live preview: a preview read before the write lands is a 404,
+ * and that 404 is what kept a new file on "File not found" (D-08).
+ */
+export function inFlightPaths(
+  uploads: readonly { status: string; targetPath?: string; file: { name: string } }[],
+  pending: readonly { node: { path: string; type: 'file' | 'directory' }; seen?: unknown }[],
+): Set<string> {
+  const paths = new Set<string>();
+  for (const u of uploads) {
+    if (u.status !== 'queued' && u.status !== 'uploading') continue;
+    paths.add(u.targetPath ? `${u.targetPath.replace(/\/+$/, '')}/${u.file.name}` : u.file.name);
+  }
+  for (const p of pending) {
+    if (p.node.type === 'file' && !('seen' in p)) paths.add(p.node.path);
+  }
+  return paths;
 }

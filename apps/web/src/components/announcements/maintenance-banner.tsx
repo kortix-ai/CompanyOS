@@ -25,7 +25,7 @@ interface MaintenanceBannerProps {
   config: MaintenanceConfig;
 }
 
-// Per-level styling — brand tokens only (kortix-*), mirroring the InfoBanner tone
+// Per-level styling — brand tokens only (kortix-*), mirroring the Alert tone
 // scale so a system banner reads the same as every other alert in the app. The
 // card border is tinted to the level so severity is legible before you read a word.
 const levelConfig: Record<
@@ -177,7 +177,7 @@ export function MaintenanceBanner({ config }: MaintenanceBannerProps) {
         >
           <div
             className={cn(
-              'bg-background relative flex items-start gap-3 rounded-[0.64rem] border p-4 shadow-lg',
+              'bg-background relative flex items-start gap-3 rounded-[0.64rem] border p-4 shadow-md',
               lc.border,
             )}
           >

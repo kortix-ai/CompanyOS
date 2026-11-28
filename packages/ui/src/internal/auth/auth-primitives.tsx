@@ -11,10 +11,12 @@ import {
   InfoIcon as InfoCircleSolid,
 } from '@phosphor-icons/react';
 import { m, useReducedMotion } from 'motion/react';
-import { useRef } from 'react';
+import { createContext, useContext, useEffect, useRef } from 'react';
 
 import { inputFocusClasses, inputSurfaceClasses } from '../../primitives/input';
 import { KortixLogo } from '../../primitives/kortix-logo';
+import { Button } from '../../primitives/button';
+import Loading from '../../primitives/loading';
 import {
   applyBackspace,
   applyBoxInput,
@@ -26,6 +28,15 @@ import { cn } from '../lib/utils';
 import { UiLink as Link } from '../../providers/ui-provider';
 
 export const AUTH_EASE = [0.23, 1, 0.32, 1] as const;
+
+/**
+ * What the enclosing AuthFrame tells the steps inside it: whether the column
+ * is centered, and the mark a header shows by default. Every step header and
+ * quiet-link row in a centered frame lines up without per-step props.
+ */
+export const AuthFrameContext = createContext<{ centered: boolean; mark?: React.ReactNode }>({
+  centered: false,
+});
 
 /** Gentle entrance: header first, body ~60ms behind. Opacity-only under reduced motion. */
 export function Rise({
@@ -85,8 +96,9 @@ export function AuthMobileLogo() {
 export function StepHeader({
   title,
   description,
-  mark,
+  mark: markProp,
   markOnMobile = false,
+  align: alignProp,
 }: {
   /** A string, or a string led by a status mark (a decided approval). */
   title: React.ReactNode;
@@ -100,17 +112,35 @@ export function StepHeader({
    *  where no corner logo stands in for it on mobile. */
   markOnMobile?: boolean;
   description?: React.ReactNode;
+  /** `center` centers the mark, title and description on one axis. */
+  align?: 'start' | 'center';
 }) {
+  const frame = useContext(AuthFrameContext);
+  const align = alignProp ?? (frame.centered ? 'center' : 'start');
+  const mark = markProp ?? frame.mark;
   return (
-    <div className="mb-10">
+    <div className={cn('mb-8', align === 'center' && 'text-center')}>
       {mark ? (
-        <div className={markOnMobile ? undefined : 'hidden md:block'}>{mark}</div>
+        <div
+          className={cn(
+            markOnMobile ? 'block' : 'hidden md:block',
+            align === 'center' && (markOnMobile ? 'flex justify-center' : 'md:flex md:justify-center'),
+          )}
+        >
+          {mark}
+        </div>
       ) : (
-        <KortixLogo variant="icon" size={22} className="text-foreground hidden md:block" />
+        <KortixLogo
+          variant="icon"
+          size={22}
+          className={cn('text-foreground hidden md:block', align === 'center' && 'md:mx-auto')}
+        />
       )}
       <h1
         className={cn(
-          'text-foreground text-2xl font-medium tracking-tight md:mt-6',
+          'text-foreground text-2xl tracking-tight text-balance md:mt-6',
+          // The sign-in frame sets its headings in medium; other screens keep semibold.
+          frame.centered ? 'font-medium' : 'font-semibold',
           mark && markOnMobile && 'mt-6',
         )}
       >
@@ -123,9 +153,96 @@ export function StepHeader({
   );
 }
 
+/** "or" between a provider button and the email form. */
+export function OrDivider({ label }: { label: string }) {
+  return (
+    <div className="text-muted-foreground my-6 flex items-center gap-3 text-xs">
+      <span className="bg-border h-px flex-1" />
+      {label}
+      <span className="bg-border h-px flex-1" />
+    </div>
+  );
+}
+
+export type QuietLink = {
+  key: string;
+  label: React.ReactNode;
+  /** Without it the entry is plain text in the row (a countdown). */
+  onClick?: () => void;
+  disabled?: boolean;
+  /** Muted text after the button, outside its accessible name (a countdown). */
+  hint?: React.ReactNode;
+};
+
+/**
+ * The secondary choices under a step's main action, on one muted row joined by
+ * middots ("Use a password · Use SSO"). Falsy entries drop out; an empty row
+ * renders nothing.
+ */
+export function QuietLinks({
+  links,
+  disabled = false,
+  className,
+  align: alignProp,
+}: {
+  links: Array<QuietLink | null | false | undefined>;
+  disabled?: boolean;
+  className?: string;
+  /** `center` centers the row and drops the lead middot instead of clipping it. */
+  align?: 'start' | 'center';
+}) {
+  const frame = useContext(AuthFrameContext);
+  const align = alignProp ?? (frame.centered ? 'center' : 'start');
+  const shown = links.filter(Boolean) as QuietLink[];
+  if (shown.length === 0) return null;
+  // Every entry leads with its middot, and the row is pulled left by one
+  // middot's width and clipped: an entry that wraps to a new line starts
+  // clean, with no dot in front of it.
+  return (
+    <div className={cn('text-muted-foreground mt-5 overflow-x-clip text-sm', className)}>
+      <p
+        className={cn(
+          'flex flex-wrap items-center gap-x-2',
+          align === 'center'
+            ? 'justify-center [&>span:first-child>span:first-child]:hidden'
+            : '-ml-4',
+        )}
+      >
+        {shown.map((link) => (
+          <span key={link.key} className="flex items-center gap-x-2 whitespace-nowrap">
+            <span aria-hidden className="w-2 text-center select-none">
+              ·
+            </span>
+            {link.onClick ? (
+              <button
+                type="button"
+                onClick={link.onClick}
+                disabled={disabled || link.disabled}
+                className="hover:text-foreground -my-2 py-2 transition-colors disabled:opacity-50"
+              >
+                {link.label}
+              </button>
+            ) : (
+              <span className="tabular-nums">{link.label}</span>
+            )}
+            {link.hint ? (
+              <>
+                <span aria-hidden className="select-none">
+                  ·
+                </span>
+                <span className="tabular-nums">{link.hint}</span>
+              </>
+            ) : null}
+          </span>
+        ))}
+      </p>
+    </div>
+  );
+}
+
 export function FieldLabel({ htmlFor, children }: { htmlFor: string; children: React.ReactNode }) {
   return (
-    <label htmlFor={htmlFor} className="text-muted-foreground text-sm font-medium">
+    <label htmlFor={htmlFor} className="text-foreground text-sm font-medium">
       {children}
     </label>
   );
@@ -167,6 +284,73 @@ export function SuccessStrip({ message }: { message: string }) {
   );
 }
 
+/**
+ * The device-code row of an RFC 8628 approval page (Capture sign-in, computer
+ * pairing): the code the person checks against their other screen, and the
+ * time left to decide. `countdown` is the formatted `m:ss` remaining.
+ */
+export function DeviceCodeHeader({ code, countdown }: { code: string; countdown: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-md border px-3.5 py-3">
+      <span className="text-foreground font-mono text-lg font-medium tracking-widest tabular-nums">
+        {code}
+      </span>
+      <span className="text-muted-foreground font-mono text-xs tabular-nums">{countdown}</span>
+    </div>
+  );
+}
+
+/**
+ * The approve/deny pair of an approval page. One shared busy state: either
+ * mutation pending disables both buttons, its spinner on the button that is
+ * running. Failures render as the strip above the pair — pass only the errors
+ * the page shows. `approveDisabled` adds a page-side gate (no workspace
+ * picked yet), on top of the busy state.
+ */
+export function ApproveDenyActions({
+  approveLabel,
+  denyLabel,
+  onApprove,
+  onDeny,
+  approvePending,
+  denyPending,
+  approveError,
+  denyError,
+  approveDisabled = false,
+}: {
+  approveLabel: React.ReactNode;
+  denyLabel: React.ReactNode;
+  onApprove: () => void;
+  onDeny: () => void;
+  approvePending: boolean;
+  denyPending: boolean;
+  approveError?: string | null;
+  denyError?: string | null;
+  approveDisabled?: boolean;
+}) {
+  const busy = approvePending || denyPending;
+  return (
+    <div className="space-y-3">
+      {approveError ? <ErrorStrip message={approveError} /> : null}
+      {denyError ? <ErrorStrip message={denyError} /> : null}
+      <Button size="lg" className="w-full" onClick={onApprove} disabled={busy || approveDisabled}>
+        {approvePending ? <Loading className="size-4 shrink-0" /> : null}
+        {approveLabel}
+      </Button>
+      <Button
+        variant="outline"
+        size="lg"
+        className="text-destructive border-destructive/30 hover:bg-destructive/5 hover:text-destructive focus-visible:ring-destructive/35 w-full"
+        onClick={onDeny}
+        disabled={busy}
+      >
+        {denyPending ? <Loading className="text-destructive! size-4 shrink-0" /> : null}
+        {denyLabel}
+      </Button>
+    </div>
+  );
+}
+
 /* ─── Six-box code input ───────────────────────────────────────────────── */
 
 export function CodeInput({
@@ -175,9 +359,12 @@ export function CodeInput({
   disabled,
   autoFocus = true,
   invalid = false,
+  onComplete,
 }: {
   value: string;
   onChange: (next: string) => void;
+  /** Called with the code the moment the last box fills: typed or pasted. */
+  onComplete?: (code: string) => void;
   disabled?: boolean;
   autoFocus?: boolean;
   /** Marks the boxes destructive and replays the shake (row-level, once). */
@@ -185,16 +372,27 @@ export function CodeInput({
 }) {
   const refs = useRef<Array<HTMLInputElement | null>>([]);
 
+  // A rejected code comes back empty: put the caret in the first box again
+  // once the boxes are enabled.
+  useEffect(() => {
+    if (invalid && !disabled && value === '') refs.current[0]?.focus();
+  }, [invalid, disabled, value]);
+
   const focusBox = (i: number) => refs.current[Math.max(0, Math.min(CODE_LENGTH - 1, i))]?.focus();
 
-  const applyEdit = (edit: { next: string; focus: number } | null) => {
+  // `retry`: a paste of the full code verifies again even when it is the code
+  // already in the boxes, the only retry after a failed check without a button.
+  const applyEdit = (edit: { next: string; focus: number } | null, retry = false) => {
     if (!edit) return;
     onChange(edit.next);
     focusBox(edit.focus);
+    if (onComplete && (retry || edit.next !== value) && /^\d+$/.test(edit.next) && edit.next.length === CODE_LENGTH) {
+      onComplete(edit.next);
+    }
   };
 
   return (
-    <div className={cn('flex gap-2.5', invalid && 'motion-safe:animate-shake')}>
+    <div className={cn('flex justify-between gap-2', invalid && 'motion-safe:animate-shake')}>
       {Array.from({ length: CODE_LENGTH }, (_, i) => (
         <input
           key={i}
@@ -224,7 +422,7 @@ export function CodeInput({
           onPaste={(e) => {
             e.preventDefault();
             const digits = e.clipboardData.getData('text').replace(/\D/g, '');
-            if (digits) applyEdit(insertDigits(value, i, digits));
+            if (digits) applyEdit(insertDigits(value, i, digits), true);
           }}
           onFocus={(e) => e.currentTarget.select()}
           aria-invalid={invalid || undefined}

@@ -34,13 +34,14 @@ import { Switch } from '@/components/kortix/switch';
 import { Icon } from '@/components/ui/icon';
 import { useColorScheme } from 'nativewind';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BottomSheetModal, BottomSheetView, BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import type { BottomSheetModal } from '@gorhom/bottom-sheet';
+import { SheetView, SheetScrollView, SheetRawTextInput } from '@/components/kortix/sheet-parts';
 // `BottomSheetTouchable` used to come from `@gorhom/bottom-sheet`'s re-exported
 // legacy touchable, which itself just proxies react-native-gesture-handler's
 // touchable on Android (and RN's own on iOS) for correct gesture arbitration
 // inside a BottomSheetModal. Use the gesture-handler `Pressable` directly.
 const BottomSheetTouchable = GestureHandlerPressable;
-import { getSheetBg, useThemeColors } from '@/lib/theme-colors';
+import { useThemeColors } from '@/lib/theme-colors';
 import { MONO_FONT_FAMILY } from '@/lib/utils/mono-font';
 import { THEME, withAlpha } from '@/lib/utils/theme';
 import {
@@ -100,9 +101,23 @@ import {
   useProjectSessionStats,
   totalTokens as sumTokens,
 } from '@/hooks/useProjectSessionStats';
-import { SheetBackdrop, KortixBottomSheetModal } from '@/components/kortix/sheet';
+import { SheetBackdrop, KortixBottomSheetModal, useSheetSurface } from '@/components/kortix/sheet';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Markdown inside the task sheet, filled with the sheet's own surface: no fill
+ * on the iOS 26 native glass, where the sheet colour drew an opaque block.
+ * Rendered inside the sheet, so it reads that sheet's context.
+ */
+function SheetMarkdownText({ isDark, children }: { isDark: boolean; children: string }) {
+  const surface = useSheetSurface();
+  return (
+    <SelectableMarkdownText isDark={isDark} surface={surface ?? undefined}>
+      {children}
+    </SelectableMarkdownText>
+  );
+}
 
 function ago(t?: string | number) {
   if (!t) return '';
@@ -122,18 +137,21 @@ type Tab = 'files' | 'sessions' | 'tasks' | 'about';
 
 // Task status config — aligned with web's unified agent_task system.
 // Pipeline: todo → [START] → in_progress → input_needed/awaiting_review → [APPROVE] → completed
-const STATUS_CONFIG: Record<string, { icon: typeof Circle; color: string; label: string }> = {
-  todo: { icon: Circle, color: THEME.light.mutedForeground, label: 'Planned' },
-  in_progress: { icon: RadioButtonIcon, color: THEME.accent.blue, label: 'Running' },
-  input_needed: { icon: AlertTriangle, color: THEME.accent.purple, label: 'Input Needed' },
-  awaiting_review: { icon: AlertTriangle, color: THEME.accent.orange, label: 'Awaiting Review' },
-  completed: { icon: CheckCircle2, color: THEME.accent.green, label: 'Completed' },
-  cancelled: { icon: Ban, color: THEME.light.mutedForeground, label: 'Cancelled' },
-  // Agent statuses (separate enum, but reused for visual parity)
-  running: { icon: RadioButtonIcon, color: THEME.accent.blue, label: 'Running' },
-  failed: { icon: AlertTriangle, color: THEME.accent.red, label: 'Failed' },
-  stopped: { icon: Ban, color: THEME.light.mutedForeground, label: 'Stopped' },
-};
+function statusConfig(scheme: 'light' | 'dark'): Record<string, { icon: typeof Circle; color: string; label: string }> {
+  const accent = THEME.accent[scheme];
+  return {
+    todo: { icon: Circle, color: THEME.light.mutedForeground, label: 'Planned' },
+    in_progress: { icon: RadioButtonIcon, color: accent.blue, label: 'Running' },
+    input_needed: { icon: AlertTriangle, color: accent.purple, label: 'Input Needed' },
+    awaiting_review: { icon: AlertTriangle, color: accent.orange, label: 'Awaiting Review' },
+    completed: { icon: CheckCircle2, color: accent.green, label: 'Completed' },
+    cancelled: { icon: Ban, color: THEME.light.mutedForeground, label: 'Cancelled' },
+    // Agent statuses (separate enum, but reused for visual parity)
+    running: { icon: RadioButtonIcon, color: accent.blue, label: 'Running' },
+    failed: { icon: AlertTriangle, color: accent.red, label: 'Failed' },
+    stopped: { icon: Ban, color: THEME.light.mutedForeground, label: 'Stopped' },
+  };
+}
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -152,6 +170,8 @@ export function ProjectDetailPage({
 }: ProjectDetailPageProps) {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const accent = THEME.accent[isDark ? 'dark' : 'light'];
+  const statusMap = statusConfig(isDark ? 'dark' : 'light');
   const insets = useSafeAreaInsets();
   const { sandboxUrl } = useSandboxContext();
   const themeColors = useThemeColors();
@@ -417,7 +437,6 @@ export function ProjectDetailPage({
   const {
     data: files,
     isLoading: filesLoading,
-    refetch: refetchFiles,
   } = useSandboxFiles(hasFiles && tab === 'files' ? sandboxUrl : undefined, filePath);
   const [viewerFile, setViewerFile] = useState<SandboxFile | null>(null);
   const [viewerVisible, setViewerVisible] = useState(false);
@@ -612,7 +631,7 @@ export function ProjectDetailPage({
             style={{
               fontSize: 13,
               fontFamily: 'Roobert-Medium',
-              color: THEME.accent.blue,
+              color: accent.blue,
             }}>
             Go back
           </RNText>
@@ -794,7 +813,6 @@ export function ProjectDetailPage({
                 loading={statsLoading}
                 isDark={isDark}
                 fg={fg}
-                muted={muted}
                 cardBg={cardBg}
                 border={border}
               />
@@ -948,7 +966,7 @@ export function ProjectDetailPage({
                       style={{
                         height: '100%',
                         width: `${(taskStats.done / taskStats.total) * 100}%`,
-                        backgroundColor: THEME.accent.green,
+                        backgroundColor: accent.green,
                         borderRadius: 3,
                       }}
                     />
@@ -1007,7 +1025,7 @@ export function ProjectDetailPage({
                   overflow: 'hidden',
                 }}>
                 {filteredTaskList.map((t: KortixTask, i: number) => {
-                  const sc = STATUS_CONFIG[t.status] || STATUS_CONFIG.todo;
+                  const sc = statusMap[t.status] || statusMap.todo;
                   const StatusIcon = sc.icon;
                   const isTerminal = t.status === 'completed' || t.status === 'cancelled';
                   return (
@@ -1325,19 +1343,6 @@ export function ProjectDetailPage({
                   </RNText>
                 </View>
               )}
-              {project.opencode_id && (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                  <FolderGit2 size={14} color={mutedStrong} />
-                  <RNText
-                    style={{
-                      fontSize: 12,
-                      fontFamily: monoFont,
-                      color: isDark ? THEME.light.mutedForeground : THEME.dark.mutedForeground,
-                    }}>
-                    {project.opencode_id}
-                  </RNText>
-                </View>
-              )}
             </View>
           </View>
         )}
@@ -1366,7 +1371,7 @@ export function ProjectDetailPage({
         backdropComponent={(p) => <SheetBackdrop {...p} opacity={0.35} />}
         onDismiss={() => setSelectedTask(null)}
 >
-        <BottomSheetScrollView
+        <SheetScrollView
           contentContainerStyle={{
             paddingHorizontal: 20,
             paddingTop: 8,
@@ -1374,7 +1379,7 @@ export function ProjectDetailPage({
           }}>
           {selectedTask &&
             (() => {
-              const currentStatus = STATUS_CONFIG[selectedTask.status] || STATUS_CONFIG.todo;
+              const currentStatus = statusMap[selectedTask.status] || statusMap.todo;
               const CurrentIcon = currentStatus.icon;
               const isTerminal =
                 selectedTask.status === 'completed' || selectedTask.status === 'cancelled';
@@ -1521,7 +1526,7 @@ export function ProjectDetailPage({
                             gap: 6,
                             paddingVertical: 11,
                             borderRadius: 10,
-                            backgroundColor: THEME.accent.green,
+                            backgroundColor: accent.green,
                             opacity: isBusy ? 0.5 : 1,
                           }}>
                           <CheckCircle2 size={14} color="#FFFFFF" /> {/* hex-allowlist: icon on a fixed accent.green fill, never themed */}
@@ -1587,9 +1592,9 @@ export function ProjectDetailPage({
                         }}>
                         Description
                       </RNText>
-                      <SelectableMarkdownText isDark={isDark} surface={getSheetBg(isDark)}>
+                      <SheetMarkdownText isDark={isDark}>
                         {selectedTask.description}
-                      </SelectableMarkdownText>
+                      </SheetMarkdownText>
                     </View>
                   )}
 
@@ -1607,9 +1612,9 @@ export function ProjectDetailPage({
                         }}>
                         Verification condition
                       </RNText>
-                      <SelectableMarkdownText isDark={isDark} surface={getSheetBg(isDark)}>
+                      <SheetMarkdownText isDark={isDark}>
                         {selectedTask.verification_condition}
-                      </SelectableMarkdownText>
+                      </SheetMarkdownText>
                     </View>
                   )}
 
@@ -1620,8 +1625,8 @@ export function ProjectDetailPage({
                         marginBottom: 16,
                         borderRadius: 12,
                         borderWidth: 1,
-                        borderColor: isDark ? withAlpha(THEME.accent.orange, 0.3) : withAlpha(THEME.accent.orange, 0.25),
-                        backgroundColor: isDark ? withAlpha(THEME.accent.orange, 0.06) : withAlpha(THEME.accent.orange, 0.04),
+                        borderColor: isDark ? withAlpha(accent.orange, 0.3) : withAlpha(accent.orange, 0.25),
+                        backgroundColor: isDark ? withAlpha(accent.orange, 0.06) : withAlpha(accent.orange, 0.04),
                         padding: 14,
                       }}>
                       <View
@@ -1631,21 +1636,21 @@ export function ProjectDetailPage({
                           gap: 6,
                           marginBottom: 8,
                         }}>
-                        <AlertTriangle size={12} color={THEME.accent.orange} />
+                        <AlertTriangle size={12} color={accent.orange} />
                         <RNText
                           style={{
                             fontSize: 11,
                             fontFamily: 'Roobert-Medium',
-                            color: THEME.accent.orange,
+                            color: accent.orange,
                             textTransform: 'uppercase',
                             letterSpacing: 0.5,
                           }}>
                           Input needed
                         </RNText>
                       </View>
-                      <SelectableMarkdownText isDark={isDark} surface={getSheetBg(isDark)}>
+                      <SheetMarkdownText isDark={isDark}>
                         {selectedTask.blocking_question}
-                      </SelectableMarkdownText>
+                      </SheetMarkdownText>
                     </View>
                   )}
 
@@ -1656,24 +1661,24 @@ export function ProjectDetailPage({
                         marginBottom: 16,
                         borderRadius: 12,
                         borderWidth: 1,
-                        borderColor: isDark ? withAlpha(THEME.accent.green, 0.25) : withAlpha(THEME.accent.green, 0.2),
-                        backgroundColor: isDark ? withAlpha(THEME.accent.green, 0.04) : withAlpha(THEME.accent.green, 0.03),
+                        borderColor: isDark ? withAlpha(accent.green, 0.25) : withAlpha(accent.green, 0.2),
+                        backgroundColor: isDark ? withAlpha(accent.green, 0.04) : withAlpha(accent.green, 0.03),
                         padding: 14,
                       }}>
                       <RNText
                         style={{
                           fontSize: 11,
                           fontFamily: 'Roobert-Medium',
-                          color: THEME.accent.green,
+                          color: accent.green,
                           textTransform: 'uppercase',
                           letterSpacing: 0.5,
                           marginBottom: 8,
                         }}>
                         Result
                       </RNText>
-                      <SelectableMarkdownText isDark={isDark} surface={getSheetBg(isDark)}>
+                      <SheetMarkdownText isDark={isDark}>
                         {selectedTask.result}
-                      </SelectableMarkdownText>
+                      </SheetMarkdownText>
                       {!!selectedTask.verification_summary && (
                         <View
                           style={{
@@ -1681,23 +1686,23 @@ export function ProjectDetailPage({
                             paddingTop: 10,
                             borderTopWidth: 1,
                             borderTopColor: isDark
-                              ? withAlpha(THEME.accent.green, 0.15)
-                              : withAlpha(THEME.accent.green, 0.15),
+                              ? withAlpha(accent.green, 0.15)
+                              : withAlpha(accent.green, 0.15),
                           }}>
                           <RNText
                             style={{
                               fontSize: 10,
                               fontFamily: 'Roobert-Medium',
-                              color: isDark ? withAlpha(THEME.accent.green, 0.7) : withAlpha(THEME.accent.green, 0.7),
+                              color: isDark ? withAlpha(accent.green, 0.7) : withAlpha(accent.green, 0.7),
                               textTransform: 'uppercase',
                               letterSpacing: 0.5,
                               marginBottom: 4,
                             }}>
                             Verification
                           </RNText>
-                          <SelectableMarkdownText isDark={isDark} surface={getSheetBg(isDark)}>
+                          <SheetMarkdownText isDark={isDark}>
                             {selectedTask.verification_summary}
-                          </SelectableMarkdownText>
+                          </SheetMarkdownText>
                         </View>
                       )}
                     </View>
@@ -1726,7 +1731,7 @@ export function ProjectDetailPage({
                         'cancelled',
                       ] as KortixTaskStatus[]
                     ).map((s) => {
-                      const sc = STATUS_CONFIG[s];
+                      const sc = statusMap[s];
                       const SIcon = sc.icon;
                       const isCurrent = selectedTask.status === s;
                       return (
@@ -1799,7 +1804,7 @@ export function ProjectDetailPage({
                 </>
               );
             })()}
-        </BottomSheetScrollView>
+        </SheetScrollView>
       </KortixBottomSheetModal>
 
       {/* Edit sheet — matches FilesPage rename sheet pattern */}
@@ -1814,7 +1819,7 @@ export function ProjectDetailPage({
           setEditValue('');
         }}
 >
-        <BottomSheetView
+        <SheetView
           style={{
             paddingHorizontal: 24,
             paddingTop: 8,
@@ -1849,7 +1854,7 @@ export function ProjectDetailPage({
           </View>
 
           {/* Input */}
-          <BottomSheetTextInput
+          <SheetRawTextInput
             value={editValue}
             onChangeText={setEditValue}
             placeholder={editField === 'name' ? 'Enter project name' : 'Enter description'}
@@ -1909,7 +1914,7 @@ export function ProjectDetailPage({
               </BottomSheetTouchable>
             );
           })()}
-        </BottomSheetView>
+        </SheetView>
       </KortixBottomSheetModal>
 
       {/* New task sheet — ported from web new-task-dialog */}
@@ -1921,7 +1926,7 @@ export function ProjectDetailPage({
         keyboardBehavior="interactive"
         keyboardBlurBehavior="restore"
 >
-        <BottomSheetScrollView
+        <SheetScrollView
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{
             paddingHorizontal: 24,
@@ -1965,7 +1970,7 @@ export function ProjectDetailPage({
           </View>
 
           {/* Title — big, bold */}
-          <BottomSheetTextInput
+          <SheetRawTextInput
             value={newTaskTitle}
             onChangeText={setNewTaskTitle}
             autoFocus
@@ -1983,7 +1988,7 @@ export function ProjectDetailPage({
           />
 
           {/* Description */}
-          <BottomSheetTextInput
+          <SheetRawTextInput
             value={newTaskDescription}
             onChangeText={setNewTaskDescription}
             multiline
@@ -2038,7 +2043,7 @@ export function ProjectDetailPage({
                   </RNText>
                 </Pressable>
               </View>
-              <BottomSheetTextInput
+              <SheetRawTextInput
                 value={newTaskVerification}
                 onChangeText={setNewTaskVerification}
                 multiline
@@ -2312,7 +2317,7 @@ export function ProjectDetailPage({
               </BottomSheetTouchable>
             );
           })()}
-        </BottomSheetScrollView>
+        </SheetScrollView>
       </KortixBottomSheetModal>
       </PageContent>
     </View>
@@ -2329,7 +2334,6 @@ function ProjectTotalsCard({
   loading,
   isDark,
   fg,
-  muted,
   cardBg,
   border,
 }: {
@@ -2340,7 +2344,6 @@ function ProjectTotalsCard({
   loading: boolean;
   isDark: boolean;
   fg: string;
-  muted: string;
   cardBg: string;
   border: string;
 }) {

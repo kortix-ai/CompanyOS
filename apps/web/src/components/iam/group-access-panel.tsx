@@ -51,7 +51,6 @@ import {
   countOverridingMembers,
   isOverridingAccountRole,
   sortGroupMembersByOverride,
-  type AccountMeta,
 } from '@/components/iam/iam-display-helpers';
 import { Badge } from '@kortix/ui/badge';
 import { Button } from '@kortix/ui/button';
@@ -64,7 +63,7 @@ import {
   DropdownMenuTrigger,
 } from '@kortix/ui/dropdown-menu';
 import { EntityAvatar } from '@kortix/ui/entity-avatar';
-import { InfoBanner } from '@kortix/ui/info-banner';
+import { Alert as BannerAlert, AlertDescription as BannerAlertDescription} from '@kortix/ui/alert';
 import { Input } from '@kortix/ui/input';
 import { Label } from '@kortix/ui/label';
 import Loading from '@kortix/ui/loading';
@@ -111,9 +110,9 @@ import {
   type GroupProjectGrant,
 } from '@/lib/iam-client';
 import { usePermission } from '@kortix/ui/workspace';
+import { useAccountMembers } from '@kortix/ui/internal/account-hub/use-account-members';
 import {
   detachGroupFromProject,
-  listAccountMembers,
   listProjectResourceGrants,
   type AccountRole,
 } from '@kortix/sdk';
@@ -529,36 +528,14 @@ function GroupMembersCard({
     ...contract('directory'),
   });
 
-  const accountMembersQuery = useQuery({
-    queryKey: ['account-members', accountId],
-    queryFn: () => listAccountMembers(accountId),
-    ...contract('directory'),
-  });
-
   // Combined index of account-level info per user_id. Lets the group
   // members list show emails AND surface the account role badge — owners
   // and admins implicitly have Manager on every project, which overrides
   // any group-level role on that project. Worth flagging here so an
   // admin who adds another admin to a "Viewer" group understands the
   // grant is mostly cosmetic for that user.
-  const accountMetaByUserId = useMemo(() => {
-    const map = new Map<string, AccountMeta>();
-    for (const m of accountMembersQuery.data ?? []) {
-      map.set(m.user_id, {
-        email: m.email,
-        accountRole: m.account_role,
-        isSuperAdmin: !!m.is_super_admin,
-      });
-    }
-    return map;
-  }, [accountMembersQuery.data]);
-  const emailByUserId = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const [id, meta] of accountMetaByUserId) {
-      if (meta.email) map.set(id, meta.email);
-    }
-    return map;
-  }, [accountMetaByUserId]);
+  // The map is built once by the shared roster hook.
+  const { emailByUserId, accountMetaByUserId } = useAccountMembers(accountId);
 
   // Pure helpers in iam-display-helpers (unit-tested).
   const overrideCount = useMemo(
@@ -631,17 +608,17 @@ function GroupMembersCard({
     <>
       {/* The IdP owns this membership — say so, and say where to change it. */}
       {idpManaged ? (
-        <InfoBanner tone="info">{tI18nComplete.raw('text58dc708c6651')}</InfoBanner>
+        <BannerAlert variant="default" ><BannerAlertDescription>{tI18nComplete.raw('text58dc708c6651')}</BannerAlertDescription></BannerAlert>
       ) : null}
 
       {settled && members.length > 0 && overrideCount > 0 ? (
-        <InfoBanner tone="warning">
+        <BannerAlert variant="warning" ><BannerAlertDescription>
           {overrideCount}{' '}
           {overrideCount === 1
             ? tI18nComplete.raw('textbff3c2a3f88a')
             : tI18nComplete.raw('text68817a89d628')}{' '}
           {tI18nComplete.raw('text954f5f9042e8')}
-        </InfoBanner>
+        </BannerAlertDescription></BannerAlert>
       ) : null}
 
       {membersQuery.isLoading ? (

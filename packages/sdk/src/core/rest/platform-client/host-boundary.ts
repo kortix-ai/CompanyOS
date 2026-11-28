@@ -12,6 +12,7 @@ import type { AccountBranding } from '../projects-client/accounts';
 import { auditFilterQuery } from '../projects-client/audit-filter';
 import { platformApiBase } from './shared';
 import { getBackendUrl } from '../../session/server-store/url-helpers';
+import { withWorkspaceRouteFallback } from '../../http/workspace-routes';
 
 export interface HostRequestOptions {
   /** Kortix API base URL. Both `https://host` and `https://host/v1` are valid. */
@@ -72,7 +73,7 @@ async function requestJson<T>(
   init?: { method?: string; body?: unknown },
 ): Promise<T> {
   const json = init?.body !== undefined;
-  const response = await fetch(`${platformApiBase(options.backendUrl)}${path}`, {
+  const response = await withWorkspaceRouteFallback(fetch)(`${platformApiBase(options.backendUrl)}${path}`, {
     method: init?.method ?? 'GET',
     headers: requestHeaders(options, json),
     ...(json ? { body: JSON.stringify(init.body) } : {}),
@@ -87,6 +88,7 @@ async function requestJson<T>(
   return body as T;
 }
 
+/** @deprecated The marketplace was removed (2026-11-20); the API answers `410 ENDPOINT_RETIRED`. Removed in the next major. */
 export interface PublicMarketplaceQuery {
   query?: string;
   type?: string;
@@ -106,6 +108,7 @@ function marketplaceQuery(input?: PublicMarketplaceQuery): string {
   return query ? `?${query}` : '';
 }
 
+/** @deprecated The marketplace was removed (2026-11-20); the API answers `410 ENDPOINT_RETIRED`. Removed in the next major. */
 export function listPublicMarketplaceItems<
   T = {
     items: unknown[];
@@ -119,6 +122,7 @@ export function listPublicMarketplaceItems<
   return requestJson<T>(`/marketplace/items${marketplaceQuery(query)}`, options);
 }
 
+/** @deprecated The marketplace was removed (2026-11-20); the API answers `410 ENDPOINT_RETIRED`. Removed in the next major. */
 export function listPublicMarketplaces<
   T = {
     marketplaces: unknown[];
@@ -130,6 +134,7 @@ export function listPublicMarketplaces<
   return requestJson<T>('/marketplace/marketplaces', options);
 }
 
+/** @deprecated The marketplace was removed (2026-11-20); the API answers `410 ENDPOINT_RETIRED`. Removed in the next major. */
 export function getPublicMarketplaceItem<T = Record<string, unknown>>(
   id: string,
   options: HostRequestOptions,
@@ -137,6 +142,7 @@ export function getPublicMarketplaceItem<T = Record<string, unknown>>(
   return requestJson<T>(`/marketplace/items/${encodeURIComponent(id)}`, options);
 }
 
+/** @deprecated The marketplace was removed (2026-11-20); the API answers `410 ENDPOINT_RETIRED`. Removed in the next major. */
 export function getPublicMarketplaceItemFile<T = Record<string, unknown>>(
   id: string,
   path: string,
@@ -197,6 +203,8 @@ export interface OAuthConsentRequest {
   self_registered?: boolean;
   /** Where approval sends the browser: the redirect host, or a native app's scheme (`cursor:`). */
   redirect_to?: string;
+  /** True when the consent names the workspace the app gets (`workspaceId` on submit). Absent on older APIs. */
+  asks_workspace?: boolean;
 }
 
 export function getOAuthConsentRequest(
@@ -206,13 +214,23 @@ export function getOAuthConsentRequest(
   return requestJson(`/oauth/authorize/consent/${encodeURIComponent(requestId)}`, options);
 }
 
+/**
+ * Approve or deny a pending OAuth request. `workspaceId` binds the grant: the
+ * issued token reaches that workspace only, like a workspace key. Without it
+ * the token acts as the person in every workspace and may create workspaces
+ * (the consent screen's All my workspaces choice).
+ */
 export function submitOAuthConsent(
-  input: { requestId: string; approved: boolean },
+  input: { requestId: string; approved: boolean; workspaceId?: string },
   options: HostRequestOptions,
 ): Promise<{ redirect_uri?: string }> {
   return requestJson('/oauth/authorize/consent', options, {
     method: 'POST',
-    body: { request_id: input.requestId, approved: input.approved },
+    body: {
+      request_id: input.requestId,
+      approved: input.approved,
+      ...(input.workspaceId ? { workspace_id: input.workspaceId } : {}),
+    },
   });
 }
 
@@ -356,13 +374,16 @@ export function submitConnectorAppForm(
 }
 
 export interface SecretSetupLinkInfo {
-  /** Signed delivery scope. Absent on older servers. */
-  scope?: 'runtime' | 'connector';
+  /** Signed delivery scope. Absent on older servers. `browser` asks for a
+   *  website login: submit it with `submitBrowserLoginSetupLink`. */
+  scope?: 'runtime' | 'connector' | 'browser';
   project_name: string;
   fields: Array<{
     name: string;
     label: string | null;
     description: string | null;
+    /** `browser` scope: the hosts the login may be typed on. */
+    sites?: string[];
   }>;
   expires_at: string;
   /** The person whose session asked for the values, when that is a member of
@@ -406,6 +427,29 @@ export interface SecretSetupLinkSubmitResult {
    * a person must widen the grant before the agent can read it.
    */
   withheld?: SecretSetupLinkWithheld[];
+}
+
+/** A website login typed into a `browser` setup link. */
+export interface SecretSetupLinkLogin {
+  username: string;
+  password: string;
+}
+
+/**
+ * Submit the website logins a `browser` setup link asks for, keyed by login
+ * name. The sandbox browser types them; the agent never sees them.
+ */
+export function submitBrowserLoginSetupLink(
+  token: string,
+  logins: Record<string, SecretSetupLinkLogin>,
+  options: HostRequestOptions,
+  /** `only_requester`: only the person who asked may use the logins. */
+  audience?: { only_requester?: boolean },
+): Promise<SecretSetupLinkSubmitResult> {
+  return requestJson(`/setup-links/secret/${encodeURIComponent(token)}`, options, {
+    method: 'POST',
+    body: { logins, ...(audience?.only_requester ? { only_requester: true } : {}) },
+  });
 }
 
 export function submitSecretSetupLink(
@@ -486,7 +530,7 @@ export function startSessionWithToken(
   options: HostRequestOptions,
 ): Promise<unknown> {
   return requestJson(
-    `/projects/${encodeURIComponent(projectId)}/sessions/${encodeURIComponent(sessionId)}/start`,
+    `/workspaces/${encodeURIComponent(projectId)}/sessions/${encodeURIComponent(sessionId)}/start`,
     options,
     { method: 'POST', body: {} },
   );
@@ -533,7 +577,7 @@ export async function downloadAccountAudit(
   query: Parameters<typeof auditFilterQuery>[0] & { format: 'csv' | 'jsonl' },
   options: HostRequestOptions,
 ): Promise<AccountAuditExport> {
-  const response = await fetch(
+  const response = await withWorkspaceRouteFallback(fetch)(
     `${platformApiBase(options.backendUrl)}/accounts/${encodeURIComponent(accountId)}/audit/export?${auditFilterQuery(query)}`,
     {
       headers: requestHeaders(options, false),

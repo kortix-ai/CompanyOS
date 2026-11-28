@@ -53,7 +53,7 @@ describe('pg-broadcast subscriber isolation', () => {
       broadcast.CHROME_COMMAND_CHANNEL,
       broadcast.SPACE_ACCESS_BUST_CHANNEL,
       broadcast.SESSION_LIST_BUST_CHANNEL,
-      broadcast.ARTIFACT_LIVE_CHANNEL,
+      broadcast.BILLING_BUST_CHANNEL,
     ]);
   });
 
@@ -65,6 +65,36 @@ describe('pg-broadcast subscriber isolation', () => {
     fire(broadcast.BASE_MOVE_CHANNEL, 'not-a-uuid');
     expect(seen).toEqual([]);
     expect(() => fire(broadcast.BASE_MOVE_CHANNEL, UUID)).not.toThrow();
+    expect(seen).toEqual([UUID]);
+  });
+
+  test('base move: a handler registered twice runs twice (the trunk registry array kept every registration)', () => {
+    const seen: string[] = [];
+    const transport = broadcast.configBaseMoveTransport();
+    const handler = (id: string) => seen.push(id);
+    transport.subscribe(handler);
+    transport.subscribe(handler);
+    fire(broadcast.BASE_MOVE_CHANNEL, UUID);
+    expect(seen).toEqual([UUID, UUID]);
+  });
+
+  test('base move: a handler registered during delivery still runs in that pass (the trunk deliver iterated its live array)', () => {
+    const seen: string[] = [];
+    const transport = broadcast.configBaseMoveTransport();
+    transport.subscribe((id) => {
+      seen.push(`first:${id}`);
+      transport.subscribe((id2) => seen.push(`new:${id2}`));
+    });
+    fire(broadcast.BASE_MOVE_CHANNEL, UUID);
+    expect(seen).toEqual([`first:${UUID}`, `new:${UUID}`]);
+  });
+
+  test('session changed: one registration per handler (the trunk registry Set kept one)', () => {
+    const seen: string[] = [];
+    const handler = (id: string) => seen.push(id);
+    broadcast.onSessionChanged(handler);
+    broadcast.onSessionChanged(handler);
+    fire(broadcast.SESSION_CHANGED_CHANNEL, UUID);
     expect(seen).toEqual([UUID]);
   });
 
@@ -103,6 +133,7 @@ describe('pg-broadcast subscriber isolation', () => {
     ['session prompts changed', 'kortix_session_prompts_changed', (h) => broadcast.onSessionPromptsChanged(h)],
     ['space access bust', 'kortix_space_access_bust', (h) => broadcast.onSpaceAccessBustNotify(h)],
     ['session list bust', 'kortix_session_list_bust', (h) => broadcast.onSessionListBustNotify(h)],
+    ['billing bust', 'kortix_billing_bust', (h) => broadcast.onBillingBustNotify(h)],
   ];
   for (const [name, channel, register] of uuidChannels) {
     test(`${name}: non-uuid dropped, throw swallowed, null handler no-op`, () => {
@@ -121,7 +152,6 @@ describe('pg-broadcast subscriber isolation', () => {
   const rawChannels: Array<[string, string, (h: ((p: string) => void) | null) => void]> = [
     ['iam cache bust', 'kortix_iam_cache_bust', (h) => broadcast.onIamCacheBust(h)],
     ['chrome command', 'kortix_chrome_cmd', (h) => broadcast.onChromeCommand(h)],
-    ['artifact live', 'kortix_artifact_live', (h) => broadcast.onArtifactLive(h)],
     ['tunnel forward', 'kortix_tunnel_rpc_forward', (h) => h && broadcast.onTunnelForwardNotify(h)],
   ];
   for (const [name, channel, register] of rawChannels) {

@@ -18,6 +18,9 @@ const platformDefaults = new Map(
  * A default read from deployment config is off somewhere, so it counts as off.
  */
 export function onByDefault(flag) {
+  // `chrome` graduated (2026-11-24): no flag, on wherever the server offers Kortix in Chrome
+  // (kortix.com). `kortix chrome` and the kortix-chrome skill keep the name as a box token.
+  if (flag === 'chrome') return true;
   const value = platformDefaults.get(flag);
   if (value === undefined) throw new Error(`feature flag ${flag} is not in apps/api/src/feature-flags/registry.ts`);
   return value === 'true';
@@ -59,5 +62,24 @@ export async function runRegionGenerator(name, script, render) {
   } else if (next !== text) {
     console.error(`The ${name} region of ${target} is stale. Run: bun ${script}${target === page ? '' : ` ${target}`}`);
     process.exit(1);
+  }
+}
+
+/**
+ * Runs a generator that owns a whole file (rather than one marked region).
+ * Writes `outputPath` from `render()`, or with --check exits 1 when the file is
+ * stale, pointing at `script` to regenerate it. Call it from the entry guard:
+ * `if (import.meta.url === pathToFileURL(process.argv[1]).href) await runFileGenerator(...)`.
+ */
+export async function runFileGenerator(name, script, render, outputPath) {
+  const rendered = await render();
+  if (process.argv.includes('--check')) {
+    if (readFileSync(outputPath, 'utf8') !== rendered) {
+      console.error(`${outputPath} is stale. Run: ${script}`);
+      process.exit(1);
+    }
+  } else {
+    writeFileSync(outputPath, rendered);
+    console.log(`Wrote ${name} to ${outputPath}`);
   }
 }

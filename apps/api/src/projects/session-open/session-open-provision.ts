@@ -23,7 +23,6 @@ import {
   sandboxSlugFromSessionMetadata,
 } from '../lib/session-sandbox-metadata';
 import { buildSessionSandboxEnvVars, sandboxCallbackUnreachableReason } from '../lib/sessions';
-import { legacyRehydrateSpec, rehydrateSessionChat } from '../legacy-migration-rehydrate';
 import { prepareInitialSandboxTurn } from '../session-turn-ledger';
 import { transitionSession } from '../session-lifecycle/status-transitions';
 import type { StartCallLog } from '../session-lifecycle/start-envelope';
@@ -72,7 +71,6 @@ export async function allocateRuntimeOnOpen(
     typeof session.metadata?.model === 'string' ? session.metadata.model : null;
   const runtimeMetadata = { opened_at: new Date().toISOString(), ...(extraRuntimeMetadata ?? {}) };
   const sessionMetadata = { ...(session.metadata ?? {}), ...runtimeMetadata };
-  const rehydrate = legacyRehydrateSpec(session.metadata, loaded.row.metadata, loaded.row.projectId);
   // The daemon claims the initial prompt only from a `delivering` turn on the
   // sandbox row. A box that replaces one that never ran carries it again, or
   // the session boots idle with no message (same rule as a restart).
@@ -111,18 +109,8 @@ export async function allocateRuntimeOnOpen(
         defaultBranch: loaded.row.defaultBranch,
         manifestPath: loaded.row.manifestPath,
         repositoryAccess: repositoryAccessFromSessionMetadata(session.metadata),
-        restoreSessionBranch: true,
       }),
     resolveGitProject: async () => withProjectGitAuth(loaded.row),
-    beforeActive: rehydrate
-      ? (externalId) =>
-          rehydrateSessionChat({
-            sessionId,
-            externalId,
-            provider: providerName,
-            spec: rehydrate,
-          })
-      : undefined,
   });
 }
 

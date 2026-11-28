@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { GatewayHooks, GatewayTrace, UpstreamDescriptor, UsageEvent } from '../domain';
-import { GatewayResolutionError, UpstreamHttpError } from '../errors';
+import { GatewayResolutionError, TimeoutError, UpstreamHttpError } from '../errors';
 import { rawProviderError } from './dispatch';
 import { createRouteMemory, routeMemoryKey } from './route-memory';
 import { handleChatCompletions } from './simple-handler';
@@ -440,7 +440,7 @@ describe('simple gateway pipeline', () => {
   });
 
   test('a provider 4xx labelled server_error reaches the client without the label OpenCode retries on', async () => {
-    // OpenCode retries any body matching /server_error|internal error|.../,
+    // The runtime retries any body matching /server_error|internal error|.../,
     // whatever the status: this permanent 400 was replayed 5 times (dev 2026-09-29).
     const upstreamBody = JSON.stringify({
       error: { type: 'server_error', message: 'Upstream request failed: This Go model requires Global regions.' },
@@ -467,6 +467,115 @@ describe('simple gateway pipeline', () => {
     expect((await overflow.json()).error.code).toBe('context_length_exceeded');
     const unavailable = rawProviderError(new UpstreamHttpError(503, upstreamBody));
     expect(await unavailable.text()).toBe(upstreamBody);
+  });
+
+  // 2026-11-02: twelve 1600x1200 PNG reads (3.6 MB base64 each, 43 MB) went to Bedrock, which
+  // refuses a body over ~32 MB with its context-overflow text at ~22k tokens. Every retry failed.
+  const sheet = (n: number) => ({ type: 'image_url', image_url: { url: `data:image/png;base64,${String(n % 10).repeat(3_620_000)}` } });
+  const sheetsRequest = (count: number) => JSON.stringify({
+    model: 'requested-model',
+    messages: [{ role: 'user', content: [{ type: 'text', text: 'review the sheets' }, ...Array.from({ length: count }, (_, i) => sheet(i))] }],
+  });
+  const bedrockTooLong = JSON.stringify({ message: 'Input is too long for requested model.' });
+
+  test('the default image window sends a 43 MB screenshot request to the provider under 31 MB', async () => {
+    let sentBytes = 0;
+    const response = await handleChatCompletions(
+      {
+        hooks: { ...hooks([], []), resolveUpstream: async () => [primary] },
+        logger: { info() {}, warn() {}, error() {} },
+        fetchImpl: async (_url, init) => {
+          sentBytes = String(init?.body ?? '').length;
+          return new Response(JSON.stringify({ id: 'c', object: 'chat.completion', choices: [{ index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }], usage: { prompt_tokens: 1, completion_tokens: 1 } }), { status: 200, headers: { 'content-type': 'application/json' } });
+        },
+      },
+      { authorization: 'Bearer token', rawBody: sheetsRequest(12) },
+    );
+    expect(response.status).toBe(200);
+    expect(sentBytes).toBeGreaterThan(14_000_000);
+    expect(sentBytes).toBeLessThan(31_000_000);
+  });
+
+  test('a provider "too long" refusal of a body over 30 MB reaches the client and the trace as request_too_large', async () => {
+    const traces: GatewayTrace[] = [];
+    const response = await handleChatCompletions(
+      {
+        hooks: { ...hooks([], traces), resolveUpstream: async () => [primary] },
+        logger: { info() {}, warn() {}, error() {} },
+        // The window off: the provider receives the whole 32.6 MB body, as before the byte cap.
+        imageWindow: { maxImages: 0, keepOnOverflow: 0 },
+        fetchImpl: async () => new Response(bedrockTooLong, { status: 400, headers: { 'content-type': 'application/json' } }),
+      },
+      { authorization: 'Bearer token', rawBody: sheetsRequest(9) },
+    );
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error.code).toBe('request_too_large');
+    expect(body.error.message).toMatch(/^The request is 32\.\d MB, more than the model provider accepts/);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(traces.at(-1)).toMatchObject({ status: 400, ok: false, errorCode: 'request_too_large' });
+  });
+
+  test('the same refusal of a small body stays context_length_exceeded, and the trace keeps the provider text', async () => {
+    const traces: GatewayTrace[] = [];
+    const response = await handleChatCompletions(
+      {
+        hooks: { ...hooks([], traces), resolveUpstream: async () => [primary] },
+        logger: { info() {}, warn() {}, error() {} },
+        fetchImpl: async () => new Response(bedrockTooLong, { status: 400, headers: { 'content-type': 'application/json' } }),
+      },
+      { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'requested-model', messages: [{ role: 'user', content: 'hi' }] }) },
+    );
+    expect(response.status).toBe(400);
+    expect((await response.json()).error).toEqual({
+      message: 'Input is too long for requested model.',
+      type: 'invalid_request_error',
+      code: 'context_length_exceeded',
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    // Not "upstream HTTP 400": an own provider's refusal is the customer's to read.
+    expect(traces.at(-1)).toMatchObject({ errorCode: 'upstream_error', errorMessage: 'Input is too long for requested model.' });
+  });
+
+  test('an own provider key the provider refuses names provider_key_rejected and the provider', async () => {
+    const traces: GatewayTrace[] = [];
+    const own: UpstreamDescriptor = { ...primary, provider: 'anthropic', billingMode: 'none', markup: 0 };
+    const response = await handleChatCompletions(
+      {
+        hooks: { ...hooks([], traces), resolveUpstream: async () => [own] },
+        logger: { info() {}, warn() {}, error() {} },
+        fetchImpl: async () => new Response(JSON.stringify({ error: { type: 'authentication_error', message: 'invalid x-api-key' } }), {
+          status: 401, headers: { 'content-type': 'application/json' },
+        }),
+      },
+      { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'anthropic/claude', stream: true, messages: [{ role: 'user', content: 'hi' }] }) },
+    );
+    expect(response.status).toBe(401);
+    expect((await response.json()).error).toEqual({
+      message: 'invalid x-api-key', type: 'invalid_request_error', code: 'provider_key_rejected', provider: 'anthropic',
+    });
+    await Bun.sleep(0);
+    expect(traces.at(-1)).toMatchObject({ status: 401, errorCode: 'provider_key_rejected', errorMessage: 'invalid x-api-key' });
+  });
+
+  test('an own provider 429 on a stream reaches the client unchanged and its trace names the failure', async () => {
+    const traces: GatewayTrace[] = [];
+    const own: UpstreamDescriptor = { ...primary, provider: 'openrouter', billingMode: 'none', markup: 0 };
+    const upstreamBody = JSON.stringify({ error: { message: 'Rate limit exceeded: free-models-per-day', code: 429 } });
+    const response = await handleChatCompletions(
+      {
+        hooks: { ...hooks([], traces), resolveUpstream: async () => [own] },
+        logger: { info() {}, warn() {}, error() {} },
+        fetchImpl: async () => new Response(upstreamBody, { status: 429, headers: { 'content-type': 'application/json' } }),
+      },
+      { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'openrouter/x', stream: true, messages: [{ role: 'user', content: 'hi' }] }) },
+    );
+    expect(response.status).toBe(429);
+    expect(await response.text()).toBe(upstreamBody);
+    await Bun.sleep(0);
+    expect(traces.at(-1)).toMatchObject({
+      status: 429, ok: false, errorCode: 'upstream_rate_limited', errorMessage: 'Rate limit exceeded: free-models-per-day',
+    });
   });
 
   test('settles one successful response exactly once', async () => {
@@ -542,7 +651,7 @@ describe('simple gateway pipeline', () => {
   });
 
   // An error frame before any output served nothing: the client gets the
-  // provider's status as an HTTP error, which OpenCode can retry or compact on.
+  // provider's status as an HTTP error, which the runtime can retry or compact on.
   test.each([
     ['a timeout', '"upstream_timeout"', 502],
     ['a numeric rate limit', '429', 429],
@@ -1064,7 +1173,8 @@ describe('managed models present as Kortix (descriptor.publicProvider)', () => {
     expect(response.status).toBe(400);
     expect(response.headers.get('content-type')).toBe('application/json');
     const body = JSON.parse(text);
-    // OpenCode's parseAPICallError reads `error.code` to raise ContextOverflowError.
+    // pi-ai's `isContextOverflow` matches `context_length_exceeded` in the error
+    // text; OpenCode's parseAPICallError read `error.code`.
     expect(body.error.code).toBe('context_length_exceeded');
     expect(body.message).toBe('This request is longer than the primary-model context window.');
     expect(text).not.toMatch(LEAK);
@@ -1346,7 +1456,8 @@ describe('model fallback chains (route.fallbackModels)', () => {
     ['paused, retry on any error', 'provider_pool_rate_limited', 'any-error', 200],
     ['needing reconnection, retry on any error', 'provider_reauth_required', 'any-error', 200],
     ['needing reconnection, retry on service errors', 'provider_reauth_required', 'transient', 400],
-    ['not connected, retry on any error', 'provider_not_connected', 'any-error', 400],
+    ['not connected, retry on any error', 'provider_not_connected', 'any-error', 200],
+    ['not connected, retry on service errors', 'provider_not_connected', 'transient', 400],
   ] as const)('a ChatGPT model with every account %s', async (_name, code, fallbackOn, expected) => {
     const managedUpstream: UpstreamDescriptor = { ...fallbackUpstream, billingMode: 'credits' };
     const { response, calls, traces } = await run({
@@ -1377,6 +1488,34 @@ describe('model fallback chains (route.fallbackModels)', () => {
       // The route hold this failure took: the pool's reset (42 s here), else 60 s.
       holdSeconds: code === 'provider_pool_rate_limited' ? 42 : 60,
     })]);
+  });
+
+  // A removed provider key stopped every session of a workspace for two days:
+  // the routed model's provider had no key, and the project's chain on "Any
+  // error" never ran. A missing key is a provider error, so that chain runs.
+  test('an own-key model with no key connected moves to the project chain on any error', async () => {
+    const planUpstream: UpstreamDescriptor = { ...fallbackUpstream, provider: 'openai-codex', billingMode: 'none', markup: 0 };
+    const gated: string[] = [];
+    const { response, calls, traces } = await run({
+      policyId: 'project:default',
+      fallbackOn: 'any-error',
+      resolve: (model) => {
+        if (model !== 'primary-model') return [planUpstream];
+        throw new GatewayResolutionError('provider_not_connected',
+          'No anthropic API key is connected for this project.', 'Add an anthropic API key in Models.');
+      },
+      respond: () => ok('from fallback'),
+      billing: async (accountId) => { gated.push(accountId); },
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('x-kortix-model')).toBe('fallback-model');
+    expect(calls.map((call) => new URL(call.url).host)).toEqual(['fallback.example']);
+    // An own-key fallback bills nothing, so no wallet gate runs.
+    expect(gated).toEqual([]);
+    expect(traces.at(-1)).toMatchObject({ ok: true, servedModel: 'fallback-model', fallbackFrom: 'primary-model' });
+    expect(traces.at(-1)?.attemptFailures).toEqual([
+      expect.objectContaining({ stage: 'resolve', routeModel: 'primary-model', code: 'provider_not_connected', status: 401 }),
+    ]);
   });
 
   // A routed model that cannot be resolved at all is the same "the provider
@@ -1739,7 +1878,7 @@ describe('refused requests are traced', () => {
         hooks: {
           ...hooks(usage, traces),
           assertBillingActive: async () => {
-            throw new Error('Billing inactive');
+            throw Object.assign(new Error('Billing inactive'), { reason: 'subscription_required' });
           },
         },
         logger,
@@ -1757,6 +1896,35 @@ describe('refused requests are traced', () => {
     expect(trace?.errorCode).toBe('subscription_required');
     expect(trace?.errorMessage).toBe('Billing inactive');
     // A refusal settles nothing: no usage row, no cost.
+    expect(usage).toHaveLength(0);
+  });
+
+  // prod 2026-11-12: the control plane stalled for 25 s and funded accounts got
+  // `402 subscription_required "attempt 3 exceeded 5000ms"`; their agents reported "Out of credits".
+  test('a billing check that got no answer is a retryable 503 with one failed trace, not a 402', async () => {
+    const usage: UsageEvent[] = [];
+    const traces: GatewayTrace[] = [];
+    const response = await handleChatCompletions(
+      {
+        hooks: {
+          ...hooks(usage, traces),
+          assertBillingActive: async () => {
+            throw new TimeoutError('attempt 3 exceeded 5000ms');
+          },
+        },
+        logger,
+      },
+      { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'requested-model', messages: [{ role: 'user', content: 'hi' }] }) },
+    );
+    expect(response.status).toBe(503);
+    expect(response.headers.get('retry-after')).toBe('5');
+    const body = (await response.json()) as { code?: string };
+    expect(body.code).toBe('admission_unavailable');
+    const trace = await firstTrace(traces);
+    expect(traces).toHaveLength(1);
+    expect(trace?.status).toBe(503);
+    expect(trace?.errorCode).toBe('admission_unavailable');
+    expect(trace?.errorMessage).toBe('attempt 3 exceeded 5000ms');
     expect(usage).toHaveLength(0);
   });
 

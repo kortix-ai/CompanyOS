@@ -23,10 +23,10 @@ globals.navigator = win.navigator;
 globals.location = win.location;
 globals.requestAnimationFrame = (cb: () => void) => setTimeout(cb, 0);
 globals.cancelAnimationFrame = (id: number) => clearTimeout(id);
-// Radix Presence reads the popover's animation name.
+// Base UI reads the popover's computed animations before it unmounts it.
 globals.getComputedStyle = win.getComputedStyle.bind(win);
 for (const key of Object.getOwnPropertyNames(win)) {
-  // Event classes too: Radix dispatches a `CustomEvent` on a happy-dom node,
+  // Event classes too: the overlay layer dispatches a `CustomEvent` on a happy-dom node,
   // which accepts only happy-dom's own events, not Bun's.
   if (/^[A-Z]/.test(key) && (!(key in globals) || key.endsWith('Event'))) {
     globals[key] = Reflect.get(win, key);
@@ -213,7 +213,7 @@ describe('AuditSessionPicker (KRTX-1727)', () => {
     await open();
     expect(calls).toEqual([]);
     await type('login');
-    expect(empty()).toBe('Select project first');
+    expect(empty()).toBe('Select workspace first');
     await type(DELETED_SESSION);
     expect(itemText()).toEqual([`${DELETED_SESSION}Session ID`]);
     await pick(0);

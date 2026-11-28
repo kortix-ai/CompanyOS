@@ -85,12 +85,12 @@ function startApi(): void {
       const bearer = req.headers.get('authorization')?.replace(/^Bearer /, '') ?? '';
       if (bearer === PROJECT_TOKEN) {
         if (revoked) return revoked401();
-        if (new URL(req.url).pathname.endsWith('/accounts/me')) {
+        if (new URL(req.url).pathname.endsWith('/me')) {
           return Response.json(PROJECT_ME);
         }
         return Response.json({ items: [] });
       }
-      if (bearer === SESSION_TOKEN && new URL(req.url).pathname.endsWith('/accounts/me')) {
+      if (bearer === SESSION_TOKEN && new URL(req.url).pathname.endsWith('/me')) {
         return Response.json(SESSION_ME);
       }
       return Response.json({ error: 'unauthenticated' }, { status: 401 });
@@ -171,7 +171,7 @@ async function runCli(args: string[]): Promise<CliResult> {
 
 let warm: CliResult;
 let whoamiRevoked: CliResult;
-let marketplaceRevoked: CliResult;
+let skillsRevoked: CliResult;
 
 beforeAll(async () => {
   startApi();
@@ -182,7 +182,7 @@ beforeAll(async () => {
   revoked = true;
   // Run the revoked-phase probes serially: the stub flag is global.
   whoamiRevoked = await runCli(['whoami', '--host', 'dev2', '--json']);
-  marketplaceRevoked = await runCli(['marketplace', 'list', '--host', 'dev2']);
+  skillsRevoked = await runCli(['system-skills', '--host', 'dev2']);
 }, 120_000);
 
 afterAll(() => {
@@ -203,13 +203,13 @@ describe('a revoked token is named by the error the CLI surfaces', () => {
   });
 
   test('surfaceApiError: the 401 line names the revoked token and the footer names the refused credential, never the active host', () => {
-    expect(marketplaceRevoked.code).toBe(1);
-    expect(marketplaceRevoked.stderr).toContain(`Token rejected — ${REVOKED_MESSAGE}`);
+    expect(skillsRevoked.code).toBe(1);
+    expect(skillsRevoked.stderr).toContain(`Token rejected — ${REVOKED_MESSAGE}`);
     // The footer must speak about the credential the request carried. The
     // active host holds a session credential — naming it here is the reported
     // bug: the customer goes looking at an unrelated session-token row.
-    expect(marketplaceRevoked.stderr).not.toContain('acting as session token');
-    expect(marketplaceRevoked.stderr).toContain('acting as project token');
-    expect(marketplaceRevoked.stderr).toContain('project token');
+    expect(skillsRevoked.stderr).not.toContain('acting as session token');
+    expect(skillsRevoked.stderr).toContain('acting as project token');
+    expect(skillsRevoked.stderr).toContain('project token');
   });
 });

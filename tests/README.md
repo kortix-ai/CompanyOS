@@ -124,17 +124,20 @@ dispatch only; the `preview` label deploys without it) and `tests-release.yml` (
 staging, whose `full suite + quality gates` job is the only required check in
 the repository).
 
-The run is six lanes in parallel, each natively on one free GitHub-hosted
-runner (`CI_RUNNER_L`, default `ubuntu-24.04`, 4 vCPU / 16 GB). Two core lanes
+The run is seven lanes in parallel, each natively on one runner
+(`CI_RUNNER_L`, fallback `ubuntu-24.04`, 4 vCPU / 16 GB). Two core lanes
 split the default run without package quality: `core-flows` runs
 `pnpm test -- --core-group=flows` (the REST and CLI flows) and `core-db` runs
 `pnpm test -- --core-group=db` (the DB suites, runner unit tests, route
 coverage, worktree tests, then the SDK). On one runner the flows and the DB
-suites shared 4 vCPU and the lane took 11-12 min. Four package lanes run one slice of package
+suites shared 4 vCPU and the lane took 11-12 min. Five package lanes run one slice of package
 quality each: `pnpm test -- --packages-only --package-group=api` (`cli`,
-`kortixd`, `rest`; `rest` holds the repo-wide checks and every other package).
-On one runner the API, CLI and kortixd suites and three `tsc` shared 4 vCPU and
-the lane took 18.5 min. No browser journey runs in `tests.yml`: the journeys
+`kortixd`, `publish`, `rest`). `publish` runs the typecheck, lint, build, pack
+and install smokes of the npm packages (`@kortix/sdk`, `@kortix/ui`,
+`@kortix/llm-catalog`, `@kortix/agent-tunnel`); `rest` holds the repo-wide
+checks and the tests of every other package. On one runner the API, CLI and
+kortixd suites and three `tsc` shared 4 vCPU and the lane took 18.5 min; with
+the npm package checks in front of its tests, `rest` took 16.9 min. No browser journey runs in `tests.yml`: the journeys
 run once, in the release suite, against deployed staging (`tests-release.yml`).
 Each lane checks out the exact requested SHA, runs
 `pnpm install --frozen-lockfile`, and invokes the unchanged root command. Every
@@ -293,6 +296,7 @@ failed `deployed` flow fails the gate.
 | Web push keys | NOTIF-4 |
 | Internal cron key | BILL-13 |
 | Database writes over the deployed pool | ACCT-2, PROJ-1 |
+| Supabase Data API stays off | SEC-K |
 
 44 flows, picked for stability: in the 8 release-gate runs from 2026-10-13 to
 2026-10-15, 43 passed every run and
@@ -398,10 +402,10 @@ infrastructure does not change test logic.
 
 The capture retries Supabase startup for up to 40 minutes. This absorbs bounded
 registry rate limits while preserving the 45-minute cold preparation budget.
-The capture and fresh local stack use Supabase's `--ignore-health-check` only
-before migrations. This prevents PostgREST from rejecting a new database before
-the `kortix` schema exists. The runner still requires migrations and service
-readiness before it starts flows.
+The capture and fresh local stack start Supabase with `--ignore-health-check`.
+Local Supabase starts without PostgREST (`-x postgrest`; see
+`supabase/config.toml`; flow SEC-K checks that the Data API stays off). The
+runner still requires migrations and service readiness before it starts flows.
 
 The worker logs whether Platinum used `via=restore` or `via=cold-boot`. It waits
 for the warm marker before it runs tests. It fetches the requested public Git
@@ -442,14 +446,15 @@ session fixture checks every session create the same way.
 
 A flow that runs a session turn registers with `harnessFlow` (`src/core/flow.ts`)
 instead of `flow`. `harnessFlow('RUN-1', meta, fn)` registers `RUN-1` and calls
-the body with `harness` = `pi`: every new session runs pi since 2026-10-23
-(OpenCode is sunset). The body proves the harness from `/kortix/health`.
+the body with `harness` = `pi`: every new session runs pi since 2026-10-23,
+and kortixd has no OpenCode adapter since 2026-10-30. The body proves the
+harness from `/kortix/health`.
 
 Drive these flows through `src/fixtures/session-run.ts`, which speaks only the
 Kortix session routes: `bootSession` (boot, prove the harness from
 `/kortix/health`, wait for the boot prompt's turn to end), `sendPrompt`
 (`POST /prompts`), `waitForTurn` (`GET /turn`), `readTranscript` and
-`waitForAssistantText` (`GET /transcript`), and `watchSessionEvents`
+`waitForAssistantText` (the stored session log, `GET /log`), and `watchSessionEvents`
 (`GET /events`). Never call a harness's own REST API from a flow. The one
 exception is `abortTurn`, the Stop the web sends, until a Kortix abort route
 exists.
@@ -764,6 +769,14 @@ package command documented in the **sdk** skill.
 3. Keep the flow `meta.routes` list exact.
 4. Regenerate `tests/spec/routes.generated.json` after route changes with
    `bun run apps/api/scripts/dump-routes.ts`.
+   Workspace routes have two names: the canonical `/v1/workspaces/…` and a
+   permanent legacy alias (`/v1/projects/…`, `/v1/accounts/:workspaceId/<family>/…`,
+   `/v1/accounts/me`, …; map in `packages/shared/src/workspace-routes.ts`).
+   The manifest marks each alias row with `aliasOf`, and coverage counts a
+   route as covered when its twin is. Write new flows against the canonical
+   name. `bun scripts/codemods/workspace-flow-routes.ts` moves flow strings
+   to it; `accounts`, `connectors`, `secrets` and `retired` flows keep the
+   legacy names on purpose (spec §4a, `WS-ROUTE-*`).
 5. Run the narrow flow first.
 6. Run `pnpm test` before handoff.
 7. Run `pnpm test -- --full` for broad refactors or release work.

@@ -18,8 +18,13 @@ planned, in flight, or parked, so another person or agent can pick it up.
 
 | Topic | Status |
 |---|---|
-| [`opencode-history-recovery/`](opencode-history-recovery/README.md) | dev rehearsal done (`recover-opencode-history`): copy OpenCode-era conversations that never reached the session log off archived boxes; prod run after the release |
+| [`change-request-auto-merge/`](change-request-auto-merge/README.md) | parked, not built: change requests merge by themselves by default, gated by a Kortix permission (Marko, 2026-11-28) |
+| [`automation-test-gate/`](automation-test-gate/README.md) | planned, not built: an agent's automation goes live only after its test on every path (API-side rule); kortixd half shipped in #13195, #13210 |
+| [`continual-learning/`](continual-learning/README.md) | planned, not built: learning built into My Kortix and the default harness (observe, learner agent, self-written eval gate, skill and eval maintenance); 4 decisions open |
+| [`agent-benchmark-expansion/`](agent-benchmark-expansion/README.md) | research done 2026-11-17: the agent-eval landscape and a ranked backlog of tasks and graders for `evals/my-kortix` |
+| [`opencode-history-recovery/`](opencode-history-recovery/README.md) | done and removed: OpenCode-era conversations copied off archived Platinum boxes on prod (6,267 written); Daytona written off; script deleted, restorable from `550757a87b` |
 | [`harness-architecture-diagram/`](harness-architecture-diagram/README.md) | designed, not built: the home-page harness diagram (mock + box copy); placement A (own section) or B (replaces the Framework tab) open |
+| [`per-agent-config-release/`](per-agent-config-release/README.md) | planned, D1–D3 decided 2026-11-23: one config release per (commit, agent) with only the files that agent uses; shadow mode proves no miss before the flip |
 | [`project-repository-access/`](project-repository-access/README.md) | phase 1 on dev (#11492 partial object store, #11501 named image steps); target decided: one Platinum volume per project (git inside, external repos only a sync target); interim: box checkouts off the API, branch-scoped refreshes, shared config snapshot |
 | [`stateless-sessions/`](stateless-sessions/README.md) | target decided: a session is its workspace + transcript on its volume, the transcript file is the one source of truth, the sandbox is disposable; stage 1 on dev (#11503), the rest not started |
 | [`long-horizon-runtime/`](long-horizon-runtime/README.md) | planned (`my-kortix-v2`), phase 1 decided: retrieval from the full record instead of compaction, an orchestrator that never waits, background commands, workers that own their threads |
@@ -31,5 +36,7 @@ planned, in flight, or parked, so another person or agent can pick it up.
 | [`kortix-yaml-versionless/`](kortix-yaml-versionless/README.md) | building (`one-schema`): one versionless kortix.yaml, hard cut of v1/v2/TOML, broken entries off at run time; zod single source next |
 | [`image-generation/`](image-generation/README.md) | in progress (branch `image-gen`): `image_gen` tool, gpt-image-2 on a connected ChatGPT plan |
 | [`platinum-machines-apps/`](platinum-machines-apps/README.md) | planning: the sandbox becomes a Machine, Apps move into Platinum; 7 decisions open; parked idea: bare-metal marketplace |
+| [`workspaces/`](workspaces/README.md) | planning: Project → Workspace, 1 account = 1 project (the Slack model); D2–D4 open |
 | [`prompt-identity/`](prompt-identity/README.md) | building (`prompt-identity`): one id per prompt, visible from accept to answer |
 | [`my-kortix-account-actions/`](my-kortix-account-actions/README.md) | planned: account-level My Kortix actions as server-side held approvals |
+| [`oauth-mfa-level/`](oauth-mfa-level/README.md) | closed, not needed: bound grants pass the MFA gate; only grants made before v0.15.3 need a reconnect. The App viewer half shipped in #12423 |

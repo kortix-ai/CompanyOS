@@ -54,10 +54,12 @@ import { subagentTitle } from '../../session/agents/agent-model';
 import { SessionLabelsModal } from './modal/session-labels-modal';
 import { ShareSessionModal } from './modal/share-session-modal';
 import {
+  BACKGROUND_WORK_POLL_MS,
   getSessionDisplayTitle,
   groupChangeRequestsBySession,
   projectSessionsRefetchInterval,
   resolveSessionListViewState,
+  sessionsWorkingInBackground,
   shortRelative,
   starterSectionOf,
 } from '../../session/actions/project-session-list-helpers';
@@ -75,8 +77,13 @@ import {
   ShowMoreButton,
 } from '../../session/list/session-list-chrome';
 import {
-  SessionGroupNameModal,
   SessionGroupSections,
+  SpacesHeading,
+  NewSessionGroupRow,
+  keepFocusForNewGroup,
+  markNewGroupFocus,
+  nextSessionGroupName,
+  sessionGroupSectionId,
   UngroupDropArea,
   startSessionDrag,
   useSessionGroupActions,
@@ -119,6 +126,8 @@ import {
   type ProjectSession,
   type ProjectSessionGroup,
 } from '@kortix/sdk';
+import { SpaceFormModal } from '../session-spaces/space-form-modal';
+import { SpaceIconBare } from '../session-spaces/space-icon';
 import {
   qk,
   useProjectSession,
@@ -132,12 +141,11 @@ import {
 import {
   ArchiveIcon,
   ArrowsSplitIcon,
-  CaretRightIcon,
   CheckIcon,
   DotsThreeIcon,
+  FunnelSimpleIcon,
   FolderSimpleIcon,
   FolderSimpleMinusIcon,
-  FolderSimplePlusIcon,
   PlusIcon,
   PushPinIcon,
   PushPinSlashIcon,
@@ -154,11 +162,18 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { formatDistanceToNowStrict } from 'date-fns';
 import { UiLink, useUiPathname, useUiRouter, useUiSearchParams, useUiViewerId } from '../../providers/ui-provider';
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { useSessionListActions } from '../../session/actions/use-session-list-actions';
-import { Separator } from '../../primitives/separator';
+import { CaretRightSolidIcon } from '../../icons/caret-right-solid';
 
 interface ProjectSessionListProps {
+  /** The spaces are drawn elsewhere (the icon rail, `sidebar_rail`): no Spaces block here. */
+  hideSpaces?: boolean;
+  /** The rail's Spaces view: the spaces and their sessions only, no Pinned and no Sessions list. */
+  spacesOnly?: boolean;
+  /** Set (the rail's panel title row, `sidebar_rail`): the view options button draws there, not on the Sessions row. */
+  filterSlot?: HTMLElement | null;
   projectId: string;
   /**
    * The list below Channels and Direct messages (`chat` on): closed until the
@@ -213,7 +228,7 @@ function ProjectSessionListSkeleton() {
   );
 }
 
-export function ProjectSessionList({ projectId, secondary = false }: ProjectSessionListProps) {
+export function ProjectSessionList({ projectId, secondary = false, hideSpaces = false, spacesOnly = false, filterSlot }: ProjectSessionListProps) {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const t = useTranslations('sidebar');
   const tPinArchive = useTranslations('sidebar.pinArchive');
@@ -251,7 +266,7 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
   // Groups render once their list loaded. Until then the lists below wait; if
   // the list cannot load, they list every session (as with the flag off), so
   // a grouped session never disappears behind a failed read.
-  const groupsEnabled = sessionGroupsFlag.enabled && groupsQuery.isSuccess;
+  const groupsEnabled = sessionGroupsFlag.enabled && groupsQuery.isSuccess && !hideSpaces;
   const listsReady = !sessionGroupsFlag.isLoading && !(sessionGroupsFlag.enabled && groupsQuery.isPending);
   const groupFilter = groupsEnabled ? 'none' : undefined;
   const groups = useMemo(
@@ -259,6 +274,7 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
     [groupsEnabled, groupsQuery.data],
   );
   const groupActions = useSessionGroupActions(projectId, groups);
+  const tGroups = useTranslations('sidebar.sessionGroups');
   const [groupToRename, setGroupToRename] = useState<ProjectSessionGroup | null>(null);
   // `fileSessionId`: the row whose "New group…" opened the dialog goes into the new group.
   const [groupCreate, setGroupCreate] = useState<{ fileSessionId: string | null } | null>(null);
@@ -289,10 +305,15 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
     labels,
     group: groupFilter,
     enabled: listsReady,
+    // One sidebar page, as the other sections read; "Load more" reads the next.
+    // Without a limit the server answered its default 50 rows (~145 KB), read
+    // again on every open and turn edge.
+    limit: SIDEBAR_PAGE_SIZE,
     refetchInterval: (loaded) =>
       projectSessionsRefetchInterval({
         sessions: loaded,
         hasOpenSession: Boolean(activeSessionId),
+        openSessionId: activeSessionId,
       }),
     // Focus IS the cross-tab signal this list has: a session started in
     // another tab (the home send is the default creation path now) has no
@@ -300,6 +321,14 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
     // sessions page already refetches on focus for the same reason.
     refetchOnWindowFocus: true,
   });
+
+  // A row that works where no stream reaches it (a run, a colleague, another
+  // chat) polls until it settles, on every route, not only a session page.
+  const backgroundWorkPoll = useCallback(
+    (loaded: ProjectSession[]) =>
+      sessionsWorkingInBackground(loaded, activeSessionId) ? BACKGROUND_WORK_POLL_MS : false,
+    [activeSessionId],
+  );
 
   // Runs other members started, and runs automation started. Each is its own
   // paged query with the same top-level filter, so a busy trigger cannot push
@@ -312,6 +341,7 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
     enabled: listsReady,
     limit: SIDEBAR_PAGE_SIZE,
     refetchOnWindowFocus: true,
+    refetchInterval: backgroundWorkPoll,
   });
   const automatedQuery = useProjectSessions(projectId, {
     parent: 'root',
@@ -321,6 +351,7 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
     enabled: listsReady,
     limit: SIDEBAR_PAGE_SIZE,
     refetchOnWindowFocus: true,
+    refetchInterval: backgroundWorkPoll,
   });
   // The viewer's pinned sessions, at the top (KRTX-2418). Any starter, any
   // depth: a pin is the viewer's choice. A pinned row is not repeated below.
@@ -329,6 +360,7 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
     labels,
     limit: SIDEBAR_PAGE_SIZE,
     refetchOnWindowFocus: true,
+    refetchInterval: backgroundWorkPoll,
   });
   const listActions = useSessionListActions(projectId);
 
@@ -348,6 +380,14 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
     if (activeParentId) setExpanded(projectId, activeParentId, true);
     if (activeSection) setExpanded(projectId, `section:${activeSection}`, true);
   }, [projectId, activeParentId, activeSection, setExpanded]);
+
+  // Reveal a runtime child on navigation, not on every render: the viewer
+  // can then fold the tree without leaving the child they are reading.
+  useEffect(() => {
+    if (activeSessionId && activeRuntimeSessionId) {
+      setExpanded(projectId, activeSessionId, true);
+    }
+  }, [projectId, activeSessionId, activeRuntimeSessionId, setExpanded]);
 
   // The session you are in opens when it spawns a session, so the new row is
   // in view. Only a rise while you watch opens it: a row you closed stays
@@ -380,7 +420,7 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
   // the sidebar lists. Never the whole history (565 KB measured on prod,
   // polled every 60 s; KRTX-2316).
   const { data: changeRequestData } = useQuery({
-    queryKey: [...changeRequestKeys.listScope(projectId), 'recent'],
+    queryKey: changeRequestKeys.sidebarRecent(projectId),
     queryFn: () =>
       listChangeRequests(projectId, undefined, { limit: SIDEBAR_CHANGE_REQUEST_LIMIT }),
     staleTime: 5_000,
@@ -407,6 +447,7 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
   const collapsedSections = useSessionFilterStore(selectCollapsedSections(projectId));
   const collapsedSectionIds = useMemo(() => new Set(collapsedSections), [collapsedSections]);
   const toggleSectionCollapsed = useSessionFilterStore((s) => s.toggleSectionCollapsed);
+  const collapseAllSections = useSessionFilterStore((s) => s.collapseAllSections);
   // Open by default: the collapsed-sections store, as Channels and Direct
   // messages. Closed by default (`secondary`): the expanded store, as Shared
   // and Automated. Both persist per project.
@@ -503,12 +544,9 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
     const isSwitchTarget = switchingToSessionId === session.session_id;
     const children = directSubsessions(session);
     const spawnedCount = nested ? 0 : (session.child_count ?? 0);
-    // Sub-agents and spawned sessions open together, under one toggle. A row
-    // whose sub-agent is the open page stays open, so that row stays visible.
+    // Sub-agents and spawned sessions share the viewer's one saved toggle.
     const childRunsOpen =
-      children.length + spawnedCount > 0 &&
-      (expandedIdSet.has(session.session_id) ||
-        (!!isActive && children.some((child) => child.id === activeRuntimeSessionId)));
+      children.length + spawnedCount > 0 && expandedIdSet.has(session.session_id);
     return (
       <div key={session.session_id} className="space-y-px">
         <ProjectSessionRow
@@ -681,7 +719,7 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
     // that case here instead of letting `FadedScrollArea` render nothing with
     // no explanation.
     // `more`: no row yet, but a list has a next page. Its Load more renders below.
-    if (viewState !== 'more' && grouped.sections.length === 0 && visibleOtherCount === 0 && groups.length === 0) {
+    if (viewState !== 'more' && grouped.sections.length === 0 && visibleOtherCount === 0) {
       return (
         <div className="text-muted-foreground px-2 pt-1 pb-2 text-xs">{t('allSectionsHidden')}</div>
       );
@@ -689,38 +727,6 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
 
     return (
       <FadedScrollArea fadeColor="from-background" className="h-full min-h-0 space-y-px">
-        {/* Pinned is the top of the list, not a block above it. Its caret shows
-            on hover. With group headers below, the next header separates it;
-            without them, a line keeps an unpinned row from reading as pinned. */}
-        <StarterSection
-          title={tPinArchive('section')}
-          query={pinnedQuery}
-          sessions={visiblePinned}
-          open={!collapsedSectionIds.has(PINNED_SECTION_ID)}
-          onToggle={() => toggleSectionCollapsed(projectId, PINNED_SECTION_ID)}
-          renderNode={(session) => renderSessionNode(session, false)}
-          caretOnHover
-        />
-        {groups.length > 0 && (
-          <SessionGroupSections
-            projectId={projectId}
-            groups={groups}
-            labels={labels}
-            collapsedSectionIds={collapsedSectionIds}
-            onToggleSection={(sectionId) => toggleSectionCollapsed(projectId, sectionId)}
-            passesFacets={passesFacets}
-            renderNode={(session) => renderSessionNode(session, false)}
-            actions={groupActions}
-            onRename={setGroupToRename}
-          />
-        )}
-        {/* Without headers below, a line keeps the next row from reading as
-            part of the pinned rows or of the last group. */}
-        {(visiblePinned.length > 0 || groups.length > 0) && !grouped.showHeaders && (
-          <div className="px-2 py-1">
-            <Separator />
-          </div>
-        )}
         {groupsEnabled ? (
           <UngroupDropArea onDropSession={(sessionId) => void groupActions.move(sessionId, null)}>
             {renderUngrouped(grouped)}
@@ -798,9 +804,67 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
         secondary ? (listOpen ? 'flex-1' : 'shrink-0') : 'h-full',
       )}
     >
-      {/* The header collapses the whole list: Pinned, the time or status
+      {/* The spaces, then Pinned, sit above Sessions, outside it: they stay in
+          view while the list is closed. Capped at half the column so they
+          never push Sessions out of view; past that they scroll. */}
+      {listsReady && (spacesOnly || pinnedQuery.sessions.length > 0 || pinnedQuery.hasNextPage || groupsEnabled || (!hideSpaces && groups.length > 0) || groupCreate) && (
+        <div className={cn('min-h-0 space-y-px overflow-y-auto', spacesOnly ? 'flex-1' : 'max-h-[50%] shrink-0')}>
+          {/* Spaces only: the panel's title row carries Spaces, All spaces and New space. */}
+          {groupsEnabled && !spacesOnly && (
+            <SpacesHeading projectId={projectId} onNew={() => setGroupCreate({ fileSessionId: null })} />
+          )}
+          {!hideSpaces && groups.length > 0 && (
+            <SessionGroupSections
+              projectId={projectId}
+              groups={groups}
+              labels={labels}
+              collapsedSectionIds={collapsedSectionIds}
+              onToggleSection={(sectionId) => toggleSectionCollapsed(projectId, sectionId)}
+              passesFacets={passesFacets}
+              renderNode={(session) => renderSessionNode(session, false)}
+              actions={groupActions}
+              onRename={setGroupToRename}
+              onNewGroup={() => setGroupCreate({ fileSessionId: null })}
+              onCollapseOthers={(groupId) => {
+                // A space's id in the set means open: keep every other section's state, and only this space open.
+                const spaceIds = new Set(groups.map((group) => sessionGroupSectionId(group.group_id)));
+                collapseAllSections(projectId, [
+                  ...Array.from(collapsedSectionIds).filter((id) => !spaceIds.has(id)),
+                  sessionGroupSectionId(groupId),
+                ]);
+              }}
+            />
+          )}
+          {groupsEnabled && groupCreate && (
+            // A new group is named in place, at the end of the groups: no dialog.
+            <NewSessionGroupRow
+              projectId={projectId}
+              defaultName={nextSessionGroupName(groups, tGroups('newGroup'))}
+              onDone={(group) => {
+                const fileSessionId = groupCreate.fileSessionId;
+                setGroupCreate(null);
+                // The row whose "New group…" opened it goes in.
+                if (group && fileSessionId) void groupActions.move(fileSessionId, group.group_id);
+              }}
+            />
+          )}
+          {spacesOnly ? null : (
+          <StarterSection
+            title={tPinArchive('section')}
+            query={pinnedQuery}
+            sessions={visiblePinned}
+            open={!collapsedSectionIds.has(PINNED_SECTION_ID)}
+            onToggle={() => toggleSectionCollapsed(projectId, PINNED_SECTION_ID)}
+            renderNode={(session) => renderSessionNode(session, false)}
+            caretOnHover
+          />
+          )}
+        </div>
+      )}
+      {/* The header collapses the sessions in no group: the time or status
           sections, Shared, Automated. Open by default (closed when
           `secondary`); the choice persists. */}
+      {spacesOnly ? null : (
       <Disclosure
         open={listOpen}
         onOpenChange={toggleListOpen}
@@ -814,11 +878,13 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
           onMenuOpenChange={holdPeek}
           onNewGroup={groupsEnabled ? () => setGroupCreate({ fileSessionId: null }) : undefined}
           secondary={secondary}
+          filterSlot={filterSlot}
         />
         <DisclosureContent className="flex min-h-0 flex-1 flex-col" contentClassName="flex min-h-0 flex-1 flex-col overflow-hidden">
           {renderBody()}
         </DisclosureContent>
       </Disclosure>
+      )}
 
       <ShareSessionModal
         projectId={projectId}
@@ -845,18 +911,13 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
       />
 
       {groupsEnabled && (
-        <SessionGroupNameModal
+        // Rename opens the space's own edit dialog: name, icon and what it is for, in one place.
+        <SpaceFormModal
           projectId={projectId}
-          group={groupToRename}
-          open={!!groupToRename || !!groupCreate}
+          space={groupToRename}
+          open={!!groupToRename}
           onOpenChange={(open) => {
-            if (open) return;
-            setGroupToRename(null);
-            setGroupCreate(null);
-          }}
-          onCreated={(group) => {
-            // The row whose menu opened it goes in; the group appearing with it is the result.
-            if (groupCreate?.fileSessionId) void groupActions.move(groupCreate.fileSessionId, group.group_id);
+            if (!open) setGroupToRename(null);
           }}
         />
       )}
@@ -888,8 +949,10 @@ function SessionListHeader({
   onMenuOpenChange,
   onNewGroup,
   secondary,
+  filterSlot,
 }: {
   projectId: string;
+  filterSlot?: HTMLElement | null;
   sessions: ProjectSession[];
   reviewCountBySession: Record<string, number>;
   onMenuOpenChange: (open: boolean) => void;
@@ -907,6 +970,29 @@ function SessionListHeader({
     secondary &&
       'opacity-0 group-focus-within/sessions-header:opacity-100 group-hover/sessions-header:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100',
   );
+  const filterMenu = (
+    <DropdownMenu onOpenChange={onMenuOpenChange}>
+      <SessionFilterMenu
+        projectId={projectId}
+        sessions={sessions}
+        reviewCountBySession={reviewCountBySession}
+        // In the panel's title row the button sits at the right edge: the menu opens below it.
+        side={filterSlot ? 'bottom' : undefined}
+        align={filterSlot ? 'end' : 'start'}
+      />
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          type="button"
+          aria-label={t('sessionViewOptions')}
+          className={filterSlot ? SESSION_MENU_TRIGGER_CLASS : controlClass}
+        >
+          <FunnelSimpleIcon className="size-4" />
+        </Button>
+      </DropdownMenuTrigger>
+    </DropdownMenu>
+  );
   return (
     <div
       className={cn(
@@ -922,9 +1008,9 @@ function SessionListHeader({
           )}
         >
           <span className="truncate">{t('sessions')}</span>
-          <CaretRightIcon
+          <CaretRightSolidIcon
             aria-hidden
-            className="duration-normal size-3 shrink-0 opacity-0 transition-transform ease-out group-hover/sessions-header:opacity-100 group-data-[state=open]/sessions:rotate-90"
+            className="duration-normal size-4 shrink-0 opacity-0 transition-transform ease-out group-hover/sessions-header:opacity-100 group-data-[state=open]/sessions:rotate-90"
           />
         </div>
       </DisclosureTrigger>
@@ -958,31 +1044,13 @@ function SessionListHeader({
             className={controlClass}
             onClick={onNewGroup}
           >
-            <FolderSimplePlusIcon className="size-4" />
+            <PlusIcon className="size-3.5" />
           </Button>
         </Hint>
       )}
-      {sessions.length > 0 && (
-        <DropdownMenu onOpenChange={onMenuOpenChange}>
-          <SessionFilterMenu
-            projectId={projectId}
-            sessions={sessions}
-            reviewCountBySession={reviewCountBySession}
-            align="start"
-          />
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              type="button"
-              aria-label={t('sessionViewOptions')}
-              className={controlClass}
-            >
-              <DotsThreeIcon className="size-4" />
-            </Button>
-          </DropdownMenuTrigger>
-        </DropdownMenu>
-      )}
+      {sessions.length > 0 && !filterSlot && filterMenu}
+      {/* The rail's panel title row holds the button: always shown there, at the row's right edge. */}
+      {sessions.length > 0 && filterSlot ? createPortal(filterMenu, filterSlot) : null}
     </div>
   );
 }
@@ -1058,9 +1126,9 @@ function SessionListSection({
           )}
         >
           <span className="truncate">{sectionKey ? t(sectionKey) : section.label}</span>
-          <CaretRightIcon
+          <CaretRightSolidIcon
             aria-hidden
-            className="duration-normal size-3 shrink-0 opacity-0 transition-transform ease-out group-hover/section-header:opacity-100 group-data-[state=open]/section:rotate-90"
+            className="duration-normal size-4 shrink-0 opacity-0 transition-transform ease-out group-hover/section-header:opacity-100 group-data-[state=open]/section:rotate-90"
           />
           <SessionSectionMenu
             projectId={projectId}
@@ -1079,10 +1147,10 @@ function SessionListSection({
  *  Hover-revealed via `group/section-header` on the header row only (not the
  *  whole `group/section` disclosure), so hovering a row inside the section
  *  doesn't also fade in the header's `⋯`; stays visible while its own menu is
- *  open via `data-[state=open]`, which Radix stamps on this trigger directly
+ *  open via `data-[state=open]`, which the menu stamps on this trigger directly
  *  (not the group). Both the click AND keydown (Enter/Space) handlers stop
  *  propagation so opening the menu — by pointer or keyboard — never also
- *  toggles the disclosure, which Radix's `pointerdown` open would otherwise
+ *  toggles the disclosure, which the menu's press-to-open would otherwise
  *  race against the header's `onKeyDown`-driven `toggle()` — same pattern as
  *  the row-level `⋯` in `ProjectSessionRow`. The hit area extends past the
  *  visible button with `before:absolute before:-inset-1` instead of growing
@@ -1122,7 +1190,7 @@ function SessionSectionMenu({
             }
           }}
         >
-          <DotsThreeIcon className="size-4" />
+          <FunnelSimpleIcon className="size-4" />
         </Button>
       </DropdownMenuTrigger>
       <SessionFilterMenu
@@ -1179,7 +1247,7 @@ function ChildRunsToggle({
     >
       {/* The count alone is the toggle: it says how many and, darker while
           open, that the tree below the row is its own. No caret. */}
-      <CountBadge count={count} className={cn(open && 'bg-foreground/12')} />
+      <CountBadge aria-hidden count={count} className={cn(open && 'bg-foreground/12')} />
     </span>
   );
 }
@@ -1217,7 +1285,8 @@ function StarterSection({
     <Disclosure
       open={open}
       onOpenChange={onToggle}
-      className="group/section space-y-1"
+      // The rows' own 1px rhythm under the header, the same as Spaces and Sessions.
+      className="group/section space-y-px"
       transition={{ duration: 0.15, ease: 'easeOut' }}
     >
       <DisclosureTrigger>
@@ -1228,10 +1297,10 @@ function StarterSection({
           )}
         >
           <span className="truncate">{title}</span>
-          <CaretRightIcon
+          <CaretRightSolidIcon
             aria-hidden
             className={cn(
-              'duration-normal size-3 shrink-0 transition-[transform,opacity] ease-out group-data-[state=open]/section:rotate-90',
+              'duration-normal size-4 shrink-0 transition-[transform,opacity] ease-out group-data-[state=open]/section:rotate-90',
               caretOnHover &&
                 'opacity-0 group-hover/section-header:opacity-100 group-focus-visible/section-header:opacity-100',
             )}
@@ -1318,7 +1387,15 @@ function SpawnedSessions({
   renderNode: (session: ProjectSession) => ReactNode;
 }) {
   const t = useTranslations('sidebar');
-  const children = useSessionChildren(projectId, parentId, { limit: SIDEBAR_PAGE_SIZE });
+  const [childrenWork, setChildrenWork] = useState(false);
+  // A workflow runner or a colleague works where no stream reaches it: the
+  // children poll while one of them works, so its row settles on any route.
+  const children = useSessionChildren(projectId, parentId, {
+    limit: SIDEBAR_PAGE_SIZE,
+    refetchInterval: childrenWork ? BACKGROUND_WORK_POLL_MS : undefined,
+  });
+  const anyChildWorks = sessionsWorkingInBackground(children.sessions, null);
+  if (anyChildWorks !== childrenWork) setChildrenWork(anyChildWorks);
   if (children.data === undefined) {
     return (
       <div className="px-2">
@@ -1488,6 +1565,10 @@ function ProjectSessionRow({
       {...openIntent}
       aria-busy={isSwitching || undefined}
       aria-current={isActive ? 'page' : undefined}
+      // The name is the title alone. From content it also took the child
+      // count's digits, glued to the title: "…17 Times 231" for a title ending
+      // in 23 with 1 spawned session. The count toggle names itself.
+      aria-label={displayTitle}
       aria-describedby={descriptionId}
       className="focus-visible:ring-kortix-base flex min-w-0 flex-1 items-center gap-2 self-stretch rounded-md py-1 focus-visible:ring-[0.6px] focus-visible:outline-none"
     >
@@ -1668,7 +1749,7 @@ function ProjectSessionRow({
               <DotsThreeIcon className="size-4" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" side="right" className="w-44">
+          <DropdownMenuContent align="start" side="right" className="w-44" onCloseAutoFocus={keepFocusForNewGroup}>
             <DropdownMenuItem
               className="cursor-pointer"
               onSelect={() => deferAfterClose(() => onRename(session.session_id, displayTitle))}
@@ -1699,8 +1780,10 @@ function ProjectSessionRow({
                         disabled={current}
                         onSelect={() => deferAfterClose(() => onMoveToGroup(session.session_id, group.group_id))}
                       >
-                        {current ? <CheckIcon /> : <FolderSimpleIcon />}
-                        <span className="truncate">{group.name}</span>
+                        {/* The space's own icon and name, as the sidebar's Spaces section draws them. */}
+                        <SpaceIconBare space={group} />
+                        <span className="min-w-0 flex-1 truncate first-letter:uppercase">{group.name}</span>
+                        {current ? <CheckIcon className="text-muted-foreground ml-auto" /> : null}
                       </DropdownMenuItem>
                     );
                   })}
@@ -1708,9 +1791,12 @@ function ProjectSessionRow({
                   {onNewGroupFor && (
                     <DropdownMenuItem
                       className="cursor-pointer"
-                      onSelect={() => deferAfterClose(() => onNewGroupFor(session.session_id))}
+                      onSelect={() => {
+                        markNewGroupFocus();
+                        deferAfterClose(() => onNewGroupFor(session.session_id));
+                      }}
                     >
-                      <FolderSimplePlusIcon />
+                      <PlusIcon />
                       {tGroups('newGroupFromMenu')}
                     </DropdownMenuItem>
                   )}

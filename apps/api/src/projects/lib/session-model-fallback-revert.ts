@@ -32,6 +32,8 @@ import { SESSION_CHANGED_CHANNEL } from '../../shared/pg-broadcast';
 import { qualifiedColumn } from '../../shared/sql-qualified-column';
 import { activeTurnAuthorityPredicate } from '../reaping/box-queries';
 import { resolveSessionPersonalOwner } from './personal-resources';
+import { ACTIVE_SESSION_STATUSES } from './session-status';
+import { errorMessage } from '../../shared/error-message';
 
 /** Never throws. Returns the restored model ref, or null when the session stays. */
 export async function revertSessionModelFallback(sessionId: string, nowMs = Date.now()): Promise<string | null> {
@@ -110,7 +112,7 @@ export async function revertSessionModelFallback(sessionId: string, nowMs = Date
   } catch (error) {
     logger.warn('[projects] session model fallback revert failed', {
       session_id: sessionId,
-      error: error instanceof Error ? error.message : String(error),
+      error: errorMessage(error),
     });
     return null;
   }
@@ -150,7 +152,7 @@ export async function revertIdleSessionFallbacks(nowMs = Date.now()): Promise<nu
     .from(projectSessions)
     .where(
       and(
-        inArray(projectSessions.status, ['queued', 'branching', 'provisioning', 'running']),
+        inArray(projectSessions.status, [...ACTIVE_SESSION_STATUSES]),
         sql`${projectSessions.metadata}->>'model_source' = 'fallback'`,
         sql`NOT EXISTS (SELECT 1 FROM ${sessionSandboxes}
           WHERE ${qualifiedColumn(sessionSandboxes.sessionId)} = ${qualifiedColumn(projectSessions.sessionId)} AND ${activeTurnAuthorityPredicate()})`,

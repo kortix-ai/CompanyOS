@@ -211,6 +211,7 @@ SessionLogPageSchema = {
   thread_id: string | null
   messages: array(SessionLogMessageSchema)
   has_more: boolean
+  source: enum(box | store) | absent
 }
 
 SessionLogPutSchema = {
@@ -347,7 +348,7 @@ SessionLogSwitchLossSchema = {
 }
 
 SessionLogSwitchPreflightRequestSchema = {
-  to: SessionLogHarnessSchema
+  to: literal("pi")
 }
 
 SessionLogSwitchPreflightSchema = {

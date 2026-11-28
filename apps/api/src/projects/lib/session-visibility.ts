@@ -1,3 +1,5 @@
+import { mayReadTriggerSession, triggerReaderPrincipal, triggerReaderSpaceKinds } from '../trigger-reader-access';
+import type { TriggerReaderPrincipal } from '../trigger-reader-policy';
 import {
   agentSessionStanding,
   isSessionTargetVisibleToCaller,
@@ -15,11 +17,14 @@ import {
 import { authorize } from '../../iam/authorize';
 import { isAgentPrincipalActor, type Actor } from '../../iam/actor';
 import { hasAccountSessionOversight } from '../../iam/session-oversight';
+import { sessionSharedThroughGroup } from '../../shared/session-group-access';
+import { resolveFeatureFlag } from '../../feature-flags/registry';
 import { recordAuditEvent } from '../../shared/audit';
 import { db } from '../../shared/db';
 import { projectSessions, serviceAccounts } from '@kortix/db';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { ttlMemo } from '../../shared/ttl-memo';
+import { foreignDmSpaceIds, myKortixPersonId } from './my-kortix-person';
 import type { ProjectRow, ProjectSessionRow } from './serializers';
 import { hiddenSpaceIds, spaceVisibleFor } from '../../shared/space-access';
 
@@ -75,6 +80,48 @@ const loadPrincipalIsServiceAccount = ttlMemo({
     return Boolean(row);
   },
 });
+
+/** How many spawn links a session's ancestor read follows: deeper than any subagent chain (cloud-subagent.ts max depth 2). */
+const MAX_SPAWN_ANCESTORS = 8;
+
+/**
+ * The sessions that spawned this one, nearest first: its spawner, the
+ * spawner's spawner, and so on (`metadata.spawned_by_session`, which only a
+ * box creating its own child sets, session-create.ts). A person-set
+ * `parent_session_id` is not followed. A spawn link never changes, so the
+ * chain is memoized like the principal lookup above.
+ */
+const loadSpawnAncestors = ttlMemo({
+  ttlMs: 60_000,
+  keyFn: (projectId: string, sessionId: string) => `${projectId}|${sessionId}`,
+  loader: async (projectId: string, sessionId: string): Promise<string[]> => {
+    const result = await db.execute<{ session_id: string }>(sql`
+      WITH RECURSIVE chain(session_id, parent, depth) AS (
+        SELECT s.session_id, s.metadata->>'spawned_by_session', 0
+          FROM kortix.project_sessions s
+         WHERE s.session_id = ${sessionId} AND s.project_id = ${projectId}::uuid
+        UNION ALL
+        SELECT s.session_id, s.metadata->>'spawned_by_session', chain.depth + 1
+          FROM kortix.project_sessions s
+          JOIN chain ON s.session_id = chain.parent
+         WHERE s.project_id = ${projectId}::uuid AND chain.depth < ${MAX_SPAWN_ANCESTORS}
+      )
+      SELECT session_id FROM chain WHERE depth > 0 ORDER BY depth
+    `);
+    const rows = (result as unknown as { rows?: Array<{ session_id: string }> }).rows ?? [...result];
+    return rows.map((row) => row.session_id);
+  },
+});
+
+/**
+ * Is the target session an ancestor of the caller's own session? A subagent
+ * reads the conversation of the sessions that started it (`kortix sessions log
+ * <parent>`), so its parent's brief can stay short (harness/pi `agentIdentity`).
+ */
+export async function isSpawnAncestor(projectId: string, boundCredentialSessionId: string | null, sessionId: string): Promise<boolean> {
+  if (!boundCredentialSessionId || boundCredentialSessionId === sessionId) return false;
+  return (await loadSpawnAncestors(projectId, boundCredentialSessionId)).includes(sessionId);
+}
 
 /**
  * Is the machine-owner lookup capable of changing the verdict?
@@ -194,8 +241,10 @@ async function recordOversightSessionRead(input: {
   sessionId: string;
   ownerId: string | null;
   visibility: string;
+  /** The My Kortix session that read for its person (`personRead`). */
+  viaMyKortixSessionId?: string;
 }): Promise<void> {
-  const key = `${input.userId}|${input.sessionId}`;
+  const key = `${input.userId}|${input.sessionId}|${input.viaMyKortixSessionId ?? ''}`;
   const now = Date.now();
   const last = oversightAuditedAt.get(key);
   if (last !== undefined && now - last < OVERSIGHT_AUDIT_WINDOW_MS) return;
@@ -211,8 +260,55 @@ async function recordOversightSessionRead(input: {
       via: 'account_session_oversight',
       sessionOwnerId: input.ownerId,
       sessionVisibility: input.visibility,
+      ...(input.viaMyKortixSessionId ? { myKortixSessionId: input.viaMyKortixSessionId } : {}),
     },
   });
+}
+
+/**
+ * My Kortix reads what its person opens through the trigger-run manager
+ * override or account oversight, for a session no person owns
+ * (`my-kortix-person.ts`). The caller has already checked the private-channel
+ * and backend-sibling gates. A private session another member started stays
+ * closed. Oversight reads are audited like the person's own.
+ */
+async function myKortixPersonRead(
+  loaded: VisibleSessionRequest,
+  row: ProjectSessionRow,
+  ownership: SessionNarrowingContext,
+  boundCredentialSessionId: string | null,
+  person: MyKortixPerson | undefined,
+): Promise<boolean> {
+  const resolved = person ?? (await resolveMyKortixPerson(loaded, boundCredentialSessionId));
+  const personId = resolved.personId;
+  if (!personId || personId !== loaded.userId || !boundCredentialSessionId) return false;
+  if (row.spaceId && resolved.foreignDms.has(row.spaceId)) return false;
+  if (!(await sessionOwnerIsMachine(loaded.row.accountId, row.createdBy))) return false;
+  if (isTriggerRunSession(row) && (await sessionManagerStanding(loaded, ownership, row, null))) return true;
+  if (!(await hasAccountSessionOversight(personId, loaded.row.accountId))) return false;
+  await recordOversightSessionRead({
+    accountId: loaded.row.accountId,
+    userId: personId,
+    sessionId: row.sessionId,
+    ownerId: row.createdBy ?? null,
+    visibility: row.visibility,
+    viaMyKortixSessionId: boundCredentialSessionId,
+  });
+  return true;
+}
+
+/** Who My Kortix reads for, resolved once per request (`my-kortix-person.ts`). */
+type MyKortixPerson = { personId: string | null; foreignDms: ReadonlySet<string> };
+
+async function resolveMyKortixPerson(
+  loaded: VisibleSessionRequest,
+  boundCredentialSessionId: string | null,
+): Promise<MyKortixPerson> {
+  const personId = await myKortixPersonId(loaded.actor, boundCredentialSessionId);
+  return {
+    personId,
+    foreignDms: personId ? await foreignDmSpaceIds(loaded.row.projectId, personId) : new Set(),
+  };
 }
 
 /** The `loaded` shape `loadVisibleSession` and its helpers receive. */
@@ -275,6 +371,29 @@ async function sessionManagerStanding(
   return canManageProject;
 }
 
+/** Per-route widening of a session read. */
+export type SessionReadOptions = {
+  /**
+   * A session token may read the sessions up its spawn chain (`isSpawnAncestor`). Only a
+   * route that reads and changes nothing passes it: every other route treats a visible session
+   * as one the caller may act on (prompt it, answer its permission requests).
+   */
+  spawnAncestorRead?: boolean;
+  /** Audited content read only. Never set on mutation or writable proxy paths. */
+  triggerReaderRead?: boolean;
+  /**
+   * A My Kortix token reads with its person's standing (`my-kortix-person.ts`):
+   * the trigger-run manager override and account oversight, for sessions no
+   * person owns. A read, never ownership or lifecycle. Content reads only, like
+   * `triggerReaderRead`: never on a route that changes the session.
+   */
+  personRead?: boolean;
+  /** `personRead` resolved once for a list: one token read, not one per row. */
+  myKortixPerson?: MyKortixPerson;
+  readerPrincipal?: TriggerReaderPrincipal;
+  readerSpaceKinds?: ReadonlyMap<string, string>;
+};
+
 async function sessionReadAccess(
   loaded: VisibleSessionRequest,
   row: ProjectSessionRow,
@@ -284,6 +403,7 @@ async function sessionReadAccess(
   callerSessionId: string | null,
   boundCredentialSessionId: string | null,
   hidden: ReadonlySet<string>,
+  opts: SessionReadOptions = {},
 ): Promise<{ canManageProject: boolean; isOwner: boolean } | null> {
   const spaceVisible = spaceVisibleFor(hidden, row.spaceId);
   const ownership = {
@@ -326,6 +446,20 @@ async function sessionReadAccess(
       });
     }
   }
+  // A Space the caller sees shares the sessions in it (session-group-access.ts).
+  // Asked only when the rules above refused; never for an agent principal (it
+  // reads only its own sessions), across a hidden private channel, or to a
+  // sibling backend session.
+  if (
+    !visible &&
+    spaceVisible &&
+    !(loaded.actor && isAgentPrincipalActor(loaded.actor)) &&
+    isSessionTargetVisibleToCaller(ownership) &&
+    resolveFeatureFlag(loaded.row.metadata, 'session_groups') &&
+    (await sessionSharedThroughGroup(loaded.row.projectId, loaded.userId, row))
+  ) {
+    visible = true;
+  }
   // An agent session always opens itself and the sessions it spawned. A trigger
   // run's `created_by` is the agent's service account, never the token's user, so
   // the ownership rule above refuses it its own row (404 on `kortix reminders`).
@@ -338,13 +472,32 @@ async function sessionReadAccess(
   ) {
     visible = true;
   }
-  if (!visible) return null;
+  // A session token reads the sessions that spawned its session: a read, never ownership,
+  // and only on a read route (`spawnAncestorRead`). Asked only when the rules above or the
+  // agent standing below would refuse the row.
+  const agentPrincipal = Boolean(loaded.actor && isAgentPrincipalActor(loaded.actor));
+  const ancestor =
+    opts.spawnAncestorRead === true &&
+    (!visible || (agentPrincipal && !agentSessionStanding(boundCredentialSessionId, row, visible).visible)) &&
+    spaceVisible &&
+    (await isSpawnAncestor(loaded.row.projectId, boundCredentialSessionId, sessionId));
+  if (ancestor) visible = true;
+  const reader = opts.triggerReaderRead === true &&
+    (!visible || (agentPrincipal && !agentSessionStanding(boundCredentialSessionId, row, visible, ancestor).visible)) && spaceVisible && isSessionTargetVisibleToCaller(ownership) &&
+    await mayReadTriggerSession(row, opts.readerPrincipal ?? await triggerReaderPrincipal(loaded.actor, loaded.row.projectId, boundCredentialSessionId), opts.readerSpaceKinds);
+  // My Kortix reads with its person's standing, on a read route only. Asked
+  // only when every rule above refused, so no other caller pays for it.
+  const person = opts.personRead === true && !visible && !reader && spaceVisible &&
+    isSessionTargetVisibleToCaller(ownership) &&
+    await myKortixPersonRead(loaded, row, ownership, boundCredentialSessionId, opts.myKortixPerson);
+  if (person) return { canManageProject, isOwner: false };
+  if (!visible && !reader) return null;
   let isOwner = row.createdBy === loaded.userId;
-  if (loaded.actor && isAgentPrincipalActor(loaded.actor)) {
+  if (agentPrincipal) {
     // Spec §2: never the launcher's standing. Checked after the ordinary
     // rules so it can only narrow them.
-    const standing = agentSessionStanding(boundCredentialSessionId, row, visible);
-    if (!standing.visible) return null;
+    const standing = agentSessionStanding(boundCredentialSessionId, row, visible, ancestor);
+    if (!standing.visible && !reader) return null;
     isOwner = standing.isOwner;
   }
   return { canManageProject, isOwner };
@@ -413,12 +566,13 @@ export async function loadVisibleSession(
    * ONLY the trigger-session manager override reads this field.
    */
   boundCredentialSessionId: string | null,
+  opts: SessionReadOptions = {},
 ): Promise<VisibleSessionAccess | null> {
   const prefetch = await sessionReadPrefetch(loaded, sessionId, boundCredentialSessionId);
   if (!prefetch) return null;
   const { row, subject, grants, hidden } = prefetch;
   const access = await sessionReadAccess(
-    loaded, row, sessionId, subject, grants, callerSessionId, boundCredentialSessionId, hidden,
+    loaded, row, sessionId, subject, grants, callerSessionId, boundCredentialSessionId, hidden, opts,
   );
   if (!access) return null;
   return finalizeVisibleAccess(loaded, row, subject, grants, access);
@@ -453,6 +607,7 @@ export async function loadVisibleSessionsForList(
   sessionIds: readonly string[],
   callerSessionId: string | null,
   boundCredentialSessionId: string | null,
+  opts: SessionReadOptions = {},
 ): Promise<Map<string, VisibleSessionAccess>> {
   const ids = [...new Set(sessionIds.filter(Boolean))];
   const out = new Map<string, VisibleSessionAccess>();
@@ -479,11 +634,20 @@ export async function loadVisibleSessionsForList(
   const subject = await subjectRead;
   const grants = await grantsRead;
   const hidden = await hiddenRead;
+  const readerPrincipal = opts.triggerReaderRead
+    ? await triggerReaderPrincipal(loaded.actor, loaded.row.projectId, boundCredentialSessionId)
+    : undefined;
+  const readerSpaceKinds = readerPrincipal && readerPrincipal.kind !== 'none'
+    ? await triggerReaderSpaceKinds(loaded.row.projectId, rows.flatMap((row) => row.spaceId ? [row.spaceId] : []))
+    : undefined;
+  const myKortixPerson = opts.personRead && boundCredentialSessionId
+    ? await resolveMyKortixPerson(loaded, boundCredentialSessionId)
+    : undefined;
   for (const sessionId of ids) {
     const row = byId.get(sessionId);
     if (!row) continue;
     const access = await sessionReadAccess(
-      loaded, row, sessionId, subject, grants.get(sessionId) ?? [], callerSessionId, boundCredentialSessionId, hidden,
+      loaded, row, sessionId, subject, grants.get(sessionId) ?? [], callerSessionId, boundCredentialSessionId, hidden, { ...opts, readerPrincipal, readerSpaceKinds, myKortixPerson },
     );
     if (!access) continue;
     out.set(sessionId, await finalizeVisibleAccess(loaded, row, subject, grants.get(sessionId) ?? [], access));

@@ -151,15 +151,35 @@ export function withUpstreamHeadersTimeout(
   };
 }
 
-/** The provider's own error, relayed with its status and a `retry-after` when it sent one. */
-export function rawProviderError(error: UpstreamHttpError): Response {
-  return new Response(providerClientErrorBody(error.status, error.body || JSON.stringify({ error: { message: error.message } })), {
+/** The provider's own error, relayed with its status and a `retry-after` when it sent one. `sentBytes` is the body's size, for `request_too_large`. */
+export function rawProviderError(error: UpstreamHttpError, sentBytes = 0): Response {
+  return new Response(providerClientErrorBody(error.status, error.body || JSON.stringify({ error: { message: error.message } }), sentBytes, error.provider), {
     status: error.status,
     headers: {
       'content-type': 'application/json',
       ...(error.headers?.['retry-after'] ? { 'retry-after': error.headers['retry-after'] } : {}),
     },
   });
+}
+
+/**
+ * The most output tokens a request on a customer's own provider key asks for.
+ * A provider reserves funds for the whole `max_tokens`: OpenRouter refuses a
+ * funded key a request it cannot afford ("requires more credits, or fewer
+ * max_tokens", HTTP 402), and pi asked for up to the model's whole context
+ * window. 32,000 is the ceiling OpenCode sent for every model
+ * (`OUTPUT_TOKEN_MAX`). An answer that reaches it ends with
+ * `finish_reason: length`, which the session shows as a cut-off answer.
+ */
+export const BYOK_MAX_OUTPUT_TOKENS = 32_000;
+
+const OUTPUT_TOKEN_FIELDS = ['max_tokens', 'max_completion_tokens', 'max_output_tokens'] as const;
+
+/** `body` with every output-token field above `cap` lowered to `cap`. */
+function capOutputTokens(body: Record<string, unknown>, cap: number): Record<string, unknown> {
+  const over = OUTPUT_TOKEN_FIELDS.filter((field) => typeof body[field] === 'number' && (body[field] as number) > cap);
+  if (!over.length) return body;
+  return { ...body, ...Object.fromEntries(over.map((field) => [field, cap])) };
 }
 
 /** Fallback models beyond this many are ignored. The API accepts at most 8 per chain. */
@@ -353,7 +373,8 @@ export async function dispatch(
   const fallbackModels = fallbackModelsOf(plan);
 
   const withDefaults = (source: Record<string, unknown>, attempt: Attempt): Record<string, unknown> => {
-    const next = applyGenerationDefaults({ ...source, model: attempt.model }, plan.defaultsFor?.(attempt.model));
+    const defaulted = applyGenerationDefaults({ ...source, model: attempt.model }, plan.defaultsFor?.(attempt.model));
+    const next = attempt.descriptor.billingMode === 'none' ? capOutputTokens(defaulted, BYOK_MAX_OUTPUT_TOKENS) : defaulted;
     if (!attempt.withoutEffort) return next;
     const { reasoning_effort: _dropped, ...stripped } = next;
     return stripped;
@@ -417,7 +438,7 @@ export async function dispatch(
     const secretId = failure.attempt.descriptor.poolSecretId;
     if (!secretId || failure.status !== 429) return;
     const seconds = (await usageLimitResetSeconds(failure)) ?? clampRetryAfterSeconds(retryAfterOf(failure)) ?? 30;
-    // OpenCode waits out a retry-after verbatim, so the client hears at most a minute.
+    // A client can wait out a retry-after verbatim (OpenCode did), so the client hears at most a minute.
     const clientSeconds = Math.min(seconds, MAX_RELAYED_RETRY_AFTER_SECONDS);
     earliestPoolRetryAt = Math.min(earliestPoolRetryAt, Date.now() + clientSeconds * 1000);
     if (!ctx.notePoolRateLimit) return;

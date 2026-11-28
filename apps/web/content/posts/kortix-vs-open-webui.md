@@ -5,7 +5,7 @@ date: "2026-10-02"
 canonical: "https://kortix.com/blog/kortix-vs-open-webui"
 author: "team"
 tags: ["Comparisons"]
-updated: "2026-10-22"
+updated: "2026-11-06"
 slug: "/kortix-vs-open-webui"
 ---
 Open WebUI gives people a private interface to their own models, and it does that job properly; Kortix CompanyOS takes the next question: what happens to the work once an answer is written. The agents that do the work, and the memory they draw on, live in your own repo.
@@ -32,13 +32,13 @@ Open WebUI is designed around a conversation. Everything else in it arranges its
 
 Kortix takes the open question Open WebUI leaves and answers it with files. The agents, their instructions and the connections to other systems are files in a repository the company holds. A change arrives as a diff. ([Kortix on GitHub](https://github.com/kortix-ai/CompanyOS))
 
-A new teammate clones it and inherits the same working setup. An agent is a Markdown file under `agents/`, plus its own `agents.<name>` block in `kortix.yaml`, which carries the governance. The agent file and `kortix.yaml`, with the OpenCode config, define the project. A reviewer can read the setup like documentation and review a change like code.
+A new teammate clones it and inherits the same working setup. An agent is a Markdown file under `agents/`, plus its own `agents.<name>` block in `kortix.yaml`, which carries the governance. The agent file and `kortix.yaml` define the project. A reviewer can read the setup like documentation and review a change like code.
 
 ## The work comes back for review
 
 Session work reaches `main` through a change request. Merge is default-deny for agents. Thousands of agents in parallel on one config, each on its own cloud computer. Each session has its own isolated machine and branch.
 
-The self-hosted install is a single Compose stack: a frontend, an API, an LLM gateway and Supabase. Sessions themselves run on Platinum, the compute provider every new session lands on. Install the CLI with `curl -fsSL https://kortix.com/install | bash`, then `kortix self-host init` to set the stack up, and `kortix self-host start` to boot it. Nothing on the first run wants a model key; it asks six questions. ([self-hosting docs](https://kortix.com/docs/host))
+The self-hosted install is a single Compose stack: a frontend, an API, an LLM gateway and Supabase. Sessions themselves run on [Platinum](https://www.platinum.dev), the compute provider every new session lands on. Install the CLI with `curl -fsSL https://kortix.com/install | bash`, then `kortix self-host init` to set the stack up, and `kortix self-host start` to boot it. Nothing on the first run wants a model key; it asks six questions. ([self-hosting docs](https://kortix.com/docs/host))
 
 ## Where Open WebUI is the better pick
 
@@ -59,7 +59,7 @@ The Open WebUI License is a permissive license with a branding clause attached. 
 
 ## When to pick which
 
-Choose Kortix if the company's setup has to sit in one repository you control, with a sandbox per session. A person decides what merges. Free is $0 with 500 credits per month, every feature and 1 project, on the user's own provider keys or ChatGPT subscription. Run it on Kortix Cloud, in your VPC, or on your own on-prem network. Self-host is free, from a public server with a Platinum key. The paid plan is credits: you choose the monthly amount, and 5,000 credits a month costs $50 at 100 credits per dollar. Members are unlimited and free, and one credit pool is shared across the account. ([Kortix pricing](https://kortix.com/pricing))
+Choose Kortix if the company's setup has to sit in one repository you control, with a sandbox per session. A person decides what merges. Free is $0 with 500 credits per month on your first workspace and every feature, on your own provider keys or ChatGPT subscription. Run it on Kortix Cloud, in your VPC, or on your own on-prem network. Self-host is free, from a public server with a Platinum key. The paid plan is credits: you choose the monthly amount, and 5,000 credits a month costs $50 at 100 credits per dollar. Members are unlimited and free, and one credit pool is shared across the account. ([Kortix pricing](https://kortix.com/pricing))
 
 Choose Open WebUI if the work lives in conversations. It gives a team a quick, private chat surface over any model, retrieval across 13 vector databases, and enterprise identity ready when you need it.
 

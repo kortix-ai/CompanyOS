@@ -1,4 +1,5 @@
 import { ApiError } from '../api/client.ts';
+import { splitHelp } from '../command-argv.ts';
 import {
   describeConfigStatus,
   describeReloadOutcome,
@@ -13,6 +14,7 @@ import {
   expandSessionIdPrefix,
   locateSessionAnywhere,
   resolveProjectContext,
+  sessionIdArgs,
   surfaceApiError,
   takeFlagBool,
   takeFlagValue,
@@ -42,6 +44,8 @@ import type { ProjectSession, ProjectSummary } from '../api/types.ts';
 import { runGit } from '../git-run.ts';
 import { type SessionStartPayload, startPollIntervalMs, startProgressTracker } from '../session-boot.ts';
 import { C, help, pad, status } from '../style.ts';
+import { agentChoiceHintFor } from './session-agent-choice.ts';
+import { machineErrors } from '../token-denial.ts';
 import { sessionWebUrl } from '../web-url.ts';
 import { openInBrowser } from '../browser.ts';
 import { runSessionsDigest } from './sessions-digest.ts';
@@ -63,6 +67,7 @@ import {
   runSessionsStop,
 } from './sessions-lifecycle.ts';
 import { runSessionsQueue, wireMessageId } from './sessions-queue.ts';
+import { runSessionsUsage } from './sessions-usage.ts';
 import { runSessionsAttachments } from './sessions-attachments.ts';
 import { sessionListQuery, startedByLabel, takeSessionListFlags, type SessionListFlags } from './sessions-list.ts';
 import { runSessionsListState } from './sessions-pin.ts';
@@ -76,7 +81,7 @@ import { requireConnectedModel } from './session-model-access.ts';
 
 const HELP = help`Usage: kortix sessions <subcommand> [options]
 
-Manage Kortix project sessions — each session is an isolated sandbox VM
+Manage Kortix workspace sessions — each session is an isolated sandbox VM
 on its own ephemeral branch.
 
 Subcommands:
@@ -85,13 +90,14 @@ Subcommands:
      [--children <session-id>]      --shared = another member did,
      [--label <label>]...           --automated = a trigger, channel or API
      [--pinned|--archived|--deleted] key did; each lists top-level sessions
-                                    with their child count. --search <q>
+     [--space <space-id>]           with their child count. --search <q>
                                     matches every session you can see.
                                     --children <id> lists one session's
                                     children. --label <l> (repeatable)
                                     lists sessions carrying every given
-                                    label. The list leaves out the sessions
-                                    you archived: --archived lists only
+                                    label. --space <id> lists the sessions
+                                    of one space. The list leaves out the
+                                    sessions you archived: --archived lists only
                                     them, --pinned only your pinned ones.
                                     --deleted lists the deleted sessions
                                     you can still restore, with their full
@@ -109,6 +115,7 @@ Subcommands:
                                     session to that agent (default: My
                                     Kortix; default_agent when My Kortix is
                                     off, or when My Kortix starts it).
+                                    --space <id> files it in that space.
                                     --model <id> overrides the model. A
                                     model on an API key or a ChatGPT
                                     subscription runs on every key you may
@@ -120,7 +127,7 @@ Subcommands:
                                     already failed. While it waits, stderr
                                     names each step once, e.g.
                                     "provisioning · building the first
-                                    image for this project (0:42)". To wait for the turn,
+                                    image for this workspace (0:42)". To wait for the turn,
                                     run kortix sessions wait-for <id> (exit
                                     1 when the turn fails). --json prints
                                     the session object (capture session_id
@@ -134,7 +141,7 @@ Subcommands:
                                     --secret <id>           narrow injected
                                       secrets to these identifiers (repeatable;
                                       backend token required).
-                                    --no-secrets            inject zero project
+                                    --no-secrets            inject zero workspace
                                       secrets into the session (backend token
                                       required).
                                     --connector <alias>=<connection-id>
@@ -164,7 +171,7 @@ Subcommands:
                                     text is given.
   reachable                         The sessions this one can message:
                                     parent, children, lead, teammates
-                                    (--scope project: every live session).
+                                    (--scope workspace: every live session).
                                     --from, --json.
   inbound <session-id> [<mode>]     What a session does with messages from
                                     other sessions: accept (default), hold
@@ -226,6 +233,9 @@ Subcommands:
   files <session-id> <sub>          The sandbox's LIVE workspace: ls, status,
                                     find, write, touch, mkdir, mv, rm. --json.
   info <session-id>                 Show one session. --json.
+  usage <session-id>                What the session and the sessions it started
+                                    cost and consumed: paid wallet, BYOK
+                                    provider and total, tokens and cache. --json.
   scope <session-id>                Read or replace the session's secret and
                                     connector access. Changes apply to the next
                                     prompt. --secret, --no-secrets,
@@ -233,7 +243,7 @@ Subcommands:
                                     --no-connectors, --json.
                                     Alias: access.
   share <session-id>                Who inside Kortix can open this session.
-                                    --mode private|project|members, --member
+                                    --mode private|workspace|members, --member
                                     <id|email>, --group <id>, --show, --json.
   links <session-id> [<sub>]        Public, unauthenticated links onto one
                                     preview port or one workspace file: ls
@@ -293,7 +303,7 @@ Subcommands:
   open <session-id>                 Open the dashboard URL for a session.
 
 Global options:
-  --project <id>     Operate on this project id (default: linked).
+  --workspace <id>   Operate on this workspace id (default: linked).
   -h, --help         Show this help.
 `;
 
@@ -402,6 +412,9 @@ export async function runSessions(argv: string[]): Promise<number> {
   if (sub === 'model') {
     return runSessionsModel(argv.slice(1));
   }
+  if (sub === 'usage' || sub === 'cost') {
+    return runSessionsUsage(argv.slice(1));
+  }
   if (sub === 'compact' || sub === 'summarize') {
     return runSessionsCompact(argv.slice(1));
   }
@@ -414,10 +427,8 @@ export async function runSessions(argv: string[]): Promise<number> {
   // this a bare `--help` falls through as an ordinary positional arg — e.g.
   // `sessions info --help` would try to look up a session literally named
   // "--help" instead of showing usage.
-  if (rest.includes('-h') || rest.includes('--help')) {
-    process.stdout.write(HELP);
-    return 0;
-  }
+  const helped = splitHelp(argv, HELP);
+  if (helped !== null) return helped;
   const json = takeFlagBool(rest, ['--json']);
   const wait = takeFlagBool(rest, ['--wait']);
   const listPreviews = takeFlagBool(rest, ['--list']);
@@ -440,7 +451,7 @@ export async function runSessions(argv: string[]): Promise<number> {
     }
   }
   try {
-    projectFlag = takeFlagValue(rest, ['--project']);
+    projectFlag = takeFlagValue(rest, ['--project', '--workspace']);
     hostFlag = takeFlagValue(rest, ['--host']);
     promptFlag = takeFlagValue(rest, ['--prompt', '-p']);
     portFlag = takeFlagValue(rest, ['--port']);
@@ -502,6 +513,8 @@ export type SessionOverrides = {
   runtimeContext?: Record<string, string>;
   labels?: string[];
   metadata?: Record<string, string>;
+  /** The space (session group id) the new session is filed in. */
+  space?: string;
 };
 
 
@@ -544,6 +557,8 @@ export function parseSessionOverrides(argv: string[]): SessionOverrides {
   }
   const labels = takeFlagValues(argv, ['--label']);
   if (labels.length) out.labels = labels;
+  const space = takeFlagValue(argv, ['--space'])?.trim();
+  if (space) out.space = space;
   for (const pair of takeFlagValues(argv, ['--meta'])) {
     const [key, value] = parseMetaPair(pair);
     (out.metadata ??= {})[key] = value;
@@ -569,13 +584,13 @@ async function sessionsLs(opts: CtxOpts, flags: SessionListFlags, json = false):
   let sessions: ProjectSession[];
   try {
     sessions = await ctx.client.get<ProjectSession[]>(
-      `/projects/${ctx.projectId}/sessions${sessionListQuery(flags, parentId)}`,
+      `/workspaces/${ctx.projectId}/sessions${sessionListQuery(flags, parentId)}`,
     );
   } catch (err) {
     if (err instanceof ApiError && err.status === 404) {
       const hostFlag = opts.hostArg ? ` --host ${opts.hostArg}` : '';
-      process.stderr.write(`${status.err(`${ctx.defaultProject ? 'Default project' : 'Project'} "${ctx.projectId}" was not found or is no longer accessible.`)} Run ` +
-        `\`kortix projects ls${hostFlag}\`, then \`kortix projects use <id>${hostFlag}\` to select an available project.\n`);
+      process.stderr.write(`${status.err(`${ctx.defaultProject ? 'Default workspace' : 'Workspace'} "${ctx.projectId}" was not found or is no longer accessible.`)} Run ` +
+        `\`kortix workspaces ls${hostFlag}\`, then \`kortix workspaces use <id>${hostFlag}\` to select an available workspace.\n`);
       return 1;
     }
     return surfaceApiError(err);
@@ -709,6 +724,7 @@ async function sessionsNew(
   if (overrides.connectors !== undefined) body.connector_bindings = overrides.connectors;
   if (overrides.runtimeContext) body.runtime_context = overrides.runtimeContext;
   if (overrides.labels) body.labels = overrides.labels;
+  if (overrides.space) body.group_id = overrides.space;
   if (overrides.metadata) body.metadata = overrides.metadata;
 
   const prepared = await prepareClientCreatedBranch(ctx, body);
@@ -716,9 +732,13 @@ async function sessionsNew(
 
   let created: ProjectSession;
   try {
-    created = await ctx.client.post<ProjectSession>(`/projects/${ctx.projectId}/sessions`, body);
+    created = await ctx.client.post<ProjectSession>(`/workspaces/${ctx.projectId}/sessions`, body);
   } catch (err) {
-    return surfaceApiError(err);
+    const code = surfaceApiError(err);
+    // My Kortix names its agent: say which flag fixes it (session-agent-choice.ts).
+    const hint = agentChoiceHintFor(err);
+    if (hint && !machineErrors()) process.stderr.write(`  ${hint}\n`);
+    return code;
   }
 
   // Drive the same canonical /start lifecycle endpoint the dashboard polls.
@@ -726,7 +746,7 @@ async function sessionsNew(
   const awaitReadiness = async (): Promise<boolean> => {
     process.stderr.write(`Session ${created.session_id}: created (${created.status}); waiting for readiness…\n`);
     // One line per change of stage or image step: `provisioning · building
-    // the first image for this project (0:42)` (session-boot.ts).
+    // the first image for this workspace (0:42)` (session-boot.ts).
     const progress = startProgressTracker();
     const intervalMs = startPollIntervalMs();
     let ready = false;
@@ -734,13 +754,13 @@ async function sessionsNew(
       if (i > 0) await new Promise((r) => setTimeout(r, intervalMs));
       try {
         const start = await ctx.client.post<SessionStartPayload>(
-          `/projects/${ctx.projectId}/sessions/${created.session_id}/start`,
+          `/workspaces/${ctx.projectId}/sessions/${created.session_id}/start`,
           {},
         );
         const line = progress(start);
         if (line) process.stderr.write(`Session ${created.session_id}: ${line}\n`);
         created = await ctx.client.get<ProjectSession>(
-          `/projects/${ctx.projectId}/sessions/${created.session_id}`,
+          `/workspaces/${ctx.projectId}/sessions/${created.session_id}`,
         );
         if (start.stage === 'ready') {
           ready = true;
@@ -872,7 +892,7 @@ async function sendPromptToSession(
 ): Promise<void> {
   const handle = kortixFromAuth(ctx.auth).session(ctx.projectId, session.session_id);
   // Carry the session's persisted model + agent: a prompt delivered without
-  // them lets OpenCode fall back to a model Kortix sandboxes don't provision.
+  // them lets the runtime fall back to a model Kortix sandboxes don't provision.
   const defaults = sessionPromptDefaults(session);
   await handle.prompts.create({
     clientMessageId: randomUUID(),
@@ -897,7 +917,7 @@ export async function prepareClientCreatedBranch(
 ): Promise<'ok' | 'error'> {
   let project: ProjectSummary;
   try {
-    project = await ctx.client.get<ProjectSummary>(`/projects/${ctx.projectId}`);
+    project = await ctx.client.get<ProjectSummary>(`/workspaces/${ctx.projectId}`);
   } catch {
     // Let the create call surface the real API error.
     return 'ok';
@@ -1086,7 +1106,7 @@ async function sessionsPreviewCandidates(
   let candidates: PreviewCandidate[];
   try {
     const body = await located.located.client.get<{ candidates: PreviewCandidate[] }>(
-      `/projects/${located.located.projectId}/sessions/${located.located.session.session_id}/previews`,
+      `/workspaces/${located.located.projectId}/sessions/${located.located.session.session_id}/previews`,
     );
     candidates = body.candidates ?? [];
   } catch (err) {
@@ -1133,7 +1153,7 @@ async function sessionsRestart(sessionId: string | undefined, opts: CtxOpts): Pr
 
   try {
     await located.located.client.post<{ ok: true; status: string }>(
-      `/projects/${located.located.projectId}/sessions/${canonicalSessionId}/restart`,
+      `/workspaces/${located.located.projectId}/sessions/${canonicalSessionId}/restart`,
     );
   } catch (err) {
     return surfaceApiError(err);
@@ -1194,7 +1214,7 @@ async function sessionsReload(
   if (statusOnly) {
     try {
       const state = await client.get<SessionConfigStatusInput>(
-        `/projects/${projectId}/sessions/${canonicalSessionId}/config`,
+        `/workspaces/${projectId}/sessions/${canonicalSessionId}/config`,
       );
       if (json) {
         process.stdout.write(`${JSON.stringify(state, null, 2)}\n`);
@@ -1209,7 +1229,7 @@ async function sessionsReload(
   }
 
   try {
-    const result = await client.post<SessionReloadOutcomeInput & { repo_refreshed: boolean }>(`/projects/${projectId}/sessions/${canonicalSessionId}/reload`, {
+    const result = await client.post<SessionReloadOutcomeInput & { repo_refreshed: boolean }>(`/workspaces/${projectId}/sessions/${canonicalSessionId}/reload`, {
       refresh_repo: !args.includes('--no-repo'),
       force,
     });
@@ -1257,7 +1277,7 @@ async function sessionsRename(
   let updated: ProjectSession;
   try {
     updated = await located.located.client.patch<ProjectSession>(
-      `/projects/${located.located.projectId}/sessions/${canonicalSessionId}`,
+      `/workspaces/${located.located.projectId}/sessions/${canonicalSessionId}`,
       { name },
     );
   } catch (err) {
@@ -1286,7 +1306,7 @@ async function sessionsRm(
   opts: CtxOpts,
   json = false,
 ): Promise<number> {
-  const ids = sessionIds.filter((a) => !a.startsWith('-'));
+  const ids = sessionIdArgs(sessionIds);
   if (ids.length === 0) {
     process.stderr.write(`${status.err('Pass a session id.')}\n`);
     return 2;
@@ -1324,7 +1344,7 @@ async function sessionsRm(
     const host = located?.located.hostName ?? opts.hostArg;
     try {
       const deleted = await client.delete<{ ok: boolean; restore_until?: string }>(
-        `/projects/${projectId}/sessions/${canonicalSessionId}`,
+        `/workspaces/${projectId}/sessions/${canonicalSessionId}`,
       );
       // An API that predates restore answers without the window.
       const restoreUntil = deleted?.restore_until;
@@ -1341,7 +1361,7 @@ async function sessionsRm(
         );
         if (restoreUntil) {
           process.stdout.write(
-            `  ${C.dim}Restorable until ${restoreUntil.slice(0, 10)}: kortix sessions restore ${canonicalSessionId} --project ${projectId}${host ? ` --host ${host}` : ''}${C.reset}\n`,
+            `  ${C.dim}Restorable until ${restoreUntil.slice(0, 10)}: kortix sessions restore ${canonicalSessionId} --workspace ${projectId}${host ? ` --host ${host}` : ''}${C.reset}\n`,
           );
         }
       }

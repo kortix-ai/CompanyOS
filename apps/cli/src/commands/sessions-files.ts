@@ -16,6 +16,7 @@ import { posix } from 'node:path';
 import { sessionModelPin, toSandboxAbsolutePath } from '@kortix/sdk';
 
 import { kortixFromAuth } from '../api/sdk.ts';
+import { splitHelp } from '../command-argv.ts';
 import { emitJson, surfaceApiError, takeFlagBool, takeFlagValue } from '../command-helpers.ts';
 import { C, help, status } from '../style.ts';
 import { loadSessionForChat } from './sessions-chat.ts';
@@ -23,7 +24,7 @@ import { loadSessionForChat } from './sessions-chat.ts';
 const HELP = help`Usage: kortix sessions cp <src> <dst> [options]
 
 Copy files between your machine and a session's sandbox, or directly
-between two sandboxes in the project. scp-style refs:
+between two sandboxes in the workspace. scp-style refs:
 
   <session-id>:<path>    a path inside that session's sandbox
   <path>                 a local path (use ./name for names with a colon)
@@ -39,7 +40,7 @@ Examples:
 
 Options:
   -r, --recursive    Copy directories recursively.
-  --project <id>     Operate on this project id (default: linked).
+  --workspace <id>   Operate on this workspace id (default: linked).
   --host <name>      Operate against a non-default Kortix host.
   --json             Print the transferred files as JSON.
   -h, --help         Show this help.
@@ -195,7 +196,7 @@ export function buildSpawnPrompt(prompt: string, opts: { fromSandbox: boolean })
 /**
  * The persisted model + agent a prompt to this session must carry (mirrors
  * the SDK's own `send()` resolution). An async prompt WITHOUT them lets
- * OpenCode fall back to its built-in default model, which is not provisioned
+ * the runtime fall back to its built-in default model, which is not provisioned
  * in Kortix sandboxes — the message lands but the agent loop never starts.
  */
 export function sessionPromptDefaults(session: {
@@ -285,17 +286,15 @@ function label(endpoint: Endpoint, path: string): string {
 }
 
 export async function runSessionsCp(argv: string[]): Promise<number> {
+  const helped = splitHelp(argv, HELP);
+  if (helped !== null) return helped;
   const rest = [...argv];
-  if (rest.includes('-h') || rest.includes('--help')) {
-    process.stdout.write(HELP);
-    return 0;
-  }
   let projectArg: string | undefined;
   let hostArg: string | undefined;
   let recursive = false;
   let json = false;
   try {
-    projectArg = takeFlagValue(rest, ['--project']);
+    projectArg = takeFlagValue(rest, ['--project', '--workspace']);
     hostArg = takeFlagValue(rest, ['--host']);
     recursive = takeFlagBool(rest, ['-r', '--recursive']);
     json = takeFlagBool(rest, ['--json']);

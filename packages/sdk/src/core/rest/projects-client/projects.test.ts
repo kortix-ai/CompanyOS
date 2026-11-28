@@ -16,17 +16,17 @@ import {
   type ProvisionPhase,
   type ProvisionProjectInput,
   type ProvisionStreamEvent,
-  createProjectRepo,
+  createWorkspaceRepo,
   getProject,
-  getProjectDetail,
-  getProjectQuota,
-  provisionProject,
-  provisionProjectStream,
-  provisionProjectWithToken,
+  getWorkspaceDetail,
+  getWorkspaceQuota,
+  provisionWorkspace,
+  provisionWorkspaceStream,
+  provisionWorkspaceWithToken,
   updateExperimentalFeature,
   updateFeatureFlag,
   updateProject,
-  transferProject,
+  transferWorkspace,
 } from './projects';
 
 test('ExperimentalFeatureKey includes the project-scoped Apps gate', () => {
@@ -45,7 +45,7 @@ beforeEach(() => {
 const opts = { backendUrl: 'http://backend.test/v1', accessToken: 'tok' };
 const input = { account_id: 'acc-1', name: 'My First Project', seed_starter: true };
 
-test('GitHub project creation accepts a marketplace project template', () => {
+test('the deprecated source_item_id still type-checks on a GitHub create (removed in the next major)', () => {
   const createInput: CreateProjectRepoInput = {
     account_id: 'acc-1',
     name: 'support-agent',
@@ -94,7 +94,7 @@ test('createProjectRepo sends icon_glyph on the wire, same as provision and link
     });
   }) as unknown as typeof fetch;
 
-  await createProjectRepo({
+  await createWorkspaceRepo({
     account_id: 'acc-1',
     name: 'support-agent',
     icon_glyph: { name: 'Rocket', color: 'blue' },
@@ -134,7 +134,7 @@ test('createProjectRepo sends project_name on the wire', async () => {
     });
   }) as unknown as typeof fetch;
 
-  await createProjectRepo({
+  await createWorkspaceRepo({
     account_id: 'acc-1',
     name: 'ana-s-agents',
     project_name: "Ana's agents",
@@ -150,7 +150,7 @@ test('returns ok:true with the parsed project on a real 200 body', async () => {
       headers: { 'content-type': 'application/json' },
     });
 
-  const result = await provisionProjectWithToken(opts, input);
+  const result = await provisionWorkspaceWithToken(opts, input);
   expect(result.ok).toBe(true);
   expect(result.ok && result.project.project_id).toBe('proj-1');
 });
@@ -187,7 +187,7 @@ test('provisionProject applies the caller timeout to slow managed-git provisioni
   ) as unknown as typeof fetch;
 
   await expect(
-    provisionProject(
+    provisionWorkspace(
       { account_id: 'acc-1', name: 'Slow Project', seed_starter: true },
       { timeout: 5 },
     ),
@@ -207,14 +207,14 @@ test('reports not-ok when the response is 200 but the body has no project_id', a
       headers: { 'content-type': 'application/json' },
     });
 
-  const result = await provisionProjectWithToken(opts, input);
+  const result = await provisionWorkspaceWithToken(opts, input);
   expect(result).toEqual({ ok: false, limitReached: false });
 });
 
 test('reports not-ok when the 200 body is not valid JSON', async () => {
   nextResponse = () => new Response('not json', { status: 200 });
 
-  const result = await provisionProjectWithToken(opts, input);
+  const result = await provisionWorkspaceWithToken(opts, input);
   expect(result).toEqual({ ok: false, limitReached: false });
 });
 
@@ -225,7 +225,7 @@ test('reports limitReached on a 403 with the project_limit_reached code', async 
       headers: { 'content-type': 'application/json' },
     });
 
-  const result = await provisionProjectWithToken(opts, input);
+  const result = await provisionWorkspaceWithToken(opts, input);
   expect(result).toEqual({ ok: false, limitReached: true });
 });
 
@@ -236,12 +236,12 @@ test('returns ok:false without hitting the network when credentials are missing'
     return new Response('{}', { status: 200 });
   }) as unknown as typeof fetch;
 
-  const result = await provisionProjectWithToken({ backendUrl: '', accessToken: '' }, input);
+  const result = await provisionWorkspaceWithToken({ backendUrl: '', accessToken: '' }, input);
   expect(result).toEqual({ ok: false, limitReached: false });
   expect(calls).toHaveLength(0);
 });
 
-test('normalizes the provider-neutral default_agent field from legacy project config', async () => {
+test('an absent default_agent reads as null; the deprecated open_code_default_agent is not read', async () => {
   configureKortix({
     backendUrl: 'http://backend.test/v1',
     getToken: async () => 'tok',
@@ -266,10 +266,9 @@ test('normalizes the provider-neutral default_agent field from legacy project co
       },
     );
 
-  const detail = await getProjectDetail('proj-1');
+  const detail = await getWorkspaceDetail('proj-1');
 
-  expect(detail.config.default_agent).toBe('kortix');
-  expect(detail.config.open_code_default_agent).toBe('kortix');
+  expect(detail.config.default_agent).toBeNull();
 });
 
 test('project detail carries the manifest health the API reports', async () => {
@@ -295,7 +294,7 @@ test('project detail carries the manifest health the API reports', async () => {
       { status: 200, headers: { 'content-type': 'application/json' } },
     );
 
-  const detail = await getProjectDetail('proj-1');
+  const detail = await getWorkspaceDetail('proj-1');
 
   expect(detail.config.manifest_health).toEqual(manifestHealth);
 });
@@ -314,7 +313,7 @@ test('a project response carries the icon through the backendApi/unwrap parsing 
       JSON.stringify({
         project: { project_id: 'proj-1', name: 'Iconic', icon: '🚀' },
         config: {
-          open_code_default_agent: null,
+          default_agent: null,
           agents: [],
           commands: [],
           skills: [],
@@ -329,7 +328,7 @@ test('a project response carries the icon through the backendApi/unwrap parsing 
       },
     );
 
-  const detail = await getProjectDetail('proj-1');
+  const detail = await getWorkspaceDetail('proj-1');
 
   expect(detail.project.icon).toBe('🚀');
 });
@@ -346,7 +345,7 @@ test('provisionProject sends the icon in the request body', async () => {
     });
   }) as unknown as typeof fetch;
 
-  await provisionProject({ account_id: 'acc-1', name: 'Iconic', icon: '🚀' });
+  await provisionWorkspace({ account_id: 'acc-1', name: 'Iconic', icon: '🚀' });
 
   expect(sentBody).toMatchObject({ icon: '🚀' });
 });
@@ -358,7 +357,7 @@ test('a project response carries the icon through to KortixProject', async () =>
       headers: { 'content-type': 'application/json' },
     });
 
-  const result = await provisionProjectWithToken(opts, { ...input, icon: '🚀' });
+  const result = await provisionWorkspaceWithToken(opts, { ...input, icon: '🚀' });
 
   expect(result.ok).toBe(true);
   expect(result.ok && result.project.icon).toBe('🚀');
@@ -409,7 +408,7 @@ test('updateProject PATCHes the project route', async () => {
   const sent = await captureUpdate({ name: 'Iconic' });
 
   expect(sent.method).toBe('PATCH');
-  expect(sent.url).toBe('http://backend.test/v1/projects/proj-1');
+  expect(sent.url).toBe('http://backend.test/v1/workspaces/proj-1');
 });
 
 test('updateProject puts an explicit null icon on the wire, not an absent key', async () => {
@@ -513,7 +512,7 @@ test('icon_glyph is sent on provision', async () => {
     });
   }) as unknown as typeof fetch;
 
-  await provisionProject({
+  await provisionWorkspace({
     account_id: 'acc-1',
     name: 'x',
     icon_glyph: { name: 'Star', color: 'red' },
@@ -538,7 +537,7 @@ test('idempotency_key is sent on provision', async () => {
     });
   }) as unknown as typeof fetch;
 
-  await provisionProject({
+  await provisionWorkspace({
     account_id: 'acc-1',
     name: 'My First Project',
     idempotency_key: 'onboarding-8f1c0f6e-1a2b-4c3d-9e8f-000000000001',
@@ -650,7 +649,7 @@ test('provisionProject sends default_branch on the wire', async () => {
     });
   }) as unknown as typeof fetch;
 
-  await provisionProject({ account_id: 'acc-1', name: 'x', default_branch: 'develop' });
+  await provisionWorkspace({ account_id: 'acc-1', name: 'x', default_branch: 'develop' });
 
   expect(sentBody).toMatchObject({ default_branch: 'develop' });
 });
@@ -689,7 +688,7 @@ function stubStreamingFetch(chunks: Array<string | Uint8Array>) {
 
 describe('provisionProjectStream', () => {
   test('is exported', () => {
-    expect(typeof provisionProjectStream).toBe('function');
+    expect(typeof provisionWorkspaceStream).toBe('function');
   });
 
   test('reports each phase in order and resolves with the project', async () => {
@@ -702,7 +701,7 @@ describe('provisionProjectStream', () => {
       'data: {"type":"done","project":{"project_id":"p1","name":"suna-web"}}\n\n',
     ].join('');
 
-    const project = await provisionProjectStream(
+    const project = await provisionWorkspaceStream(
       { name: 'suna-web' },
       (event) => {
         if (event.type === 'phase') seen.push(event.phase);
@@ -717,13 +716,13 @@ describe('provisionProjectStream', () => {
   test('rejects with the server error when the stream ends in an error event', async () => {
     const body = 'data: {"type":"error","error":"Owner or admin role required"}\n\n';
     await expect(
-      provisionProjectStream({ name: 'x' }, () => {}, { fetch: stubStreamingFetch([body]) }),
+      provisionWorkspaceStream({ name: 'x' }, () => {}, { fetch: stubStreamingFetch([body]) }),
     ).rejects.toThrow('Owner or admin role required');
   });
 
   test('rejects when the stream closes with no terminal event', async () => {
     await expect(
-      provisionProjectStream({ name: 'x' }, () => {}, { fetch: stubStreamingFetch([]) }),
+      provisionWorkspaceStream({ name: 'x' }, () => {}, { fetch: stubStreamingFetch([]) }),
     ).rejects.toThrow();
   });
 
@@ -736,7 +735,7 @@ describe('provisionProjectStream', () => {
   // an `ApiError` tagged with a stable code. The message is unchanged: every
   // existing reader keeps reading the same text.
   test('tags the no-terminal-event close with PROVISION_STREAM_UNTERMINATED_CODE', async () => {
-    const error = await provisionProjectStream({ name: 'x' }, () => {}, {
+    const error = await provisionWorkspaceStream({ name: 'x' }, () => {}, {
       fetch: stubStreamingFetch([]),
     }).then(
       () => null,
@@ -750,7 +749,7 @@ describe('provisionProjectStream', () => {
 
   test('a stream that delivered phases and then closed still carries the unterminated code', async () => {
     const body = 'data: {"type":"phase","phase":"validating"}\n\n';
-    const error = await provisionProjectStream({ name: 'x' }, () => {}, {
+    const error = await provisionWorkspaceStream({ name: 'x' }, () => {}, {
       fetch: stubStreamingFetch([body]),
     }).then(
       () => null,
@@ -773,7 +772,7 @@ describe('provisionProjectStream', () => {
     ].join('');
     const seen: string[] = [];
 
-    const project = await provisionProjectStream(
+    const project = await provisionWorkspaceStream(
       { name: 'suna-web' },
       (event) => {
         if (event.type === 'phase') seen.push(event.phase);
@@ -800,7 +799,7 @@ describe('provisionProjectStream', () => {
     const frame = 'data: {"type":"done","project":{"project_id":"p1","name":"suna-web"}}\n\n';
     const splitPoint = frame.indexOf('"project_id"') + 5; // land inside the JSON body
 
-    const project = await provisionProjectStream({ name: 'x' }, () => {}, {
+    const project = await provisionWorkspaceStream({ name: 'x' }, () => {}, {
       fetch: stubStreamingFetch([frame.slice(0, splitPoint), frame.slice(splitPoint)]),
     });
 
@@ -819,7 +818,7 @@ describe('provisionProjectStream', () => {
     const emojiByteOffset = new TextEncoder().encode(frame.slice(0, frame.indexOf('🚀'))).length;
     const splitPoint = emojiByteOffset + 2; // split the 4-byte emoji sequence in half
 
-    const project = await provisionProjectStream({ name: 'x' }, () => {}, {
+    const project = await provisionWorkspaceStream({ name: 'x' }, () => {}, {
       fetch: stubStreamingFetch([bytes.slice(0, splitPoint), bytes.slice(splitPoint)]),
     });
 
@@ -833,7 +832,7 @@ describe('provisionProjectStream', () => {
       'data: {"type":"phase","phase":"creating_repository"}\n\n',
     ].join('');
 
-    const project = await provisionProjectStream(
+    const project = await provisionWorkspaceStream(
       { name: 'x' },
       (event) => {
         if (event.type === 'phase') seen.push(event.phase);
@@ -855,7 +854,7 @@ describe('provisionProjectStream', () => {
     const third = Math.ceil(frame.length / 3);
     const chunks = [frame.slice(0, third), frame.slice(third, third * 2), frame.slice(third * 2)];
 
-    const project = await provisionProjectStream({ name: 'x' }, () => {}, {
+    const project = await provisionWorkspaceStream({ name: 'x' }, () => {}, {
       fetch: stubStreamingFetch(chunks),
     });
 
@@ -884,7 +883,7 @@ describe('provisionProjectStream', () => {
         { status: 200, headers: { 'content-type': 'text/event-stream' } },
       );
 
-    await expect(provisionProjectStream({ name: 'x' }, () => {}, { fetch: stub })).rejects.toThrow(
+    await expect(provisionWorkspaceStream({ name: 'x' }, () => {}, { fetch: stub })).rejects.toThrow(
       'provisionProjectStream: received an unparseable SSE frame',
     );
 
@@ -903,7 +902,7 @@ describe('provisionProjectStream', () => {
         headers: { 'content-type': 'application/json' },
       });
 
-    await expect(provisionProjectStream({ name: 'x' }, () => {}, { fetch: stub })).rejects.toThrow(
+    await expect(provisionWorkspaceStream({ name: 'x' }, () => {}, { fetch: stub })).rejects.toThrow(
       'Owner or admin role required',
     );
   });
@@ -929,7 +928,7 @@ describe('provisionProjectStream', () => {
       'data: {"type":"error","error":"Another provision with this idempotency_key is in flight","code":"provision_in_flight","status":409}\n\n';
     let caught: unknown;
     try {
-      await provisionProjectStream({ name: 'x' }, () => {}, { fetch: stubStreamingFetch([body]) });
+      await provisionWorkspaceStream({ name: 'x' }, () => {}, { fetch: stubStreamingFetch([body]) });
     } catch (err) {
       caught = err;
     }
@@ -949,7 +948,7 @@ describe('provisionProjectStream', () => {
       });
     let caught: unknown;
     try {
-      await provisionProjectStream({ name: 'x' }, () => {}, { fetch: stub });
+      await provisionWorkspaceStream({ name: 'x' }, () => {}, { fetch: stub });
     } catch (err) {
       caught = err;
     }
@@ -967,7 +966,7 @@ describe('provisionProjectStream', () => {
       });
     let caught: unknown;
     try {
-      await provisionProjectStream({ name: 'x' }, () => {}, { fetch: stub });
+      await provisionWorkspaceStream({ name: 'x' }, () => {}, { fetch: stub });
     } catch (err) {
       caught = err;
     }
@@ -1029,27 +1028,27 @@ describe('provisionProjectStream', () => {
 
 test('FEATURE_FLAG_KEYS lists every flag key exactly once', () => {
   const expected: FeatureFlagKey[] = [
-    'marketplace',
     'reminders',
-    'secrets_egress',
-    'pooled_provider_secrets',
     'us_region',
     'event_triggers',
-    'notification_center',
-    'workspace_volume',
+    'channels',
     'chat',
     'shared_drives',
     'goals',
-    'artifacts',
-    'artifact_comments',
     'email_channel',
     'session_groups',
-    'chrome',
     'agent_teams',
     'voice_call',
     'chat_input',
     'chat_front',
     'spaces_proactive',
+    'program_agents',
+    'evals',
+    'desktop_tabs',
+    'calendar',
+    'review_swipe',
+    'platinum_cache',
+    'sidebar_rail',
   ];
   expect([...FEATURE_FLAG_KEYS].sort()).toEqual(expected.sort());
   expect(new Set(FEATURE_FLAG_KEYS).size).toBe(FEATURE_FLAG_KEYS.length);
@@ -1073,6 +1072,62 @@ test('a graduated flag key still typechecks but is no longer a served flag', () 
   expect(FEATURE_FLAG_KEYS).not.toContain(graduated);
 });
 
+test('chrome graduated: Kortix in Chrome needs no flag, the key still typechecks', () => {
+  // Every project gets Kortix in Chrome since 2026-11-24 wherever the API serves
+  // it. The API sends `experimental.chrome` (whether it serves /v1/chrome) for
+  // older clients, but it no longer lists, resolves, or accepts the key.
+  const graduated: FeatureFlagKey = 'chrome';
+  expect(FEATURE_FLAG_KEYS).not.toContain(graduated);
+  const project = { experimental: {} } as Pick<KortixProject, 'experimental'>;
+  const sent: boolean | undefined = project.experimental?.chrome;
+  expect(sent).toBeUndefined();
+});
+
+test('workspace_volume graduated: every Platinum session is stateless, the key still typechecks', () => {
+  // Stateless sandboxes are the default since 2026-11-23: every new Platinum
+  // session keeps /workspace on its own volume. The API sends
+  // `experimental.workspace_volume` (whether new sessions get a volume) for
+  // older clients, but it no longer lists, resolves, or accepts the key.
+  const graduated: FeatureFlagKey = 'workspace_volume';
+  expect(FEATURE_FLAG_KEYS).not.toContain(graduated);
+  const project = { experimental: {} } as Pick<KortixProject, 'experimental'>;
+  const sent: boolean | undefined = project.experimental?.workspace_volume;
+  expect(sent).toBeUndefined();
+});
+
+test('secrets_egress graduated: enforced exposure needs no flag, the key still typechecks', () => {
+  // Network-Enforced Secrets is on for every project since 2026-11-23. The API
+  // sends `experimental.secrets_egress: true` for older clients, but it no
+  // longer lists, resolves, or accepts the key.
+  const graduated: FeatureFlagKey = 'secrets_egress';
+  expect(FEATURE_FLAG_KEYS).not.toContain(graduated);
+  const project = { experimental: {} } as Pick<KortixProject, 'experimental'>;
+  const sent: boolean | undefined = project.experimental?.secrets_egress;
+  expect(sent).toBeUndefined();
+});
+
+test('pooled_provider_secrets graduated: provider keys need no flag, the key still typechecks', () => {
+  // Named provider keys, sharing and session key selection are on for every
+  // project since 2026-11-12. The API sends `experimental.pooled_provider_secrets:
+  // true` for older clients, but it no longer lists, resolves, or accepts the key.
+  const graduated: FeatureFlagKey = 'pooled_provider_secrets';
+  expect(FEATURE_FLAG_KEYS).not.toContain(graduated);
+  const project = { experimental: {} } as Pick<KortixProject, 'experimental'>;
+  const sent: boolean | undefined = project.experimental?.pooled_provider_secrets;
+  expect(sent).toBeUndefined();
+});
+
+test('notification_center graduated: notifications need no flag, the key still typechecks', () => {
+  // Notifications are on for every project since 2026-11-06. The API sends
+  // `experimental.notification_center: true` for older clients, but it no
+  // longer lists, resolves, or accepts the key as a flag.
+  const graduated: FeatureFlagKey = 'notification_center';
+  expect(FEATURE_FLAG_KEYS).not.toContain(graduated);
+  const project = { experimental: {} } as Pick<KortixProject, 'experimental'>;
+  const sent: boolean | undefined = project.experimental?.notification_center;
+  expect(sent).toBeUndefined();
+});
+
 test('agent_tunnel graduated: computers need no flag, the key still typechecks', () => {
   // A paired computer is an account of the `computer` connector, gated only by
   // the platform's TUNNEL_ENABLED. The API no longer serves `agent_tunnel`.
@@ -1086,11 +1141,11 @@ test('agent_principal graduated: every governed agent authorizes as itself, the 
   expect(FEATURE_FLAG_KEYS).not.toContain(graduated);
 });
 
-test('session_transcript_history graduated: saved history is always on, the key still typechecks', () => {
-  // Every session saves its transcript and shows it while its computer is off.
-  // The API no longer serves `session_transcript_history`.
-  const graduated: FeatureFlagKey = 'session_transcript_history';
-  expect(FEATURE_FLAG_KEYS).not.toContain(graduated);
+test('session_transcript_history is no FeatureFlagKey: it left with the v1 transcript (P8.4)', () => {
+  // The flag gated the v1 transcript mirror. The session log is every session's saved history.
+  // @ts-expect-error The key is not in the union any more.
+  const removed: FeatureFlagKey = 'session_transcript_history';
+  expect(FEATURE_FLAG_KEYS).not.toContain(removed);
 });
 
 test('teams graduated: Microsoft Teams needs no flag, the key still typechecks', () => {
@@ -1187,7 +1242,7 @@ test('updateFeatureFlag PATCHes the canonical /features route', async () => {
   const sent = await captureFeatureCall(() => updateFeatureFlag('proj-1', 'reminders', true));
 
   expect(sent.method).toBe('PATCH');
-  expect(sent.url).toBe('http://backend.test/v1/projects/proj-1/features');
+  expect(sent.url).toBe('http://backend.test/v1/workspaces/proj-1/features');
   expect(sent.parsed).toEqual({ feature: 'reminders', enabled: true });
 });
 
@@ -1206,7 +1261,7 @@ test('updateExperimentalFeature keeps its legacy /experimental wire path', async
   // the canonical route would break every consumer pinned to an old server.
   const sent = await captureFeatureCall(() => updateExperimentalFeature('proj-1', 'reminders', false));
 
-  expect(sent.url).toBe('http://backend.test/v1/projects/proj-1/experimental');
+  expect(sent.url).toBe('http://backend.test/v1/workspaces/proj-1/experimental');
   expect(sent.parsed).toEqual({ feature: 'reminders', enabled: false });
 });
 
@@ -1231,7 +1286,7 @@ test('a failed repository create does not raise the global error toast', async (
   });
 
   await expect(
-    createProjectRepo({ account_id: 'acc-1', name: 'company' } as CreateProjectRepoInput),
+    createWorkspaceRepo({ account_id: 'acc-1', name: 'company' } as CreateProjectRepoInput),
   ).rejects.toThrow();
 
   expect(toasted).toEqual([]);
@@ -1250,7 +1305,7 @@ async function captureTransfer(projectId: string, accountId: string) {
     });
   }) as unknown as typeof fetch;
 
-  await transferProject(projectId, accountId);
+  await transferWorkspace(projectId, accountId);
 
   expect(request).toBeDefined();
   return {
@@ -1263,7 +1318,7 @@ test('transferProject POSTs the target account id to the transfer route', async 
   const sent = await captureTransfer('proj-1', 'acc-2');
 
   expect(sent.method).toBe('POST');
-  expect(sent.url).toBe('http://backend.test/v1/projects/proj-1/transfer');
+  expect(sent.url).toBe('http://backend.test/v1/workspaces/proj-1/transfer');
   expect(sent.parsed).toEqual({ account_id: 'acc-2' });
 });
 
@@ -1288,7 +1343,7 @@ test('getProjectQuota reads the cap state for an explicit account', async () => 
     );
   }) as unknown as typeof fetch;
 
-  const quota = await getProjectQuota({ accountId: 'acc-1' });
+  const quota = await getWorkspaceQuota({ accountId: 'acc-1' });
 
   expect(sentUrl).toBe('http://backend.test/v1/projects/quota?account_id=acc-1');
   expect(quota.capped).toBe(true);
@@ -1309,7 +1364,7 @@ test('getProjectQuota omits account_id to let the server resolve the default', a
     });
   }) as unknown as typeof fetch;
 
-  const quota = await getProjectQuota();
+  const quota = await getWorkspaceQuota();
 
   expect(sentUrl).toBe('http://backend.test/v1/projects/quota');
   expect(quota.capped).toBe(false);

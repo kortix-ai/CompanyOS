@@ -136,6 +136,11 @@ export function describeCadence(expression: string): string {
     return n === 1 ? 'Every minute' : `Every ${n} minutes`;
   }
 
+  // Every minute: `*` in the minute field, as `kortix.yaml` often writes it.
+  if (minute === '*' && hour === '*' && day === '*' && month === '*' && weekday === '*') {
+    return 'Every minute';
+  }
+
   // Every N hours, on a given minute.
   if (hour.startsWith('*/') && day === '*' && weekday === '*') {
     const n = Number(hour.slice(2));
@@ -382,7 +387,7 @@ export function describeConditions(filter: Record<string, string> | null | undef
  * these were two tabs of the Settings overlay — every pane in that overlay
  * takes its title and description from its rail entry, and being the one
  * exception is what let the copy drift before. They are capability PAGES now
- * (`/projects/<id>/schedules`, `/projects/<id>/webhooks`), not panes, so they
+ * (`/workspaces/<id>/schedules`, `/workspaces/<id>/webhooks`), not panes, so they
  * have no rail entry to read: a rail lookup that finds nothing renders no
  * heading and throws nothing, which is exactly the silent failure to avoid.
  * The copy is the wording those rail entries carried, moved verbatim.

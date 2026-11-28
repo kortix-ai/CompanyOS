@@ -9,7 +9,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColorScheme } from 'nativewind';
 import { haptics } from '@/lib/haptics';
-import { BottomSheetModal, BottomSheetTextInput, BottomSheetView } from '@gorhom/bottom-sheet';
+import type { BottomSheetModal } from '@gorhom/bottom-sheet';
+import { SheetRawTextInput, SheetView } from '@/components/kortix/sheet-parts';
 import {
   CheckIcon as Check,
   GlobeIcon as Globe,
@@ -36,14 +37,18 @@ function providerLabel(provider: SandboxProviderName): string {
   return provider.toUpperCase();
 }
 
+/** Not one of the statuses statusColor and statusLabel name: still provisioning. */
+const isProvisioningStatus = (status: string) =>
+  !['running', 'ready', 'active', 'stopped', 'archived', 'error', 'failed'].includes(status);
+
 function statusColor(status: string, isDark: boolean): string {
   switch (status) {
-    case 'running': case 'ready': case 'active': return THEME.accent.green;
+    case 'running': case 'ready': case 'active': return THEME.accent[isDark ? 'dark' : 'light'].green;
     case 'stopped': case 'archived':
       return isDark ? THEME.dark.mutedForeground : THEME.light.mutedForeground;
     case 'error': case 'failed':
       return isDark ? THEME.dark.destructive : THEME.light.destructive;
-    default: return THEME.accent.orange;
+    default: return THEME.accent[isDark ? 'dark' : 'light'].orange;
   }
 }
 
@@ -63,6 +68,7 @@ export default function InstancesScreen() {
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const accent = THEME.accent[isDark ? 'dark' : 'light'];
   const { sandboxId, switchSandbox } = useSandboxContext();
 
   const { data: instances, isLoading, refetch, isRefetching } = useInstances();
@@ -81,7 +87,7 @@ export default function InstancesScreen() {
 
   // Auto-poll when any instance is provisioning
   const hasProvisioning = React.useMemo(
-    () => instances?.some((i) => !['running', 'ready', 'active', 'stopped', 'archived', 'error', 'failed'].includes(i.status)),
+    () => instances?.some((i) => isProvisioningStatus(i.status)),
     [instances],
   );
   React.useEffect(() => {
@@ -135,7 +141,7 @@ export default function InstancesScreen() {
                   <>
                     <View className="py-3.5">
                       <View className="flex-row items-center mb-2">
-                        <View className="h-2.5 w-2.5 rounded-full mr-3" style={{ backgroundColor: THEME.accent.orange }} />
+                        <View className="h-2.5 w-2.5 rounded-full mr-3" style={{ backgroundColor: accent.orange }} />
                         <View className="flex-1">
                           <Text className="font-roobert-medium text-[15px] text-foreground">Sandbox</Text>
                           <Text className="mt-0.5 font-roobert text-[13px] text-muted-foreground">
@@ -166,7 +172,7 @@ export default function InstancesScreen() {
                 {instances?.map((instance, idx) => {
                   const isActive = instance.external_id === sandboxId;
                   const isLast = idx === (instances?.length ?? 0) - 1;
-                  const isProvisioning = !['running', 'ready', 'active', 'stopped', 'archived', 'error', 'failed'].includes(instance.status);
+                  const isProvisioning = isProvisioningStatus(instance.status);
                   // Prefer live /kortix/health version for the active instance;
                   // fall back to the DB cache (instance.version) for others.
                   const effectiveVersion = (isActive ? liveActiveVersion : null) || instance.version || null;
@@ -176,7 +182,7 @@ export default function InstancesScreen() {
                         <View className="flex-row items-center">
                           <View
                             className="h-2.5 w-2.5 rounded-full mr-3"
-                            style={{ backgroundColor: isProvisioning ? THEME.accent.orange : statusColor(instance.status, isDark) }}
+                            style={{ backgroundColor: statusColor(instance.status, isDark) }}
                           />
                           <View className="flex-1">
                             <Text className="font-roobert-medium text-[15px] text-foreground" numberOfLines={1}>
@@ -201,7 +207,7 @@ export default function InstancesScreen() {
                           >
                             <View
                               className="h-full rounded-full"
-                              style={{ width: '30%', backgroundColor: THEME.accent.orange }}
+                              style={{ width: '30%', backgroundColor: accent.orange }}
                             />
                           </View>
                         )}
@@ -310,7 +316,7 @@ const AddInstanceSheet = React.forwardRef<
       backdropComponent={(p) => <SheetBackdrop {...p} opacity={0.35} />}
       onDismiss={resetState}
     >
-      <BottomSheetView style={{ paddingHorizontal: 20, paddingTop: 4, paddingBottom: Math.max(insets.bottom, 20) + 16 }}>
+      <SheetView style={{ paddingHorizontal: 20, paddingTop: 4, paddingBottom: Math.max(insets.bottom, 20) + 16 }}>
         {isCreating && progress ? (
           <View className="px-1">
             <Text className="mb-2 text-[13px] font-roobert-medium uppercase tracking-wider text-muted-foreground/80">
@@ -375,7 +381,7 @@ const AddInstanceSheet = React.forwardRef<
               Enter the address of your Kortix instance.
             </Text>
 
-            <BottomSheetTextInput
+            <SheetRawTextInput
               value={customUrl}
               onChangeText={setCustomUrl}
               placeholder="http://localhost:8008/v1/p/sandbox/8000"
@@ -392,7 +398,7 @@ const AddInstanceSheet = React.forwardRef<
               }}
             />
 
-            <BottomSheetTextInput
+            <SheetRawTextInput
               value={customLabel}
               onChangeText={setCustomLabel}
               placeholder="Display name (optional)"
@@ -443,7 +449,7 @@ const AddInstanceSheet = React.forwardRef<
             </Pressable>
           </View>
         )}
-      </BottomSheetView>
+      </SheetView>
     </KortixBottomSheetModal>
   );
 });

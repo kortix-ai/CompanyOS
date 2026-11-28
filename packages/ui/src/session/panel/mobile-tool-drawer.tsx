@@ -13,8 +13,8 @@
  *
  * Bodies are the same self-contained surfaces Advanced mode's panel tabs
  * mount (`SessionTerminalPanel`, `BrowserPanel`, `SessionFilesExplorer`,
- * `SessionAuditPanel`), so both panel modes get identical tools here. vaul
- * unmounts the content on close, so the terminal reconnects per open — the
+ * `SessionAuditPanel`), so both panel modes get identical tools here. The
+ * drawer unmounts the content on close, so the terminal reconnects per open — the
  * tradeoff every mobile drawer in this feature already accepts.
  */
 
@@ -36,7 +36,7 @@ import { sessionPreviewTabId } from '../../internal/stores/session-browser-store
 import {
   AlarmIcon,
   FolderOpenIcon,
-  GlobeIcon,
+  AppWindowIcon,
   MonitorIcon,
   ScrollIcon,
   TerminalWindowIcon,
@@ -45,7 +45,7 @@ import {
 
 const TOOL_META: Record<QuickView, { label: string; Icon: Icon }> = {
   terminal: { label: 'Terminal', Icon: TerminalWindowIcon },
-  browser: { label: 'Browser', Icon: GlobeIcon },
+  browser: { label: 'Browser', Icon: AppWindowIcon },
   files: { label: 'Files', Icon: FolderOpenIcon },
   audit: { label: 'Audit', Icon: ScrollIcon },
   reminders: { label: 'Loops', Icon: AlarmIcon },

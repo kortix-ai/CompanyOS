@@ -8,6 +8,8 @@ import {
   ENVIRONMENT_PROTECTION_USERNAME,
 } from '@/lib/environment-protection';
 import { AUTH_BOUNCE_COOKIE } from '@kortix/ui/internal/lib/onboarding/landing-destination';
+import { SESSION_ENDED_COOKIE } from '@/lib/auth/session-expiry';
+import { KORTIX_SUPABASE_AUTH_COOKIE } from '@/lib/supabase/constants';
 import { middleware } from './middleware';
 
 /**
@@ -32,7 +34,7 @@ import { middleware } from './middleware';
  * possible, source assertion — comments stripped first — where it is not).
  */
 
-const FOREIGN_PROJECT = '/projects/319395c1-9c3f-41b4-ac6c-9539a12dbb7c';
+const FOREIGN_PROJECT = '/workspaces/319395c1-9c3f-41b4-ac6c-9539a12dbb7c';
 
 function setCookieFor(response: Response, name: string): string | undefined {
   return response.headers.getSetCookie().find((value) => value.startsWith(`${name}=`));
@@ -80,6 +82,23 @@ describe('kortix_auth_bounce: Secure on production HTTPS', () => {
   });
 });
 
+describe('kortix_session_ended: Secure and HttpOnly on production HTTPS', () => {
+  test('the bounce of a request that carried a session sets the marker with both flags', async () => {
+    env.NODE_ENV = 'production';
+    const request = new NextRequest(new Request(`https://dev.kortix.com${FOREIGN_PROJECT}`));
+    // An expired session: the bounce needs no Supabase call (KRTX-2111).
+    const session = { access_token: 'synthetic', refresh_token: 'synthetic', expires_at: 1 };
+    request.cookies.set(
+      KORTIX_SUPABASE_AUTH_COOKIE,
+      `base64-${Buffer.from(JSON.stringify(session)).toString('base64url')}`,
+    );
+
+    const cookie = setCookieFor(await middleware(request), SESSION_ENDED_COOKIE);
+    expect(cookie).toContain('Secure');
+    expect(cookie).toContain('HttpOnly');
+  });
+});
+
 describe('__Secure-kortix_test_access: never minted on an open path', () => {
   test('the exempted auth callback response sets no access cookie and no Basic challenge', async () => {
     process.env.WEB_PROTECTION_ENABLED = 'true';
@@ -103,7 +122,7 @@ describe('__Secure-kortix_test_access: never minted on an open path', () => {
     process.env.WEB_PROTECTION_PASSWORD = 'test-protection-pw';
 
     const response = await middleware(
-      new NextRequest(new Request('https://dev.kortix.com/projects')),
+      new NextRequest(new Request('https://dev.kortix.com/workspaces')),
     );
 
     expect(response.status).toBe(401);

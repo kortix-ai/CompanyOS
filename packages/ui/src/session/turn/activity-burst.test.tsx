@@ -162,7 +162,7 @@ describe('ActivityGroupStep', () => {
 
   test('group trigger skeleton', () => {
     expect(rowNodes(triggerRow(render(false), 'Read 2 files'))).toBe(
-      '<div data-status="done" class="select-none text-foreground/80 hover:text-foreground flex w-full cursor-pointer items-center gap-3 text-left text-sm leading-[1.5] transition-colors" role="button" aria-expanded="false" tabindex="0"><svg class="text-muted-foreground size-4 flex-none"/><span class="min-w-0 truncate font-medium">Read 2 files</span><svg class="text-muted-foreground/40 size-3.5 flex-none transition-transform group-data-[state=open]/step:rotate-90"/></div>',
+      '<div data-status="done" class="select-none text-foreground/80 hover:text-foreground flex w-full cursor-pointer items-center gap-3 text-left text-sm leading-[1.5] transition-colors" role="button" aria-expanded="false" tabindex="0"><svg class="text-muted-foreground size-4 flex-none"/><span class="min-w-0 truncate font-medium">Read 2 files</span><svg class="text-muted-foreground size-3.5 flex-none transition-transform group-data-[state=open]/step:rotate-90"/></div>',
     );
   });
 
@@ -521,7 +521,7 @@ describe('ActivityBurst', () => {
 
   const renderBurst = (
     parts: Part[],
-    { working = false, isTrailing = false, density = 'normal' as 'normal' | 'minimal' } = {},
+    { working = false, isTrailing = false, density = 'normal' as 'normal' | 'minimal', open = false } = {},
   ) =>
     renderToStaticMarkup(
       <QueryClientProvider client={new QueryClient()}>
@@ -533,6 +533,7 @@ describe('ActivityBurst', () => {
             isTrailing={isTrailing}
             disableNavigation
             density={density}
+            defaultOpen={open}
           />
         </IntlTestProvider>
       </QueryClientProvider>,
@@ -743,7 +744,7 @@ describe('ActivityBurst', () => {
       } as unknown as Part,
     ]);
     expect(rowNodes(triggerRow(markup, 'Thinking'))).toBe(
-      '<div class="select-none text-foreground/80 hover:text-foreground flex w-full cursor-pointer items-center gap-3 text-left text-sm leading-[1.5] transition-colors" role="button" aria-expanded="false" tabindex="0"><span class="font-medium tabular-nums">Thinking</span><svg class="text-muted-foreground/40 size-3.5 flex-none transition-transform group-data-[state=open]/step:rotate-90"/></div>',
+      '<div class="select-none text-foreground/80 hover:text-foreground flex w-full cursor-pointer items-center gap-3 text-left text-sm leading-[1.5] transition-colors" role="button" aria-expanded="false" tabindex="0"><span class="font-medium tabular-nums">Thinking</span><svg class="text-muted-foreground size-3.5 flex-none transition-transform group-data-[state=open]/step:rotate-90"/></div>',
     );
   });
 
@@ -803,19 +804,16 @@ describe('ActivityBurst', () => {
     expect(markup).toContain('Thinking');
   });
 
-  test('a thought opens itself while the model is still thinking', () => {
-    // The live thought is the LAST row, which is the only place one can be:
-    // a tool call after it means the model closed that reasoning block to make
-    // the call. The fixture used to put a running bash after the thought and
-    // still expect it open — the exact shape this row must NOT treat as live.
-    const markup = renderBurst(
-      [
-        done('1', 'bash'),
-        { id: 'r', type: 'reasoning', text: 'Weighing two schemas' } as unknown as Part,
-      ],
-      { working: true, isTrailing: true },
-    );
-    expect(markup).toContain('Weighing two schemas');
+  test('a live thought opens only when the reader opens it (KRTX-5238)', () => {
+    // Nothing in a turn opens or closes by itself: a burst that opened while the model thought
+    // and shut at the next text moved everything under it.
+    const parts = [done('1', 'bash'), { id: 'r', type: 'reasoning', text: 'Weighing two schemas' } as unknown as Part];
+    const closed = renderBurst(parts, { working: true, isTrailing: true });
+    expect(closed).toContain('Working');
+    expect(closed).not.toContain('Weighing two schemas');
+    const opened = renderBurst(parts, { working: true, isTrailing: true, open: true });
+    expect(opened).toContain('Thinking');
+    expect(opened).not.toContain('Weighing two schemas');
   });
 
   test('a tool call after a thought settles it, even with no end time on the part', () => {
@@ -827,7 +825,7 @@ describe('ActivityBurst', () => {
         { id: 'r', type: 'reasoning', text: 'Weighing two schemas' } as unknown as Part,
         tool('1', 'bash', { status: 'running', input: { command: 'ls' } }),
       ],
-      { working: true, isTrailing: true },
+      { working: true, isTrailing: true, open: true },
     );
     expect(markup).toContain('Thinking');
     expect(markup).not.toContain('Weighing two schemas');
@@ -854,12 +852,12 @@ describe('ActivityBurst', () => {
       expect(markup).not.toContain('pnpm build');
     });
 
-    test('…and the same running burst IS open under normal density', () => {
+    test('…normal density stays collapsed too (KRTX-5238), and the reader\'s open shows the command', () => {
       // The control: proves the assertion above can fail. Without it, a
       // refactor that stopped rendering the command at all would keep the
       // minimal test green for the wrong reason.
-      const markup = renderBurst(liveParts(), { working: true, isTrailing: true });
-      expect(markup).toContain('pnpm build');
+      expect(renderBurst(liveParts(), { working: true, isTrailing: true })).not.toContain('pnpm build');
+      expect(renderBurst(liveParts(), { working: true, isTrailing: true, open: true })).toContain('pnpm build');
     });
 
     test('a live bare thought keeps its text behind the caret', () => {
@@ -876,9 +874,10 @@ describe('ActivityBurst', () => {
       });
       expect(minimal).toContain('Thinking');
       expect(minimal).not.toContain('Weighing two schemas');
-      // The control again: normal density DOES open the live thought.
+      // Normal density keeps it behind the caret too (KRTX-5238): only the reader opens it.
       const normal = renderBurst(thought, { working: true, isTrailing: true });
-      expect(normal).toContain('Weighing two schemas');
+      expect(normal).toContain('Thinking');
+      expect(normal).not.toContain('Weighing two schemas');
     });
 
     test('a settled burst renders identically in both modes', () => {
@@ -917,14 +916,14 @@ describe('ActivityBurst', () => {
         done('2', 'read', { filePath: '/workspace/main.ts' }),
         thinking('r3', 'Weighing the third schema'),
       ],
-      { working: true, isTrailing: true },
+      { working: true, isTrailing: true, open: true },
     );
     expect(markup).toContain('Thinking');
     expect(shimmeringThoughts(markup)).toBe(1);
   });
 
-  test('a settled thought stays CLOSED while later work runs', () => {
-    // The same flag force-opens every past thought, so finished reasoning
+  test('in an opened burst no thought opens itself, settled or live (KRTX-5238)', () => {
+    // The same flag force-opened every past thought, so finished reasoning
     // unfurled its whole paragraph under a row the reader never opened.
     const markup = renderBurst(
       [
@@ -932,10 +931,10 @@ describe('ActivityBurst', () => {
         done('1', 'bash'),
         thinking('r2', 'Weighing the second schema'),
       ],
-      { working: true, isTrailing: true },
+      { working: true, isTrailing: true, open: true },
     );
     expect(markup).not.toContain('Weighing the first schema');
-    expect(markup).toContain('Weighing the second schema');
+    expect(markup).not.toContain('Weighing the second schema');
   });
 
   test('a thought that ended stops shimmering even as the last row of a working burst', () => {
@@ -1078,7 +1077,7 @@ describe('ActivityBurst', () => {
         done('1', 'read', { filePath: '/workspace/package.json' }),
         tool('2', 'read', { status: 'error', error: 'ENOENT', input: { filePath: '/gone.ts' } }),
       ],
-      { working: true, isTrailing: true },
+      { working: true, isTrailing: true, open: true },
     );
     expect(markup).toContain('Read 2 files');
     expect(markup).not.toContain("Couldn't read your files");
@@ -1105,7 +1104,7 @@ describe('ActivityBurst', () => {
         done('1', 'read', { filePath: '/workspace/main.ts' }),
         done('2', 'grep', { pattern: 'foo' }),
       ],
-      { working: true, isTrailing: true },
+      { working: true, isTrailing: true, open: true },
     );
     expect(markup).toContain('Looked through your files · 1 read');
     expect(markup).not.toContain('Read 2 files');
@@ -1117,7 +1116,7 @@ describe('ActivityBurst', () => {
         done('1', 'edit', { filePath: '/workspace/main.ts' }),
         done('2', 'edit', { filePath: '/workspace/other.ts' }),
       ],
-      { working: true, isTrailing: true },
+      { working: true, isTrailing: true, open: true },
     );
     expect(markup).toContain('Updated 2 files');
     expect(markup).not.toContain('Wrote 2 files');
@@ -1353,7 +1352,7 @@ describe('answered question step', () => {
       time: { start: 1, end: 2 },
     });
 
-  const renderBurst = (parts: Part[], { working = false, isTrailing = false } = {}) =>
+  const renderBurst = (parts: Part[], { working = false, isTrailing = false, open = false } = {}) =>
     renderToStaticMarkup(
       <QueryClientProvider client={new QueryClient()}>
         <IntlTestProvider locale="en" onError={() => {}}>
@@ -1363,6 +1362,7 @@ describe('answered question step', () => {
             working={working}
             isTrailing={isTrailing}
             disableNavigation
+            defaultOpen={open}
           />
         </IntlTestProvider>
       </QueryClientProvider>,
@@ -1375,6 +1375,7 @@ describe('answered question step', () => {
     const markup = renderBurst([answered('q'), done('1', 'bash'), done('2', 'bash')], {
       working: true,
       isTrailing: true,
+      open: true,
     });
     expect(markup).toContain('Questions');
     expect(markup).toContain('2 answered');
@@ -1393,7 +1394,7 @@ describe('answered question step', () => {
 
   test('answered question trigger skeleton', () => {
     expect(rowNodes(triggerRow(renderBurst([answered('q')]), '2 answered'))).toBe(
-      '<div class="select-none text-foreground/80 hover:text-foreground flex w-full cursor-pointer items-center gap-3 text-left text-sm leading-[1.5] transition-colors" role="button" aria-expanded="false" tabindex="0"><svg class="text-muted-foreground size-4 flex-none"/><span class="font-medium">Questions</span><span class="text-muted-foreground tabular-nums">2 answered</span><svg class="text-muted-foreground/40 size-3.5 flex-none transition-transform group-data-[state=open]/step:rotate-90"/></div>',
+      '<div class="select-none text-foreground/80 hover:text-foreground flex w-full cursor-pointer items-center gap-3 text-left text-sm leading-[1.5] transition-colors" role="button" aria-expanded="false" tabindex="0"><svg class="text-muted-foreground size-4 flex-none"/><span class="font-medium">Questions</span><span class="text-muted-foreground tabular-nums">2 answered</span><svg class="text-muted-foreground size-3.5 flex-none transition-transform group-data-[state=open]/step:rotate-90"/></div>',
     );
   });
 

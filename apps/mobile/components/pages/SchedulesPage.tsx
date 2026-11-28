@@ -19,15 +19,16 @@ import React, { useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { useColorScheme } from 'nativewind';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BottomSheetModal } from '@gorhom/bottom-sheet';
+import type { BottomSheetModal } from '@gorhom/bottom-sheet';
 import { TRIGGER_CONTROL_ACTIONS, triggerControlsFrom } from '@kortix/sdk';
 import { useCans } from '@kortix/sdk/react';
-import { CaretRightIcon as ChevronRight, WarningIcon as TriangleAlert } from '@/lib/icons';
+import { CaretRightIcon as ChevronRight, PlusIcon, WarningIcon as TriangleAlert } from '@/lib/icons';
 import { Text } from '@/components/ui/text';
 import { Icon } from '@/components/ui/icon';
 import { PageHeader } from '@/components/kortix/page-header';
 import { PageContent } from '@/components/kortix/page-content';
 import { SearchListHeader } from '@/components/kortix/search-list-header';
+import { BottomSearchBar, useBottomSearchInset, usesBottomSearch } from '@/components/kortix/bottom-search-bar';
 import { PageList, StatusDot } from '@/components/kortix/page-list';
 import { THEME, withAlpha } from '@/lib/utils/theme';
 import { useProjectTriggers } from '@/lib/projects/hooks';
@@ -61,6 +62,7 @@ export function SchedulesPage({
 }: SchedulesPageProps) {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const accent = THEME.accent[isDark ? 'dark' : 'light'];
   const insets = useSafeAreaInsets();
   const [search, setSearch] = useState('');
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
@@ -84,6 +86,17 @@ export function SchedulesPage({
   }, [all, search]);
   const selected = useMemo(() => all.find((t) => t.slug === selectedSlug) ?? null, [all, selectedSlug]);
 
+  // iOS: search and New schedule sit at the bottom (`BottomSearchBar`); elsewhere
+  // the search pill under the header and the header's `+`.
+  const bottomSearch = usesBottomSearch();
+  const bottomInset = useBottomSearchInset();
+  const openCreate = controls.canCreate
+    ? () => {
+        haptics.tap();
+        addSheetRef.current?.present();
+      }
+    : undefined;
+
   const openRow = (slug: string) => {
     haptics.tap();
     setSelectedSlug(slug);
@@ -96,24 +109,24 @@ export function SchedulesPage({
         title={page.label}
         onBack={onBack}
         onOpenDrawer={onBack ? undefined : onOpenDrawer}
-        onAdd={controls.canCreate ? () => { haptics.tap(); addSheetRef.current?.present(); } : undefined}
+        onAdd={bottomSearch ? undefined : openCreate}
         addLabel="New schedule"
       />
 
       <PageContent>
         {errors.length > 0 && (
-          <View style={{ marginHorizontal: 16, marginTop: 12, padding: 12, borderRadius: 12, backgroundColor: withAlpha(THEME.accent.orange, 0.08) }}>
+          <View style={{ marginHorizontal: 16, marginTop: 12, padding: 12, borderRadius: 12, backgroundColor: withAlpha(accent.orange, 0.08) }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-              <Icon as={TriangleAlert} size={15} color={THEME.accent.orange} />
-              <Text style={{ fontSize: 12.5, fontFamily: 'Roobert-Medium', color: THEME.accent.orange }}>Some triggers couldn't be parsed</Text>
+              <Icon as={TriangleAlert} size={15} color={accent.orange} />
+              <Text style={{ fontSize: 12.5, fontFamily: 'Roobert-Medium', color: accent.orange }}>Some triggers couldn't be parsed</Text>
             </View>
             {errors.map((e) => (
-              <Text key={e.slug + e.path} style={{ fontSize: 12, color: THEME.accent.orange, marginTop: 2 }}>{e.path} — {e.error}</Text>
+              <Text key={e.slug + e.path} style={{ fontSize: 12, color: accent.orange, marginTop: 2 }}>{e.path} — {e.error}</Text>
             ))}
           </View>
         )}
 
-        <SearchListHeader value={search} onChangeText={setSearch} placeholder="Search schedules" />
+        {bottomSearch ? null : <SearchListHeader value={search} onChangeText={setSearch} placeholder="Search schedules" />}
 
         <PageList<ProjectTrigger>
           isLoading={isLoading}
@@ -122,7 +135,7 @@ export function SchedulesPage({
           onRefresh={() => refetch()}
           emptyLabel={
             forbidden
-              ? "You don't have access to this project's schedules"
+              ? "You don't have access to this workspace's schedules"
               : filtered.length === 0
                 ? all.length === 0 ? 'No schedules yet' : 'No matching schedules'
                 : null
@@ -130,6 +143,7 @@ export function SchedulesPage({
           // Settings rows in a group (Jay, 2026-09-22), the Agents list's
           // layout; virtualised, one `SettingsGroupItem` per row (COR-155).
           header={<View className="h-1" />}
+          bottomInset={bottomSearch ? bottomInset : undefined}
           data={filtered}
           keyExtractor={(t) => t.slug}
           renderItem={(t, index) => (
@@ -151,6 +165,15 @@ export function SchedulesPage({
           )}
         />
       </PageContent>
+
+      <BottomSearchBar
+        value={search}
+        onChangeText={setSearch}
+        placeholder="Search schedules"
+        // The bar's own haptic stands in for `openCreate`'s.
+        action={openCreate ? { label: 'New schedule', icon: PlusIcon, onPress: () => addSheetRef.current?.present() } : undefined}
+        background={bgColor}
+      />
 
       <KortixBottomSheetModal
         ref={addSheetRef}

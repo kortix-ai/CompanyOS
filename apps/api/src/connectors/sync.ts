@@ -1,17 +1,5 @@
 import { createHash } from 'node:crypto';
-import {
-  connectorConnections,
-  connectorActions,
-  connectorPolicies,
-  connectorPolicySets,
-  connectors,
-  connectorProjectPolicies,
-  connectorProjectSettings,
-  connectorSyncFences,
-  projectSessionConnectorBindings,
-  projects,
-  tunnelConnections,
-} from '@kortix/db';
+import { connectorConnections, connectorActions, connectorPolicies, connectorPolicySets, connectors, connectorProjectPolicies, connectorProjectSettings, connectorSyncFences, projectSessionConnectorBindings, tunnelConnections } from '@kortix/db';
 /**
  * Connector materialization sweep — read `connectors:` from kortix.yaml,
  * fetch + normalize each connector's catalog, and upsert into the DB
@@ -25,7 +13,7 @@ import { and, eq, inArray, isNotNull, notExists, or, sql } from 'drizzle-orm';
 import { getImpersonationContext } from '../shared/impersonation';
 import { parse as parseYaml } from 'yaml';
 import { hasEmailInboxes, loadSlackInstall, purgeLegacyEmailState } from '../channels/install-store';
-import { assertAllowedEndpointUrl, assertAllowedSourceAddress } from '../marketplace/catalog';
+import { assertAllowedEndpointUrl, assertAllowedSourceAddress } from '../shared/source-address-guard';
 import { safeEgressFetch, UnsafeEgressError } from '../shared/ssrf-guard';
 import { configuredTimeoutMs, withTimeout } from '../shared/with-timeout';
 import { config } from '../config';
@@ -36,18 +24,20 @@ import {
 } from '../projects/connectors';
 import { type GitBackedProject, isRepoFileNotFoundError, readRepoFile } from '../projects/git';
 import { mapWithConcurrency } from '../shared/map-with-concurrency';
-import { MANIFEST_PROJECT_NAME_KEY, metadataMerge, projectNameAction, withProjectGitAuth } from '../projects/surface';
+import { MANIFEST_PROJECT_NAME_KEY, metadataMerge, projectNameAction, renameAccountOfSoleProject, withProjectGitAuth } from '../projects/surface';
 import { extractProjectPolicies } from '../projects/policies';
 import { hideSupersededSlack } from './channel-rules';
 import {
   confineSharedProjectSecretToConnector,
+  websiteLoginIdentifiers,
   getProjectSecretValueForConsumer,
 } from '../projects/secrets';
 import { SecretUndecryptableError } from '../secrets/undecryptable';
 import { type GitTriggerSpec, extractTriggers, readManifest, runtimeManifest } from '../projects/triggers';
 import { syncDeclaredApps } from '../apps/app-manifest';
 import { reconcileProjectTriggerRuntime } from '../projects/trigger-runtime-catalog';
-import { reconcileEventSubscriptions } from '../projects/surface';
+import { gateTriggerSetup, reconcileEventSubscriptions } from '../projects/surface';
+import { recordAuditEvent } from '../shared/audit';
 import { db } from '../shared/db';
 import { isUniqueViolation } from '../shared/postgres-errors';
 import { ensureChannelConnectorDeclared, removeChannelConnectorDeclared } from './channel-manifest';
@@ -91,6 +81,7 @@ import {
   mergeAuthDiscoveries,
 } from './auth-discovery';
 import type { HttpRouteSpec, NormalizedAction } from './types';
+import { projectsView, updateProjectRows, updateProjectRowsReturning } from '../workspaces/rows';
 
 export interface SyncResult {
   synced: number;
@@ -165,6 +156,25 @@ export async function rematerializeCatalogAfterCredentialUpdate(
     // A member's update refreshes only its own connector.
     ...(!projectDefault && input.connectorId ? { onlyConnectorId: input.connectorId } : {}),
   });
+}
+
+/**
+ * A catalog fetch that only shows nobody signed in yet: an MCP connector that
+ * declares auth, fetched with no credential, answered HTTP 401 or 403.
+ *
+ * Prod audit, 2026-11-11: 28 accounts added an MCP server and never finished
+ * the sign-in. The sync called `tools/list` without a credential, got 401, and
+ * stored the connector as `error`, which outranks `needs_auth`: the list showed
+ * Error instead of Sign in. A 401 to a stored credential stays an error: the
+ * credential was rejected, and the gateway names that fix.
+ */
+export function mcpCatalogAwaitsSignIn(
+  spec: Pick<ConnectorSpec, 'provider' | 'auth'>,
+  credential: string | null | undefined,
+  error: unknown,
+): boolean {
+  if (spec.provider !== 'mcp' || spec.auth.type === 'none' || credential) return false;
+  return /^MCP tools\/list failed: HTTP 40[13]$/.test(error instanceof Error ? error.message : '');
 }
 
 export function catalogPersistenceState(
@@ -263,7 +273,7 @@ export async function discoverDraftConnectorAuth(
   projectId: string,
   draft: Record<string, unknown>,
 ): Promise<ConnectorAuthDiscovery> {
-  const [row] = await db.select().from(projects).where(eq(projects.projectId, projectId)).limit(1);
+  const [row] = await db.select().from(projectsView).where(eq(projectsView.projectId, projectId)).limit(1);
   if (!row) throw new Error('project not found');
   return discoverConnectorAuthFromSource(await withProjectGitAuth(row), draft);
 }
@@ -403,9 +413,9 @@ export async function reconcileChannelConnectors(
 ): Promise<void> {
   try {
     const [row] = await db
-      .select({ accountId: projects.accountId, metadata: projects.metadata })
-      .from(projects)
-      .where(eq(projects.projectId, projectId))
+      .select({ accountId: projectsView.accountId, metadata: projectsView.metadata })
+      .from(projectsView)
+      .where(eq(projectsView.projectId, projectId))
       .limit(1);
     if (!row) return;
     const slackInstalled = (await loadSlackInstall(projectId).catch(() => null)) != null;
@@ -467,6 +477,13 @@ const SYNC_CONCURRENCY = 4;
 
 interface ResolvedCatalog {
   actions: NormalizedAction[];
+  /**
+   * An MCP server that signs in (auth declared) answered 401/403 to a
+   * catalog fetch with no credential: nobody has signed in yet. Not an error:
+   * the connector lists as `needs_auth` with its Sign in action, and the
+   * sign-in re-fetches the catalog (oauth2-rematerialize.ts).
+   */
+  awaitsSignIn?: boolean;
   /** Fetched with a member's personal credential (`resolveMcpCatalogCredential`). */
   memberPublished?: boolean;
   /** OpenAPI server discovered from the doc (folded into config). */
@@ -484,7 +501,7 @@ export async function syncProjectConnectors(
   _accountId: string,
   opts: SyncOptions = {},
 ): Promise<SyncResult> {
-  const [row] = await db.select().from(projects).where(eq(projects.projectId, projectId)).limit(1);
+  const [row] = await db.select().from(projectsView).where(eq(projectsView.projectId, projectId)).limit(1);
   if (!row)
     return {
       synced: 0,
@@ -500,7 +517,7 @@ export async function syncProjectConnectors(
 }
 
 async function syncProjectConnectorsFenced(
-  row: typeof projects.$inferSelect,
+  row: typeof projectsView.$inferSelect,
   accountId: string,
   fence: ConnectorSyncFence,
   opts: SyncOptions,
@@ -547,6 +564,9 @@ async function syncProjectConnectorsFenced(
     const triggers = extractTriggers(runtimeManifest(manifest));
     triggerSpecs = triggers.specs;
     await reconcileProjectTriggerRuntime(projectId, triggers.specs);
+    // A kortix.yaml edit that turns on a trigger the account has no model for
+    // pauses it with the reason; one that brings a model resumes it.
+    await gateTriggerSetup({ projectId, accountId, specs: triggers.specs });
     errors.push(...triggers.errors.map((e) => ({ slug: e.slug, error: e.error })));
 
     const parsed = extractConnectors(manifest);
@@ -591,10 +611,31 @@ async function syncProjectConnectorsFenced(
 
   // A connector binding is server-side by definition. Convert legacy runtime
   // rows before catalog discovery or a concurrent sandbox start can read them.
+  // A website login is never a connector credential: kortix.yaml (which an
+  // agent can edit) naming one must not move a person's password to the
+  // connector's host. The connector reader refuses a `browser` row anyway;
+  // this refuses the binding out loud and leaves the login untouched.
+  const bindings = specs.flatMap((spec) => (spec.auth.secret ? [{ slug: spec.slug, identifier: spec.auth.secret }] : []));
+  const loginNames = await websiteLoginIdentifiers(projectId, [...new Set(bindings.map((b) => b.identifier))]);
+  for (const binding of bindings.filter((b) => loginNames.has(b.identifier))) {
+    errors.push({
+      slug: binding.slug,
+      error: `auth.secret ${binding.identifier} is a website login, which only the sandbox browser may use. Store this connector's credential under another name.`,
+    });
+    await recordAuditEvent({
+      accountId,
+      projectId,
+      actorType: 'system',
+      source: 'connector_sync',
+      action: 'secret.consumer.denied',
+      outcome: 'denied',
+      resourceType: 'project_secret',
+      metadata: { name: binding.identifier, connector: binding.slug, requested_consumer: 'connector', configured_consumer: 'browser', reason: 'website_login_binding' },
+    });
+  }
   await Promise.all(
-    specs
-      .map((spec) => spec.auth.secret)
-      .filter((identifier): identifier is string => Boolean(identifier))
+    [...new Set(bindings.map((b) => b.identifier))]
+      .filter((identifier) => !loginNames.has(identifier))
       .map((identifier) => confineSharedProjectSecretToConnector(projectId, identifier)),
   );
 
@@ -767,22 +808,25 @@ async function syncProjectConnectorsFenced(
   // and the marketplace gate) follows every push, not only PUT /default-agent.
   const declaredDefaultAgent = typeof manifest?.raw.default_agent === 'string' ? manifest.raw.default_agent.trim() : '';
   if (declaredDefaultAgent) {
-    await db.update(projects)
-      .set({ metadata: metadataMerge({ default_agent: declaredDefaultAgent }) })
-      .where(and(eq(projects.projectId, projectId), sql`coalesce(${projects.metadata}->>'default_agent', '') <> ${declaredDefaultAgent}`));
+    await updateProjectRows(
+      and(eq(projectsView.projectId, projectId), sql`coalesce(${projectsView.metadata}->>'default_agent', '') <> ${declaredDefaultAgent}`),
+      { metadata: metadataMerge({ default_agent: declaredDefaultAgent }) },
+    );
   }
 
   // kortix.yaml owns project.name: a push that changes it renames the project.
   if (manifest) {
-    const [current] = await db.select({ name: projects.name, metadata: projects.metadata }).from(projects).where(eq(projects.projectId, projectId)).limit(1);
+    const [current] = await db.select({ name: projectsView.name, metadata: projectsView.metadata }).from(projectsView).where(eq(projectsView.projectId, projectId)).limit(1);
     const project = manifest.raw.project as { name?: unknown } | undefined;
     const marker = (current?.metadata as Record<string, unknown> | null)?.[MANIFEST_PROJECT_NAME_KEY];
     const action = current ? projectNameAction(project?.name, marker, current.name) : 'none';
     if (action !== 'none') {
       const declaredName = String(project!.name).trim();
-      await db.update(projects)
-        .set({ ...(action === 'apply' ? { name: declaredName } : {}), metadata: metadataMerge({ [MANIFEST_PROJECT_NAME_KEY]: declaredName }) })
-        .where(eq(projects.projectId, projectId));
+      const [renamed] = await updateProjectRowsReturning(eq(projectsView.projectId, projectId), {
+        ...(action === 'apply' ? { name: declaredName } : {}),
+        metadata: metadataMerge({ [MANIFEST_PROJECT_NAME_KEY]: declaredName }),
+      });
+      if (action === 'apply' && renamed) await renameAccountOfSoleProject(renamed, declaredName);
     }
   }
 
@@ -1100,8 +1144,14 @@ async function upsertConnector(
  * account, because it is not empty: a channel connector (the install token is
  * the project's own identity) and a server with no auth (a public MCP server
  * such as DeepWiki: the account is the whole connection).
+ *
+ * A Composio or Pipedream connector always parses with `auth.type: 'none'`
+ * (its connected account is the auth), so the no-auth rule must not reach it:
+ * it seeded a shared account that no sign-in ever finished, beside the
+ * member's own account a chat Connect card created.
  */
 export function skipsEmptyProjectAccount(spec: ConnectorSpec): boolean {
+  if (spec.provider === 'composio' || spec.provider === 'pipedream') return true;
   return !(spec.provider === 'channel' || spec.auth?.type === 'none');
 }
 
@@ -1274,13 +1324,13 @@ export async function ensureProjectComputer(
   // allows reads, and the rows would outlive it.
   if (!config.TUNNEL_ENABLED || getImpersonationContext()) return;
   const [project] = await db
-    .select({ accountId: projects.accountId, existing: connectors.connectorId })
-    .from(projects)
+    .select({ accountId: projectsView.accountId, existing: connectors.connectorId })
+    .from(projectsView)
     .leftJoin(
       connectors,
-      and(eq(connectors.projectId, projects.projectId), eq(connectors.providerType, 'computer')),
+      and(eq(connectors.projectId, projectsView.projectId), eq(connectors.providerType, 'computer')),
     )
-    .where(eq(projects.projectId, projectId))
+    .where(eq(projectsView.projectId, projectId))
     .orderBy(sql`${connectors.slug} = ${COMPUTER_SLUG} desc`, connectors.createdAt)
     .limit(1);
   if (!project) return;
@@ -1412,14 +1462,20 @@ export async function resolveCatalog(
       }
       case 'mcp': {
         assertAllowedEndpointUrl(spec.url!);
-        const tools = await listMcpTools({
-          url: spec.url!,
-          auth: spec.auth,
-          headers: spec.headers,
-          secret: options.credential ?? null,
-          fetchImpl: options.mcpFetchImpl ?? connectorEgressFetch,
-        });
-        return { actions: normalizeMcp(tools), server: spec.url };
+        let tools: unknown[];
+        try {
+          tools = await listMcpTools({
+            url: spec.url!,
+            auth: spec.auth,
+            headers: spec.headers,
+            secret: options.credential ?? null,
+            fetchImpl: options.mcpFetchImpl ?? connectorEgressFetch,
+          });
+        } catch (e) {
+          if (mcpCatalogAwaitsSignIn(spec, options.credential, e)) return { actions: [], server: spec.url, awaitsSignIn: true };
+          throw e;
+        }
+        return { actions: normalizeMcp(tools as any[]), server: spec.url };
       }
       case 'pipedream': {
         if (!pipedreamConfigured() || !spec.app) return { actions: [], server: null };

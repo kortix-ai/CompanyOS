@@ -119,7 +119,9 @@ flow(
       r.status(OWNER_READ);
     });
     await ctx.step("a team member with no credit row of their own reads an all-zero breakdown, not an error", async () => {
-      const team = await ctx.fixtures.team();
+      // A team with no credit row: the member has no account of their own, so
+      // the breakdown reads the team's.
+      const team = await ctx.fixtures.team({ credits: false });
       const member = await team.addMember("member");
       const r = await ctx.client.as(member).get("/v1/billing/credit-breakdown");
       r.status(OWNER_READ);
@@ -140,7 +142,7 @@ flow(
       r.status(401);
     });
 
-    await ctx.step("OWNER reads the credits tier ladder ($50 … $50,000, 25 tiers) and the $50–$50,000 bounds", async () => {
+    await ctx.step("OWNER reads the credits tier ladder ($50 … $10,000, 16 tiers, volume bonus in the credits) and the $50–$10,000 bounds", async () => {
       const r = await ctx.client.as(ctx.P.OWNER).get("/v1/billing/tier-configurations");
       r.status(OWNER_READ);
       if (r.statusCode !== 200) return;
@@ -148,12 +150,16 @@ flow(
         .has("$.tiers[0].name", "credits_50")
         .has("$.tiers[0].display_name", "5,000 credits")
         .has("$.tiers[0].monthly_price", 50)
+        .has("$.tiers[0].monthly_credits", 50)
         .has("$.tiers[3].monthly_price", 200)
-        .has("$.tiers[24].monthly_price", 50000)
-        .has("$.tiers[24].display_name", "5,000,000 credits")
-        .has("$.tiers[25]", undefined)
+        .has("$.tiers[3].display_name", "22,000 credits")
+        .has("$.tiers[3].monthly_credits", 220)
+        .has("$.tiers[15].monthly_price", 10000)
+        .has("$.tiers[15].display_name", "1,300,000 credits")
+        .has("$.tiers[15].monthly_credits", 13000)
+        .has("$.tiers[16]", undefined)
         .has("$.min_monthly_usd", 50)
-        .has("$.max_monthly_usd", 50000);
+        .has("$.max_monthly_usd", 10000);
     });
     await ctx.step("ANON cannot read tier-configurations → 401 (auth-gated, not public)", async () => {
       const r = await ctx.client.as(ctx.P.ANON).get("/v1/billing/tier-configurations");
@@ -181,7 +187,7 @@ flow(
 );
 
 // BILL-15 — a team's balance is read through account_id (KRTX-2989). The two
-// credit routes used the caller's personal account, so a team member saw their
+// credit routes used the caller's first account, so a team member saw their
 // own zero balance as the team's, and a non-member could not be refused.
 flow(
   "BILL-15",

@@ -1,4 +1,5 @@
 import { backendApi } from '../../http/api-client';
+import { appendQuery } from '../../http/url';
 import { unwrap } from './shared';
 import type { SecretConsumer, SecretDeliveryStrategy, SecretValueStatus } from './secrets';
 
@@ -29,6 +30,18 @@ export interface SubscriptionAccount {
   email: string | null;
   /** The provider's plan name, lower case: `plus`, `pro`, `team`, `max`, … */
   plan: string | null;
+}
+
+/**
+ * The last check of a saved provider API key against its provider: one cheap
+ * completion when the key is saved or rotated, and on `verifyAccountSecretResource`.
+ * `invalid`: the provider refused the key (`message` is its words). `unknown`:
+ * no clean answer (timeout, network, rate limit); the key stays usable.
+ */
+export interface AccountKeyVerification {
+  status: 'verified' | 'invalid' | 'unknown';
+  message: string;
+  checked_at: string;
 }
 
 export interface AccountSecretResource {
@@ -71,6 +84,11 @@ export interface AccountSecretResource {
    *  again with `rotateAccountSecretResource` (a ChatGPT login: reconnect).
    *  Absent from APIs older than this field. */
   status?: SecretValueStatus;
+  /** The provider API key's last check; `null` for a key never checked. A
+   *  Claude login carries `invalid` with Anthropic's words while Anthropic
+   *  forbids it (a 403 on a model call; the gateway skips it), else `null`. A
+   *  ChatGPT login: always `null`. Absent from APIs older than this field. */
+  verification?: AccountKeyVerification | null;
 }
 
 /** Storage identity is separate from the ID: older logins remain in their original store. */
@@ -79,12 +97,12 @@ export interface SubscriptionConnection extends AccountSecretResource {
 }
 
 export async function listSubscriptionConnections(accountId: string, projectId: string) {
-  return unwrap(await backendApi.get<{ subscriptions: SubscriptionConnection[] }>(`/accounts/${encodeURIComponent(accountId)}/subscription-connections?project_id=${encodeURIComponent(projectId)}`));
+  return unwrap(await backendApi.get<{ subscriptions: SubscriptionConnection[] }>(`/accounts/${encodeURIComponent(accountId)}/subscription-connections${appendQuery({ project_id: projectId })}`));
 }
 
 export async function refreshSubscriptionConnectionUsage(accountId: string, secretId: string, projectId: string, storage: SubscriptionConnection['storage']) {
   const path = `/accounts/${encodeURIComponent(accountId)}/subscription-connections/${encodeURIComponent(secretId)}/usage`;
-  return unwrap(await backendApi.post<{ usage: SubscriptionUsage | null; provider_account?: SubscriptionAccount | null }>(`${path}?project_id=${encodeURIComponent(projectId)}&storage=${storage}`));
+  return unwrap(await backendApi.post<{ usage: SubscriptionUsage | null; provider_account?: SubscriptionAccount | null }>(`${path}${appendQuery({ project_id: projectId, storage })}`));
 }
 
 export interface CreateAccountSecretResourceInput {
@@ -110,10 +128,10 @@ export interface SessionProviderSecretPool {
 const accountPath = (accountId: string) => `/accounts/${encodeURIComponent(accountId)}/secret-resources`;
 const secretPath = (accountId: string, secretId: string) => `${accountPath(accountId)}/${encodeURIComponent(secretId)}`;
 const poolPath = (projectId: string, sessionId: string, providerId: string) =>
-  `/projects/${encodeURIComponent(projectId)}/sessions/${encodeURIComponent(sessionId)}/provider-secret-pools/${encodeURIComponent(providerId)}`;
+  `/workspaces/${encodeURIComponent(projectId)}/sessions/${encodeURIComponent(sessionId)}/provider-secret-pools/${encodeURIComponent(providerId)}`;
 
 export async function listAccountSecretResources(accountId: string, projectId?: string) {
-  const query = projectId ? `?project_id=${encodeURIComponent(projectId)}` : '';
+  const query = appendQuery({ project_id: projectId });
   return unwrap(await backendApi.get<{ secrets: AccountSecretResource[] }>(`${accountPath(accountId)}${query}`));
 }
 export async function createAccountSecretResource(accountId: string, input: CreateAccountSecretResourceInput) {
@@ -121,6 +139,10 @@ export async function createAccountSecretResource(accountId: string, input: Crea
 }
 export async function rotateAccountSecretResource(accountId: string, secretId: string, value: string) {
   return unwrap(await backendApi.put<AccountSecretResource>(`${secretPath(accountId, secretId)}/value`, { value }));
+}
+/** Check one saved provider API key against its provider again (owner, admin or creator). */
+export async function verifyAccountSecretResource(accountId: string, secretId: string) {
+  return unwrap(await backendApi.post<AccountSecretResource>(`${secretPath(accountId, secretId)}/verify`));
 }
 /** End the rate-limit rest of one stored account now (owner, admin or creator). */
 export async function retryAccountSecretResource(accountId: string, secretId: string) {
@@ -132,7 +154,7 @@ export async function retryAccountSecretResource(accountId: string, secretId: st
  * the stored snapshot; `usage` is null when the provider reports none.
  */
 export async function refreshAccountSecretUsage(accountId: string, secretId: string, projectId?: string) {
-  const query = projectId ? `?project_id=${encodeURIComponent(projectId)}` : '';
+  const query = appendQuery({ project_id: projectId });
   return unwrap(await backendApi.post<{ usage: SubscriptionUsage | null; provider_account?: SubscriptionAccount | null }>(`${secretPath(accountId, secretId)}/usage${query}`));
 }
 export async function deleteAccountSecretResource(accountId: string, secretId: string) {
@@ -151,7 +173,7 @@ export async function getSessionProviderSecretPool(projectId: string, sessionId:
   return unwrap(await backendApi.get<SessionProviderSecretPool>(poolPath(projectId, sessionId, providerId)));
 }
 export async function listSessionProviderSecretPools(projectId: string, sessionId: string) {
-  const path = `/projects/${encodeURIComponent(projectId)}/sessions/${encodeURIComponent(sessionId)}/provider-secret-pools`;
+  const path = `/workspaces/${encodeURIComponent(projectId)}/sessions/${encodeURIComponent(sessionId)}/provider-secret-pools`;
   return unwrap(await backendApi.get<{
     pools: SessionProviderSecretPool[];
     can_edit: boolean;

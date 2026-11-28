@@ -1,13 +1,13 @@
 /** Fans one provider delivery or notice out to the event triggers subscribed to it. */
-import { connectorConnections, connectors, projectTriggerRuntime, projects } from '@kortix/db';
+import { connectorConnections, connectors, projectTriggerRuntime } from '@kortix/db';
 import { and, eq, sql } from 'drizzle-orm';
 import { logger } from '../../lib/logger';
-import { notificationsEnabled } from '../../notifications/enabled';
 import {
   fireGitTrigger,
   markGitTriggerAttemptFailed,
   markGitTriggerFired,
-  renderPromptTemplate,
+  renderTriggerInput,
+  triggerInputPreamble,
   triggerFilterMatches,
   automaticFirePauseReason,
 } from '../lib/triggers';
@@ -17,11 +17,13 @@ import { takeThrottledRunSlot } from '../lib/trigger-run-caps';
 import { recordTriggerRun, triggerRunFromFire } from '../trigger-execution-store';
 import type { GitTriggerSpec } from '../trigger-types';
 import { db } from '../../shared/db';
+import { ACCOUNT_STATE_FIRE_CODES } from '../lib/trigger-fire';
 import * as store from './store';
 import { eventTriggersEnabled } from './flag';
 import { connectorEventApp } from './mcp-source';
 import { reconcileEventSubscriptionsFromCatalog } from './subscriptions';
 import type { EventDelivery, ProviderNotice } from './types';
+import { projectsView } from '../../workspaces/rows';
 
 export interface DeliveryTally {
   fired: number;
@@ -29,7 +31,21 @@ export interface DeliveryTally {
   /** No subscription row references the delivery's external id. */
   ignored: number;
   failed: number;
+  /** How many of `failed` were account-state refusals (billing gate, KRTX-1505):
+   *  no retry can fix one, the owner can. The ingress answers 402 only when every
+   *  failure was one — a mixed batch keeps the 500-retry contract. */
+  refused: number;
+  /** The first refusal's error and code, for the ingress's 402. */
+  accountState?: { error: string; code: string };
 }
+
+/** The outcome of one delivery. `account_state` is a failure no retry can fix (the billing gate),
+ *  carrying the refusal the sender would see, so the ingress can answer the 402 convention. */
+export type DeliveryOutcome =
+  | 'fired'
+  | 'skipped'
+  | 'failed'
+  | { status: 'account_state'; error: string; code: string };
 
 /** Third-party event content is untrusted data, never an instruction from a person. */
 /** The first line also becomes the session's title until the agent names it, so it names the trigger. */
@@ -120,11 +136,11 @@ async function deliverToRow(
   provider: string,
   row: store.EventSubscriptionRow,
   delivery: EventDelivery,
-): Promise<'fired' | 'skipped' | 'failed'> {
+): Promise<DeliveryOutcome> {
   // Only a live subscription fires: an errored or parked row (revoked or narrowed
   // account) must not feed sessions while its provider instance winds down.
   if (row.status !== 'active') return 'skipped';
-  const [project] = await db.select().from(projects).where(eq(projects.projectId, row.projectId)).limit(1);
+  const [project] = await db.select().from(projectsView).where(eq(projectsView.projectId, row.projectId)).limit(1);
   if (!project || project.status !== 'active') return 'skipped';
   // The project's pause, or the account's Pause all triggers (KRTX-1721).
   if (await automaticFirePauseReason(project)) return 'skipped';
@@ -160,9 +176,6 @@ async function deliverToRow(
   if (!triggerFilterMatches(spec, payload)) return 'skipped';
 
   const idempotencyKey = eventIdempotencyKey(row.projectId, row.slug, delivery.eventId);
-  // Alerts need the project's notification_center flag; off, the failure
-  // count is not read either.
-  const alertsOn = notificationsEnabled(project.metadata);
   try {
     // A provider retry of an event whose run dead-lettered or lost its session
     // runs again instead of replaying that outcome (webhook-delivery.ts).
@@ -173,7 +186,7 @@ async function deliverToRow(
       spec,
       project,
       payload,
-      renderedPrompt: `${eventPromptPreamble(spec, provider)}${renderPromptTemplate(spec.promptTemplate, payload)}`,
+      renderedPrompt: `${triggerInputPreamble(spec, eventPromptPreamble(spec, provider))}${renderTriggerInput(spec, payload)}`,
       source: 'event',
       idempotencyKey,
     });
@@ -189,10 +202,14 @@ async function deliverToRow(
       // The provider retries on our 500. Only a failure no retry can fix, or
       // the third failed attempt of one event, alerts (KRTX-1742). A create
       // that went back to the queue alerts from the drain if it dead-letters.
-      const alerts =
-        alertsOn && !result.requeued && (!result.retryable || (await eventFailureAlerts(row.projectId, idempotencyKey)));
+      const alerts = !result.requeued && (!result.retryable || (await eventFailureAlerts(row.projectId, idempotencyKey)));
       if (alerts) {
-        await raiseTriggerAlert({ projectId: row.projectId, accountId: project.accountId, slug: row.slug, source: 'fire', error, notificationCenter: true });
+        await raiseTriggerAlert({ projectId: row.projectId, accountId: project.accountId, slug: row.slug, source: 'fire', error });
+      }
+      // Account state, not a server fault: the billing gate's convention. The
+      // provider retries a 5xx forever, so the ingress must not answer one.
+      if (result.errorCode && ACCOUNT_STATE_FIRE_CODES.has(result.errorCode)) {
+        return { status: 'account_state', error, code: result.errorCode };
       }
       return 'failed';
     }
@@ -208,20 +225,29 @@ async function deliverToRow(
     await recordTriggerRun({ projectId: row.projectId, slug: row.slug, source: 'event', spec, payload, status: 'failed', error: message, now: new Date() });
     await markGitTriggerAttemptFailed(row.projectId, row.slug, new Date(), message).catch(() => {});
     // The provider retries on our 500: the same rule as a retryable failure.
-    if (alertsOn && (await eventFailureAlerts(row.projectId, idempotencyKey))) {
-      await raiseTriggerAlert({ projectId: row.projectId, accountId: project.accountId, slug: row.slug, source: 'fire', error: message, notificationCenter: true });
+    if (await eventFailureAlerts(row.projectId, idempotencyKey)) {
+      await raiseTriggerAlert({ projectId: row.projectId, accountId: project.accountId, slug: row.slug, source: 'fire', error: message });
     }
     return 'failed';
   }
 }
 
 export async function deliverEvents(provider: string, deliveries: readonly EventDelivery[]): Promise<DeliveryTally> {
-  const tally: DeliveryTally = { fired: 0, skipped: 0, ignored: 0, failed: 0 };
+  const tally: DeliveryTally = { fired: 0, skipped: 0, ignored: 0, failed: 0, refused: 0 };
   for (const delivery of deliveries) {
     // Zero rows: an instance of another environment sharing the provider project. Never unsubscribe it.
     const rows = await store.rowsByExternalId(provider, delivery.externalId);
     if (rows.length === 0) tally.ignored += 1;
-    for (const row of rows) tally[await deliverToRow(provider, row, delivery)] += 1;
+    for (const row of rows) {
+      const outcome = await deliverToRow(provider, row, delivery);
+      if (typeof outcome === 'string') {
+        tally[outcome] += 1;
+      } else {
+        tally.failed += 1;
+        tally.refused += 1;
+        if (!tally.accountState) tally.accountState = { error: outcome.error, code: outcome.code };
+      }
+    }
   }
   return tally;
 }

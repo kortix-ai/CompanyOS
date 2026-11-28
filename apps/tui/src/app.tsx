@@ -16,7 +16,7 @@
  * `ui/Panel` sets `overflow: 'hidden'`, and an absolutely positioned child is
  * scissored to its containing panel's rectangle. A `<Modal>` mounted from
  * inside a panel therefore renders as a sliver. So the app owns ONE overlay
- * slot at the root of the tree. The command panels (`/sessions`, `/projects`,
+ * slot at the root of the tree. The command panels (`/sessions`, `/workspaces`,
  * a confirm) are in-flow lists above the input instead, so they are passed
  * DOWN into the session column.
  *
@@ -33,7 +33,7 @@
 import { clearAuth } from '@kortix/cli/src/api/auth.ts';
 import { webDashboardUrl } from '@kortix/cli/src/web-url.ts';
 import { sessionParentId } from '@kortix/sdk';
-import { useAccounts, useFeatureFlag, useProjectSessions, useProjects } from '@kortix/sdk/react';
+import { useFeatureFlag, useProjectSessions, useProjects } from '@kortix/sdk/react';
 import { useKeyboard, useRenderer, useTerminalDimensions } from '@opentui/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -66,7 +66,7 @@ import { type LinkRow, LinksOverlay } from './features/links/index.ts';
 import { PortsOverlay, type UsePortsResult } from './features/ports/index.ts';
 import { type ComposerMetrics, DraftView, SessionView } from './features/session/index.ts';
 import { focusHints } from './features/session/session-view.tsx';
-import { Sidebar, type SidebarNavItem } from './features/sidebar/index.ts';
+import { Sidebar, type SidebarNavItem, useRefreshSessions } from './features/sidebar/index.ts';
 import { kortix } from './kortix.ts';
 import { copyToClipboard } from './lib/clipboard.ts';
 import { useCopyOnSelect } from './lib/copy-on-select.ts';
@@ -81,6 +81,7 @@ import { PeekView } from './features/agents/peek-view.tsx';
 import { SCREEN_TITLE, Screen, type ScreenRoute, isScreenRoute } from './screens.tsx';
 import { theme } from './theme.ts';
 import { printable } from './lib/printable.ts';
+import { PICK_WORKSPACE_TEXT } from './lib/workspaces.ts';
 import { Panel, type SplashLine, StatusBar, Toast, type ToastKind } from './ui/index.ts';
 
 const SIDEBAR_WIDTH = 28;
@@ -326,11 +327,12 @@ export function App({
 
   // ── what is open: names for the splash, the tray and the header ─────────
 
-  // These lists are already in the query cache for the sidebar and the
-  // `/sessions` panel; reading them here costs no extra request.
+  // The `/sessions` panel reads this same list (every starter), and the
+  // sidebar these projects: one request each for all of them.
   const sessions = useProjectSessions(projectId ?? '', { enabled: Boolean(projectId) });
+  // A session action changes the sidebar's lists too: refresh every list.
+  const refreshSessions = useRefreshSessions(projectId);
   const projects = useProjects(accountId ?? undefined);
-  const accounts = useAccounts();
   const sessionRow = useMemo(
     () => sessions.sessions.find((entry) => entry.session_id === sessionId) ?? null,
     [sessions.sessions, sessionId],
@@ -342,9 +344,7 @@ export function App({
       : undefined;
   const projectName =
     projects.data?.find((project) => project.project_id === projectId)?.name ??
-    (projectId ? projectId.slice(0, 8) : 'no project');
-  const accountName =
-    accounts.data?.find((account) => account.account_id === accountId)?.name ?? null;
+    (projectId ? projectId.slice(0, 8) : 'no workspace');
   // An env-token host has no name: its address is what tells it apart.
   const hostLabel =
     host.source === 'env' ? hostOrigin(host.backendUrl).replace(/^https?:\/\//, '') : host.name;
@@ -392,8 +392,8 @@ export function App({
   // The empty state is the symbol, one hint and where you are — one quiet
   // line. The host, the user and the ids are `/status`.
   const splashLines = useMemo<SplashLine[]>(
-    () => [{ label: '', value: [projectName, accountName].filter(Boolean).join(' · ') }],
-    [projectName, accountName],
+    () => [{ label: '', value: projectId ? projectName : '' }],
+    [projectId, projectName],
   );
 
   // The terminal window's title follows the open session (the `title`
@@ -407,7 +407,7 @@ export function App({
   }, [renderer, ui.title.on, windowTitle]);
   useEffect(() => () => renderer.setTerminalTitle(''), [renderer]);
 
-  // Drag over any text to copy it (OSC 52), as OpenCode does: the TUI holds the mouse, so
+  // Drag over any text to copy it (OSC 52): the TUI holds the mouse, so
   // the terminal's own selection never sees the drag.
   useCopyOnSelect(
     useCallback(
@@ -508,17 +508,6 @@ export function App({
     setFocus('composer');
   }, []);
 
-  const pickAccount = useCallback((nextAccount: string) => {
-    setAccountId(nextAccount);
-    setProjectId(null);
-    setSessionId(null);
-    setTerminalOpen(false);
-    setRoute('session');
-    // A project is the next thing an account switch needs.
-    setPanel({ kind: 'projects', query: '' });
-    setFocus('composer');
-  }, []);
-
   // ── actions ─────────────────────────────────────────────────────────────
 
   /** Run one session action: its sentence on success, its error on failure. */
@@ -528,26 +517,26 @@ export function App({
         const message = await run();
         pushToast(message);
         after?.();
-        void sessions.refetch();
+        void refreshSessions();
       } catch (error) {
         pushToast(`${label} failed: ${errorText(error)}`, 'error');
       }
     },
-    [pushToast, sessions.refetch],
+    [pushToast, refreshSessions],
   );
 
   /** `/new <prompt>`, the draft's first prompt, `/fork`. Throws so the draft can restore. */
   const start = useCallback(
     async (prompt: string, forkFrom?: string) => {
       if (!projectId) {
-        pushToast('No project selected. Type /projects to pick one.', 'error');
-        throw new Error('no project');
+        pushToast(PICK_WORKSPACE_TEXT, 'error');
+        throw new Error('no workspace');
       }
       try {
         const id = forkFrom
           ? await forkSession(kortix(), projectId, forkFrom, prompt)
           : await startSession(kortix(), projectId, prompt);
-        void sessions.refetch();
+        void refreshSessions();
         openSession(id);
         if (forkFrom) pushToast('Forked into a new session.');
       } catch (error) {
@@ -555,7 +544,7 @@ export function App({
         throw error;
       }
     },
-    [projectId, sessions.refetch, openSession, pushToast],
+    [projectId, refreshSessions, openSession, pushToast],
   );
 
   const confirm = useCallback(
@@ -653,10 +642,8 @@ export function App({
             yes: 'Delete session',
             action: { kind: 'delete-session', sessionId: sid },
           });
-        case 'projects':
-          return setPanel({ kind: 'projects', query: args });
-        case 'accounts':
-          return setPanel({ kind: 'accounts', query: args });
+        case 'workspaces':
+          return setPanel({ kind: 'workspaces', query: args });
         case 'hosts':
           if (onSwitchHost) return onSwitchHost();
           return pushToast('Host switching needs the login screen.', 'error');
@@ -678,8 +665,7 @@ export function App({
             lines: [
               { label: 'host', value: `${hostLabel}  ${hostOrigin(host.backendUrl)}` },
               { label: 'user', value: host.userEmail || 'unknown' },
-              { label: 'account', value: accountName ?? accountId ?? 'none' },
-              { label: 'project', value: projectId ? `${projectName}  ${projectId}` : 'none' },
+              { label: 'workspace', value: projectId ? `${projectName}  ${projectId}` : 'none' },
               { label: 'session', value: sid ? `${title ?? ''}  ${sid}` : 'none (draft)' },
               {
                 label: 'runtime',
@@ -751,8 +737,9 @@ export function App({
         case 'review':
         case 'apps':
         case 'customize':
-        case 'account':
           return openScreen(command);
+        case 'members':
+          return openScreen('account');
         case 'providers':
           return openScreen('providers', args.trim().toLowerCase() || null);
         case 'connectors':
@@ -784,7 +771,6 @@ export function App({
       sessionRow,
       host,
       hostLabel,
-      accountName,
       accountId,
       projectName,
       capabilities,
@@ -871,8 +857,8 @@ export function App({
     const row = sessions.sessions.find((entry) => entry.session_id === id);
     return { sessionId: id, title: row ? sessionTitle(row) : id.slice(0, 8) };
   });
-  // The draft is a tab too: the session it is about to start (opencode's
-  // "New session" tab), so the bar never prints an empty-state sentence.
+  // The draft is a tab too: the session it is about to start (a "New session"
+  // tab), so the bar never prints an empty-state sentence.
   if (!sessionId && route === 'session') tabs.push({ sessionId: DRAFT_TAB, title: 'New session' });
   const tabsNode = tabsShown ? (
     <TabsBar
@@ -909,8 +895,7 @@ export function App({
         sessionId={sessionId}
         onClose={closePanel}
         onOpenSession={openSession}
-        onPickProject={pickProject}
-        onPickAccount={pickAccount}
+        onPickWorkspace={pickProject}
         onConfirm={confirm}
       />
     ) : null;
@@ -942,12 +927,6 @@ export function App({
         // it keeps the open project and session, unlike a real pick.
         onAccountResolved={(resolved) => {
           setAccountId((current) => current ?? resolved);
-        }}
-        onAccountChange={(nextAccount) => {
-          setAccountId(nextAccount);
-          setProjectId(null);
-          setSessionId(null);
-          setRoute('session');
         }}
         onToast={pushToast}
       />

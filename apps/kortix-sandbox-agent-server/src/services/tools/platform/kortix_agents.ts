@@ -26,13 +26,13 @@ interface AgentConfig {
 }
 
 /** The settings a before → after row names, in the order a person reads them. */
-const SETTING_FIELDS = ['description', 'model', 'prompt', 'connectors', 'secrets', 'apps', 'skills', 'tools', 'kortix_permissions', 'space', 'enabled']
+const SETTING_FIELDS = ['description', 'model', 'prompt', 'mode', 'hidden', 'connectors', 'secrets', 'apps', 'skills', 'tools', 'kortix_permissions', 'space', 'enabled']
 
-/** One flat view of an agent block: `behavior.description`, `.prompt` and `.model` lifted to the top. */
+/** One flat view of an agent block: `behavior.description`, `.prompt`, `.model`, `.mode` and `.hidden` lifted to the top. */
 function flat(block: Record<string, unknown> | null | undefined): Record<string, unknown> {
   const b = block ?? {}
   const behavior = (b.behavior ?? {}) as Record<string, unknown>
-  return { ...b, description: behavior.description ?? b.description, prompt: behavior.prompt ?? b.prompt, model: behavior.model ?? b.model }
+  return { ...b, description: behavior.description ?? b.description, prompt: behavior.prompt ?? b.prompt, model: behavior.model ?? b.model, mode: behavior.mode, hidden: behavior.hidden }
 }
 
 /**
@@ -81,12 +81,14 @@ interface PickerModel {
   modalities?: { input?: string[] }
   limit?: { context?: number }
   description?: string
+  /** For `available: false`: `login` (a ChatGPT login) or `provider` (a provider key). */
+  availability?: 'login' | 'provider'
 }
 
 interface ModelPicker {
   models?: Record<string, PickerModel>
   defaultModel?: string
-  claudeSubscription?: { connected?: boolean; models?: Array<{ id: string; name?: string; description?: string; limit?: { context?: number }; efforts?: string[]; connected?: boolean }> }
+  claudeSubscription?: { connected?: boolean; models?: Array<{ id: string; name?: string; description?: string; limit?: { context?: number }; efforts?: string[]; connected?: boolean; enabled?: boolean }> }
 }
 
 /** A model a spawn may name, as the model reads it. */
@@ -106,6 +108,14 @@ const KORTIX_REF = 'kortix/'
 /** A name that marks a small, quick model. The catalog has no speed field. */
 const FAST_NAME = /\b(flash|mini|nano|lite|haiku|fast|turbo|small|air)\b/i
 
+/** The workspace default as the ref a spawn takes: a gateway wire id gains `kortix/`; a Claude subscription ref stays. */
+function defaultRefOf(picker: ModelPicker): string | null {
+  const wire = picker.defaultModel
+  if (!wire) return null
+  if (wire.startsWith('claude-agent/')) return wire
+  return `${KORTIX_REF}${wire.replace(/^kortix\//, '')}`
+}
+
 function contextWords(tokens: number | undefined): string | null {
   if (!tokens || tokens <= 0) return null
   return tokens >= 1_000_000 ? `${Math.round(tokens / 100_000) / 10}M context` : `${Math.round(tokens / 1000)}k context`
@@ -121,7 +131,7 @@ function strengths(id: string, model: { name?: string; reasoning?: boolean; atta
 
 /** The models this project may run: offered, and reachable for this person. Default first. */
 function usableModels(picker: ModelPicker): UsableModel[] {
-  const fallback = picker.defaultModel ? `${KORTIX_REF}${picker.defaultModel.replace(/^kortix\//, '')}` : null
+  const fallback = defaultRefOf(picker)
   const gateway = Object.entries(picker.models ?? {})
     .filter(([, model]) => model.enabled !== false && model.available !== false)
     .map(([wire, model]): UsableModel => {
@@ -138,34 +148,59 @@ function usableModels(picker: ModelPicker): UsableModel[] {
     })
   const claude = picker.claudeSubscription?.connected
     ? (picker.claudeSubscription.models ?? [])
-        .filter((model) => model.connected !== false)
+        .filter((model) => model.connected !== false && model.enabled !== false)
         .map((model): UsableModel => ({
           id: model.id,
           name: model.name || model.id,
           provider: 'Claude subscription',
           good_for: strengths(model.id, { name: model.name, reasoning: (model.efforts?.length ?? 0) > 0 }),
           ...(model.limit?.context ? { context: model.limit.context } : {}),
-          default: false,
+          default: model.id === fallback,
           ...(model.description ? { description: model.description } : {}),
         }))
     : []
   return [...gateway, ...claude].sort((a, b) => Number(b.default) - Number(a.default) || a.name.localeCompare(b.name))
 }
 
+/** The most offered-but-not-runnable models `models` names; the rest are counted. */
+const NOT_RUNNABLE_MAX = 60
+
+/**
+ * The workspace's offered models this person cannot run yet: `kortix models ls`
+ * counts them as offered (enabled), the gateway refuses them until a provider
+ * is connected for this person. Each names the step that makes it runnable.
+ */
+function notRunnable(picker: ModelPicker): Array<{ id: string; name: string; needs: string }> {
+  return Object.entries(picker.models ?? {})
+    .filter(([, model]) => model.enabled !== false && model.available === false)
+    .map(([wire, model]) => ({
+      id: `${KORTIX_REF}${wire}`,
+      name: model.name || wire,
+      needs: model.availability === 'login' ? 'a ChatGPT login (kortix providers login openai)' : `a ${model.provider_name || model.provider || wire.split('/')[0]} key (kortix providers set ${model.provider || wire.split('/')[0]})`,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
 async function models(context: PlatformToolContext) {
   const read = await cliJson<ModelPicker>(['models', 'ls', '--json'], context)
   if ('error' in read) return fail(TOOL, 'models', 'Could not list the models', read.error, context)
-  const usable = usableModels(read.value)
+  const picker = read.value
+  const usable = usableModels(picker)
+  const blocked = notRunnable(picker)
+  // `kortix models ls` counts every model the workspace offers (enabled), runnable or not.
+  const offered = Object.values(picker.models ?? {}).filter((model) => model.enabled !== false).length
+  const defaultRef = defaultRefOf(picker)
+  const defaultRunnable = defaultRef ? usable.some((model) => model.id === defaultRef) : false
   if (usable.length === 0) {
-    return fail(TOOL, 'models', 'No models to run', { kind: 'failed', message: 'This project offers no model you can run. A project admin connects a provider or turns a model on under Project admin → Models.' }, context)
+    return fail(TOOL, 'models', 'No models to run', { kind: 'failed', message: `This workspace offers no model you can run${offered > 0 ? ` (${offered} offered, none connected for you)` : ''}. A workspace admin connects a provider or turns a model on in Workspace settings → Models.` }, context)
   }
-  const fallback = usable.find((model) => model.default)?.id ?? null
+  const runnableWord = usable.length === 1 ? '1 model you can run' : `${usable.length} models you can run`
   return ok(
     TOOL,
     'models',
     {
-      title: usable.length === 1 ? '1 model' : `${usable.length} models`,
-      subtitle: 'Pass an id as `model` to a hand-off, a workflow agent or an agent setting.',
+      title: runnableWord,
+      ...(blocked.length > 0 ? { subtitle: `${offered} offered in this workspace; ${blocked.length} need a provider connected first.` } : {}),
       rows: capRows(
         usable.map((model) => ({
           title: model.name,
@@ -176,9 +211,19 @@ async function models(context: PlatformToolContext) {
       links: [{ label: 'Models', href: adminHref(context.env, 'models') }],
     },
     {
-      default: fallback,
+      scope: 'models: the offered models this session can run now. offered: every model the workspace offers (the enabled set `kortix models ls` lists), runnable or not.',
+      default: defaultRef,
+      default_runnable: defaultRunnable,
+      offered,
+      runnable: usable.length,
       models: usable,
-      note: 'Use `id` exactly as written. Omit `model` to run on the default. Pick a fast model for bulk and parallel work, the strongest reasoning model for synthesis and judgment.',
+      ...(blocked.length > 0
+        ? { not_runnable: blocked.slice(0, NOT_RUNNABLE_MAX), ...(blocked.length > NOT_RUNNABLE_MAX ? { not_runnable_more: blocked.length - NOT_RUNNABLE_MAX } : {}) }
+        : {}),
+      note:
+        'Use `id` exactly as written. Omit `model` to run on the default. Pick a fast model for bulk and parallel work, the strongest reasoning model for synthesis and judgment. ' +
+        'A model in not_runnable fails until its provider is connected: never pick one.' +
+        (defaultRef && !defaultRunnable ? ' The workspace default is not runnable for this person: name a model from models.' : ''),
     },
   )
 }
@@ -211,9 +256,16 @@ function blockFrom(args: Record<string, any>, base: Record<string, unknown>): Re
   if (typeof args.instructions === 'string') behavior.prompt = args.instructions
   if (typeof args.model === 'string') behavior.model = args.model
   if (typeof args.description === 'string') behavior.description = args.description
+  if (args.mode === 'primary' || args.mode === 'subagent' || args.mode === 'all') behavior.mode = args.mode
+  // A helper My Kortix created is hidden from the pickers; one the person makes startable is not (Agent Evals
+  // on dev: promoted to primary, it kept `hidden: true` and never showed in the picker).
+  if (args.mode === 'primary' || args.mode === 'all') delete behavior.hidden
   if (Object.keys(behavior).length > 0) block.behavior = behavior
   for (const key of ['connectors', 'secrets', 'apps', 'skills', 'tools', 'kortix_permissions'] as const) {
-    if (args[key] !== undefined) block[key] = args[key]
+    if (args[key] === undefined) continue
+    // A model writes "every" or "nothing" as a one-item list; kortix.yaml refuses `["all"]` as a skill name.
+    const one = Array.isArray(args[key]) && args[key].length === 1 ? String(args[key][0]).toLowerCase() : null
+    block[key] = one === 'all' || one === '*' ? 'all' : one === 'none' ? 'none' : args[key]
   }
   if (typeof args.space === 'string' && args.space !== 'none') block.space = args.space
   if (typeof args.enabled === 'boolean') block.enabled = args.enabled
@@ -232,6 +284,15 @@ async function save(action: 'create' | 'update', name: string, args: Record<stri
   }
   const before = exists ? (current.value.block ?? {}) : {}
   const block = blockFrom(args, before)
+  if (action === 'create') {
+    // KRTX-4810: an agent created on the person's behalf is a helper, so it is declared a
+    // subagent and kept out of the pickers until the person promotes it (the agent
+    // properties' "Who can start it"). A `mode` here is the person's own ask.
+    const behavior = (block.behavior ?? {}) as Record<string, unknown>
+    behavior.mode ??= 'subagent'
+    if (behavior.mode === 'subagent') behavior.hidden = true
+    block.behavior = behavior
+  }
   // The CLI reads the block from a file: its flag parser takes `-` for a missing value.
   const saved = await withJsonFile(block, (file) => cliJson<{ block?: Record<string, unknown> }>(['agents', 'config', name, '--file', file, '--json'], context))
   if ('error' in saved) return fail(TOOL, action, action === 'create' ? `Could not create ${name}` : `Could not change ${name}`, saved.error, context)
@@ -241,7 +302,8 @@ async function save(action: 'create' | 'update', name: string, args: Record<stri
     action,
     {
       title: action === 'create' ? `Created ${name}` : changes.length > 0 ? `Changed ${name}` : `${name} is unchanged`,
-      subtitle: 'Saved to the project settings.',
+      // Omitted tools mean every tool (`"*"`): say so, or the reply names only the grants that were set.
+      subtitle: action === 'create' && args.tools === undefined ? 'Saved to the workspace settings. Tools: every tool (none were listed).' : 'Saved to the workspace settings.',
       changes,
       links: [{ label: 'Open agent', href: agentHref(context.env, name) }],
     },
@@ -263,7 +325,7 @@ async function setAccess(name: string, args: Record<string, any>, context: Platf
   const set = await cliJson<Record<string, unknown>>(['agents', 'scope', name, ...flags, '--json'], context)
   if ('error' in set) return fail(TOOL, 'set_access', `Could not change what ${name} may use`, set.error, context)
   const after = await cliJson<Record<string, unknown>>(['agents', 'scope', name, '--show', '--json'], context)
-  const now = 'error' in after ? set.value : after.value
+  const now = 'error' in after ? { ...set.value, secrets: set.value.secrets ?? set.value.env } : after.value
   return ok(
     TOOL,
     'set_access',
@@ -279,7 +341,7 @@ async function setAccess(name: string, args: Record<string, any>, context: Platf
 export default {
   description:
     "The project's agents: each one is a colleague with one job, its own instructions and model, and a limited set of connectors, secrets and apps it may use. " +
-    'Actions: `list`; `models` (the models a project agent, a hand-off or a workflow agent may run on: each `id` is the exact `model` value, with what it is good for); `get` (name); `create` (name, description, instructions, optional model, connectors, skills, tools); ' +
+    'Actions: `list`; `models` (the models a project agent, a hand-off or a workflow agent can run now: each `id` is the exact `model` value, with what it is good for; `offered` counts every model the workspace offers, and `not_runnable` names the offered ones that need a provider connected first); `get` (name); `create` (name, description, instructions, optional model, connectors, skills, tools; a created agent is a subagent kept out of the pickers until the person promotes it, unless the person asked for a primary agent — pass `mode` = primary then); ' +
     '`update` (name, plus only the fields to change); `set_access` (name, connectors / secrets / apps: a list, "all" or "none"). ' +
     'Before `set_access` or an `update` that gives an agent more access, show the person what changes and ask once. ' +
     'The result shows the person a card; tell them the outcome in plain words.',
@@ -291,11 +353,12 @@ export default {
       description: { type: 'string', description: 'One line: what this agent does.' },
       instructions: { type: 'string', description: "The agent's instructions: who it is, what it does, how it works." },
       model: { type: 'string', description: 'A model id exactly as `models` lists it, e.g. `kortix/<model>`; omit to follow the project default.' },
+      mode: { type: 'string', enum: ['primary', 'subagent', 'all'], description: "Who can start it. On create, omit it to declare the agent a subagent that stays out of the pickers until the person promotes it; pass 'primary' only when the person asks for one they start sessions with." },
       connectors: { description: 'Connector slugs it may use, "all" or "none".', anyOf: [{ type: 'array', items: { type: 'string' } }, { type: 'string' }] },
       secrets: { description: 'Secret names it receives, "all" or "none".', anyOf: [{ type: 'array', items: { type: 'string' } }, { type: 'string' }] },
       apps: { description: 'App slugs it may open, "all" or "none".', anyOf: [{ type: 'array', items: { type: 'string' } }, { type: 'string' }] },
       skills: { type: 'array', items: { type: 'string' }, description: 'Skill names it may load.' },
-      tools: { description: 'Tools it may use.', anyOf: [{ type: 'array', items: { type: 'string' } }, { type: 'string' }, { type: 'object' }] },
+      tools: { description: 'Tools it may use. Omitted means every tool: list only the ones the job needs (["read", "web_search"]).', anyOf: [{ type: 'array', items: { type: 'string' } }, { type: 'string' }, { type: 'object' }] },
       kortix_permissions: { description: 'Kortix actions it may take, or "all".', anyOf: [{ type: 'array', items: { type: 'string' } }, { type: 'string' }] },
       space: { type: 'string', description: 'The space it belongs to.' },
       enabled: { type: 'boolean', description: 'Turn the agent on or off.' },

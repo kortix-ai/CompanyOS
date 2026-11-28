@@ -3,32 +3,41 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { ApiError } from '../core/http/api/errors';
 import {
-  createProjectSessionGroup,
-  deleteProjectSessionGroup,
-  listProjectSessionGroups,
-  renameProjectSessionGroup,
-  reorderProjectSessionGroups,
-  setProjectSessionGroup,
+  createWorkspaceSessionGroup,
+  deleteWorkspaceSessionGroup,
+  listWorkspaceSessionGroups,
+  renameWorkspaceSessionGroup,
+  reorderWorkspaceSessionGroups,
+  setWorkspaceSessionGroup,
+  setWorkspaceSessionGroupSharing,
+  setWorkspaceSessionGroupTabs,
+  updateWorkspaceSessionGroup,
+  updateWorkspaceSessionGroupMemory,
   type CreateProjectSessionGroupInput,
   type ProjectSessionGroup,
+  type UpdateWorkspaceSessionGroupInput,
+  type WorkspaceSessionGroupSharingInput,
 } from '../core/rest/projects-client/session-groups';
 import { contract } from './query-contracts';
 import { qk } from './query-keys';
-import { findCachedProjectSession, refileCachedProjectSession, updateCachedProjectSessions } from './session-cache-write';
+import { findCachedWorkspaceSession, refileCachedWorkspaceSession, updateCachedWorkspaceSessions } from './session-cache-write';
 
 /**
  * The project's session groups, in order. Members create, rename and reorder
  * them, so this is the `inventory` tier. Pass `enabled: false` while the
  * project's `session_groups` flag is off: the route answers 403 then.
  */
-export function useProjectSessionGroups(projectId: string | null | undefined, options?: { enabled?: boolean }) {
+export function useWorkspaceSessionGroups(projectId: string | null | undefined, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: qk.project.sessionGroups(projectId ?? ''),
-    queryFn: () => listProjectSessionGroups(projectId as string),
+    queryFn: () => listWorkspaceSessionGroups(projectId as string),
     enabled: !!projectId && (options?.enabled ?? true),
     ...contract('inventory'),
   });
 }
+
+/** @deprecated Use `useWorkspaceSessionGroups`. Kept permanently. */
+export const useProjectSessionGroups = useWorkspaceSessionGroups;
 
 /**
  * Every caller shows its own error (a dialog line, a toast). Without an
@@ -61,30 +70,105 @@ function useInvalidateSessionGroups(projectId: string) {
 }
 
 /** Create a group, last in the order. A taken name rejects with `ApiError` code `group_name_taken`. */
-export function useCreateProjectSessionGroup(projectId: string) {
+export function useCreateWorkspaceSessionGroup(projectId: string) {
   const invalidate = useInvalidateSessionGroups(projectId);
   return useMutation({
-    mutationFn: (input: CreateProjectSessionGroupInput) => createProjectSessionGroup(projectId, input),
+    mutationFn: (input: CreateProjectSessionGroupInput) => createWorkspaceSessionGroup(projectId, input),
     onSuccess: invalidate,
     onError: callerShowsError,
   });
 }
 
+/** @deprecated Use `useCreateWorkspaceSessionGroup`. Kept permanently. */
+export const useCreateProjectSessionGroup = useCreateWorkspaceSessionGroup;
+
 /** Rename a group. A taken name rejects with `ApiError` code `group_name_taken`. */
-export function useRenameProjectSessionGroup(projectId: string) {
+export function useRenameWorkspaceSessionGroup(projectId: string) {
   const invalidate = useInvalidateSessionGroups(projectId);
   return useMutation({
-    mutationFn: (args: { groupId: string; name: string }) => renameProjectSessionGroup(projectId, args.groupId, args.name),
+    mutationFn: (args: { groupId: string; name: string }) => renameWorkspaceSessionGroup(projectId, args.groupId, args.name),
     onSuccess: invalidate,
+    onError: callerShowsError,
+  });
+}
+
+/**
+ * Change who sees a group. Who sees its sessions changes with it, so every
+ * session list refetches too. A caller who may not manage it rejects with
+ * `ApiError` code `group_manage_forbidden`.
+ */
+export function useSetWorkspaceSessionGroupSharing(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (args: { groupId: string; input: WorkspaceSessionGroupSharingInput }) =>
+      setWorkspaceSessionGroupSharing(projectId, args.groupId, args.input),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: qk.project.sessionGroups(projectId) }),
+        queryClient.invalidateQueries({ queryKey: qk.project.sessionsScope(projectId) }),
+      ]),
+    onError: callerShowsError,
+  });
+}
+
+/** Replace a group's tabs (the whole ordered list). */
+export function useSetWorkspaceSessionGroupTabs(projectId: string) {
+  const invalidate = useInvalidateSessionGroups(projectId);
+  return useMutation({
+    mutationFn: (args: { groupId: string; tabs: Parameters<typeof setWorkspaceSessionGroupTabs>[2] }) =>
+      setWorkspaceSessionGroupTabs(projectId, args.groupId, args.tabs),
+    onSuccess: invalidate,
+    onError: callerShowsError,
+  });
+}
+
+/** @deprecated Use `useRenameWorkspaceSessionGroup`. Kept permanently. */
+export const useRenameProjectSessionGroup = useRenameWorkspaceSessionGroup;
+
+/** Rename a group, change its description, or both. A taken name rejects with `ApiError` code `group_name_taken`. */
+export function useUpdateWorkspaceSessionGroup(projectId: string) {
+  const invalidate = useInvalidateSessionGroups(projectId);
+  return useMutation({
+    mutationFn: (args: { groupId: string; input: UpdateWorkspaceSessionGroupInput }) =>
+      updateWorkspaceSessionGroup(projectId, args.groupId, args.input),
+    onSuccess: invalidate,
+    onError: callerShowsError,
+  });
+}
+
+/**
+ * After a memory update: the groups list (`memory_updated_at`), the space's
+ * memory layer and its pages, and every open page (an update may have
+ * rewritten one). Another layer's lists keep their rows.
+ */
+function invalidateAfterSpaceMemoryUpdate(queryClient: QueryClient, projectId: string, groupId: string) {
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: qk.project.sessionGroups(projectId) }),
+    queryClient.invalidateQueries({ queryKey: qk.project.memoryLayer(projectId, groupId) }),
+    queryClient.invalidateQueries({ queryKey: [...qk.project.memory(projectId), 'page'] }),
+  ]);
+}
+
+/**
+ * Update a space's memory now (`updateWorkspaceSessionGroupMemory`): resolves
+ * `{ updated_pages, sessions, memory_updated_at }`, then the groups list and
+ * the space's memory pages refetch. A refusal rejects with `ApiError` code
+ * `memory_unavailable`, `memory_model_unavailable` or `memory_update_running`.
+ */
+export function useUpdateWorkspaceSessionGroupMemory(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (groupId: string) => updateWorkspaceSessionGroupMemory(projectId, groupId),
+    onSuccess: (_result, groupId) => invalidateAfterSpaceMemoryUpdate(queryClient, projectId, groupId),
     onError: callerShowsError,
   });
 }
 
 /** Delete a group. Its sessions move to no group, so its list and the no-group lists refetch too. */
-export function useDeleteProjectSessionGroup(projectId: string) {
+export function useDeleteWorkspaceSessionGroup(projectId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (groupId: string) => deleteProjectSessionGroup(projectId, groupId),
+    mutationFn: (groupId: string) => deleteWorkspaceSessionGroup(projectId, groupId),
     onSuccess: (_result, groupId) =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: qk.project.sessionGroups(projectId) }),
@@ -94,17 +178,20 @@ export function useDeleteProjectSessionGroup(projectId: string) {
   });
 }
 
+/** @deprecated Use `useDeleteWorkspaceSessionGroup`. Kept permanently. */
+export const useDeleteProjectSessionGroup = useDeleteWorkspaceSessionGroup;
+
 /**
  * Put the groups in this order (every group id, once). The cached list shows
  * the new order at once and keeps the server's answer. A refusal (409
  * `group_order_stale`: someone added or deleted a group) puts the old order
  * back and reads the list again; the returned promise rejects.
  */
-export function useReorderProjectSessionGroups(projectId: string) {
+export function useReorderWorkspaceSessionGroups(projectId: string) {
   const queryClient = useQueryClient();
   const key = qk.project.sessionGroups(projectId);
   return useMutation({
-    mutationFn: (groupIds: string[]) => reorderProjectSessionGroups(projectId, groupIds),
+    mutationFn: (groupIds: string[]) => reorderWorkspaceSessionGroups(projectId, groupIds),
     onMutate: async (groupIds) => {
       await queryClient.cancelQueries({ queryKey: key });
       const previous = queryClient.getQueryData<ProjectSessionGroup[]>(key);
@@ -126,6 +213,9 @@ export function useReorderProjectSessionGroups(projectId: string) {
   });
 }
 
+/** @deprecated Use `useReorderWorkspaceSessionGroups`. Kept permanently. */
+export const useReorderProjectSessionGroups = useReorderWorkspaceSessionGroups;
+
 /**
  * File a session into a group (`groupId`) or into none (`null`). At once, every
  * cached copy carries the new `group_id`, the row leaves the cached list of
@@ -133,20 +223,20 @@ export function useReorderProjectSessionGroups(projectId: string) {
  * lists refetch and put it in its place. A refusal rejects the returned
  * promise; the refetch puts the row back.
  */
-export function useSetProjectSessionGroup(projectId: string) {
+export function useSetWorkspaceSessionGroup(projectId: string) {
   const queryClient = useQueryClient();
   const groupOf = (sessionId: string) =>
-    findCachedProjectSession(queryClient, projectId, (session) => session.session_id === sessionId)?.group_id ?? null;
+    findCachedWorkspaceSession(queryClient, projectId, (session) => session.session_id === sessionId)?.group_id ?? null;
   const write = (sessionId: string, groupId: string | null) => {
-    updateCachedProjectSessions(queryClient, projectId, (sessions) =>
+    updateCachedWorkspaceSessions(queryClient, projectId, (sessions) =>
       sessions.map((session) => (session.session_id === sessionId ? { ...session, group_id: groupId } : session)),
     );
-    const moved = findCachedProjectSession(queryClient, projectId, (session) => session.session_id === sessionId);
-    if (moved) refileCachedProjectSession(queryClient, projectId, moved);
+    const moved = findCachedWorkspaceSession(queryClient, projectId, (session) => session.session_id === sessionId);
+    if (moved) refileCachedWorkspaceSession(queryClient, projectId, moved);
   };
   return useMutation({
     mutationFn: ({ sessionId, groupId }: { sessionId: string; groupId: string | null }) =>
-      setProjectSessionGroup(projectId, sessionId, groupId),
+      setWorkspaceSessionGroup(projectId, sessionId, groupId),
     onMutate: ({ sessionId, groupId }) => {
       const from = groupOf(sessionId);
       write(sessionId, groupId);
@@ -163,3 +253,6 @@ export function useSetProjectSessionGroup(projectId: string) {
       invalidateGroupLists(queryClient, projectId, [context?.from ?? null, groupId]),
   });
 }
+
+/** @deprecated Use `useSetWorkspaceSessionGroup`. Kept permanently. */
+export const useSetProjectSessionGroup = useSetWorkspaceSessionGroup;

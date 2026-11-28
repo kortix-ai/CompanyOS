@@ -46,14 +46,14 @@ export function ConnectorGetTool({ call, defaultOpen, forceOpen }: ToolProps) {
           </div>
           {data.env && (
             <div className="text-xs">
-              <span className="text-muted-foreground/60">
+              <span className="text-muted-foreground">
                 {tI18nComplete.raw('text146cd06d5026')}{' '}
               </span>
               <code className="bg-muted rounded px-1 text-xs">{data.env}</code>
             </div>
           )}
           {data.notes && (
-            <div className="text-muted-foreground border-border/30 mt-2 border-t pt-2 text-xs whitespace-pre-wrap">
+            <div className="text-muted-foreground border-border mt-2 border-t pt-2 text-xs whitespace-pre-wrap">
               {data.notes}
             </div>
           )}

@@ -49,7 +49,7 @@ const row = (over: Record<string, unknown> = {}) =>
     sandboxProvider: 'platinum',
     sandboxId: 's',
     sandboxUrl: null,
-    opencodeSessionId: null,
+    runtimeSessionId: null,
     agentName: 'default',
     status: 'stopped',
     error: null,
@@ -140,4 +140,12 @@ test('list serialization prefers the durable conversation selection without chan
   expect(serializeSession(source).model).toBe('kortix/deepseek-v4.1-flash');
   expect(serializeSession(row({ metadata: {} })).model).toBeNull();
   expect(serializeSession(source, { canAccess: false, conversationModel: 'kortix/glm-5.3-flash' }).model).toBeNull();
+});
+
+test('an explicit model selection outranks the previous conversation model on every session read', () => {
+  const source = row({ metadata: { model: 'kortix/model-next', model_source: 'explicit', model_picked_at: 1000 } });
+  for (const trimListMetadata of [true, false]) {
+    expect(serializeSession(source, { trimListMetadata, conversationModel: 'kortix/model-previous' }).model).toBe('kortix/model-next');
+    expect(serializeSession(source, { trimListMetadata, conversationModel: 'kortix/model-previous', canAccess: false }).model).toBeNull();
+  }
 });

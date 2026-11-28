@@ -6,7 +6,7 @@ export type AuthEmailAction =
   | { kind: "link"; value: string }
   | { kind: "code"; value: string };
 
-export interface DisposableInbox {
+interface DisposableInbox {
   email: string;
   waitForAuthAction(after: Date): Promise<AuthEmailAction>;
   waitForInviteLink(after: Date): Promise<string>;
@@ -57,7 +57,8 @@ interface ResendInboxSummary {
 function extractAuthAction(text: string): AuthEmailAction | null {
   const decoded = text.replaceAll("&amp;", "&");
   const urls = decoded.match(/https?:\/\/[^\s<>"')]+/g) ?? [];
-  const verifyLink = urls.find((url) => url.includes("/auth/v1/verify?"));
+  // The signup confirmation links to the web callback with a token hash.
+  const verifyLink = urls.find((url) => url.includes("/auth/v1/verify?") || /[?&]token_hash=/.test(url));
   if (verifyLink) return { kind: "link", value: verifyLink };
 
   const code = decoded.match(/(?:^|\D)(\d{6})(?:\D|$)/)?.[1];
@@ -245,7 +246,7 @@ export async function createDisposableInbox(): Promise<DisposableInbox> {
   );
 }
 
-export interface EmailProviderStatus {
+interface EmailProviderStatus {
   available: boolean;
   reason: string;
 }

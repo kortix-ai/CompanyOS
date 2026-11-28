@@ -37,6 +37,7 @@ import {
 } from '../sandbox-turn-lifecycle';
 import { drainSessionLifecycleQueue } from '../session-lifecycle';
 import { confirmInboxPromptConsumed, steerTargetAtTurnEnd } from '../session-lifecycle/consumption';
+import { requeueDroppedSteer } from '../session-lifecycle/redelivery';
 import { reconcileForwardedTurnsAtEnd } from '../session-lifecycle/forwarded-strand-reconcile';
 import { promoteNextInboxRow } from '../session-lifecycle/store';
 import { generateSessionTitleFromFirstPrompt } from '../session-title-generate';
@@ -104,7 +105,7 @@ export function requireSandboxCredential(
 
 // The daemon claims its first prompt through the session-bound credential.
 // No prompt or turn-ledger identifier belongs in the VM environment.
-// The answer also carries the durable OpenCode root pin. A daemon without a
+// The answer also carries the durable runtime root pin (`runtime_session_id`). A daemon without a
 // local pin file (a converged legacy box, a rebuilt home) must resume THAT
 // root. Otherwise it adopts or creates another root and relays it over the
 // pin, and the session opens on an empty conversation (prod 2026-09-23).
@@ -113,12 +114,12 @@ export function claimInitialTurn(
   authenticatedSandboxId: string | null,
   authenticatedSandboxMetadata: unknown,
   turnStreamMetadata: Record<string, unknown>,
-  opencodeSessionId: string | null,
+  runtimeSessionId: string | null,
 ): Response {
   const denial = requireSandboxCredential(c, authenticatedSandboxId, 'initial_turn_claim');
   if (denial) return denial;
   // The pinned root, under its W3 name and its pre-W3 name (an older daemon reads it).
-  const pin = { runtime_session_id: opencodeSessionId };
+  const pin = { runtime_session_id: runtimeSessionId };
   const sandboxMetadata = (authenticatedSandboxMetadata ?? {}) as Record<string, unknown>;
   const activeTurns =
     sandboxMetadata.activeTurns &&
@@ -177,7 +178,7 @@ export async function abandonTurn(
 }
 
 // The API created this token-bound `delivering` record before it provisioned
-// the sandbox. The daemon can promote that exact record after OpenCode
+// the sandbox. The daemon can promote that exact record after the runtime
 // accepts the boot prompt. It cannot create a record or revive one removed
 // by terminal evidence. Require the sandbox credential for this upward
 // lifecycle transition; a project/session PAT is not sufficient.
@@ -190,9 +191,9 @@ export async function acceptTurn(
     return requireSandboxCredential(c, authenticatedSandboxId, 'turn_accepted');
   }
   const turnToken = body.turn_token?.trim();
-  const opencodeSessionId = body.runtime_session_id?.trim();
+  const runtimeSessionId = body.runtime_session_id?.trim();
   const messageId = body.turn_message_id?.trim();
-  if (!turnToken || !opencodeSessionId || !messageId) {
+  if (!turnToken || !runtimeSessionId || !messageId) {
     return c.json(
       {
         error: 'turn_token, runtime_session_id, and turn_message_id are required',
@@ -201,7 +202,7 @@ export async function acceptTurn(
     );
   }
   const ok = await acceptSandboxTurn({ sandboxId: authenticatedSandboxId }, turnToken, {
-    runtimeSessionId: opencodeSessionId,
+    runtimeSessionId: runtimeSessionId,
     messageId,
   });
   return c.json({ ok });
@@ -221,13 +222,13 @@ export async function beginTurn(
   if (!authenticatedSandboxId) {
     return requireSandboxCredential(c, authenticatedSandboxId, 'turn_begin');
   }
-  const opencodeSessionId = body.runtime_session_id?.trim();
+  const runtimeSessionId = body.runtime_session_id?.trim();
   const messageId = body.turn_message_id?.trim();
-  if (!opencodeSessionId || !messageId) {
+  if (!runtimeSessionId || !messageId) {
     return c.json({ error: 'runtime_session_id and turn_message_id are required' }, 400);
   }
   const outcome = await adoptRuntimeSandboxTurn(authenticatedSandboxId, {
-    runtimeSessionId: opencodeSessionId,
+    runtimeSessionId: runtimeSessionId,
     messageId,
   });
   return c.json({
@@ -257,7 +258,7 @@ async function settleTurnLedger(sessionId: string, body: TurnStreamBody, childSe
   // after the last turn ended" half of the model.
   //
   // But ONLY for a turn that genuinely ended. `session.error` also fires
-  // while opencode is RETRYING (a 429 backoff, a transient upstream 5xx),
+  // while the runtime is RETRYING (a 429 backoff, a transient upstream 5xx),
   // and pulling the deadline in to 15 minutes there killed the box mid-turn
   // on any backoff longer than that — the exact state the deleted execution
   // lease treated correctly, because it renewed on 'busy' OR 'retry'. The
@@ -334,7 +335,7 @@ async function promoteAfterTurnEnd(
   if (!childSession) {
     void reconcileForwardedTurnsAtEnd({
       sessionId,
-      opencodeSessionId:
+      runtimeSessionId:
         typeof body.runtime_session_id === 'string' ? body.runtime_session_id : null,
       endedMessageId: typeof body.turn_message_id === 'string' ? body.turn_message_id : null,
     }).catch((err) =>
@@ -378,7 +379,7 @@ async function promoteAfterTurnEnd(
     }
     console.info('[turn-stream] terminal turn settlement', {
       sessionId,
-      opencodeSessionId:
+      runtimeSessionId:
         typeof body.runtime_session_id === 'string' ? body.runtime_session_id : null,
       turnMessageId: typeof body.turn_message_id === 'string' ? body.turn_message_id : null,
       outcome: turnCompletion.outcome,
@@ -402,12 +403,11 @@ async function publishTurnEnd(
   const { projectId, sessionId, childSession, turnStreamMetadata, turnStreamSession } = ctx;
   const { status, errorInfo, turnCompletion } = settled;
   // Tell the person who prompted the turn and the session's watchers
-  // (notifications/session-push.ts); with the project's notification_center
-  // flag off, the session creator's phones only. Only an end that closed a
-  // turn in THIS call notifies (see turnEndPushType); replays and aborts do
-  // not, and a promoted queued prompt means the session is still running, so
-  // it gets no completion. Fire-and-forget: the flag read, the prompter lookup
-  // and the delivery must never delay or fail the relay.
+  // (notifications/session-push.ts). Only an end that closed a turn in THIS
+  // call notifies (see turnEndPushType); replays and aborts do not, and a
+  // promoted queued prompt means the session is still running, so it gets no
+  // completion. Fire-and-forget: the prompter lookup and the delivery must
+  // never delay or fail the relay.
   const pushType = turnEndPushType({
     outcome: turnCompletion.outcome,
     status,
@@ -438,8 +438,7 @@ async function publishTurnEnd(
   }
   // A trigger session's creator is the agent's service account, so the turn
   // end above reaches only a person who prompted it. Record the run on its
-  // trigger: a failed or recovered run alerts the trigger's watchers (flag
-  // off: a failed run pushes the account owner, as before KRTX-1742).
+  // trigger: a failed or recovered run alerts the trigger's watchers.
   try {
     await recordTriggerRunEnd({
       projectId,
@@ -496,7 +495,18 @@ async function publishTurnEnd(
       activeTurnCount: turnCompletion.activeTurnCount,
     });
   }
-  const ok = relayEnd ? await relayTurnEnd(sessionId, status, errorInfo) : false;
+  // The turn's last assistant text (kortixd sends it on `end`): the reply a
+  // chat thread gets when the agent ran no `slack send` of its own.
+  const finalText = status === 'idle' && typeof body.text === 'string' ? body.text : undefined;
+  const turnMessageId = typeof body.turn_message_id === 'string' && body.turn_message_id ? body.turn_message_id : null;
+  // A turn no Slack message started (a colleague's report) answers the thread
+  // when its prompt's source says the platform started it for that thread.
+  // Only a turn that ended: a retryable error (`non_terminal`) still runs, and
+  // a late frame while another turn runs is stale.
+  const followUp = turnMessageId && turnEndWorkDue(turnCompletion)
+    ? { messageId: turnMessageId, source: () => turnPromptSource(sessionId, turnMessageId) }
+    : undefined;
+  const ok = relayEnd ? await relayTurnEnd(sessionId, status, errorInfo, finalText, followUp) : false;
   // A Telegram chat has no live turn that shows the error. Tell it when no Slack
   // or Teams turn carried the end. The gate is the push's own (turnEndPushType):
   // an end that closed a root turn in THIS call with a non-abort error, so once
@@ -504,7 +514,6 @@ async function publishTurnEnd(
   // Tracked, so a deploy drain waits for the send; never awaited, so the
   // daemon's acknowledgement does not.
   if (!ok && pushType === 'error') {
-    const turnMessageId = typeof body.turn_message_id === 'string' ? body.turn_message_id : null;
     trackDetached(
       turnPromptSource(sessionId, turnMessageId)
         .catch(() => null)
@@ -532,10 +541,10 @@ async function publishTurnEnd(
   });
 }
 
-// `end` / `turn_end` carry no text — the sandbox observed the opencode turn
+// `end` / `turn_end` carry no text — the sandbox observed the runtime turn
 // finish (idle) or die (error) without the agent closing its Slack message;
 // finalize it gracefully instead of letting it rot into a timeout failure.
-// (`turn_end` is the alias newer sandboxes send, with status + the opencode
+// (`turn_end` is the alias newer sandboxes send, with status + the runtime
 // session id for the server-side root-session guard.)
 export async function settleTurnEnd(
   c: RelayResponder,
@@ -556,17 +565,21 @@ export async function settleTurnEnd(
       }),
     );
   }
-  // Started beside the promotion, awaited before the acknowledgement.
-  const sessionList = refreshSessionListAtTurnEnd(ctx);
+  // Started beside the promotion so the box read overlaps the promote's DB
+  // work. Drain-tracked, never awaited: the ack must not wait on a box (KRTX-4682).
+  trackDetached(refreshSessionListAtTurnEnd(ctx));
   const promotedPromptId = await promoteAfterTurnEnd(ctx, body, settled);
   const response = await publishTurnEnd(c, ctx, body, settled, promotedPromptId);
-  await sessionList;
   // THE TURN ENDED, SO A BACKGROUND SUBAGENT'S PARENT HEARS IT (subagent-notice.ts).
   // After the promotion: a prompt queued for this child starts its next turn
   // first, so the child is not finished yet. Tracked, never awaited.
   // A teammate (agent teams: `team_lead`) always tells its lead.
+  // Also for `already_closed` while no turn runs, as below: the parent's agents
+  // line polls its children, and that session-list read closes the child's turn
+  // just before this frame. The notice key carries the turn id, so a re-sent end
+  // writes nothing.
   if (
-    settled.turnCompletion.outcome === 'closed' &&
+    turnEndWorkDue(settled.turnCompletion) &&
     ctx.childSession &&
     (ctx.turnStreamMetadata[SUBAGENT_NOTIFY_PARENT_KEY] === true || typeof ctx.turnStreamMetadata[TEAM_LEAD_KEY] === 'string')
   ) {
@@ -597,10 +610,13 @@ export async function settleTurnEnd(
 /**
  * THE TURN ENDED, SO ITS SUBAGENT CHILDREN EXIST — store the box's state
  * document, which writes the session's list of runtime conversations
- * (`writeRuntimeSessionList`). Awaited before the turn end is acknowledged:
- * the daemon re-sends an unacknowledged turn end, so an API that stops
- * mid-write (a deploy) gets the turn end again and writes the list then
- * (R7.4). Never throws.
+ * (`writeRuntimeSessionList`). Drain-tracked, never awaited by the
+ * acknowledgement: the read crosses the sandbox ingress and the daemon
+ * (`/kortix/runtime/state`, 8 s budget), and a slow box held every turn end
+ * until the 25 s request deadline 503'd it (KRTX-4682). The write is
+ * idempotent and self-healing: a lost ACK gets the turn end re-sent (R7.4),
+ * and a write lost to an API restart is rewritten by the next pull-through
+ * read or the session's next turn end. Never throws.
  */
 async function refreshSessionListAtTurnEnd(ctx: TurnEndContext): Promise<void> {
   const userId = ctx.turnStreamSession.createdBy;
@@ -619,7 +635,7 @@ async function refreshSessionListAtTurnEnd(ctx: TurnEndContext): Promise<void> {
 // only, like every other durable write in this file: the daemon only ever
 // reports its own pin-file root, never a subagent, and the sleeve has already
 // refused any sandbox token that is not scoped to this exact session.
-export async function pinOpencodeSession(
+export async function pinRuntimeSession(
   c: RelayResponder,
   body: TurnStreamBody,
   authenticatedSandboxId: string | null,
@@ -653,6 +669,29 @@ export async function readSteer(
   const messageId = body.turn_message_id?.trim();
   if (!messageId) return c.json({ error: 'turn_message_id is required' }, 400);
   const outcome = await confirmInboxPromptConsumed(sessionId, messageId);
+  return c.json({ ok: outcome !== 'no_prompt', outcome });
+}
+
+// A stopped turn DROPPED a steered message it never read (pi): its inbox row
+// goes back on the queue and starts the next turn (`requeueDroppedSteer`). A
+// row still mid-delivery answers 503, so the daemon retries once the POST has
+// come back. Sandbox credential only, like `steer_read`.
+export async function dropSteer(
+  c: RelayResponder,
+  body: TurnStreamBody,
+  sessionId: string,
+  authenticatedSandboxId: string | null,
+): Promise<Response | null> {
+  if (!authenticatedSandboxId) {
+    return requireSandboxCredential(c, authenticatedSandboxId, 'steer_dropped');
+  }
+  const messageId = body.turn_message_id?.trim();
+  if (!messageId) return c.json({ error: 'turn_message_id is required' }, 400);
+  const outcome = await requeueDroppedSteer(sessionId, messageId);
+  if (outcome === 'pending_delivery') return c.json({ ok: false, outcome }, 503);
+  if (outcome === 'requeued' || outcome === 'exhausted') {
+    logger.info('[turn-stream] a stopped turn dropped a steered prompt', { session_id: sessionId, message_id: messageId, outcome });
+  }
   return c.json({ ok: outcome !== 'no_prompt', outcome });
 }
 

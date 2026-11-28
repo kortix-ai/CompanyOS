@@ -55,8 +55,8 @@ const RELEASE_PROSE = [
   '[&_pre]:bg-muted [&_pre]:my-4 [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:p-4',
   '[&_pre_code]:bg-transparent [&_pre_code]:p-0',
   '[&_strong]:text-foreground [&_strong]:font-medium',
-  '[&_img]:border-border/60 [&_img]:my-5 [&_img]:rounded-md [&_img]:border',
-  '[&_hr]:border-border/60 [&_hr]:my-8',
+  '[&_img]:border-border [&_img]:my-5 [&_img]:rounded-md [&_img]:border',
+  '[&_hr]:border-border [&_hr]:my-8',
   '[&_blockquote]:border-border [&_blockquote]:border-l-2 [&_blockquote]:pl-4 [&_blockquote]:italic',
 ].join(' ');
 

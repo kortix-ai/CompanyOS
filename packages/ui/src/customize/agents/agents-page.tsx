@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * /projects/[id]/customize/agents: the Agents index, where the sidebar's
+ * /workspaces/[id]/admin/agents (Workspace settings › Agents): the Agents index, where the sidebar's
  * Customize row lands.
  *
  * Customize is agent-first. My Kortix is not listed: the project home starts
@@ -58,6 +58,7 @@ import {
   InputGroupSearchInput,
 } from '../../primitives/input-group';
 import { useUiPathname, useUiRouter, useUiSearchParams } from '../../providers/ui-provider';
+import { AGENT_MODE_LABEL, AGENT_MODES } from '../sections/view/agent-editor-catalog';
 import { CatalogNoMatch } from '../shared/catalog/catalog-empty-state';
 import { CatalogGridSkeleton } from '../shared/catalog/catalog-grid';
 import { GRID_CLASSNAME } from '../shared/catalog/catalog-grid-tokens';
@@ -68,7 +69,6 @@ import { AgentCoverCard } from './agent-cover-card';
 import { agentInMode, filterAgents } from './agent-filter';
 import { CapabilityPageShell } from '../shared/capability-page-shell';
 import { CreateAgentModal } from './create-agent-modal';
-import { AgentPinButton } from './agent-pin-button';
 
 type Agent = ProjectConfigSummary['agents'][number];
 
@@ -116,7 +116,7 @@ export function AgentsPage({ projectId }: { projectId: string }) {
   });
   const triggerCounts = useMemo(() => {
     const counts = new Map<string, number>();
-    const fallback = config?.default_agent ?? config?.open_code_default_agent ?? null;
+    const fallback = config?.default_agent ?? null;
     for (const trigger of triggersQuery.data?.triggers ?? []) {
       const owner = trigger.agent === 'default' && fallback ? fallback : trigger.agent;
       counts.set(owner, (counts.get(owner) ?? 0) + 1);
@@ -142,7 +142,7 @@ export function AgentsPage({ projectId }: { projectId: string }) {
 
   const agents = useMemo(() => toArray(config?.agents), [config]);
   const filtered = useMemo(() => filterAgents(agents, { mode: null, query }), [agents, query]);
-  const defaultAgent = config?.default_agent ?? config?.open_code_default_agent ?? null;
+  const defaultAgent = config?.default_agent ?? null;
   // The agents a person starts first (the default leading), subagents after.
   const work = useMemo(
     () =>
@@ -152,7 +152,7 @@ export function AgentsPage({ projectId }: { projectId: string }) {
           (a, b) =>
             Number(agentInMode(b, 'primary')) - Number(agentInMode(a, 'primary')) ||
             Number(b.name === defaultAgent) - Number(a.name === defaultAgent) ||
-            agentDisplayName(a.name).localeCompare(agentDisplayName(b.name)),
+            agentDisplayName(a.name, a.title).localeCompare(agentDisplayName(b.name, b.title)),
         ),
     [filtered, defaultAgent],
   );
@@ -174,11 +174,10 @@ export function AgentsPage({ projectId }: { projectId: string }) {
       slug={agent.name}
       href={agentHref(projectId, agent.name)}
       onIntent={() => prefetchAgentConfig(queryClient, projectId, agent.name)}
-      title={agentDisplayName(agent.name)}
+      title={agentDisplayName(agent.name, agent.title)}
       description={agent.description}
       badges={<AgentCardBadges agent={agent} />}
       coverLabel={cover}
-      action={<AgentPinButton projectId={projectId} agent={agent.name} onCard />}
       meta={
         <AgentCardFacts
           agent={agent}
@@ -319,23 +318,25 @@ function AgentCardFacts({
 }
 
 /**
- * Card badges — "also a subagent", disabled. The default agent is marked on
+ * Card badges — the agent's role, disabled. The default agent is marked on
  * the cover instead.
  *
- * The section already says primary or subagent, so a mode chip only marks the
- * both-ways `all` agent: it sits with the primaries but other agents call it
- * too.
+ * Every card names its role (KRTX-4810) with the same labels the properties
+ * panel's "Who can start it" select shows, so a helper My Kortix created reads
+ * as a subagent at a glance and a promoted one shows as primary. An undeclared
+ * mode reads as primary — the runtime's own assumption (`agent-filter.ts`).
  */
 function AgentCardBadges({ agent }: { agent: Agent }) {
   const tI18nComplete = useI18nTranslations('hardcodedUi.i18nComplete');
-  const mode = agent.mode?.toLowerCase();
+  const declared = agent.mode?.toLowerCase();
+  const role = declared && (AGENT_MODES as readonly string[]).includes(declared)
+    ? (declared as (typeof AGENT_MODES)[number])
+    : 'primary';
   return (
     <>
-      {mode === 'all' ? (
-        <Badge variant="muted" size="xs">
-          {tI18nComplete.raw('agentsListAlsoSubagent')}
-        </Badge>
-      ) : null}
+      <Badge variant="muted" size="xs">
+        {AGENT_MODE_LABEL[role]}
+      </Badge>
       {agent.enabled === false ? (
         <Badge variant="muted" size="xs">
           {tI18nComplete.raw('text75081b593d15')}
@@ -365,7 +366,7 @@ function DefaultAgentSelector({
   const availableAgents = toArray(config.agents).filter(
     (agent) => agent.enabled !== false && agentInMode(agent, 'primary'),
   );
-  const current = config.default_agent ?? config.open_code_default_agent;
+  const current = config.default_agent;
   const mutation = useMutation({
     mutationFn: (agentName: string) => updateProjectDefaultAgent(projectId, agentName),
     onSuccess: async (result) => {
@@ -403,7 +404,7 @@ function DefaultAgentSelector({
             <SelectItem key={agent.name} value={agent.name}>
               <span className="flex min-w-0 items-center gap-2">
                 <AgentMark slug={agent.name} />
-                <span className="truncate">{agentDisplayName(agent.name)}</span>
+                <span className="truncate">{agentDisplayName(agent.name, agent.title)}</span>
               </span>
             </SelectItem>
           ))}

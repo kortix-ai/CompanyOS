@@ -1,8 +1,11 @@
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from 'node:crypto';
 import { config } from '../../config';
+import { triggerReaderStanding, type TriggerReaderPrincipal } from '../trigger-reader-policy';
 import {
   agentSessionStanding,
+  isSessionTargetVisibleToCaller,
   isProjectSessionVisibleTo,
+  isTriggerRunSession,
   type SecretGrant,
   type ShareSubject,
 } from '../../connectors/share';
@@ -101,20 +104,38 @@ export function selectSessionRowsForViewer(input: {
    * must not get every member's private session there.
    */
   accountSessionOversight?: boolean;
+  readerPrincipal?: TriggerReaderPrincipal;
+  readerExcludedSpaceIds?: ReadonlySet<string>;
   /**
    * The caller is an agent session under the agent-principal model (spec §2).
    * It lists only its own session, its children, and project-visible sessions —
    * never the launcher's other private or restricted ones.
    */
   agentPrincipal?: boolean;
+  /** Enumeration only. Never changes canAccess or a read/write gate. */
+  canListSessions?: boolean;
   /** Recently deleted (KRTX-2853): `SessionListFilter.deleted`. */
   deleted?: boolean;
   /** Now, for the restore window. */
   now?: number;
   /** The private channels the caller may not see (`hiddenSpaceIds`): their sessions are never listed. */
   hiddenSpaceIds: ReadonlySet<string>;
+  /** The Spaces whose sessions the caller sees through the group (`sharedGroupIdsFor`). Absent: none. */
+  sharedGroupIds?: ReadonlySet<string>;
+  /** The group of each child row's parent (`parent_session_id` or `spawned_by_session`) the page does not hold. */
+  parentGroupIds?: ReadonlyMap<string, string | null>;
+  /**
+   * A My Kortix token whose person has manager standing (`my-kortix-person.ts`):
+   * it lists the trigger runs its person lists, when no person owns them.
+   * Twin of `SessionListViewer.myKortixTriggerRuns`.
+   */
+  myKortixTriggerRuns?: boolean;
+  /** The `created_by` values of the rows that are service accounts of the account. */
+  machineOwnerIds?: ReadonlySet<string>;
+  /** Other members' DM spaces (`foreignDmSpaceIds`): never listed through `myKortixTriggerRuns`. */
+  myKortixForeignDms?: ReadonlySet<string>;
 }): { authorized: boolean; items: SessionInventoryItem[] } {
-  if (input.scope === 'project' && !input.canManageProject) {
+  if (input.scope === 'project' && !input.canManageProject && !input.canListSessions) {
     return { authorized: false, items: [] };
   }
 
@@ -145,10 +166,21 @@ export function selectSessionRowsForViewer(input: {
         spaceVisible: spaceVisibleFor(input.hiddenSpaceIds, row.spaceId),
       },
     );
+    const reader = spaceVisibleFor(input.hiddenSpaceIds, row.spaceId) &&
+      (!row.spaceId || !input.readerExcludedSpaceIds?.has(row.spaceId)) &&
+      isSessionTargetVisibleToCaller({ origin: row.origin, sessionId: row.sessionId, callerSessionId: input.callerSessionId, boundCredentialSessionId: input.boundCredentialSessionId }) &&
+      triggerReaderStanding({ metadata: row.metadata, spaceKind: null, tombstoned: deletedAt !== null }, input.readerPrincipal ?? { kind: 'none' });
+    const myKortixRun = input.myKortixTriggerRuns === true &&
+      input.boundCredentialSessionId !== null &&
+      spaceVisibleFor(input.hiddenSpaceIds, row.spaceId) &&
+      isSessionTargetVisibleToCaller({ origin: row.origin, sessionId: row.sessionId, callerSessionId: input.callerSessionId, boundCredentialSessionId: input.boundCredentialSessionId }) &&
+      isTriggerRunSession(row) &&
+      (row.createdBy === null || input.machineOwnerIds?.has(row.createdBy) === true) &&
+      (!row.spaceId || input.myKortixForeignDms?.has(row.spaceId) === false);
     const access = input.agentPrincipal
       ? spaceVisibleFor(input.hiddenSpaceIds, row.spaceId) &&
-        agentSessionStanding(input.boundCredentialSessionId, row, canAccess).visible
-      : canAccess;
+        (reader || agentSessionStanding(input.boundCredentialSessionId, row, canAccess).visible)
+      : reader || canAccess || myKortixRun || sharedThroughGroup(row, input);
     return { row, canAccess: access, runtimeStatus, deletedAt, deletedBy };
   });
 
@@ -168,21 +200,11 @@ export function selectSessionRowsForViewer(input: {
     };
   }
 
-  if (input.scope === 'project') {
-    // A list row is a disclosure. Keep manager-only lifecycle coverage for
-    // sessions the manager can open, including soft-deleted rows, but never
-    // return an inaccessible session as a redacted breadcrumb.
-    return {
-      authorized: true,
-      items: items.filter((item) => item.canAccess),
-    };
-  }
-
   return {
     authorized: true,
     items: items.filter((item) => {
       if (item.deletedAt) return false;
-      if (!item.canAccess) return false;
+      if (!item.canAccess && !input.canListSessions) return false;
       // A stopped session lists whatever its runtime row says: a terminal turn
       // error parks the session (`parkTurnError`) while its box is still up,
       // and a session stopped before its first box was created has no runtime
@@ -338,3 +360,34 @@ export function cursorForRow(
  *  exists so no caller can re-create the unbounded read this replaced. */
 export const SESSION_PAGE_DEFAULT_LIMIT = 50;
 export const SESSION_PAGE_MAX_LIMIT = 200;
+
+/**
+ * The row is in a Space the caller sees, or is a child of a session in one
+ * (`sharedGroupIds`): the group shares it whatever its own sharing. Never
+ * across a hidden private channel or to a sibling backend session.
+ */
+function sharedThroughGroup(
+  row: { groupId: string | null; parentSessionId: string | null; metadata: unknown; spaceId: string | null; origin: string | null; sessionId: string },
+  input: {
+    sharedGroupIds?: ReadonlySet<string>;
+    parentGroupIds?: ReadonlyMap<string, string | null>;
+    hiddenSpaceIds: ReadonlySet<string>;
+    callerSessionId: string | null;
+    boundCredentialSessionId: string | null;
+  },
+): boolean {
+  const shared = input.sharedGroupIds;
+  if (!shared || shared.size === 0) return false;
+  if (!spaceVisibleFor(input.hiddenSpaceIds, row.spaceId)) return false;
+  if (!isSessionTargetVisibleToCaller({
+    origin: row.origin ?? null,
+    sessionId: row.sessionId,
+    callerSessionId: input.callerSessionId,
+    boundCredentialSessionId: input.boundCredentialSessionId,
+  })) return false;
+  if (row.groupId) return shared.has(row.groupId);
+  const meta = (row.metadata ?? {}) as Record<string, unknown>;
+  const parent = row.parentSessionId ?? (typeof meta.spawned_by_session === 'string' ? meta.spawned_by_session : null);
+  const parentGroup = parent ? input.parentGroupIds?.get(parent) : null;
+  return parentGroup ? shared.has(parentGroup) : false;
+}

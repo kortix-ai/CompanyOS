@@ -10,7 +10,7 @@
  * hook already tracks:
  *
  *   `loading` — a saved copy may still paint: a read is in flight, or the
- *               OpenCode root it is keyed by is still resolving.
+ *               runtime root it is keyed by is still resolving.
  *   `shown`   — the store holds messages for this session (saved or live).
  *   `none`    — nothing can paint before the runtime answers: the saved copy
  *               is absent or was refused, or no root is known and no
@@ -21,17 +21,12 @@
  * rendered as a negative.
  */
 
-import { type SessionTranscriptSyncEnvelope, getSessionTurn } from '../rest/projects-client/sessions';
+import { getSessionTurn } from '../rest/projects-client/sessions';
 import { loadSessionLogPage, readFirstSessionLogAnswer, type SessionLogPage } from '../session-log/source';
 import { EMPTY_SESSION_LOG_STATE, applySessionLogPage } from '../session-log/store';
 import { sessionLogRoot } from '../session-log/v1-view';
 
 export interface SavedSessionCopy {
-  /**
-   * @deprecated Always null: no v1 saved copy is read (`GET …/transcript`, P8.3). The session
-   * log's page is `log`. Removed in the next major.
-   */
-  envelope: SessionTranscriptSyncEnvelope | null;
   /**
    * The conversation is proven empty, with nothing to wait for
    * ({@link isEmptyConversation}): show the composer, not a boot screen.
@@ -48,13 +43,12 @@ export interface SavedSessionCopy {
  * The saved copy of a session, for a host that shows the session before
  * `useSession` binds it (a connecting view while the computer wakes).
  *
- * The session log first: its newest page of the root thread (`GET …/log`), as `log` with
- * `envelope: null`. The host puts it in the session store (`applySessionLogPage`) and renders
- * `useSessionLogThread`, which loads a sub-agent's thread from the heads that page names.
- * `useSession` reads the page again at the bind. No v1 window is read then.
+ * The session log's newest page of the root thread (`GET …/log`), as `log`. The host puts it
+ * in the session store (`applySessionLogPage`) and renders `useSessionLogThread`, which loads a
+ * sub-agent's thread from the heads that page names. `useSession` reads the page again at the
+ * bind.
  *
- * Any other answer (a 404, a failed read, an invalid page) answers no copy: `log: null`. No v1
- * window is read (`GET …/transcript`, P8.3).
+ * Any other answer (a 404, a failed read, an invalid page) answers no copy: `log: null`.
  *
  * The turn record is read only when the page proves `runtimeSessionId` empty. Never throws.
  */
@@ -64,19 +58,14 @@ export async function readSavedSessionCopy(input: {
   sessionId: string;
   /** The runtime session the copy belongs to (the root). */
   runtimeSessionId: string;
-  /**
-   * @deprecated Ignored: the session log is always read, and no v1 window. The project flag
-   * `session_log` it carried is gone.
-   */
-  sessionLog?: boolean;
 }): Promise<SavedSessionCopy> {
   const { projectId, sessionId, runtimeSessionId } = input;
-  if (!projectId || !sessionId || !runtimeSessionId) return { envelope: null, empty: false };
-  const log = loadSessionLogPage ? await readFirstSessionLogAnswer(loadSessionLogPage, projectId, sessionId) : null;
-  if (!log || log === 'missing') return { envelope: null, empty: false, log: null };
+  if (!projectId || !sessionId || !runtimeSessionId) return { empty: false };
+  const log = await readFirstSessionLogAnswer(loadSessionLogPage, projectId, sessionId);
+  if (!log || log === 'missing') return { empty: false, log: null };
   const root = sessionLogRoot(applySessionLogPage(EMPTY_SESSION_LOG_STATE, log));
   const provenEmpty = !!root?.empty && root.runtimeSessionId === runtimeSessionId;
-  return { envelope: null, empty: provenEmpty && (await noTurnSince(projectId, sessionId, runtimeSessionId)), log };
+  return { empty: provenEmpty && (await noTurnSince(projectId, sessionId, runtimeSessionId)), log };
 }
 
 /**
@@ -117,7 +106,7 @@ export interface SavedTranscriptInput {
    */
   mirror: 'idle' | 'loading' | 'painted' | 'absent';
   /**
-   * The OpenCode root the transcript is keyed by: `known`, `pending` while a
+   * The runtime root the transcript is keyed by: `known`, `pending` while a
    * control-plane read that can supply it is outstanding, or `unknown` when
    * none is left (only the runtime can name it now).
    */
@@ -142,33 +131,13 @@ export function resolveSavedTranscript(input: SavedTranscriptInput): SavedTransc
   return 'loading';
 }
 
-/**
- * The OpenCode root a saved window proves EMPTY, or null.
- *
- * The proof is the server's: a complete read of the runtime that found no
- * messages, served as an available, complete window that counts zero. `total`
- * must say so explicitly; an older API sends none and never answers an empty
- * window as available.
- */
-export function savedCopyEmptyRoot(
-  envelope: SessionTranscriptSyncEnvelope | null | undefined,
-): string | null {
-  return envelope?.available &&
-    envelope.source === 'mirror' &&
-    envelope.complete &&
-    envelope.total === 0 &&
-    envelope.messages.length === 0
-    ? (envelope.runtime_session_id ?? null)
-    : null;
-}
-
 export interface EmptyConversationInput {
   /**
-   * The OpenCode root the server's saved copy proves empty: a complete read of
+   * The runtime root the server's saved copy proves empty: a complete read of
    * the runtime found no messages (`total: 0`). Null when no copy proves it.
    */
   savedEmptyRoot: string | null;
-  /** The OpenCode root this session's transcript is keyed by, or `''`. */
+  /** The runtime root this session's transcript is keyed by, or `''`. */
   rootSessionId: string;
   /** The server's turn record (`GET …/turn`) has answered. */
   turnRead: boolean;

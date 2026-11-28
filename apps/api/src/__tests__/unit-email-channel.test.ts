@@ -43,6 +43,8 @@ function makeChain(): any {
 }
 
 mock.module("../shared/db", () => ({
+  withDbTransaction: async <T>(action: () => Promise<T>) => action(),
+  afterDbCommit: (action: () => void) => action(),
   db: {
     select: () => makeChain(),
     insert: () => makeChain(),
@@ -105,7 +107,7 @@ let createCalls: Array<any> = [];
 let deliverOutcome: "delivered" | "no-session" = "delivered";
 
 // The email tools go through the `kortix connectors` CLI, which every harness's
-// shell has. OpenCode alone has the MCP face, so an MCP-only prompt left a pi
+// shell has. pi serves no MCP servers, so an MCP-only prompt left a pi
 // session unable to read or answer the thread (W1 B8).
 function expectConnectorEmailPrompt(prompt: string) {
   expect(prompt).toContain(
@@ -617,6 +619,17 @@ describe("handleEmailEvent", () => {
     [],
     [{ connectionId: "connection-email-1" }],
   ];
+
+  test("a refused create fails the consumer with a safe code instead of consuming the email", async () => {
+    setChannelLifecycleForTest({
+      createCommandStatus: async () => null,
+      resolveProjectAutomationActor: async () => 'user-1',
+      createSession: async () => ({ status: 'failed', error: { status: 403, body: { code: 'CONNECTOR_NOT_ASSIGNED', error: 'private manifest detail' } } }),
+    });
+    dbResults = [[CHANNEL_ON], [], [PROJECT_ROW], [{ agentName: 'dispatcher', sessionModel: null }], [{ eventId: 'email:threadcreate:inb-1:thr-1' }]];
+    await expect(handleEmailEvent(stored(), { finalAttempt: false })).rejects.toThrow('Email session creation failed: CONNECTOR_NOT_ASSIGNED');
+    expect(continueCalls).toHaveLength(0);
+  });
 
   test("first email reads its body and creates one project-visible session bound to the thread", async () => {
     dbResults = [

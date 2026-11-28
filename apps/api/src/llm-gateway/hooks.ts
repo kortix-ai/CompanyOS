@@ -5,6 +5,7 @@ import type {
   GatewayTrace,
   UsageEvent,
 } from '@kortix/llm-gateway';
+import { withFailureDetail } from '@kortix/llm-gateway';
 import { BillingGateError, assertBillingActive } from '../billing/services/billing-gate';
 import { accountMayUseManagedModels, getCachedAccountTier } from '../billing/services/entitlements';
 import { resolveAccountBilling } from '../billing/services/billing-cache';
@@ -22,6 +23,8 @@ import {
 } from '../projects/sandbox-deadline';
 import { validateAccountToken } from '../repositories/account-tokens';
 import { tokenRefusalReason } from '../shared/session-lease-refusal';
+import { keyScopeAllows } from '../iam/key-scope';
+import { PROJECT_ACTIONS } from '../iam/actions';
 import { isGatewayKey } from '../shared/crypto';
 import { recordGatewayTrace } from '../shared/gateway-logs';
 import { recordUsageEvent } from '../shared/usage-events';
@@ -31,6 +34,9 @@ import { validateGatewayKey } from './gateway-keys';
 import { resolveDefaultModelForPrincipal } from './resolution/default-model';
 import { fallbackSwitchOf, switchSessionToFallback } from './resolution/session-model-fallback';
 import { resolveSessionPersonalOwner } from '../projects/lib/personal-resources';
+
+/** The permission a workspace key's scope must hold to call a model. */
+const GATEWAY_KEY_ACTION = PROJECT_ACTIONS.PROJECT_SESSION_START;
 
 // ─── Canonical gateway control plane ────────────────────────────────────────
 //
@@ -80,6 +86,20 @@ async function resolvePrincipalWithReason(
   const yolo = await attributeYoloToken(token);
   if (yolo) return { principal: yolo, reason: null };
   const account = await validateAccountToken(token);
+  if (account.isValid && account.userId && account.accountId && !keyScopeAllows(account.scopes ?? null, GATEWAY_KEY_ACTION)) {
+    // A scoped workspace key (read, or a custom list without session start)
+    // runs no model: a model call is work the key was not granted
+    // (iam/key-scope.ts). Refused, attributed to the key's owner.
+    return {
+      principal: null,
+      reason: `This key's scope does not include "workspace.session.start", which model calls need.`,
+      refusedPrincipal: {
+        userId: account.userId,
+        accountId: account.accountId,
+        ...(account.projectId ? { projectId: account.projectId } : {}),
+      },
+    };
+  }
   if (account.isValid && account.userId && account.accountId) {
     // projectId/sessionId attribute usage to the calling session (the sandbox
     // connector token is minted per-session with session_id = sandbox_id) — the
@@ -315,11 +335,14 @@ export async function authorizeRequest(
       const billing = await assertLlmBillingActive(principal.accountId);
       if (billing?.holdUsd) principal = { ...principal, billingHold: { amountUsd: billing.holdUsd } };
     } catch (err) {
+      // Only a refusal is a 402. A wallet fault or a timeout is thrown: the
+      // route answers 5xx and the gateway a retryable 503 (prod 2026-11-12).
+      if (!(err instanceof BillingGateError)) throw err;
       return {
         ok: false,
         status: 402,
-        errorCode: err instanceof BillingGateError ? err.reason : 'subscription_required',
-        message: err instanceof Error ? err.message : 'Billing inactive',
+        errorCode: err.reason,
+        message: err.message,
         principal,
       };
     }
@@ -454,6 +477,7 @@ const OPERATION_ROUTES = new Map<unknown, string>([
   ['images.edits', '/v1/llm/images/edits'],
   ['audio.transcriptions', '/v1/llm/audio/transcriptions'],
   ['audio.speech', '/v1/llm/audio/speech'],
+  ['audio.dictation', '/v1/projects/{workspaceId}/dictation'],
 ]);
 
 const routeOf = (event: UsageEvent) => OPERATION_ROUTES.get(event.operation) ?? '/v1/llm/chat/completions';
@@ -461,7 +485,8 @@ const routeOf = (event: UsageEvent) => OPERATION_ROUTES.get(event.operation) ?? 
 export async function recordGatewayUsage(event: UsageEvent): Promise<void> {
   // The request is over: its cost is in the logged spend (or it cost nothing),
   // so its in-flight budget reservation must stop counting.
-  releaseBudgetReservation(event.projectId, event.actorUserId);
+  // Claude passthrough authenticates without taking a block-budget reservation.
+  if (event.provider !== 'claude-agent') releaseBudgetReservation(event.projectId, event.actorUserId);
   const pureHoldRefund = isPureHoldRefund(event);
   // A pure hold refund observed nothing — no upstream call happened.
   if (!pureHoldRefund) extendDeadlineForLlmActivity(event.sessionId);
@@ -512,7 +537,7 @@ export async function recordGatewayUsage(event: UsageEvent): Promise<void> {
   // reconciles against what is owed, never against finalCost alone.
   const ownKey = event.billingMode === 'none';
   const owed = ownKey ? byokFee : event.finalCost;
-  const label = ownKey ? 'BYOK fee' : 'LLM';
+  const label = ownKey ? 'BYOK fee' : event.operation === 'audio.dictation' ? 'Dictation' : 'LLM';
 
   if (event.billingHoldUsd != null) {
     const { toDeduct, toRefund } = reconcileBillingHold(owed, event.billingHoldUsd);
@@ -555,7 +580,11 @@ async function settleLlmUsage(
   await settleAndCheckAutoTopup({
     accountId: event.accountId,
     amount: costUsd,
-    description: `${label} · ${event.provider ? `${event.provider}/` : ''}${event.model}`,
+    // A dictation reads "Dictation" alone: its model is the product, not a choice.
+    description:
+      event.operation === 'audio.dictation'
+        ? label
+        : `${label} · ${event.provider ? `${event.provider}/` : ''}${event.model}`,
     kind: 'llm_debit',
     key: usageEventId ? { request: `llm:${usageEventId}` } : null,
     audit: hasAudit
@@ -646,9 +675,12 @@ export function emitGatewayGenAiSpan(trace: GatewayTrace): void {
 }
 
 /** Persist a request trace to gateway_request_logs (skips unauthenticated traces), then evaluate warn budgets. */
-export async function persistGatewayTrace(trace: GatewayTrace): Promise<void> {
+export async function persistGatewayTrace(received: GatewayTrace): Promise<void> {
   // Unknown credentials carry no accountId — nothing useful to attribute.
-  if (!trace.accountId) return;
+  if (!received.accountId) return;
+  // A failed row always names a code and a message, also for a trace from a
+  // gateway build that left them blank (429s and 5xx relayed as received).
+  const trace = withFailureDetail(received);
   // KRTX-2631: account-only refusals intentionally remain DB-forensics-only.
   // Persist their real accountId with projectId = null; do not infer a project.
   // Product list/detail readers stay project-scoped. An account-scoped reader

@@ -5,7 +5,7 @@ import { parseDocument } from 'yaml';
 import { dirname, resolve } from 'node:path';
 import type { App, AppDeployment, CreateAppInput, UpdateAppInput } from '@kortix/sdk';
 
-import { splitHelp } from '../command-argv.ts';
+import { splitHelp, toWorkspaceAlias } from '../command-argv.ts';
 import {
   emitJson,
   fail,
@@ -14,6 +14,7 @@ import {
   takeFlagValue,
 } from '../command-helpers.ts';
 import { C, help, pad, status } from '../style.ts';
+import { terminalSafe } from '../token-denial.ts';
 import { accessCommand, accessLinkCommand } from './apps-access.ts';
 import { eventsCommand } from './apps-events.ts';
 import { addAppBlocks } from './apps-launch-yaml.ts';
@@ -37,6 +38,7 @@ import {
   scoped,
   slugFrom,
   stageArtifact,
+  deployProvenance,
   waitForDeployment,
 } from './apps-deploy.ts';
 
@@ -102,7 +104,7 @@ Subcommands:
     --readiness-path <path>         Default: /.
     --spa | --no-spa                Static/bundle history fallback.
     --provider <name>               platinum (default).
-    --access <mode>                 private (default), project, restricted, public, or password.
+    --access <mode>                 private (default), workspace, restricted, public, or password.
     --password <value>              Required for new password-protected Apps.
     --members <ids>                 Comma-separated member ids for restricted access.
     --groups <ids>                  Comma-separated group ids for restricted access.
@@ -112,10 +114,11 @@ Subcommands:
                                     A new App is unlisted unless kortix.yaml sets
                                     display.listed: true. Pass --listed for a
                                     site or UI people open.
+    --force                         Deploy even when HEAD does not contain the live commit.
     --no-wait                       Return after the deployment is queued.
     --wait-seconds <seconds>        Default: 1200.
   set <id|slug>                     Change an existing App. Only the flags you
-                                    pass are sent. Needs project write access.
+                                    pass are sent. Needs workspace write access.
                                     A machine change applies to the next
                                     deployment. A run-mode change applies within
                                     5 minutes.
@@ -147,7 +150,7 @@ Subcommands:
                                     (only that trigger) --wait[=<s>]: wait for the
                                     outcome; exit 0 only when a trigger fired.
   events credentials <id|slug>      KORTIX_APP_EVENTS_URL and KORTIX_APP_TOKEN, for code
-                                    that runs outside the App. Project admins.
+                                    that runs outside the App. Workspace admins.
   start <id|slug>                   Permit requests and start the App.
   stop <id|slug>                    Suspend now. The next authorized request wakes it.
   rollback <id|slug> <id|vN>        Roll back: a NEW release from that release's artifact
@@ -205,7 +208,7 @@ Subcommands:
                                     deployment cannot be deleted: roll back first.
 
 Global options:
-  --project <id>     Operate on this project id.
+  --workspace <id>   Operate on this workspace id.
   --host <name>      Operate against a non-default Kortix host.
   --json             Machine-readable output.
   -h, --help         Show this help.
@@ -264,7 +267,7 @@ function takeCommon(rest: string[]) {
   return {
     json,
     options: {
-      projectArg: takeFlagValue(rest, ['--project']),
+      projectArg: takeFlagValue(rest, ['--project', '--workspace']),
       hostArg: takeFlagValue(rest, ['--host']),
     },
   };
@@ -588,9 +591,9 @@ async function ensureTemplateSecret(ctx: Ctx, secret: AppTemplateSecret, json: b
     const app = await resolveApp(ctx.apps, secret.app);
     const result = await ctx.apps.exec(app.app_id, { command: secret.command });
     const value = result.stdout.split('\n').map((line) => line.trim()).filter(Boolean).pop();
-    if (result.exit_code !== 0 || !value) return `could not create the project secret ${secret.name}: \`${secret.command.join(' ')}\` on ${secret.app} exited ${result.exit_code}`;
+    if (result.exit_code !== 0 || !value) return `could not create the workspace secret ${secret.name}: \`${secret.command.join(' ')}\` on ${secret.app} exited ${result.exit_code}`;
     await ctx.secrets.upsert({ name: secret.name, value });
-    if (!json) process.stdout.write(`  ${status.ok(`wrote the project secret ${secret.name}`)}\n`);
+    if (!json) process.stdout.write(`  ${status.ok(`wrote the workspace secret ${secret.name}`)}\n`);
     return null;
   });
 }
@@ -661,6 +664,8 @@ async function deployOne(
   return scoped(ctx, async () => {
     let app = await provisionDeployApp(ctx.apps, flags, manifestDefaults, sourcePath);
 
+    const provenance = await deployProvenance(ctx.apps, app, sourcePath, flags.force);
+
     if (flags.accessMode) {
       await ctx.apps.access.update(app.app_id, {
         mode: flags.accessMode,
@@ -689,6 +694,7 @@ async function deployOne(
       const staged = await stageArtifact(ctx.apps, flags, sourcePath, json);
       cleanup = staged.cleanup;
       let deployment = await ctx.apps.deployments.create(app.app_id, {
+        ...provenance,
         artifact_id: staged.artifactId,
         source: staged.source,
         ...(flags.provider ? { provider: flags.provider } : {}),
@@ -738,9 +744,9 @@ async function showCommand(
           : 'not deployed';
     process.stdout.write(`\n  ${C.bold}${app.name}${C.reset}\n  ${C.dim}${hosting}${C.reset}\n${appLines(app)}`);
     if (!app.external_url && app.access_mode !== 'public') {
-      process.stdout.write(`  ${C.dim}${pad('access', 14)}${C.reset}${app.access_mode}\n`);
+      process.stdout.write(`  ${C.dim}${pad('access', 14)}${C.reset}${toWorkspaceAlias(app.access_mode)}\n`);
       process.stdout.write(
-        `  Open in a browser: kortix apps access-link ${app.app_id} --project ${ctx.projectId}${options.hostArg ? ` --host ${options.hostArg}` : ''}\n`,
+        `  Open in a browser: kortix apps access-link ${app.app_id} --workspace ${ctx.projectId}${options.hostArg ? ` --host ${options.hostArg}` : ''}\n`,
       );
     }
     for (const deployment of result.deployments) {
@@ -749,7 +755,7 @@ async function showCommand(
           ? `  ${C.bold}live${C.reset}`
           : '';
       process.stdout.write(
-        `  v${deployment.version}  ${deployment.status}  ${deployment.deployment_id}${live}\n`,
+        `  v${deployment.version}  ${deployment.status}  ${deployment.deployment_id}${live}${deployment.source_commit ? `  ${terminalSafe(deployment.source_commit)}${deployment.source_ref ? ` (${terminalSafe(deployment.source_ref)})` : ''}` : ''}${deployment.source_force ? '  forced' : ''}\n`,
       );
     }
     process.stdout.write('\n');

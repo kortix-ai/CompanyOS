@@ -85,9 +85,13 @@ export const FadedScrollArea = React.forwardRef<
     if (!el) return;
     const ro = new ResizeObserver(updateScrollFades);
     ro.observe(el);
+    // Rows that load after mount grow the content, not the box: watch both.
+    // Assumes stable direct children (one list element, as the callers use).
+    for (const child of el.children) ro.observe(child);
     el.addEventListener('scroll', updateScrollFades, { passive: true });
     window.addEventListener('resize', updateScrollFades);
-    // Keep wheel/touch scroll working inside Radix scroll-lock layers (Dialog/Modal).
+    // Stop wheel/touch events here, so a scroll lock listening on an ancestor
+    // layer (a dialog or modal) cannot cancel them.
     const stopScrollLockCapture = (e: Event) => e.stopPropagation();
     el.addEventListener('wheel', stopScrollLockCapture, { passive: false });
     el.addEventListener('touchmove', stopScrollLockCapture, { passive: false });

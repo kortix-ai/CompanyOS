@@ -1,4 +1,5 @@
-import { SessionSnapshotSchema, SessionTranscriptSyncEnvelopeSchema } from "@kortix/api-contract";
+import { SessionSnapshotSchema } from "@kortix/api-contract";
+import { SessionLogPageSchema } from "@kortix/api-contract/session-log";
 import { Client } from "pg";
 import { flow } from "../core/flow";
 import type { FlowContext, FlowMeta, Principal } from "../core/types";
@@ -19,7 +20,7 @@ function storeFlow(id: string, meta: FlowMeta, fn: (ctx: FlowContext) => Promise
         ...(meta.routes ?? []),
         "POST /v1/accounts/tokens",
         "DELETE /v1/accounts/tokens/:tokenId",
-        "POST /v1/projects/:projectId/sessions/:sessionId/log/journal",
+        "POST /v1/workspaces/:projectId/sessions/:sessionId/log/journal",
       ],
     },
     fn,
@@ -39,18 +40,17 @@ storeFlow(
     domain: "sessions",
     requires: ["database"],
     routes: [
-      "GET /v1/projects/:projectId/sessions/:sessionId/transcript",
-      "PATCH /v1/projects/:projectId/features",
+      "PATCH /v1/workspaces/:projectId/features",
       // `kortix sessions digest` lists, then digests each session.
-      "GET /v1/projects/:projectId/sessions",
-      "GET /v1/accounts/me",
+      "GET /v1/workspaces/:projectId/sessions",
+      "GET /v1/me",
       // `kortix sessions log` locates the session, asks for its stored session
       // log (404: none), then reads its saved copy.
-      "GET /v1/projects/:projectId/sessions/:sessionId",
-      "GET /v1/projects/:projectId/sessions/:sessionId/log",
-      "GET /v1/projects/:projectId/sessions/:sessionId/snapshot",
+      "GET /v1/workspaces/:projectId/sessions/:sessionId",
+      "GET /v1/workspaces/:projectId/sessions/:sessionId/log",
+      "GET /v1/workspaces/:projectId/sessions/:sessionId/snapshot",
       // The CLI reads the `session_log` flag: on, the stored log is the only saved copy.
-      "GET /v1/projects/:projectId/detail",
+      "GET /v1/workspaces/:projectId/detail",
     ],
   },
   async (ctx) => {
@@ -87,29 +87,31 @@ storeFlow(
       ],
       bearer: await ownerBearer(ctx.P.OWNER),
     });
-    const route = "/v1/projects/:projectId/sessions/:sessionId/transcript";
-    const options = {
-      params: { projectId: project.id, sessionId },
-      query: { shape: "sync", history: "true" },
-    };
+    const route = "/v1/workspaces/:projectId/sessions/:sessionId/log";
+    const options = { params: { projectId: project.id, sessionId } };
     const owner = ctx.client.as(ctx.P.OWNER);
+    const reply = fixture.messages[1]!;
     await ctx.step(
-      "a stopped session's saved messages read from PostgreSQL without waking it, in the contract shape",
+      "a stopped session's saved messages read from its stored log without waking it, in the contract shape; the v1 transcript route is gone",
       async () => {
         (await owner.get(route, options))
           .status(200)
           .body()
-          .has("$.source", "mirror")
-          .has("$.available", true)
-          .has("$.message_count", 2)
-          .schema(SessionTranscriptSyncEnvelopeSchema);
+          .schema(SessionLogPageSchema)
+          .has("$.thread_id", fixture.root)
+          .has("$.messages.length", 2)
+          .has("$.has_more", false);
+        // P8.3: `GET …/transcript` (every shape) was removed; the session log is its successor.
+        for (const query of [{}, { shape: "sync", history: "true" }, { limit: "40", detail: "full" }]) {
+          (await owner.get("/v1/workspaces/:projectId/sessions/:sessionId/transcript", { ...options, query })).status(404);
+        }
       },
     );
     await ctx.step(
-      "the session snapshot answers the same saved window in one read, every leg in the contract shape",
+      "the session snapshot answers the saved log page in one read; its transcript part is the pointer only",
       async () => {
         (
-          await owner.get("/v1/projects/:projectId/sessions/:sessionId/snapshot", {
+          await owner.get("/v1/workspaces/:projectId/sessions/:sessionId/snapshot", {
             params: { projectId: project.id, sessionId },
           })
         )
@@ -117,7 +119,9 @@ storeFlow(
           .body()
           .has("$.session.session_id", sessionId)
           .has("$.transcript.known", true)
-          .has("$.transcript.message_count", 2)
+          .has("$.transcript.requested", false)
+          .has("$.log.known", true)
+          .has("$.log.page.messages.length", 2)
           .has("$.turn.known", true)
           .has("$.queue.known", true)
           .schema(SessionSnapshotSchema);
@@ -128,7 +132,7 @@ storeFlow(
       async () => {
         (
           await owner.patch(
-            "/v1/projects/:projectId/features",
+            "/v1/workspaces/:projectId/features",
             { feature: "session_transcript_history", enabled: false },
             { params: { projectId: project.id } },
           )
@@ -149,48 +153,35 @@ storeFlow(
         } finally {
           await db.end();
         }
-        (await owner.get(route, options))
-          .status(200)
-          .body()
-          .has("$.source", "mirror")
-          .has("$.available", true)
-          .has("$.message_count", 2)
-          .has("$.runtime_session_id", fixture.root)
-          .has(
-            "$.messages[1].info.time.completed",
-            fixture.messages[1].info.time.completed,
-          )
-          .has(
-            "$.messages[1].parts[0].text",
-            "This reply is stored in the database.",
-          );
+        const page = (await owner.get(route, options)).status(200).json<{
+          thread_id: string;
+          messages: Array<{ message_id: string; completed_at: string | null; blocks: Array<{ type: string; text?: string }> }>;
+        }>();
+        if (page.thread_id !== fixture.root || page.messages.length !== 2) {
+          throw new Error(`stored log after the off override: thread ${page.thread_id}, ${page.messages.length} messages`);
+        }
+        const saved = page.messages[1]!;
+        if (saved.message_id !== reply.info.id) throw new Error(`reply id ${saved.message_id}, expected ${reply.info.id}`);
+        if (saved.completed_at !== new Date(reply.info.time.completed as number).toISOString()) {
+          throw new Error(`reply completed_at ${saved.completed_at}, expected ${new Date(reply.info.time.completed as number).toISOString()}`);
+        }
+        if (!saved.blocks.some((b) => b.type === "text" && b.text === "This reply is stored in the database.")) {
+          throw new Error(`the saved reply lost its text: ${JSON.stringify(saved.blocks)}`);
+        }
       },
     );
     await ctx.step(
-      "a sub-agent's saved transcript is its own window, and the conversation never includes it",
+      "a sub-agent's saved messages are its own thread, and the conversation never includes them",
       async () => {
-        (await owner.get(route, options))
+        const root = (await owner.get(route, options)).status(200).json<{ threads: Array<{ thread_id: string }>; messages: unknown[] }>();
+        if (!root.threads.some((t) => t.thread_id === child)) throw new Error(`threads ${JSON.stringify(root.threads)} name no sub-agent thread`);
+        (await owner.get(route, { ...options, query: { thread: child } }))
           .status(200)
           .body()
-          .has("$.message_count", 2)
-          .has("$.total", 2);
-        (await owner.get(route, { ...options, query: { ...options.query, child } }))
-          .status(200)
-          .body()
-          .has("$.available", true)
-          .has("$.runtime_session_id", child)
-          .has("$.message_count", 1)
-          .has("$.messages[0].parts[0].text", "List the files.");
-        (
-          await owner.get(route, { ...options, query: { ...options.query, child: "not-a-session" } })
-        ).status(400);
-        (
-          await owner.get(route, { ...options, query: { ...options.query, child: "ses_nothingsaved" } })
-        )
-          .status(200)
-          .body()
-          .has("$.available", false)
-          .has("$.message_count", 0);
+          .has("$.thread_id", child)
+          .has("$.messages.length", 1)
+          .has("$.messages[0].blocks[0].text", "List the files.");
+        (await owner.get(route, { ...options, query: { thread: "ses_nothingsaved" } })).status(404);
       },
     );
     await ctx.step(
@@ -203,48 +194,10 @@ storeFlow(
       },
     );
     await ctx.step(
-      "a replaced root makes the old transcript unavailable without waking a sandbox",
-      async () => {
-        const db = new Client({ connectionString: ctx.env.databaseUrl! });
-        // A dropped connection must fail the next query, not crash the runner.
-        db.on("error", () => {});
-        await db.connect();
-        try {
-          await db.query(
-            "UPDATE kortix.project_sessions SET runtime_session_id = $2 WHERE session_id = $1",
-            [sessionId, "ses_replacement"],
-          );
-        } finally {
-          await db.end();
-        }
-        (await owner.get(route, options))
-          .status(200)
-          .body()
-          .has("$.available", false)
-          .has("$.message_count", 0)
-          .has("$.runtime_session_id", "ses_replacement");
-      },
-    );
-    await ctx.step(
       "the real CLI digests the stopped session's saved transcript",
       async () => {
         // `kortix sessions digest` used to refuse any session that was not
         // `running` and never make the request.
-        //
-        // Put the root back first. The step above replaced it to prove the SYNC
-        // shape refuses a mirror it cannot attribute; the compact shape the CLI
-        // reads carries no such check, so leaving `ses_replacement` in place
-        // would make this step pass for a reason it is not testing.
-        const restore = new Client({ connectionString: ctx.env.databaseUrl! });
-        await restore.connect();
-        try {
-          await restore.query(
-            "UPDATE kortix.project_sessions SET runtime_session_id = $2 WHERE session_id = $1",
-            [sessionId, fixture.root],
-          );
-        } finally {
-          await restore.end();
-        }
         const pat = await ctx.fixtures.pat({
           name: ctx.fixtures.name("cli-digest"),
         });
@@ -353,7 +306,7 @@ storeFlow(
           throwIfCliInfraFailure(old, "kortix sessions log --schema v1");
           if (old.exitCode !== 2 || !old.stderr.includes('Invalid --schema "v1"'))
             throw new Error(`--schema v1: expected exit 2 naming the invalid schema, got ${old.exitCode}: ${old.all}`);
-          const status = (await owner.get("/v1/projects/:projectId/sessions/:sessionId", {
+          const status = (await owner.get("/v1/workspaces/:projectId/sessions/:sessionId", {
             params: { projectId: project.id, sessionId },
           })).status(200).json<{ status: string }>();
           if (status.status !== "stopped")
@@ -411,18 +364,17 @@ storeFlow(
     tags: ["deployed"],
     requires: ["database"],
     routes: [
-      "POST /v1/projects/:projectId/sessions/:sessionId/attachments",
-      "GET /v1/projects/:projectId/sessions/:sessionId/attachments/:attachmentId",
-      "POST /v1/projects/:projectId/sessions/:sessionId/prompts",
-      "DELETE /v1/projects/:projectId/sessions/:sessionId",
+      "POST /v1/workspaces/:projectId/sessions/:sessionId/attachments",
+      "GET /v1/workspaces/:projectId/sessions/:sessionId/attachments/:attachmentId",
+      "POST /v1/workspaces/:projectId/sessions/:sessionId/prompts",
+      "DELETE /v1/workspaces/:projectId/sessions/:sessionId",
       // `kortix sessions attachments` logs in, locates the session, reads its
       // saved transcript as the index, then fetches the bytes.
-      "GET /v1/accounts/me",
-      "GET /v1/projects/:projectId/sessions/:sessionId",
-      "GET /v1/projects/:projectId/sessions/:sessionId/transcript",
+      "GET /v1/me",
+      "GET /v1/workspaces/:projectId/sessions/:sessionId",
       // The `session_log` flag decides which saved copy the index is: the stored log or the v1 transcript.
-      "GET /v1/projects/:projectId/detail",
-      "GET /v1/projects/:projectId/sessions/:sessionId/log",
+      "GET /v1/workspaces/:projectId/detail",
+      "GET /v1/workspaces/:projectId/sessions/:sessionId/log",
     ],
   },
   async (ctx) => {
@@ -442,7 +394,7 @@ storeFlow(
     const owner = ctx.client.as(ctx.P.OWNER);
     const attachmentId = crypto.randomUUID();
     const params = { projectId: project.id, sessionId, attachmentId };
-    const upload = "/v1/projects/:projectId/sessions/:sessionId/attachments";
+    const upload = "/v1/workspaces/:projectId/sessions/:sessionId/attachments";
     const download = `${upload}/:attachmentId`;
     const ref = `kortix-attachment://${project.id}/${sessionId}/${attachmentId}`;
     const contents = "Files remain readable while the computer is stopped.";
@@ -531,7 +483,7 @@ storeFlow(
         ).status(404);
         (
           await owner.post(
-            "/v1/projects/:projectId/sessions/:sessionId/prompts",
+            "/v1/workspaces/:projectId/sessions/:sessionId/prompts",
             {
               client_message_id: crypto.randomUUID(),
               message_id: "msg_0123456789abAbCdEfGhIjKlMn",
@@ -642,7 +594,7 @@ storeFlow(
           if (unknown.exitCode !== 1 || !unknown.stderr.includes("No stored file"))
             throw new Error(`unknown id was not refused: ${unknown.exitCode} ${unknown.all}`);
 
-          const session = (await owner.get("/v1/projects/:projectId/sessions/:sessionId", { params }))
+          const session = (await owner.get("/v1/workspaces/:projectId/sessions/:sessionId", { params }))
             .status(200)
             .json<{ status: string }>();
           if (session.status !== "stopped")
@@ -658,7 +610,7 @@ storeFlow(
         (
           await owner.request(
             "DELETE",
-            "/v1/projects/:projectId/sessions/:sessionId",
+            "/v1/workspaces/:projectId/sessions/:sessionId",
             { params },
           )
         ).status(200);

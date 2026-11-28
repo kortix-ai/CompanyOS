@@ -11,8 +11,14 @@ import type {
   CommitmentInfo,
   ScheduledChange,
 } from '../../types';
+import { getStripe } from '../../shared/stripe';
+import { noWorkspaceError } from '../../shared/no-workspace';
+import { accountExists } from '../../shared/resolve-account';
+import { isUuid } from '../../shared/validate';
+import { listStripeCustomerIdsByAccountId } from '../repositories/customers';
 import { getCreditAccount } from '../repositories/credit-accounts';
 import { getAutoTopupSettings } from './auto-topup';
+import { accountHoldsComp } from './account-write-owner';
 import { resolveAccountBilling } from './billing-cache';
 import { ACCESS_GRACE_DAYS, type ResolvedBilling } from './resolve-billing';
 import { type ContractRow, getContractState } from './enterprise-contracts';
@@ -25,7 +31,7 @@ import {
 import { getCreditSummary } from './credits';
 import { initializeFreeTierAccount } from './free-tier';
 import { PLAN_CATALOG, PLAN_FAMILY_LABELS } from './plan-catalog';
-import { canonicalTier, getTier, getTierEntitlements, planMonthlyUsd } from './tiers';
+import { canonicalTier, getTier, getTierEntitlements, planCreditsUsd, planMonthlyUsd } from './tiers';
 import { getAccountEntitlements } from './entitlements';
 import { currentPeriodStart, getUsageBreakdownThisPeriod } from './usage-breakdown';
 
@@ -106,12 +112,19 @@ export async function buildMinimalAccountState(accountId: string): Promise<Accou
   const billingSnapshot = billingSnapshotFromAccount(sub);
   const billingState = resolveBillingState(billingSnapshot);
 
+  // Free credits once per person (design.md §3.2 C6): a further workspace on
+  // Free gets no recurring grant, so it reports none and no reset date.
+  const freeEligible = sub?.freeCreditsEligible !== false;
+  const onPaidPlan = monthlyUsd !== null;
+  const compUntil = planCompUntil(sub, billingSnapshot);
+
   const state = {
     credits: {
       total: credits.total,
       daily: credits.daily,
       monthly: credits.monthly,
-      expires_at: isoValue(account?.nextCreditGrant),
+      expires_at: compUntil ?? (freeEligible || onPaidPlan ? isoValue(account?.nextCreditGrant) : null),
+      free_grant: { eligible: freeEligible, claimed_workspace_id: null as string | null },
       extra: credits.extra,
       can_run: isAdmin ? true : billingStateAllowsRun(billingState),
       // Lifetime rollups, maintained from credit_ledger by the
@@ -168,7 +181,9 @@ export async function buildMinimalAccountState(accountId: string): Promise<Accou
       // on (billing/routes/payments.ts). Reporting the stored tier's answer
       // here while the route enforced the resolved one would show a trialing
       // account a buy button the server rejects, or hide one it accepts.
-      can_purchase_credits: isAdmin ? true : resolved.entitlements.canPurchaseCredits,
+      // Not widened for admins: the purchase and auto top-up routes gate on the
+      // resolved entitlement, so reporting `true` would show buttons that 400.
+      can_purchase_credits: resolved.entitlements.canPurchaseCredits,
     },
     tier: {
       // RESOLVED: what the account behaves as, so this matches what every gate
@@ -176,8 +191,12 @@ export async function buildMinimalAccountState(accountId: string): Promise<Accou
       name: resolved.features.key,
       display_name: isAdmin && tierName === 'none' ? 'Admin' : resolved.features.displayName,
       // STORED: `monthly_credits` is the recurring GRANT, which Stripe owns.
-      monthly_credits: monthlyUsd ?? tier.monthlyCredits,
-      can_purchase_credits: isAdmin ? true : resolved.entitlements.canPurchaseCredits,
+      // 0 on a Free workspace that gets no free credits.
+      // On Credits: the amount billed plus its volume bonus (planCreditsUsd).
+      monthly_credits: monthlyUsd != null ? planCreditsUsd(monthlyUsd) : (freeEligible ? tier.monthlyCredits : 0),
+      // Not widened for admins: the purchase and auto top-up routes gate on the
+      // resolved entitlement, so reporting `true` would show buttons that 400.
+      can_purchase_credits: resolved.entitlements.canPurchaseCredits,
       entitlements,
     },
     enterprise_license_available: config.ENTERPRISE_LICENSE_AVAILABLE,
@@ -191,9 +210,16 @@ export async function buildMinimalAccountState(accountId: string): Promise<Accou
     models: [],
     auto_topup: autoTopup,
     usage_this_period: usageThisPeriod,
+    plan_comp: compUntil ? { until: compUntil, source: 'workspace_split' as const } : null,
   };
 
   return state;
+}
+
+/** The end of an active split-off comp, or null. A subscription the account bought itself ends the comp's meaning. */
+function planCompUntil(sub: CreditAccountRow, snapshot: ReturnType<typeof billingSnapshotFromAccount>): string | null {
+  if (!sub || !accountHoldsComp(sub) || hasLiveSubscription(snapshot)) return null;
+  return isoValue(sub.compPlanUntil);
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -250,6 +276,7 @@ export function buildLocalAccountState(): AccountStateResponse {
       lifetime_purchased: 0,
       lifetime_used: 0,
       daily_refresh: null,
+      free_grant: { eligible: true, claimed_workspace_id: null },
     },
     model_access: { managed: true, requires_provider_key: false },
     billing_state: 'active',
@@ -313,6 +340,7 @@ export function buildLocalAccountState(): AccountStateResponse {
       last_failure_at: null,
     },
     usage_this_period: null,
+    plan_comp: null,
   };
 }
 
@@ -381,8 +409,8 @@ function extractScheduledChange(
     const to = Number(sub.scheduledMonthlyUsd);
     return {
       type: 'downgrade',
-      current_tier: { name: 'credits', display_name: 'Credits', monthly_credits: from * 100, monthly_usd: from },
-      target_tier: { name: 'credits', display_name: 'Credits', monthly_credits: to * 100, monthly_usd: to },
+      current_tier: { name: 'credits', display_name: 'Credits', monthly_credits: Math.round(planCreditsUsd(from) * 100), monthly_usd: from },
+      target_tier: { name: 'credits', display_name: 'Credits', monthly_credits: Math.round(planCreditsUsd(to) * 100), monthly_usd: to },
       effective_date: isoValue(sub.scheduledTierChangeDate) ?? new Date((periodEndSeconds(sub, currentTierName) ?? 0) * 1000).toISOString(),
     };
   }
@@ -401,4 +429,60 @@ function extractScheduledChange(
   }
 
   return null;
+}
+
+/** Read-only identity safety check. Legacy personal billing used account_id = user_id. */
+export async function buildWorkspacelessAccountState(userId: string) {
+  // The id is quoted into a Stripe search query (stripeNamesLiveSubscription).
+  if (!isUuid(userId)) throw new Error('Workspace-less billing state requires a user id');
+  // A workspace still keyed by this id belongs to its members; a person without
+  // a membership never reads it (shared/resolve-account.ts).
+  if (await accountExists(userId)) throw noWorkspaceError();
+  const [account, customers] = await Promise.all([
+    getCreditAccount(userId),
+    listStripeCustomerIdsByAccountId(userId),
+  ]);
+  // An unknown status is not evidence that recurring billing has ended. A store
+  // cancellation keeps the entitlement until its expiry, so only a past expiry ends it.
+  const storeEnded = Boolean(account?.revenuecatCancelledAt && account.revenuecatCancelAtPeriodEnd &&
+    new Date(account.revenuecatCancelAtPeriodEnd).getTime() <= Date.now());
+  // A subscription the wallet already proves needs no provider read; absence always does.
+  const active = Boolean(
+    (account?.stripeSubscriptionId && live(account.stripeSubscriptionStatus)) ||
+    ((account?.revenuecatSubscriptionId || account?.revenuecatCustomerId) && !storeEnded),
+  ) || await stripeNamesLiveSubscription(userId, customers);
+  return {
+    billing_state: active ? 'active' : account ? 'no_subscription' : 'no_account',
+    has_active_subscription: active,
+    subscription: { status: active ? 'active' : 'no_subscription' },
+    can_manage_billing: false,
+  };
+}
+
+const live = (status: string | null | undefined) => !['canceled', 'incomplete_expired'].includes(status ?? '');
+
+/** Every Stripe read propagates its error: a failed lookup is never absence. */
+async function stripeNamesLiveSubscription(userId: string, customers: string[]): Promise<boolean> {
+  for (const customer of customers) {
+    for (let after: string | undefined; ;) {
+      const page = await getStripe().subscriptions.list({
+        customer, status: 'all', limit: 100, ...(after ? { starting_after: after } : {}),
+      });
+      if (page.data.some((sub) => live(sub.status))) return true;
+      if (!page.has_more) break;
+      after = page.data.at(-1)?.id;
+      if (!after) throw new Error('Incomplete subscription listing');
+    }
+  }
+  // A subscription can name the identity before (or without) a customer mapping
+  // (legacy-stripe-sync.ts).
+  for (let page: string | undefined; ;) {
+    const found = await getStripe().subscriptions.search({
+      query: `metadata['account_id']:'${userId}'`, limit: 100, ...(page ? { page } : {}),
+    });
+    if (found.data.some((sub) => live(sub.status))) return true;
+    if (!found.has_more) return false;
+    page = found.next_page ?? undefined;
+    if (!page) throw new Error('Incomplete subscription search');
+  }
 }

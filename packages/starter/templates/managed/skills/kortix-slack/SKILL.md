@@ -6,12 +6,12 @@ description: How to CONNECT Slack (one command — `kortix channels connect`, pr
 <skill name="slack">
 
 <overview>
-Your sandbox is wired into Slack. When a teammate `@`-mentions the bot or replies in a thread the bot owns, the platform spins up this session and hands you the message; your turn IS the Slack reply.
+Your sandbox is wired into Slack. When a teammate `@`-mentions the bot, or the person who started your thread replies in it, the platform spins up this session and hands you the message; your turn IS the Slack reply. Your posts show your agent's name and face, set by the platform: never sign them "Kortix".
 
 The `slack` CLI is on `$PATH` and **just works** — every call runs through the Kortix connector gateway, which resolves the Slack bot token **server-side**. There is no token in your sandbox and nothing to configure: don't look for `$SLACK_BOT_TOKEN`, don't reach for an MCP/HTTP workaround, just run the commands below. They are the full, supported surface (posting, **file upload**, history, reactions, search, edit/delete — all of it). Two patterns matter most:
 
 - **`slack step "..."`** — narrate progress. Updates the live plan block in the Slack thread *as you go*.
-- **`slack send "..."`** — finalize the turn with your answer. This closes the plan block and posts the reply.
+- **`slack send "..."`** — finalize the turn with your answer. This closes the plan block and posts the reply. A turn that ends without it still answers: the platform posts your last message as the reply. That holds for a turn a colleague's report or another session's message started, too: when the report brings the person nothing new, end that turn with no text. Use `slack send` when the answer needs Block Kit or a file; plain prose may simply be your last message.
 
 Everything else (`slack history`, `slack react`, `slack send --file`, `slack search`, …) is for when the task explicitly asks for it.
 </overview>
@@ -34,8 +34,8 @@ slack send --channel U0123ABCD --text "Can you approve the deploy?"
 | `thread_binding` | Meaning | What to do |
 | --- | --- | --- |
 | `bound: true` | In a channel, a reply that @mentions the bot comes back to this session as your next turn. In a DM, every reply does. | Tell the user you asked in Slack and, in a channel, to @mention the bot in the thread to answer. Then end the turn. Do not poll. |
-| `bound: false`, `reason: thread_bound_to_another_session`, `owner_session_id` | Another session of this project owns the thread. Replies go there, not here. | To take it over: `slack bind-thread --channel <channel> --thread <thread_ts> --force`. Otherwise post a NEW top-level message (`slack send --channel <id>` without `--thread`). |
-| `bound: false`, `reason: thread_owned_by_another_user` / `thread_owned_by_another_project` | Another person's session, or another project, owns the thread. `--force` cannot move it. | Post a NEW top-level message. |
+| `bound: false`, `reason: thread_bound_to_another_session`, `owner_session_id` | Another session of this workspace owns the thread. Replies go there, not here. | To take it over: `slack bind-thread --channel <channel> --thread <thread_ts> --force`. Otherwise post a NEW top-level message (`slack send --channel <id>` without `--thread`). |
+| `bound: false`, `reason: thread_owned_by_another_user` / `thread_owned_by_another_project` | Another person's session, or another workspace, owns the thread. `--force` cannot move it. | Post a NEW top-level message. |
 | `bound: false`, `reason: workspace_unknown` / `bind_failed` | The bind was not written. Replies will start a new session. | Run `slack bind-thread --channel <channel> --thread <thread_ts>` once. If it fails, tell the user replies will not reach this session. |
 | `bound: false`, `reason: top_level_file` | A top-level `--file` post has no thread to bind. | Post a text message with `slack send --channel` if you expect a reply. |
 | `bound: "unknown"`, `reason: not_reported` | The API did not report a binding. | Run `slack bind-thread --channel <channel> --thread <thread_ts>` and read its result. |
@@ -46,7 +46,7 @@ slack send --channel U0123ABCD --text "Can you approve the deploy?"
 
 - `{"ok": true, "bound": true, "session_id": "<this session>"}` — the thread is yours (already, or now).
 - exit 1, `status: 409` — another session owns the thread; the error names it. **The default never takes a thread over.**
-- `--force` moves the thread to this session: `{"bound": true, "rebound_from": "<old session>"}`. It works only when both sessions belong to the same project and were started by the same user. Otherwise it fails with `status: 403` (`THREAD_OWNED_BY_ANOTHER_USER` / `THREAD_OWNED_BY_ANOTHER_PROJECT`). After a move, replies stop reaching the old session — use `--force` only when the user wants this session to own the conversation.
+- `--force` moves the thread to this session: `{"bound": true, "rebound_from": "<old session>"}`. It works only when both sessions belong to the same workspace and were started by the same user. Otherwise it fails with `status: 403` (`THREAD_OWNED_BY_ANOTHER_USER` / `THREAD_OWNED_BY_ANOTHER_PROJECT`). After a move, replies stop reaching the old session — use `--force` only when the user wants this session to own the conversation.
 
 Rules:
 - **Tell the human to reply IN THE THREAD.** A top-level message in the DM or channel is a new thread and starts a new session. In a channel, the reply must @mention the bot to reach the session. A DM needs no mention.
@@ -57,7 +57,7 @@ Rules:
 <connecting>
 ### "Connect my Slack" = ONE command. Nothing else.
 
-If the project isn't wired to Slack yet (or the user asks to connect/set up
+If the workspace isn't wired to Slack yet (or the user asks to connect/set up
 Slack), run:
 
 ```sh
@@ -412,13 +412,16 @@ slack thread  --channel "$SLACK_CHANNEL_ID" --ts "$SLACK_THREAD_TS"  # this thre
 
 Each message carries `user`, the author's id, and `user_name`, the author's display name when Slack has one. Write people's names from `user_name` in an answer. Use `<@user>` only to mention someone, because a mention notifies them.
 
-### Reads and writes stay inside this project
+### Where you can read and write
 
-Every Kortix project in a Slack workspace shares one bot, so reads reach only this project's conversations: the channels and DMs connected to it, and the threads its sessions started or joined. `slack history`, `slack thread`, `slack channel-info`, `slack file-info` and `slack search` refuse anything else with `conversation_not_in_project`, and `slack channels` lists public channels plus this project's private ones.
+One Slack workspace runs in one Kortix workspace, and you move through it like a teammate, under your own connector rules:
 
-Writes never act inside another project's channel or thread: `slack send` (text or `--file`), `slack edit`, `slack delete`, `slack react`, `slack unreact`, `slack join` and `slack bind-thread` refuse them with the same `conversation_not_in_project`. A channel no project is connected to and a DM with a person are fine. Pass `--channel` as the id (`C0123ABCD`, or a user id `U0123ABCD` for a DM), never a channel name.
+- **Public channels:** read and post anywhere. A read of a public channel the bot is not in joins it and reads again, by itself: you do not need `slack join` first.
+- **Private channels, group DMs and DMs:** the bot must be in them (a person invites it to a private channel). You read one only when the person you work for is in it too; otherwise the read is refused with `slack_private_conversation`. A private channel the bot is not in answers `channel_not_found`: ask the person to invite the bot.
+- **Writes** (`slack send`, `--file`, `slack edit`, `slack delete`, `slack react`, `slack unreact`, `slack join`, `slack bind-thread`) go anywhere the bot may post. Pass `--channel` as the id (`C0123ABCD`, or a user id `U0123ABCD` for a DM), never a channel name.
+- `slack_not_linked` means this Kortix workspace no longer holds the Slack workspace (another one installed Slack). Tell the user to connect Slack again from this workspace.
 
-On that error, do not retry with another id. Tell the user what the error message says: the conversation belongs to another project, or they can connect it by running `/kortix switch` in it.
+On a refusal, do not retry with another id. Tell the user what the error message says.
 
 ### React to a message
 
@@ -435,7 +438,7 @@ A "seen it" reaction (`eyes`, `hourglass`, `thinking_face`, …) is temporary. T
 slack send --channel "C0123ABCD" --text "Heads up: rolled api@a3f1 forward."
 ```
 
-A channel of another Kortix project refuses the post (see "Reads and writes stay inside this project").
+A channel of another Kortix workspace refuses the post (see "Reads and writes stay inside this workspace").
 
 ### Edit / delete a message you posted earlier
 

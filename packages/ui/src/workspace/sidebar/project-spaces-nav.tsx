@@ -1,22 +1,21 @@
 'use client';
 
 import type { ProjectSpace } from '@kortix/sdk';
-import { useProjectSessions, useProjectSpaces, useSessionAsks } from '@kortix/sdk/react';
-import { useReviewSessionSummary } from '../../internal/hooks/use-review-session-summary';
+import { useFeatureFlag, useProjectSessions, useProjectSpaces } from '@kortix/sdk/react';
 import { MY_KORTIX_AGENT_NAME } from '@kortix/shared';
-import { CheckIcon, LockSimpleIcon, PlusIcon } from '@phosphor-icons/react';
+import { LockSimpleIcon } from '@phosphor-icons/react';
 import { type KeyboardEvent, useMemo, useState } from 'react';
 
 import { useTranslations } from '../../i18n';
 import { HoverPrefetchLink } from '../../internal/components/hover-prefetch-link';
 import { useIsMobile } from '../../internal/hooks';
-import { reviewHref } from '../../internal/lib/capability-tab-routes';
 import { uiRoutes } from '../../lib/routes';
 import { Button } from '../../primitives/button';
-import { CountBadge } from '../../primitives/count-badge';
 import { FadedScrollArea } from '../../primitives/faded-scroll-area';
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from '../../primitives/sidebar';
 import { useUiPathname } from '../../providers/ui-provider';
+import { ProjectReviewNavItem } from './footer/project-review-nav';
+import { ChatSectionHeading, ProjectAgentsRows } from './project-agents-nav';
 import { CreateChannelDialog } from '../spaces/create-channel-dialog';
 import { PrivateChannelsNotInRow } from '../spaces/private-channels-not-in';
 import {
@@ -30,7 +29,7 @@ import { SpaceAvatar } from '../spaces/space-avatar';
 import { usePersonalSpaceName } from '../spaces/use-personal-space-name';
 import { useMentionNames, useOtherPerson } from '../spaces/space-people';
 
-/** ↑/↓ move between the rows (Review, the spaces, New space), as in a list. */
+/** ↑/↓ move between the rows (Review, the chats, the agents, the channels), as in a list. */
 function moveFocus(event: KeyboardEvent<HTMLUListElement>) {
   if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
   const rows = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('[data-sidebar="menu-button"]'));
@@ -40,20 +39,10 @@ function moveFocus(event: KeyboardEvent<HTMLUListElement>) {
   rows[Math.max(0, Math.min(rows.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1)))]?.focus();
 }
 
-/** `href`, or a page under it. */
+/** `href`, or a page under it. A query (`/inbox?view=review`) is not part of the match. */
 function isAt(pathname: string | null, href: string): boolean {
-  return !!pathname && (pathname === href || pathname.startsWith(`${href}/`));
-}
-
-/**
- * What waits on the person across the project, the Customize nav's number:
- * the review summary's "needs you", plus the agents' questions and permission
- * asks (`useSessionAsks`). Connector approvals are already in the summary.
- */
-function useReviewBadgeCount(projectId: string): number {
-  const reviewNeedsYou = useReviewSessionSummary(projectId, { enabled: true }).totalNeedsYou;
-  const asks = useSessionAsks(projectId).data?.asks;
-  return reviewNeedsYou + (asks?.filter((ask) => ask.kind !== 'approval').length ?? 0);
+  const path = href.split('?')[0]!;
+  return !!pathname && (pathname === path || pathname.startsWith(`${path}/`));
 }
 
 /**
@@ -65,7 +54,14 @@ function useReviewBadgeCount(projectId: string): number {
  * skeleton for navigation); the personal row renders at once, since `/chat`
  * creates that space on first open.
  */
-export function ProjectSpacesNav({ projectId }: { projectId: string }) {
+export function ProjectSpacesNav({
+  projectId,
+  review = true,
+}: {
+  projectId: string;
+  /** False: Review is a button on the panel's title row (the icon rail, `sidebar_rail`). */
+  review?: boolean;
+}) {
   const t = useTranslations('sidebar');
   const pathname = useUiPathname();
   const spaces = useProjectSpaces(projectId);
@@ -75,9 +71,8 @@ export function ProjectSpacesNav({ projectId }: { projectId: string }) {
   const [createOpen, setCreateOpen] = useState(false);
   const { personal, others } = useMemo(() => orderSpaces(spaces.data ?? []), [spaces.data]);
   const chatHref = `${uiRoutes().project(projectId)}/chat`;
-  // The Review page on its own route (`reviewHref`), beside this sidebar.
-  const review = reviewHref(projectId);
-  const openAsks = useReviewBadgeCount(projectId);
+  // Agents (`channels`): a section of the agents the person can message, then the channels under their own heading.
+  const agentsOn = useFeatureFlag(projectId, 'channels').enabled;
 
   const hrefOf = (space: ProjectSpace) =>
     space.kind === 'dm' ? uiRoutes().dm(projectId, space.dm_agent_name ?? '') : uiRoutes().channel(projectId, space.slug ?? '');
@@ -85,18 +80,9 @@ export function ProjectSpacesNav({ projectId }: { projectId: string }) {
   return (
     <FadedScrollArea fadeColor="from-background" className="h-full min-h-0">
       <SidebarMenu className="gap-px" onKeyDown={moveFocus}>
-        {review ? (
-          // Spacing, not a rule, sets Review apart from the spaces.
-          <SidebarMenuItem className="mb-2">
-            <SidebarMenuButton asChild isActive={isAt(pathname, review)} className="text-sidebar-foreground">
-              <HoverPrefetchLink href={review}>
-                <CheckIcon />
-                <span className="min-w-0 flex-1 truncate">{t('spaces.review')}</span>
-                {openAsks > 0 ? <CountBadge count={openAsks} tone="waiting" /> : null}
-              </HoverPrefetchLink>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        ) : null}
+        {/* The Review page, the same row the default sidebar shows first.
+            Spacing, not a rule, sets Review apart from the spaces. */}
+        {review ? <ProjectReviewNavItem projectId={projectId} itemClassName="mb-2" /> : null}
         <SpaceRow
           projectId={projectId}
           space={personal}
@@ -107,6 +93,8 @@ export function ProjectSpacesNav({ projectId }: { projectId: string }) {
           isPrivate
           names={names}
         />
+        <ProjectAgentsRows projectId={projectId} pathname={pathname} enabled={agentsOn} />
+        <ChatSectionHeading label={t('spaces.title')} actionLabel={t('spaces.addChannel')} onAction={() => setCreateOpen(true)} />
         {spaces.isError && !spaces.data ? (
           <li className="space-y-1.5 px-2 py-2">
             <p className="text-destructive/80 text-xs">{t('spaces.loadError')}</p>
@@ -131,14 +119,6 @@ export function ProjectSpacesNav({ projectId }: { projectId: string }) {
             />
           );
         })}
-        {spaces.data ? (
-          <SidebarMenuItem>
-            <SidebarMenuButton onClick={() => setCreateOpen(true)} className="text-muted-foreground hover:text-sidebar-foreground">
-              <PlusIcon />
-              <span>{t('spaces.addChannel')}</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        ) : null}
         <PrivateChannelsNotInRow projectId={projectId} />
       </SidebarMenu>
       <CreateChannelDialog projectId={projectId} open={createOpen} onOpenChange={setCreateOpen} />

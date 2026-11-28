@@ -3,8 +3,9 @@
  * account-deletion.ts so its unit test can stub this step and keep testing the
  * sandbox reclaim; integration-account-erasure-stores.test.ts runs it for real.
  */
-import { projectSessions, sessionSandboxes, projects } from '@kortix/db';
+import { projectSessions, sessionSandboxes } from '@kortix/db';
 import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm';
+import { BillingError } from '../../errors';
 import { logger } from '../../lib/logger';
 import { tryGetProvider } from '../../platform/providers';
 import { deleteSessionWorkspaceVolume, WORKSPACE_VOLUME_SESSION_KEY } from '../../platform/services/workspace-volume';
@@ -15,12 +16,20 @@ import {
 } from '../../projects/surface';
 import { markKortixRemovalIntent } from '../../projects/surface';
 import { db } from '../../shared/db';
+import { escalateProviderAuthOutage, isProviderAuthFailure } from '../../shared/provider-auth';
+import { projectsView } from '../../workspaces/rows';
 
 /** Provider calls in flight at once, the same bound as the sandbox reclaim. */
 const REMOVE_CONCURRENCY = 8;
 
 /** Sandbox states the reclaim pass leaves alone: parked, but still on the provider's disk. */
 const PARKED_SANDBOX_STATUSES = ['stopped', 'archived'] as const;
+
+async function mapInBatches<T>(items: T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
+  for (let i = 0; i < items.length; i += limit) {
+    await Promise.all(items.slice(i, i + limit).map(fn));
+  }
+}
 
 /**
  * The account's data outside our database that the row delete cannot reach
@@ -37,6 +46,13 @@ export async function deleteAccountExternalStores(
   /** Boxes the reclaim pass of this run already removed. */
   alreadyRemoved: ReadonlySet<string> = new Set(),
 ): Promise<void> {
+  await removeParkedBoxes(accountId, alreadyRemoved);
+  // Session /workspace volumes, after the boxes that mount them.
+  await removeWorkspaceVolumes(accountId);
+  await removeProjectStores(accountId);
+}
+
+async function removeParkedBoxes(accountId: string, alreadyRemoved: ReadonlySet<string>): Promise<void> {
   const parked = await db
     .select({
       sandboxId: sessionSandboxes.sandboxId,
@@ -55,65 +71,69 @@ export async function deleteAccountExternalStores(
   // can fail on the provider's own transition.
   const targets = parked.filter((row) => !alreadyRemoved.has(row.externalId as string));
   let failed = 0;
-  for (let i = 0; i < targets.length; i += REMOVE_CONCURRENCY) {
-    await Promise.all(
-      targets.slice(i, i + REMOVE_CONCURRENCY).map(async (row) => {
-        const provider = tryGetProvider(row.provider as string);
-        if (!provider) {
-          // Nothing on this deployment can remove it; retrying would block the
-          // deletion for ever.
-          logger.error(
-            `[AccountDeletion] No provider client for ${row.provider}; parked sandbox ${row.sandboxId} stays at the provider`,
-          );
-          return;
-        }
-        // Stamp the intent BEFORE the provider call: its `removed` webhook can
-        // land while this step is still running (the reported occurrence: 931 ms
-        // after the reclaim summary, whose select never sees a parked row) and
-        // must not read as a lost runtime. A parked box is inert — it cannot run
-        // or bill — so a stamp failure skips this box's removal and the retry
-        // stamps it again; the deletion stays retryable.
-        try {
-          await markKortixRemovalIntent(row.sandboxId);
-        } catch (err) {
-          failed++;
-          logger.error(`[AccountDeletion] Failed to stamp removal intent for parked sandbox ${row.sandboxId}:`, {
-            error: err instanceof Error ? err.message : err,
-          });
-          return;
-        }
-        try {
-          await provider.remove(row.externalId as string);
-        } catch (err) {
-          if (isAlreadyNotRunning(err)) return;
-          failed++;
-          logger.error(`[AccountDeletion] Failed to remove parked sandbox ${row.sandboxId}:`, {
-            error: err instanceof Error ? err.message : err,
-          });
-        }
-      }),
-    );
+  let authOutages = 0;
+  await mapInBatches(targets, REMOVE_CONCURRENCY, async (row) => {
+    const provider = tryGetProvider(row.provider as string);
+    if (!provider) {
+      // Nothing on this deployment can remove it; retrying would block the
+      // deletion for ever.
+      logger.error(
+        `[AccountDeletion] No provider client for ${row.provider}; parked sandbox ${row.sandboxId} stays at the provider`,
+      );
+      return;
+    }
+    // Stamp the intent BEFORE the provider call: its `removed` webhook can
+    // land while this step is still running (the reported occurrence: 931 ms
+    // after the reclaim summary, whose select never sees a parked row) and
+    // must not read as a lost runtime. A parked box is inert — it cannot run
+    // or bill — so a stamp failure skips this box's removal and the retry
+    // stamps it again; the deletion stays retryable.
+    try {
+      await markKortixRemovalIntent(row.sandboxId);
+    } catch (err) {
+      failed++;
+      logger.error(`[AccountDeletion] Failed to stamp removal intent for parked sandbox ${row.sandboxId}:`, {
+        error: err instanceof Error ? err.message : err,
+      });
+      return;
+    }
+    try {
+      await provider.remove(row.externalId as string);
+    } catch (err) {
+      if (isAlreadyNotRunning(err)) return;
+      failed++;
+      // A dead provider credential fails every call to that provider. It is an
+      // outage to fix at the provider, not a fault of this account: page it
+      // once per window with its remediation (KRTX-4792).
+      if (isProviderAuthFailure(err)) {
+        authOutages++;
+        escalateProviderAuthOutage(row.provider as string, 'account erasure: parked sandbox removal', err);
+      }
+      logger.error(`[AccountDeletion] Failed to remove parked sandbox ${row.sandboxId}:`, {
+        error: err instanceof Error ? err.message : err,
+      });
+    }
+  });
+  // Only provider auth outages: the deletion stays retryable and the caller
+  // gets a controlled 503, not a 500 that pages as an error of this account.
+  if (failed > 0 && authOutages === failed) {
+    throw new BillingError('Account deletion is waiting on our sandbox provider. Nothing was lost; try again shortly.', 503);
   }
   if (failed > 0) throw new Error(`${failed} parked sandbox(es) of account ${accountId} could not be removed`);
+}
 
-  // Session /workspace volumes, after the boxes that mount them.
+async function removeWorkspaceVolumes(accountId: string): Promise<void> {
   const volumeSessions = await db
     .select({ sessionId: projectSessions.sessionId, metadata: projectSessions.metadata })
     .from(projectSessions)
     .where(and(eq(projectSessions.accountId, accountId), sql`${projectSessions.metadata} ? ${WORKSPACE_VOLUME_SESSION_KEY}::text`));
-  for (let i = 0; i < volumeSessions.length; i += REMOVE_CONCURRENCY) {
-    await Promise.all(
-      volumeSessions.slice(i, i + REMOVE_CONCURRENCY).map((s) => deleteSessionWorkspaceVolume(s.sessionId, s.metadata)),
-    );
-  }
+  await mapInBatches(volumeSessions, REMOVE_CONCURRENCY, (s) => deleteSessionWorkspaceVolume(s.sessionId, s.metadata));
+}
 
-  const accountProjects = await db.select().from(projects).where(eq(projects.accountId, accountId));
-  for (let i = 0; i < accountProjects.length; i += REMOVE_CONCURRENCY) {
-    await Promise.all(
-      accountProjects.slice(i, i + REMOVE_CONCURRENCY).map(async (project) => {
-        await sessionAttachmentStore().removeProject(project.projectId);
-        await deleteManagedProjectRepo(project);
-      }),
-    );
-  }
+async function removeProjectStores(accountId: string): Promise<void> {
+  const accountProjects = await db.select().from(projectsView).where(eq(projectsView.accountId, accountId));
+  await mapInBatches(accountProjects, REMOVE_CONCURRENCY, async (project) => {
+    await sessionAttachmentStore().removeProject(project.projectId);
+    await deleteManagedProjectRepo(project);
+  });
 }

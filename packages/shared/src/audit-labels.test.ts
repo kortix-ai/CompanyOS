@@ -50,10 +50,32 @@ function badTitle(title: string): boolean {
 }
 
 describe('route lookup', () => {
+  test('Space sharing and tab updates have distinct audit actions on both workspace paths', () => {
+    for (const prefix of ['projects', 'workspaces']) {
+      for (const [suffix, action, title] of [
+        ['sharing', 'project.session_group.sharing.update', 'Updated session group sharing'],
+        ['tabs', 'project.session_group.tabs.update', 'Updated session group tabs'],
+      ]) {
+        expect(auditLabelForRoute('PUT', `/v1/${prefix}/:workspaceId/session-groups/:groupId/${suffix}`)).toEqual({ action, title });
+        expect(auditLabelForAction(action)?.title).toBe(title);
+      }
+    }
+  });
+  test('a row written before the 2026-11-05 param rename (`:projectId`, `:accountId`) keeps its label', () => {
+    expect(auditLabelForRoute('GET', '/v1/projects/:projectId/search')).toEqual(
+      auditLabelForRoute('GET', '/v1/projects/:workspaceId/search'),
+    );
+    expect(auditLabelForRoute('GET', '/v1/accounts/:accountId/audit')).not.toBeNull();
+    expect(auditLabelForRoute('GET', '/v1/accounts/:accountId/audit')).toEqual(
+      auditLabelForRoute('GET', '/v1/accounts/:workspaceId/audit'),
+    );
+    expect(auditLabelForHttpAction('GET /v1/projects/:projectId/search')?.action).toBe('drive.file.search');
+  });
+
   test('Drive index search and Git repository search round-trip to distinct audit routes', () => {
     const searches = [
-      { route: '/v1/projects/:projectId/search', action: 'drive.file.search', title: 'Searched project Drive' },
-      { route: '/v1/projects/:projectId/files/search', action: 'file.search', title: 'Searched project files' },
+      { route: '/v1/projects/:workspaceId/search', action: 'drive.file.search', title: 'Searched project Drive' },
+      { route: '/v1/projects/:workspaceId/files/search', action: 'file.search', title: 'Searched project files' },
     ];
     for (const { route, action, title } of searches) {
       expect(auditLabelForRoute('GET', route)).toEqual({ action, title });
@@ -154,6 +176,14 @@ describe('action lookup', () => {
       must(AUDIT_EVENT_LABELS['opencode.tool.updated'], 'opencode.tool.updated'),
     );
     expect(auditLabelForAction('opencode.session.idle')?.action).toBe('opencode.session.idle');
+    // New rows name the same events `agent.*`.
+    expect(auditLabelForAction('agent.message.part.reasoning.updated')?.title).toBe(
+      must(AUDIT_EVENT_LABELS['agent.message.part.*'], 'agent.message.part.*'),
+    );
+    expect(auditLabelForAction('agent.tool.updated')?.title).toBe(
+      must(AUDIT_EVENT_LABELS['agent.tool.updated'], 'agent.tool.updated'),
+    );
+    expect(auditLabelForAction('agent.session.idle')?.title).toBe(must(AUDIT_EVENT_LABELS['agent.*'], 'agent.*'));
   });
 
   test('a route action names the route it labels; an event action names none', () => {
@@ -261,4 +291,15 @@ describe('catalog shape', () => {
     }
     expect(bad).toEqual([]);
   });
+});
+
+describe('space mutation audit labels', () => {
+  for (const root of ['projects', 'workspaces']) {
+    test(`${root} sharing and tabs have readable labels`, () => {
+      expect(auditLabelForRoute('PUT', `/v1/${root}/:workspaceId/session-groups/:groupId/sharing`))
+        .toEqual({ action: 'project.session_group.sharing.update', title: 'Updated session group sharing' });
+      expect(auditLabelForRoute('PUT', `/v1/${root}/:workspaceId/session-groups/:groupId/tabs`))
+        .toEqual({ action: 'project.session_group.tabs.update', title: 'Updated session group tabs' });
+    });
+  }
 });

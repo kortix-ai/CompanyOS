@@ -30,22 +30,5 @@ export {
 // =============================================================================
 // PROVIDER UTILITIES
 // =============================================================================
-export { shouldUseRevenueCat } from './provider';
 export { canShowExternalPurchase } from './store-policy';
 export { getUpgradeSheetIncludedItems } from './upgrade-sheet-included';
-
-// =============================================================================
-// REVENUECAT
-// =============================================================================
-export {
-  initializeRevenueCat,
-  setRevenueCatAttributes,
-  getOfferings,
-  getOfferingById,
-  purchasePackage,
-  getCustomerInfo,
-  presentPaywall,
-  presentCustomerInfo,
-  isRevenueCatInitialized,
-} from './revenuecat';
-export type { RevenueCatProduct } from './revenuecat';

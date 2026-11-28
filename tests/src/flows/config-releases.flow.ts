@@ -27,6 +27,7 @@ import {
 } from '../fixtures/session-run';
 import { withTransientGitRetry } from '../fixtures/git-transient';
 import { isKe2eRetryableError, transientRetryDelayMs } from '../core/client';
+import { lockProjectFirst } from '../fixtures/token-binding-lock';
 
 /**
  * `fetch` for the idempotent reads and descriptor mints of this file. Bun
@@ -146,10 +147,9 @@ const MANIFEST = [
   '    description: main agent',
   '    mode: primary',
   '    prompt_file: agents/kortix.md',
-  // An agent boots without a checkout unless it opts in. The box flows run a
-  // repository-backed session, whose release carries an archive.
-  '    workspace:',
-  '      project_repository: true',
+  // The box flows run a repository-backed session (its agent may read the
+  // repository), whose release carries an archive.
+  '    kortix_permissions: [workspace.gitops.read]',
   '    skills: all',
   '    tools: all',
   '  reviewer:',
@@ -379,9 +379,9 @@ async function setup(ctx: FlowContext): Promise<Fixture> {
       );
       // Bind the API-minted credential exactly as the sandbox's KORTIX_TOKEN is bound.
       await db.query(
-        `UPDATE kortix.account_tokens
+        lockProjectFirst(`UPDATE kortix.account_tokens
             SET account_id = $2, user_id = $3, project_id = $4, session_id = $5, agent_grant = $6::jsonb
-          WHERE token_id = $1`,
+          WHERE token_id = $1`),
         [
           tokenId,
           team.id,
@@ -760,6 +760,36 @@ flow(
         if (otherAgent.status !== 403) throw new Error(`another agent's query: expected 403, got ${otherAgent.status}`);
       });
 
+      // D3 of the per-agent config release plan: pi reads the root AGENTS.md
+      // and the agent's local pi packages from the release.
+      await ctx.step('a session without repository access also receives the root AGENTS.md and the local pi package its agent enables, and no repo-scoped tree', async () => {
+        const manifest = MANIFEST.replace('agents:\n', 'tools:\n  lookup_order: tools/lookup_order.ts\n  hidden_tool: tools/hidden.ts\nextensions:\n  audit:\n    pi: extensions/audit/index.ts\nagents:\n')
+          .replace('    skills: none\n    tools: all\n', '    skills: none\n    extensions: [audit]\n    tools:\n      exclude: [hidden_tool]\n');
+        await fixture.commit(
+          {
+            'kortix.yaml': manifest,
+            'AGENTS.md': 'Project rules for every agent.\n',
+            'extensions/audit/index.ts': 'export default () => {}\n',
+            'extensions/audit/package.json': '{"name":"audit"}\n',
+          },
+          'AGENTS.md and a local pi package',
+        );
+        const restricted = await fixture.mint({ repositoryAccess: false, agentName: 'reviewer' });
+        const r = await fixture.descriptor(restricted.secret, restricted.sessionId, { accept: ['config-release-v3'] });
+        if (r.status !== 200) throw new Error(`expected 200, got ${r.status}: ${JSON.stringify(r.body)}`);
+        const d = r.body as Descriptor;
+        const paths = d.files?.map(([path]) => path).join(',');
+        const expected = 'AGENTS.md,extensions/audit/index.ts,extensions/audit/package.json,tools/lib/client.ts,tools/lookup_order.ts';
+        if (paths !== expected) throw new Error(`restricted files: ${paths}`);
+        const query = d.archive!.url.slice(d.archive!.url.indexOf('?'));
+        if (query !== `?commit=${d.source_commit}&agent=reviewer`) throw new Error(`archive url ${d.archive!.url}`);
+        const download = await fixture.download(restricted.secret, d.config_tree_id!, query);
+        if (download.status !== 200) throw new Error(`download: expected 200, got ${download.status}`);
+        await assertArchiveMatches(d, download.bytes);
+        const repoScoped = await fixture.download(restricted.secret, d.config_tree_id!, `${query}&scope=repo`);
+        if (repoScoped.status !== 403) throw new Error(`the repo-scoped query: expected 403, got ${repoScoped.status}`);
+      });
+
       await ctx.step('the release is the base commit\'s whole tree: an unregistered skill folder and any other file ship at their repository paths', async () => {
         const tip = await fixture.commit(
           {
@@ -802,7 +832,7 @@ flow(
     domain: 'config-releases',
     requires: ['database'],
     timeoutMs: 180_000,
-    routes: [MINT, DESCRIPTOR, ARCHIVE, 'POST /v1/projects/:projectId/secrets', ...GIT_PROXY],
+    routes: [MINT, DESCRIPTOR, ARCHIVE, 'POST /v1/workspaces/:projectId/secrets', ...GIT_PROXY],
   },
   async (ctx) => {
     const { randomBytes } = await import('node:crypto');
@@ -813,7 +843,7 @@ flow(
         const r = await ctx.client
           .as(ctx.P.OWNER)
           .post(
-            '/v1/projects/:projectId/secrets',
+            '/v1/workspaces/:projectId/secrets',
             { name: 'KE2E_CFG_SECRET', value },
             { params: { projectId: fixture.projectId } },
           );
@@ -1043,7 +1073,7 @@ flow(
       const generation = randomUUID();
       let newTip = '';
       await ctx.step("the project repository is replaced by a second project's repository with a new generation", async () => {
-        // OWNER's funded personal account: the free team account holds one project.
+        // OWNER's funded account: the free team account holds one project.
         const other = await ctx.fixtures.project({ managedGit: true });
         const otherRepo = await fixture.openRepo(other.id);
         newTip = await commitTo(
@@ -1224,7 +1254,7 @@ flow(
       const own = await fixture.mint();
 
       await ctx.step('the project reports no `config_releases` flag at all', async () => {
-        const r = await ctx.client.as(ctx.P.OWNER).get('/v1/projects/:projectId', { params: { projectId: fixture.projectId } });
+        const r = await ctx.client.as(ctx.P.OWNER).get('/v1/workspaces/:projectId', { params: { projectId: fixture.projectId } });
         r.status(200);
         const experimental = r.json<{ experimental: Record<string, boolean> }>().experimental;
         if ('config_releases' in experimental) {
@@ -1241,7 +1271,7 @@ flow(
         for (const enabled of [false, true, null]) {
           const r = await ctx.client
             .as(ctx.P.OWNER)
-            .patch('/v1/projects/:projectId/features', { feature: 'config_releases', enabled }, {
+            .patch('/v1/workspaces/:projectId/features', { feature: 'config_releases', enabled }, {
               params: { projectId: fixture.projectId },
             });
           r.status(400);
@@ -1593,7 +1623,7 @@ async function boxSession(ctx: FlowContext, fixture: Fixture) {
     async () => {
       const r = await ctx.client
         .as(ctx.P.OWNER)
-        .post('/v1/projects/:projectId/sessions/:sessionId/start', {}, {
+        .post('/v1/workspaces/:projectId/sessions/:sessionId/start', {}, {
           params: { projectId: fixture.projectId, sessionId },
           query: { wait_ms: '8000' },
           timeoutMs: 25_000,
@@ -1701,7 +1731,7 @@ const MARKER_PROMPT =
  * check.
  *
  * WHY. `MARKER_PROMPT` is fixed text. Asking it more than once in the SAME
- * OpenCode conversation is confounded: proven on a real box 2026-09-27, a
+ * conversation is confounded: proven on a real box 2026-09-27, a
  * model answering a LITERALLY REPEATED question sometimes echoes its own
  * PRIOR turn's answer instead of re-reading the current system prompt — the
  * exact wrong-marker signature this flow throws on — even though the daemon's
@@ -1768,10 +1798,10 @@ harnessFlow(
     routes: [
       FEATURES,
       CONFIG_STATE,
-      'POST /v1/projects/:projectId/sessions',
-      'POST /v1/projects/:projectId/sessions/:sessionId/start',
-      'GET /v1/projects/:projectId/sessions/:sessionId/turn',
-      'GET /v1/projects/:projectId/sessions/:sessionId/transcript',
+      'POST /v1/workspaces/:projectId/sessions',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/turn',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/log',
       ...GIT_PROXY,
     ],
   },
@@ -1780,7 +1810,7 @@ harnessFlow(
     try {
       // The box's session runs a managed model (spec, `boxSession`). A free-tier
       // account cannot use one at all — every turn 400s `plan_upgrade_required`
-      // before it ever reaches OpenCode, which reads exactly like a stale/empty
+      // before it ever reaches the runtime, which reads exactly like a stale/empty
       // config answer in this flow's own assertions (2026-09-27: this is what
       // actually produced "the answer does not come from the new release: "
       // on preview run 36279090948 and on #7796's control run 36287293649,
@@ -1956,10 +1986,10 @@ harnessFlow(
 
 // ── CFG-12 — a base move and a prompt in the same instant ──────────────────
 //
-// DEF-DEV-1, on a real box. A convergence retires the OpenCode process that is
-// serving the session. If a prompt lands between the turn gate and the swap,
-// the process writing that turn is killed: the client gets `HTTP 503` and the
-// assistant row stays `completed = null` for ever.
+// DEF-DEV-1, on a real OpenCode box: a convergence retired the process that
+// served the session. If a prompt landed between the turn gate and the swap,
+// the process writing that turn was killed: the client got `HTTP 503` and the
+// assistant row stayed `completed = null` for ever.
 //
 // Two ways to land in that window, both here:
 //
@@ -1993,10 +2023,10 @@ harnessFlow(
     routes: [
       FEATURES,
       CONFIG_STATE,
-      'POST /v1/projects/:projectId/sessions',
-      'POST /v1/projects/:projectId/sessions/:sessionId/start',
-      'GET /v1/projects/:projectId/sessions/:sessionId/turn',
-      'GET /v1/projects/:projectId/sessions/:sessionId/transcript',
+      'POST /v1/workspaces/:projectId/sessions',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/turn',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/log',
       ...GIT_PROXY,
     ],
   },
@@ -2005,7 +2035,7 @@ harnessFlow(
     try {
       // See CFG-11's identical step for why: a free-tier account 400s
       // `plan_upgrade_required` on the box's managed model before a prompt
-      // ever reaches OpenCode, and that reads exactly like a stale/empty
+      // ever reaches the runtime, and that reads exactly like a stale/empty
       // config answer here — the actual cause of the CFG-11/CFG-12 preview
       // failures attributed to config releases on 2026-09-26/27.
       await ctx.step('the account is entitled to the managed lineup', async () => {
@@ -2211,10 +2241,10 @@ flow(
       CONFIG_STATE,
       DESCRIPTOR,
       MINT,
-      'POST /v1/projects/:projectId/sessions',
-      'POST /v1/projects/:projectId/sessions/:sessionId/start',
-      'GET /v1/projects/:projectId/sessions/:sessionId/turn',
-      'GET /v1/projects/:projectId/sessions/:sessionId/transcript',
+      'POST /v1/workspaces/:projectId/sessions',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/turn',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/log',
       ...GIT_PROXY,
     ],
   },
@@ -2501,11 +2531,11 @@ harnessFlow(
     routes: [
       FEATURES,
       CONFIG_STATE,
-      'POST /v1/projects/:projectId/sessions',
-      'POST /v1/projects/:projectId/sessions/:sessionId/start',
-      'POST /v1/projects/:projectId/sessions/:sessionId/prompts',
-      'GET /v1/projects/:projectId/sessions/:sessionId/turn',
-      'GET /v1/projects/:projectId/sessions/:sessionId/transcript',
+      'POST /v1/workspaces/:projectId/sessions',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/prompts',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/turn',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/log',
       ...GIT_PROXY,
     ],
   },

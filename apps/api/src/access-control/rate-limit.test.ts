@@ -3,7 +3,16 @@ import { afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 const submissions: Array<Record<string, unknown>> = [];
 mock.module('../config', () => ({ config: {} }));
 mock.module('../shared/db', () => ({
-  db: { insert: () => ({ values: async (row: Record<string, unknown>) => { submissions.push(row); } }) },
+  withDbTransaction: <T,>(action: () => Promise<T>): Promise<T> => action(),
+  db: {
+    insert: () => ({
+      values: (row: Record<string, unknown>) => ({
+        onConflictDoNothing: async () => {
+          submissions.push(row);
+        },
+      }),
+    }),
+  },
 }));
 mock.module('../shared/audit', () => ({ recordAuditEvent: async () => {} }));
 mock.module('../repositories/sso', () => ({ ssoEnforcedForEmail: async () => null }));

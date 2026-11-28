@@ -88,10 +88,10 @@ describe('persistent layer — the terminal lives inside this shell, not beside 
     expect(html).toContain('pty-socket');
     expect(html).toContain('Terminal');
     expect(html).toContain('aria-label="Full screen"');
-    // The shared CARD_FRAME, worn by whichever layer is up. Exactly one card
-    // is on screen here — the duplicated standalone terminal frame this work
-    // deleted would have produced a second.
-    expect(html.match(/inset-y-3 right-3 left-3/g)).toHaveLength(1);
+    // The shared docked frame, worn by whichever layer is up. Exactly one
+    // frame is on screen here — a duplicated standalone terminal frame would
+    // produce a second.
+    expect(html.match(/absolute inset-0 flex min-w-0 flex-col/g)).toHaveLength(1);
   });
 
   test('the body stays mounted once activated, so the PTY survives a close', () => {
@@ -298,9 +298,15 @@ function toolPartsChildren(props: {
     children: ReactElement<{ children?: ReactNode }>;
   }>;
   const raw = provider.props.children.props.children;
-  return (Array.isArray(raw) ? raw : [raw])
-    .flat()
-    .filter((c): c is ReactElement => !!c && typeof c === 'object' && 'type' in c);
+  const elements = (list: unknown): ReactElement[] =>
+    (Array.isArray(list) ? list : [list])
+      .flat()
+      .filter((c): c is ReactElement => !!c && typeof c === 'object' && 'type' in c);
+  // The rows sit in one list box (it draws the hairline between them): read through it.
+  return elements(raw).flatMap((c) => {
+    const inner = elements((c.props as { children?: unknown }).children);
+    return c.type === 'div' && inner.some((i) => i.type === ToolPartRenderer) ? inner : [c];
+  });
 }
 
 describe('ToolParts summary line (W3, opt-in)', () => {
@@ -336,6 +342,28 @@ describe('ToolParts summary line (W3, opt-in)', () => {
   test('without `summary` (the default StepDetailBody uses), no summary line renders', () => {
     const children = toolPartsChildren({ calls: [part('bash')], sessionId: 's1' });
     expect(children.some((c) => c.type === 'p')).toBe(false);
+  });
+});
+
+describe('ToolParts: a failed show is not presented (2026-11-16)', () => {
+  const BANNER = 'This step hit a problem — the details below show what happened.';
+  const hasBanner = (children: ReactElement[]) =>
+    children.some((c) => c.type === 'div' && (c.props as { children?: ReactNode }).children === BANNER);
+  const rows = (children: ReactElement[]) => children.filter((c) => c.type === ToolPartRenderer);
+  const root = (calls: ToolCallBlock[]) =>
+    (callInRender(() => ToolParts({ calls, sessionId: 's1' })) as ReactElement<{ children: ReactElement<{ className: string }> }>).props.children;
+
+  test('a lone failed show: no banner, no row, no full-height slot', () => {
+    const children = toolPartsChildren({ calls: [part('show', 'error')], sessionId: 's1' });
+    expect(hasBanner(children)).toBe(false);
+    expect(rows(children)).toHaveLength(0);
+    expect(root([part('show', 'error')]).props.className).not.toContain('h-full');
+  });
+
+  test('beside a failed bash: the bash keeps its row and the banner; the show is gone', () => {
+    const children = toolPartsChildren({ calls: [part('show', 'error'), part('bash', 'error')], sessionId: 's1' });
+    expect(hasBanner(children)).toBe(true);
+    expect(rows(children).map((c) => (c.props as { call: ToolCallBlock }).call.name)).toEqual(['bash']);
   });
 });
 

@@ -30,8 +30,8 @@ export const KIND_LABEL: Record<InboxNotificationKind, string> = {
   automation_recovered: 'Recovery alert',
   capture_device_down: 'Capture computer stopped',
   capture_device_recovered: 'Capture computer recording again',
+  mention: 'Mentions',
   message: 'Message',
-  artifact_comment: 'Artifact comment',
 };
 
 /** Kinds that wait on the person: an answer, an approval, a failure to look at. */
@@ -41,6 +41,7 @@ const NEEDS_YOU: ReadonlySet<InboxNotificationKind> = new Set([
   'turn_error',
   'automation_failed',
   'capture_device_down',
+  'mention',
 ]);
 
 /** One-column glyph by kind. Color is for the glyph only; the shape names the kind. */
@@ -54,8 +55,8 @@ const KIND_MARK: Record<InboxNotificationKind, { glyph: string; tone: InboxTone 
   automation_recovered: { glyph: '✓', tone: 'ok' },
   capture_device_down: { glyph: '!', tone: 'bad' },
   capture_device_recovered: { glyph: '✓', tone: 'ok' },
+  mention: { glyph: '@', tone: 'busy' },
   message: { glyph: '"', tone: 'idle' },
-  artifact_comment: { glyph: '"', tone: 'idle' },
 };
 
 export interface InboxRow {
@@ -147,6 +148,8 @@ export function targetOf(
   return { kind: 'web', url: webUrlOf(row.url, webBaseUrl) };
 }
 
+/** A row keeps the pre-2026-11-06 `/projects/…` path; the web page is `/workspaces/…`. */
 export function webUrlOf(url: string, webBaseUrl: string): string {
-  return `${webBaseUrl.replace(/\/+$/, '')}${withoutNotificationParam(url)}`;
+  const path = withoutNotificationParam(url).replace(/^\/projects(?=[/?#]|$)/, '/workspaces');
+  return `${webBaseUrl.replace(/\/+$/, '')}${path}`;
 }

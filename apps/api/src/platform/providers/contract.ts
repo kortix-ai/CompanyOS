@@ -74,7 +74,7 @@ export interface CreateSandboxOpts {
    * for backward compatibility with every existing caller.
    *
    * `monitor` is the per-project monitor box: the SAME image and the SAME agent port as a session, running the
-   * daemon in monitor mode instead of opencode. It differs from a session only
+   * daemon in monitor mode instead of the session runtime. It differs from a session only
    * in lifecycle (`autoStopInterval: 0` → persistent) and in having no
    * `session_sandboxes` row.
    */
@@ -231,13 +231,17 @@ export interface SandboxExecOptions {
 export interface SandboxStartOptions {
   /**
    * Called while start() waits on provider-side work that legitimately
-   * outlasts a plain start: today a Platinum restore from cold storage, which
-   * takes minutes under load. A caller holding a time-boxed claim on the start
-   * (a wake or restart lease) renews it here, so the claim does not lapse and
-   * hand the box to cleanup while it is still coming up. Called at most every
-   * 30 s, only while that work is observed in progress; a throw is ignored.
+   * outlasts a plain start: today Platinum's restore from cold storage, which
+   * takes minutes under load, or its wait for host capacity or another start.
+   * A caller holding a time-boxed claim on the start (a wake or restart lease)
+   * renews it here, so the claim does not lapse and hand the box to cleanup
+   * while it is still coming up. Called at most every 30 s per kind (a new
+   * kind is reported at once), only while that work is observed in progress;
+   * a throw is ignored. `archive`: the box is restoring from cold storage;
+   * `wait`: any other wait (no host capacity yet, a start in flight, a
+   * relocation).
    */
-  onProgress?: () => Promise<void>;
+  onProgress?: (kind: 'archive' | 'wait') => Promise<void>;
 }
 
 export interface SandboxProvider {
@@ -318,7 +322,7 @@ export interface SandboxProvider {
     externalId: string,
     request: SandboxIngressRequest,
   ): Promise<ResolvedSandboxIngress>;
-  ensureRunning(externalId: string): Promise<void>;
+  ensureRunning(externalId: string, wakeReason?: unknown): Promise<void>;
   getProvisioningStatus(sandboxId: string): Promise<ProvisioningStatus | null>;
   /**
    * List the running boxes this deployment owns, for the orphan-box reaper

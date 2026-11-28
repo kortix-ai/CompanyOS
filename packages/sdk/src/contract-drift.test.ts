@@ -69,9 +69,6 @@ import type {
   SessionAuditAction,
   SessionOpenBundle,
   SessionPrompt,
-  SessionTranscript,
-  SessionTranscriptMessage,
-  SessionTranscriptSyncEnvelope,
   SessionTurn,
   SessionTurnEnded,
   SessionTurnFailure,
@@ -106,11 +103,10 @@ export function contractDrift(): void {
   // `warm_pool*` are read by older hosts only; the API stopped sending them.
   noPhantom<NoPhantom<KortixProject, C.Project, 'warm_pool' | 'warm_pool_available'>>();
 
-  // The runtime value sets, both ways: the SDK's copy is the contract's (`core/wire-values`).
+  // The runtime value sets: one canonical body (`@kortix/sdk/wire-values`); the
+  // contract file re-exports it, so the SDK's types accept the wire's sets.
   fits<RuntimeCapability>(wire<RR.RuntimeCapability>());
-  fits<RR.RuntimeCapability>(wire<RuntimeCapability>());
   fits<RuntimeThreadStatus>(wire<RR.RuntimeThreadStatus>());
-  fits<RR.RuntimeThreadStatus>(wire<RuntimeThreadStatus>());
   // The turn verdict `kortix.control.turn` carries.
   fits<SessionWorkingVerdict>(wire<C.SessionWorking>());
   noPhantom<NoPhantom<SessionWorkingVerdict, C.SessionWorking>>();
@@ -196,12 +192,6 @@ export function contractDrift(): void {
   fits<ProjectTriggerDryRunResult>(wire<C.TriggerDryRunResult>());
   noPhantom<NoPhantom<ProjectTriggerDryRunResult, C.TriggerDryRunResult>>();
 
-  fits<SessionTranscript>(wire<C.SessionTranscript>());
-  noPhantom<NoPhantom<SessionTranscript, C.SessionTranscript>>();
-  noPhantom<NoPhantom<SessionTranscriptMessage, C.SessionTranscriptMessage>>();
-  fits<SessionTranscriptSyncEnvelope>(wire<C.SessionTranscriptSyncEnvelope>());
-  noPhantom<NoPhantom<SessionTranscriptSyncEnvelope, C.SessionTranscriptSyncEnvelope>>();
-
   fits<SessionTurnStatus>(wire<C.SessionTurnStatus>());
   noPhantom<NoPhantom<SessionTurnStatus, C.SessionTurnStatus>>();
   noPhantom<NoPhantom<SessionTurn, C.SessionTurn>>();
@@ -213,6 +203,7 @@ export function contractDrift(): void {
   fits<CreateSessionPromptResult>(wire<C.CreateSessionPromptResult>());
   noPhantom<NoPhantom<CreateSessionPromptResult, C.CreateSessionPromptResult>>();
 
+  // The transcript leg is the pointer only (P8.3/P8.4): the v1 window is gone on both sides.
   fits<SessionOpenBundle>(wire<C.SessionSnapshot>());
   noPhantom<NoPhantom<SessionOpenBundle, C.SessionSnapshot>>();
   noPhantom<NoPhantom<SessionAuditAction, C.SessionAuditAction>>();

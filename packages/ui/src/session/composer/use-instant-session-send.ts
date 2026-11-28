@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 
-import { errorToast } from '../../primitives/toast';
+import { onlineManager } from '@tanstack/react-query';
+import { errorToast, infoToast } from '../../primitives/toast';
 import type { ComposerOptions } from './composer-chat-input';
 import type { AttachedFile } from './session-chat-input';
 import { isFirstPromptRow } from './queue-projection';
@@ -333,8 +334,8 @@ function useFirstPromptSources({
     // `readStartStash` covers the canonical SDK stash (written under the route
     // session id by this shell, the project-home composer, and
     // `useConfigureThread` — all three producers now share the one canonical
-    // shape) plus its `opencode_pending_prompt` legacy fallback for any other
-    // as-yet-unconverted producer.
+    // shape) plus the legacy `opencode_pending_prompt` key an older tab may
+    // still hold.
     const text = readStartStash(sessionId)?.prompt;
     if (!text) return null;
     return {
@@ -425,8 +426,8 @@ function planSend({
   // through its delivery chain: a text-only send never overtakes an upload.
   //
   // The first send starts the session. A send typed while the first boots
-  // is an inbox row carrying its queue placement, drawn as a Quick Queue
-  // bubble or a Queue List row until the row lists it.
+  // is an inbox row carrying its placement, drawn as a transcript bubble or
+  // a waiting row above the composer until the row lists it.
   //
   // One exception: a first send that is not detached (no uploads, nothing
   // earlier still delivering) paints after its POST. The hero composer that
@@ -544,6 +545,7 @@ export function useInstantSessionSend(
   const { projectId, sessionId, hydrated, onSubmit, promptInbox } = props;
   const tI18nHardcoded = useTranslations('hardcodedUi');
   const tComposerAttachments = useTranslations('hardcodedUi.composerAttachments');
+  const tThreads = useTranslations('threads');
   const { submission, setSubmission, extraSends, setExtraSends, firstSendInFlight, mountedRef } =
     useSendMemory();
   const { submitted, effectiveSubmission } = useFirstPromptSources({
@@ -581,6 +583,8 @@ export function useInstantSessionSend(
         firstSendInFlight,
         mountedRef,
       };
+      // A new session's first prompt has no row on screen to say it waits: say it once.
+      if (send.first && !onlineManager.isOnline()) infoToast(tThreads('notSentYet'));
       paintSend(send, env);
       const post = buildPost(send, env);
       const { detached } = send;
@@ -600,6 +604,7 @@ export function useInstantSessionSend(
       projectId,
       tI18nHardcoded,
       tComposerAttachments,
+      tThreads,
       onSubmit,
       promptInbox.enqueue,
       setSubmission,

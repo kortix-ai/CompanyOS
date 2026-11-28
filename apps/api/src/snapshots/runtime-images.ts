@@ -58,7 +58,6 @@ export function metaRuntimeArtifacts(root: string) {
     { label: 'sdk', path: resolve(root, 'packages/sdk/src') },
     { label: 'llm-catalog', path: resolve(root, 'packages/llm-catalog/src') },
     { label: 'manifest-schema', path: resolve(root, 'packages/manifest-schema/src') },
-    { label: 'registry', path: resolve(root, 'packages/registry/src') },
     { label: 'shared', path: resolve(root, 'packages/shared/src') },
     { label: 'starter', path: resolve(root, 'packages/starter/src') },
     // The managed skills baked into the image live under templates/, not
@@ -490,7 +489,7 @@ type TemplateIdentity = Awaited<ReturnType<typeof computeTemplateIdentity>>;
  *   • a distinct predecessor snapshot exists (there's a real drift), and
  *   • the drift is provably agent-ONLY: the new identity's swapKey (user image +
  *     spec + NON-agent runtime layer) equals the predecessor's STORED swapKey, so
- *     the ONLY thing that changed is the agent binary. A bumped opencode /
+ *     the ONLY thing that changed is the agent binary. A bumped
  *     entrypoint / CLI / slack-cli / SDK / manifest-schema / browser /
  *     layer version — or the user image or spec — moves swapKey → full rebuild.
  *     (No isShared shortcut: the shared default's runtime LAYER is not constant,

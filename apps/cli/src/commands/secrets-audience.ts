@@ -41,7 +41,7 @@ export async function secretsShare(args: string[], opts: CtxOpts, json = false):
     );
   }
   if (everyone && users.length + groups.length + agents.length > 0) {
-    return fail('--everyone shares it with the whole project; drop --user, --group and --agent.');
+    return fail('--everyone shares it with the whole workspace; drop --user, --group and --agent.');
   }
   if (!everyone && users.length + groups.length + agents.length === 0) {
     return fail(
@@ -52,7 +52,7 @@ export async function secretsShare(args: string[], opts: CtxOpts, json = false):
   const ctx = await resolveProjectContext(opts);
   if (!ctx) return 1;
   try {
-    const list = await ctx.client.get<ProjectSecretsResponse>(`/projects/${ctx.projectId}/secrets`);
+    const list = await ctx.client.get<ProjectSecretsResponse>(`/workspaces/${ctx.projectId}/secrets`);
     const target = list.items.find(
       (item) => item.identifier.toUpperCase() === identifier.toUpperCase(),
     );
@@ -70,11 +70,11 @@ export async function secretsShare(args: string[], opts: CtxOpts, json = false):
     let accountId: string | null = null;
     for (const who of users) {
       if (who === 'me') {
-        const me = await ctx.client.get<{ user_id: string }>('/accounts/me');
+        const me = await ctx.client.get<{ user_id: string }>('/me');
         principals.push({ principal_type: 'user', principal_id: me.user_id });
         continue;
       }
-      accountId ??= (await ctx.client.get<{ account_id: string }>(`/projects/${ctx.projectId}`))
+      accountId ??= (await ctx.client.get<{ account_id: string }>(`/workspaces/${ctx.projectId}`))
         .account_id;
       const userId = await resolveUserId(ctx.client, accountId, who);
       if (!userId) return 1;
@@ -85,20 +85,20 @@ export async function secretsShare(args: string[], opts: CtxOpts, json = false):
       const identities = (
         await ctx.client.get<{
           agents: Array<{ service_account_id: string; agent_name: string | null }>;
-        }>(`/projects/${ctx.projectId}/agent-identities`)
+        }>(`/workspaces/${ctx.projectId}/agent-identities`)
       ).agents;
       for (const name of agents) {
         const hit = identities.find((agent) => agent.agent_name === name);
         if (!hit) {
           process.stderr.write(
-            `${status.err(`No agent "${name}" in this project. See: kortix agents ls`)}\n`,
+            `${status.err(`No agent "${name}" in this workspace. See: kortix agents ls`)}\n`,
           );
           return 1;
         }
         principals.push({ principal_type: 'agent', principal_id: hit.service_account_id });
       }
     }
-    const response = await ctx.client.post<ProjectSecret>(`/projects/${ctx.projectId}/secrets`, {
+    const response = await ctx.client.post<ProjectSecret>(`/workspaces/${ctx.projectId}/secrets`, {
       name: target.name,
       identifier: target.identifier,
       shared_with: everyone ? [] : principals,
@@ -112,7 +112,7 @@ export async function secretsShare(args: string[], opts: CtxOpts, json = false):
       return n === 0 ? null : `${n} ${n === 1 ? one : many}`;
     };
     const audience = everyone
-      ? 'everyone in the project'
+      ? 'everyone in the workspace'
       : [
           count('user', 'person', 'people'),
           count('group', 'group', 'groups'),
@@ -139,14 +139,28 @@ export async function secretsShare(args: string[], opts: CtxOpts, json = false):
 
 export async function secretsRequest(rest: string[], opts: CtxOpts, json = false): Promise<number> {
   const show = takeFlagBool(rest, ['--show']);
+  const login = takeFlagBool(rest, ['--login']);
   let scope: string | undefined;
   let expires: string | undefined;
+  let sites: string[];
   try {
     scope = takeFlagValue(rest, ['--scope']);
     expires = takeFlagValue(rest, ['--expires']);
+    sites = takeFlagValues(rest, ['--site']);
   } catch (err) {
     return fail((err as Error).message);
   }
+  // `--login` asks for a website login: a username and password the sandbox
+  // browser types for you (`agent-browser auth login … --credential-provider
+  // kortix`). It is the `browser` scope.
+  if (login) {
+    if (scope !== undefined && scope !== 'browser') return fail('--login cannot be combined with --scope ' + scope);
+    scope = 'browser';
+  }
+  if (scope === 'browser' && sites.length === 0) {
+    return fail('A login needs the site it is typed on: --site app.example.com (repeat for each host of the sign-in flow).');
+  }
+  if (scope !== 'browser' && sites.length > 0) return fail('--site applies only to --login.');
   const names = rest.map((n) => n.trim().toUpperCase()).filter(Boolean);
   if (names.length === 0) {
     return fail('Pass at least one secret NAME to request.');
@@ -161,8 +175,10 @@ export async function secretsRequest(rest: string[], opts: CtxOpts, json = false
         ctx.auth.api_base,
         ctx.auth.token,
         ctx.projectId,
-        scope ?? 'connector',
+        scope ?? 'runtime',
         [...new Set(names)].sort(),
+        // Logins only: a link for other sites is a different link.
+        ...(scope === 'browser' ? [[...new Set(sites.map((site) => site.toLowerCase()))].sort()] : []),
       ]),
     )
     .digest('hex');
@@ -174,6 +190,8 @@ export async function secretsRequest(rest: string[], opts: CtxOpts, json = false
     names: string[];
     /** Resolved by current servers; absent on servers older than the disclosure. */
     scope?: string;
+    /** `browser` scope: the hosts the login may be typed on. */
+    sites?: string[];
     expires_at: string;
     agent?: string;
     withheld?: Array<{
@@ -190,15 +208,17 @@ export async function secretsRequest(rest: string[], opts: CtxOpts, json = false
         url: z.string().url(),
         names: z.array(z.string()),
         scope: z.string().optional(),
+        sites: z.array(z.string()).optional(),
         expires_at: z.string().refine((value) => Date.parse(value) > Date.now()),
         agent: z.string().optional(),
         withheld: z.array(z.object({ name: z.string(), reason: z.enum(['agent_grant', 'session_allowlist']) })).optional(),
         withheld_fix: z.string().optional(),
       }).parse(JSON.parse(readFileSync(cacheFile, 'utf8')));
     } else {
-      resp = await ctx.client.post(`/projects/${ctx.projectId}/secret-requests`, {
+      resp = await ctx.client.post(`/workspaces/${ctx.projectId}/secret-requests`, {
         names,
         ...(scope ? { scope } : {}),
+        ...(scope === 'browser' ? { sites } : {}),
         ...(expires ? { expires_in_minutes: Number(expires) } : {}),
       });
       try {
@@ -230,9 +250,11 @@ export async function secretsRequest(rest: string[], opts: CtxOpts, json = false
   // The web form degrades to "Delivery scope is unavailable" when the API omits
   // the resolved scope; mirror that here instead of printing "Delivery: undefined".
   const deliveryLine =
-    resp.scope === 'runtime' || resp.scope === 'connector'
-      ? `Delivery: ${resp.scope} — ${resp.scope === 'runtime' ? 'real value in the sandbox environment' : 'server-side only; never in the sandbox environment'}.`
-      : 'Delivery scope is unavailable. Ask the agent to confirm where this value will be used before saving.';
+    resp.scope === 'browser'
+      ? `Delivery: website login for ${(resp.sites ?? []).join(', ')} — the sandbox browser types it; you never see the username or password. Sign in with: agent-browser auth login <profile> --credential-provider kortix --item ${resp.names[0]} --url <sign-in page URL>`
+      : resp.scope === 'runtime' || resp.scope === 'connector'
+        ? `Delivery: ${resp.scope} — ${resp.scope === 'runtime' ? 'real value in the sandbox environment' : 'server-side only; never in the sandbox environment'}.`
+        : 'Delivery scope is unavailable. Ask the agent to confirm where this value will be used before saving.';
   process.stdout.write(
     `\n  ${C.bold}Hand this link to whoever has the value${C.reset} ${C.faded}(${resp.names.join(', ')})${C.reset}\n` +
       `  ${C.cyan}${resp.url}${C.reset}\n\n` +
@@ -305,7 +327,7 @@ export async function secretsGrant(argv: string[], opts: CtxOpts, json = false):
   };
   try {
     resp = await ctx.client.post<typeof resp>(
-      `/projects/${ctx.projectId}/secrets/${encodeURIComponent(identifier)}/grant`,
+      `/workspaces/${ctx.projectId}/secrets/${encodeURIComponent(identifier)}/grant`,
       { agent },
     );
   } catch (err) {
@@ -326,7 +348,7 @@ export async function secretsGrant(argv: string[], opts: CtxOpts, json = false):
   // every other agent on the project.
   if (resp.adopted_governance) {
     process.stdout.write(
-      `${status.warn('This wrote the first `agents:` block — an agent that is not listed now receives NO project secrets.')}\n`,
+      `${status.warn('This wrote the first `agents:` block — an agent that is not listed now receives NO workspace secrets.')}\n`,
     );
   }
   return 0;

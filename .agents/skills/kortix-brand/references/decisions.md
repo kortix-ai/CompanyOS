@@ -6,9 +6,65 @@ Each entry has six fields: **Date** (ISO, the day the decision was recorded or m
 
 How to add an entry: change the value in `visual/visual-system.json`, run `scripts/generate-tokens.ts`, update the guidance file, then write the entry here, at the top of its date group. Do not put a color literal in this file: write the token name. `tests/unit/brand-kit.test.ts` fails on a literal. A value that was removed is written in code font, which the test skips.
 
-Ids: `D1` to `D8` and `D4a` to `D4k` come from the 2026-10-01 brand-kit build. `J-1` to `J-9` also live in `visual-system.json` (`decisions`). `K1` and up are kit-build decisions. `D9` comes from the OpenCode decoupling plan (2026-10-02). `E1` and `E2` are errata moved from the old skills. `Q1` and up come from fresh-agent QA rounds (Q1 to Q21 round 1, Q22 to Q32 round 2, Q33 to Q45 the full judge input and the surface agents, Q46 to Q57 the final kit pass on round 3).
+Ids: `D1` to `D8` and `D4a` to `D4k` come from the 2026-10-01 brand-kit build. `J-1` to `J-9` also live in `visual-system.json` (`decisions`). `K1` and up are kit-build decisions. `D9` comes from the OpenCode decoupling plan (2026-10-02); D39 answers it. `E1` and `E2` are errata moved from the old skills. `Q1` and up come from fresh-agent QA rounds (Q1 to Q21 round 1, Q22 to Q32 round 2, Q33 to Q45 the full judge input and the surface agents, Q46 to Q57 the final kit pass on round 3).
 
 ---
+
+## 2026-11-24
+
+### D45 Every agent writes direct, concise, warm and professional answers
+- **Date:** 2026-11-24
+- **Decision:** Every agent's system prompt, root and subagent, carries a `## How you write` section, placed before "Act before you ask". It asks for the answer first, short sentences, a warm and professional tone, plain words matched to the reader, specific numbers and dates, formatting only when it helps, no filler opener ("Great question", "Certainly"), no recap, no closing offer ("Let me know if…"), and no AI tics (em dashes, "It's not X, it's Y", "delve", "seamless", "robust", "leverage"). It forbids writing the result of a step the agent did not run. The agent's own instructions, a loaded skill or the person's request on voice, length or format win over it. My Kortix keeps its D31 voice, emoji and humor included.
+- **Why:** team request, 2026-11-24: answers should be "direct and concise", in a "warm and professional tone", easy for people to read, "not an ai slop, but actual high quality content". Only My Kortix (D31) and the router had voice rules; Worker, custom workspace agents and subagents had none. An A/B run on two hosted models (`deepseek-v4.1-flash`, `glm-5.3-flash`) cut answer length by 25 to 44 %, em dashes from 45 to 0, 64 to 9 and 45 to 9, and bold by about 70 %. The "did not run" rule came from the same run: without it, "lead with the result" made one model invent a check's output.
+- **Where:** `HOW_YOU_WRITE` in `apps/kortix-sandbox-agent-server/src/harness/pi/runtime.ts`, the harness README ("How agents write"), [voice-and-tone.md](verbal/voice-and-tone.md) section 2.
+- **Supersedes:** nothing. D31 stands for My Kortix.
+- **Source:** the `agent-writing-voice` branch.
+
+### D44 The home hero subhead names the category, then what it does and what you own
+- **Date:** 2026-11-24
+- **Decision:** The home hero subhead is: "The operating system for the AI-native company. Connect every data source, orchestrate agents, and keep their skills, memory and connectors in one git repo you own. Open source, any model, in our cloud or yours." The title stays "The CompanyOS". The README tagline follows: "The open-source CompanyOS: the operating system for the AI-native company.", with the subhead's second sentence as its lead line. The GitHub About reads "Kortix CompanyOS – the open-source operating system for the AI-native company." plus the same sentence and "Any model, in our cloud or yours." The positioning line ("The cloud-native agent harness for companies") leaves the hero and the README and stays the line for the docs index, the Guide and the Developers intros.
+- **Why:** founder, 2026-11-24: "The Operating System For the AI Native Company & then say like – connect all data sources across the company, orchestrate agents", then "store skills, memory connectors, agent, and store everything in one repo or one place … maybe we keep it as a git repo", then "go update the github readme &/or even github page itself description". Draft lines the founder gave and the kit does not allow stay out: the 80/20 agent-to-human split (an unmeasured productivity metric, `claims.md`), "basically free to run" (no price references) and "the most sophisticated system" (the one sanctioned superlative is "the leading open-source alternative").
+- **Where:** `apps/web/src/features/marketing/landing-hero/sand-band-hero.tsx`, `README.md`, the GitHub About of `kortix-ai/CompanyOS`, [positioning.md](verbal/positioning.md) section 1.
+- **Supersedes:** D37 (the subhead sentence). D35's positioning line stands for every surface except the home hero subhead.
+- **Source:** the `hero-subhead` branch.
+
+## 2026-11-21
+
+### D43 Wallpapers carry color: ten gradients and a custom one replace the monochrome set
+- **Date:** 2026-11-21
+- **Decision:** The wallpaper picker is Dither (the default, unchanged), ten colored gradients, Blank and Custom. Brandmark, Pixel Beams, Silk, Grain and Neuro leave the picker. A person who had one selected gets Dither. Custom is a palette only: 2 to 5 colors, from 18 ready-made palettes or a picker per color, drawn as Ember's dithered corner bloom. No shape, finish, placement or saved presets: those were built and removed the same day as too complex. Every gradient keeps the area behind the centered content clear (`calm` on its `GradientConfig`).
+- **Why:** the founder-side ask on 2026-11-21: the monochrome set read as ugly, and the references were dithered color blooms and grained gradients on a dark page. Color in a wallpaper is art, not chrome: it sits in the art layer (D4d) and no control takes a color from it.
+- **Where:** `packages/ui/src/theme/wallpaper-gradients.ts` (presets), `packages/ui/src/theme/wallpapers.ts` (registry), [graphic-elements.md](visual/graphic-elements.md) "Wallpapers".
+- **Supersedes:** the unwritten "wallpapers are monochrome" convention. No earlier entry stated it.
+- **Source:** the `wallpapers-v2` branch.
+
+## 2026-11-09
+
+### D42 The home hero has no trait line: title, then subhead
+- **Date:** 2026-11-09
+- **Decision:** The home hero renders no trait block above the title. It is the nav, then the title "The CompanyOS" (D35), then the subhead (D37), then the CTAs and the session-window band. No carousel, badges or replacement line goes in the freed space.
+- **Why:** two teammates in #kortix-triage, 2026-11-09: the two-by-two icon-and-label line ("Open Source, Extensible, Multiplayer, Sovereign", D35) reads as clutter and eats about a quarter of a phone's first screen; the follow-up ask was to remove the section outright, with no substitute.
+- **Where:** `apps/web/src/features/marketing/landing-hero/sand-band-hero.tsx`. The trait words stay in [positioning.md](verbal/positioning.md) "The three lengths" (the Short line), which the hero no longer spells out.
+- **Supersedes:** the trait-line part of D35 (D35's subhead part was already superseded by D37; the title and the positioning line stand).
+- **Source:** KRTX-4560 (the `krtx-4560-remove-hero-traits` branch).
+
+## 2026-11-06
+
+### D41 One workspace role, one Settings panel, and the workspace code names
+- **Date:** 2026-11-06
+- **Decision:** (1) A person holds ONE role per workspace, read from one ladder: Owner, Admin, Manager, Member. The UI never shows "account owner", "account admin", "account member", "project member" or "project manager", and never a second "access role" beside the workspace role. An invite reads "Invite people to {workspace}" and carries one role (Owner only by a transfer). (2) "Workspace settings" is the workspace's one Settings panel (`/workspaces/<id>/admin/<section>`, rail Workspace · Library · People · Billing · Support). "Preferences" is the person's own settings (profile, security, appearance, notifications, personal keys); the menu row that opens it says "Preferences" and keeps Mod+,. No surface has two rows labelled "Settings". (3) The code now has workspace names (`/v1/workspaces`, `workspace_id`, `kortix workspaces`, `KORTIX_WORKSPACE_ID`): copy that cites a code name uses the workspace name; the project and account names stay valid aliases and appear only where the reader's tool still prints them. (4) A key the workspace mints says "This workspace"; a personal key says "Every workspace". Never "Whole workspace" for a key that reaches more than one.
+- **Why:** founder, 2026-11-05 and 2026-11-06: "there will just be Workspace scopes not the account level or project level shit, just 1 type", "Hardcore treat everything 100% like SLACK Workspace", "1 Settings panel with all from top to bottom things". The review of the `workspaces` branch (findings 19 to 21) found the invite dialog still offering "Account member" plus an optional "Project member" row, two rows labelled "Settings" with different meanings, and copy that called the viewer's email "Workspace".
+- **Where:** [voice-and-tone.md](verbal/voice-and-tone.md) (the workspace and role rows of the noun table, the code-name rule), `packages/ui/src/access/access/role-select.tsx`, `packages/ui/src/access/access/invite-people-dialog.tsx`, `packages/shared/src/workspace-settings.ts` (the section names), `apps/web/translations/*.json`, `.agents/skills/learnings/work/workspaces/ux.md` sections 3 and 4.
+- **Supersedes:** the two-level access sentence of D40 ("the owner, admin and member role is the 'workspace role', and the Manager, Editor and Viewer grant is the 'access role'"), and D39 rule (4) where it kept `project` code names in copy that now has a workspace name. The rest of D39 stands.
+- **Source:** the `workspaces` branch (sub-branch `ws-r1-web`).
+
+### D39 Copy never names OpenCode as the harness; it names pi only where the sentence needs the name
+- **Date:** 2026-11-06
+- **Decision:** D9 has an answer. Customer copy names no harness product: it writes "agents", "the agent harness" or "the agent runtime". It names pi only where the sentence needs the name (D20, D24 and D27 say where). It never names OpenCode as a harness. OpenCode Zen and OpenCode Go stay as model-provider names.
+- **Why:** D9's premise is gone. Every session runs pi inside the Kortix daemon. The daemon has had no OpenCode adapter since 2026-10-30: a box that OpenCode booted before then boots pi (`apps/kortix-sandbox-agent-server/src/harness/README.md`, section "OpenCode is deleted"). The `registeredHarnesses` list, the `pi_harness` flag and the `runtime:` choice that D9 cites no longer exist. D9's "Until answered" line (name OpenCode on marketing surfaces) contradicted the harness rule in `verbal/claims.md` (user decision, 2026-10-28). This entry records that rule as the answer.
+- **Where:** `verbal/claims.md` (the harness rule and the row "Harness"), `verbal/voice-and-tone.md` (the brand-name row "OpenCode", the product noun `kortix.yaml`), `verbal/concepts.md` (beat 1, move 4).
+- **Supersedes:** D9.
+- **Source:** the `opencode-removal` branch.
 
 ## 2026-11-05
 
@@ -19,6 +75,14 @@ Ids: `D1` to `D8` and `D4a` to `D4k` come from the 2026-10-01 brand-kit build. `
 - **Where:** `apps/api/src/lib/email/template.tsx`.
 - **Supersedes:** the last sentence of D26 ("The footer is centered: tagline, social icons, `kortix.com`"). The rest of D26 stands.
 - **Source:** the `email-footer-left` branch.
+
+### D40 "Workspace" is the one container noun; "project", "account" and "organization" leave the copy
+- **Date:** 2026-11-05
+- **Decision:** A workspace is a company's place in Kortix: its people, agents, sessions, connectors, files and billing. One workspace = one company, each one independent, the Slack model. It is the only top-level noun in every surface: the web app, mobile, the CLI help, the docs and marketing. "Project", "account" (as the container) and "organization" (as the container) move to the Never column of the noun table in [voice-and-tone.md](verbal/voice-and-tone.md). The copy follows four rules: (1) "Slack workspace", "Teams tenant" and "GitHub organization" stay, always qualified; (2) "your Kortix account" stays for a person's sign-in identity only (sign in, profile, delete my account); (3) the session's machine is a "sandbox", never a "workspace"; (4) a code name stays exact and in mono (`kortix projects use`, `--project`, `KORTIX_PROJECT_ID`, `/v1/projects`, `project.gitops.merge`, ICU placeholder names such as `{project}`). In the two-level access copy, the owner, admin and member role is the "workspace role", and the Manager, Editor and Viewer grant is the "access role" ("workspace access"). Positioning keeps the repo: "A Kortix workspace is backed by a git repo, and that repo is the company."
+- **Why:** founder, 2026-11-05: "can we somehow rename projects into workspaces? ... unify one organization and one project just into one primitive called a workspace", then "'Project' disappears from the UI, CLI and docs ... Hardcore treat everything 100% like SLACK Workspace, each being independent & all is per Workspace". Users read "project" as a small unit of work and asked whether a new task needs a new project. The data already has the Slack shape: 95.3% of accounts that have a project have exactly one (prod aggregates, 2026-11-05). Before this entry, "workspace" meant four things in `apps/web/translations/en.json`: the account, the project, a Slack workspace and the sandbox.
+- **Where:** [voice-and-tone.md](verbal/voice-and-tone.md) (the noun table and the three rules after it), [claims.md](verbal/claims.md) (the price, secrets, channels and audience rows), [positioning.md](verbal/positioning.md), [concepts.md](verbal/concepts.md), `apps/web/translations/en.json`, `packages/ui/src/i18n/en.ts`, `apps/web/content/docs/`, `apps/web/src/i18n/workspace-vocabulary.test.ts` (the ratchet). The plan and the UX contract: `.agents/skills/learnings/work/workspaces/`.
+- **Supersedes:** the `project` and `account` rows of the product noun table, and the rule that wrote "project" exactly as the code names it.
+- **Source:** the `workspaces` branch (sub-branch `workspaces-ws-copy`).
 
 ## 2026-11-02
 
@@ -300,7 +364,7 @@ Ids: `D1` to `D8` and `D4a` to `D4k` come from the 2026-10-01 brand-kit build. `
 
 ## 2026-10-02
 
-### D9 (OPEN) Harness naming when pi is the default
+### D9 (SUPERSEDED by D39) Harness naming when pi is the default
 - **Decision:** Open. The copy names OpenCode as the agent harness: "An agent is an OpenCode agent", "OpenCode-native". A second harness, pi, ships in the product. The plan is that pi replaces OpenCode. The founder has not decided what the copy says when a project's default harness is pi: name pi, name no harness, or keep OpenCode until it is removed.
 - **Why:** The old reason for the rule was false. It said that OpenCode is the only shipped harness and that the other harnesses are behind `KORTIX_ACP_RUNTIME`. No code reads that variable. The code has two harnesses (`registeredHarnesses` in `apps/kortix-sandbox-agent-server/src/harness/harness.ts`): OpenCode, the default, and pi, which a project selects with the experimental `pi_harness` flag or `runtime: pi` in `kortix.yaml`. No Claude Code or Codex harness exists in code. On 2026-10-02 pi does not have rewind, compaction, slash commands, MCP servers or a todo tool, so OpenCode stays the default and the OpenCode copy is true for a default project.
 - **Where:** `verbal/claims.md` (the harness rule), the accuracy gates in `apps/web/src/features/marketing/agents-and-skills/content.ts`, `faq/content.ts`, `how-it-work/how-it-works-content.ts` and `how-it-work/step/step-harness.tsx`. 11 marketing files name OpenCode.
@@ -414,7 +478,7 @@ Ids: `D1` to `D8` and `D4a` to `D4k` come from the 2026-10-01 brand-kit build. `
 - **Source:** surface agents S1 and S2 (2026-10-01).
 
 ### Q40 Status chips, banners, spinners and the Badge
-- **Decision:** A filled banner has `border-transparent`. A chip label is `text-foreground`, with the hue on its glyph and tint. A diff counter or git status letter may paint `STATUS_TEXT` (contrast OPEN under J-7). `Badge` has no `color` prop: the 17-hue showcase map is deleted. `update` is `kortix-orange`. `destructive` stays the one red chip variant and still paints red text: debt. Paused and budget-reached states are `kortix-orange`. Badge geometry (`rounded-[5px] py-[0.1rem] text-[0.8rem]`) is recorded as debt with the nearest steps, not allowlisted. A test that pins `animate-spinner-spin` is changed with the code it pins. Why: S4 hit each gap while moving the primitives to tokens.
+- **Decision:** A filled banner has `border-transparent`. A chip label is `text-foreground`, with the hue on its glyph and tint. A diff counter or git status letter may paint `STATUS_TEXT` (green and red pass 4.5:1 on every light ground, J-7). `Badge` has no `color` prop: the 17-hue showcase map is deleted. `update` is `kortix-orange`. `destructive` stays the one red chip variant and still paints red text: debt. Paused and budget-reached states are `kortix-orange`. Badge geometry (`rounded-[5px] py-[0.1rem] text-[0.8rem]`) is recorded as debt with the nearest steps, not allowlisted. A test that pins `animate-spinner-spin` is changed with the code it pins. Why: S4 hit each gap while moving the primitives to tokens.
 - **Where:** `visual/color.md`, `visual/motion.md`, `visual/typography.md` (known drift).
 - **Source:** surface agents S4 and S6 (2026-10-01).
 
@@ -699,7 +763,7 @@ Ids: `D1` to `D8` and `D4a` to `D4k` come from the 2026-10-01 brand-kit build. `
 - **Where:** `visual/color.md`.
 - **Supersedes:** the Tailwind palette classes in `status.tsx`, and the yellow-as-info mapping.
 - **Source:** brand-kit build 2026-10-01.
-- **Related:** J-4 (mobile status parity, resolved), J-7 (light and dark accent pairs for text, open).
+- **Related:** J-4 (mobile status parity, resolved), J-7 (light and dark accent pairs, resolved).
 
 ### D4a Floating panels open and close with no animation
 - **Decision:** Menus, selects, popovers, tooltips, submenus and the command palette open and close with no animation. Modals, sheets and toasts keep 200 to 300ms. The hover card is the only animated floating panel.
@@ -831,7 +895,7 @@ Eight decisions made while the generator replaced the hand-written token blocks.
 - **J-4.** Resolved: web status uses `kortix-green` and `kortix-orange`; mobile semantic status aliases these accents.
 - **J-5.** Mobile keeps stock spacing (decided). It also keeps stock type (`text-xs` is 12px on mobile, 13px on web) and stock radius (`rounded-xl` 12px against 14px). Decide whether type and radius follow web.
 - **J-6.** `text-md` sets line height with a denominator of 0.9375 against a 0.9rem size (21.12px, not 22px). Fix the denominator or delete `text-md` (8 uses). Until then add no use.
-- **J-7.** `kortix-*` accents are theme-invariant and measure 2.4 to 4.0:1 on white. Decide on light and dark pairs for text use.
+- **J-7.** Resolved 2026-11-19: each `kortix-*` accent has a light and a dark value. See J-7 below.
 - **CLI banner.** The ASCII "KORTIX" banner ignores `NO_COLOR` and ships inside customer-site templates. Decide whether it is a sanctioned treatment.
 - **App icons.** The favicon, mobile icon and desktop icon do not match. One icon spec is OPEN.
 - **Outlined `Card`.** It ships `rounded-xl` and a `border-border/60`. Both conflict with `rounded-md` and one border color.
@@ -858,11 +922,11 @@ Eight decisions made while the generator replaced the hand-written token blocks.
 - **Supersedes:** none.
 - **Source:** `visual-system.json` `J-6`.
 
-### J-7 (OPEN) Light and dark accent pairs for text
-- **Decision:** Open. See the J-7 bullet in K4. Paint accents on glyphs, dots, tints and charts only.
-- **Why:** Every `kortix-*` accent measures 2.4 to 4.0:1 on white.
-- **Where:** `visual/color.md`.
-- **Supersedes:** none.
+### J-7 Light and dark accent pairs
+- **Decision:** Each `kortix-*` accent has a light and a dark value at the same OKLCH hue. Dark keeps the old values. Light: green `#037225` and red `#c21425` (4.55:1 on `#dedede`, the darkest light fill token, so hovered and selected rows pass, for diff counters); orange `#b47508`, yellow `#9f7f02`, blue `#1784e9` and purple `#9b70c5` (3.8:1 on white, 3.05:1 on `#e6e6e6`, the 3:1 glyph floor). Accents still paint glyphs, dots, tints and charts only. The hand-written `pure-light` and `light` palettes in `globals.css` take the same light values. Mobile takes both values: `global.css` per scope and native `THEME.accent[tone]` (KRTX-5033).
+- **Why:** The theme-invariant accents measured 2.38 to 3.98:1 on white. Orange (2.83:1) and yellow (2.38:1) failed the 3:1 floor for a status glyph (WCAG 1.4.11). Green and red at 4.5:1 also make `STATUS_TEXT` legal.
+- **Where:** `visual/color.md`, `visual-system.json` `color.accents`.
+- **Supersedes:** "Theme-invariant today" in `color.accents.rule`.
 - **Source:** `visual-system.json` `J-7`.
 
 ### J-8 Duration tokens compile

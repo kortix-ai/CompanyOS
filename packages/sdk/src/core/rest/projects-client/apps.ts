@@ -2,7 +2,9 @@
 // on an App's `capabilities`.
 
 import { backendApi } from '../../http/api-client';
+import { appendQuery } from '../../http/url';
 import { unwrap } from './shared';
+import { appsPath, appPath } from './apps-paths';
 
 /** Platinum is the reference App host. Daytona is a legacy fallback. */
 export type AppHostingProvider = 'platinum' | 'daytona';
@@ -385,6 +387,11 @@ export type AppSource =
 export type CreateAppDeploymentInput = CreateAppBuildInput;
 
 export interface CreateAppBuildInput {
+  /** Deploying checkout HEAD; absent for sources outside Git. */
+  source_commit?: string;
+  source_ref?: string | null;
+  /** Explicit bypass of the CLI live-commit ancestry guard. */
+  source_force?: boolean;
   artifact_id: string;
   source: AppSource;
   /** Optional infrastructure preference. Omit it to use the server policy. */
@@ -402,6 +409,9 @@ export interface CreateAppBuildInput {
 }
 
 export interface AppDeployment {
+  source_commit?: string | null;
+  source_ref?: string | null;
+  source_force?: boolean;
   deployment_id: string;
   app_id: string;
   /** `null` for a historic record made without an artifact. */
@@ -474,7 +484,7 @@ export interface AppLogsOptions {
 /** The project's Apps the caller may open (a project manager: every App). */
 export async function listApps(projectId: string): Promise<App[]> {
   const data = unwrap(
-    await backendApi.get<{ apps: App[] }>(`/projects/${projectId}/apps`),
+    await backendApi.get<{ apps: App[] }>(appsPath(projectId)),
     'Failed to list Apps',
   );
   return data.apps;
@@ -482,14 +492,14 @@ export async function listApps(projectId: string): Promise<App[]> {
 
 export async function createApp(projectId: string, input: CreateAppInput): Promise<App> {
   return unwrap(
-    await backendApi.post<App>(`/projects/${projectId}/apps`, input),
+    await backendApi.post<App>(appsPath(projectId), input),
     'Failed to create App',
   );
 }
 
 export async function getApp(projectId: string, appId: string): Promise<App> {
   return unwrap(
-    await backendApi.get<App>(`/projects/${projectId}/apps/${appId}`),
+    await backendApi.get<App>(appPath(projectId, appId)),
     'Failed to load App',
   );
 }
@@ -500,7 +510,7 @@ export async function updateApp(
   input: UpdateAppInput,
 ): Promise<App> {
   return unwrap(
-    await backendApi.patch<App>(`/projects/${projectId}/apps/${appId}`, input),
+    await backendApi.patch<App>(appPath(projectId, appId), input),
     'Failed to update App',
   );
 }
@@ -526,7 +536,7 @@ export async function deleteApp(
   appId: string,
 ): Promise<{ ok: boolean; images?: AppImageRelease; triggers_removed?: string[] }> {
   return unwrap(
-    await backendApi.delete<{ ok: boolean; images?: AppImageRelease; triggers_removed?: string[] }>(`/projects/${projectId}/apps/${appId}`),
+    await backendApi.delete<{ ok: boolean; images?: AppImageRelease; triggers_removed?: string[] }>(appPath(projectId, appId)),
     'Failed to delete App',
   );
 }
@@ -545,7 +555,7 @@ export interface AppToken {
  */
 export async function createAppToken(projectId: string, appId: string): Promise<AppToken> {
   return unwrap(
-    await backendApi.post<AppToken>(`/projects/${projectId}/apps/${appId}/token`, {}),
+    await backendApi.post<AppToken>(`${appPath(projectId, appId)}/token`, {}),
     'Failed to mint an App token',
   );
 }
@@ -567,7 +577,7 @@ export async function getAppAuthEnv(projectId: string, appId: string): Promise<A
   const app = await getApp(projectId, appId);
   if (!app.auth) throw new Error('This server does not report sign-in values for Apps.');
   const keySet = unwrap(
-    await backendApi.get<unknown>(`/projects/${projectId}/jwks.json`),
+    await backendApi.get<unknown>(`/workspaces/${projectId}/jwks.json`),
     'Failed to read the project key set',
   );
   const bytes = new TextEncoder().encode(JSON.stringify(keySet));
@@ -582,7 +592,7 @@ export async function getAppAuthEnv(projectId: string, appId: string): Promise<A
 
 export async function getAppAccess(projectId: string, appId: string): Promise<AppAccessConfig> {
   return unwrap(
-    await backendApi.get<AppAccessConfig>(`/projects/${projectId}/apps/${appId}/access`),
+    await backendApi.get<AppAccessConfig>(`${appPath(projectId, appId)}/access`),
     'Failed to load App access policy',
   );
 }
@@ -603,7 +613,7 @@ export interface AppAgentAccess {
 /** The agents whose `apps:` grant names this App (or is `all`). */
 export async function listAppAgents(projectId: string, appId: string): Promise<AppAgentAccess[]> {
   return unwrap(
-    await backendApi.get<{ agents: AppAgentAccess[] }>(`/projects/${projectId}/apps/${appId}/agents`),
+    await backendApi.get<{ agents: AppAgentAccess[] }>(`${appPath(projectId, appId)}/agents`),
     'Failed to load the agents with access to this App',
   ).agents;
 }
@@ -614,14 +624,14 @@ export async function updateAppAccess(
   input: UpdateAppAccessInput,
 ): Promise<AppAccessConfig> {
   return unwrap(
-    await backendApi.patch<AppAccessConfig>(`/projects/${projectId}/apps/${appId}/access`, input),
+    await backendApi.patch<AppAccessConfig>(`${appPath(projectId, appId)}/access`, input),
     'Failed to update App access policy',
   );
 }
 
 export async function createAppAccessSession(projectId: string, appId: string): Promise<AppAccessSession> {
   return unwrap(
-    await backendApi.post<AppAccessSession>(`/projects/${projectId}/apps/${appId}/access-session`, {}),
+    await backendApi.post<AppAccessSession>(`${appPath(projectId, appId)}/access-session`, {}),
     'Failed to create App access session',
   );
 }
@@ -631,7 +641,7 @@ export async function registerAppArtifact(
   input: RegisterAppArtifactInput,
 ): Promise<RegisterAppArtifactResponse> {
   return unwrap(
-    await backendApi.post<RegisterAppArtifactResponse>(`/projects/${projectId}/apps/artifacts`, input),
+    await backendApi.post<RegisterAppArtifactResponse>(`${appsPath(projectId)}/artifacts`, input),
     'Failed to register App artifact',
   );
 }
@@ -643,7 +653,7 @@ export async function finalizeAppArtifact(
 ): Promise<AppArtifact> {
   return unwrap(
     await backendApi.post<AppArtifact>(
-      `/projects/${projectId}/apps/artifacts/${artifactId}/finalize`,
+      `${appsPath(projectId)}/artifacts/${artifactId}/finalize`,
       input,
     ),
     'Failed to finalize App artifact',
@@ -710,7 +720,7 @@ export async function createAppDeployment(
   input: CreateAppDeploymentInput,
 ): Promise<AppDeployment> {
   return unwrap(
-    await backendApi.post<AppDeployment>(`/projects/${projectId}/apps/${appId}/deployments`, input),
+    await backendApi.post<AppDeployment>(`${appPath(projectId, appId)}/deployments`, input),
     'Failed to create App deployment',
   );
 }
@@ -718,7 +728,7 @@ export async function createAppDeployment(
 export async function listAppDeployments(projectId: string, appId: string): Promise<AppDeployment[]> {
   const data = unwrap(
     await backendApi.get<{ deployments: AppDeployment[] }>(
-      `/projects/${projectId}/apps/${appId}/deployments`,
+      `${appPath(projectId, appId)}/deployments`,
     ),
     'Failed to list App deployments',
   );
@@ -732,7 +742,7 @@ export async function getAppDeployment(
 ): Promise<AppDeploymentDetail> {
   return unwrap(
     await backendApi.get<AppDeploymentDetail>(
-      `/projects/${projectId}/apps/${appId}/deployments/${deploymentId}`,
+      `${appPath(projectId, appId)}/deployments/${deploymentId}`,
     ),
     'Failed to load App deployment',
   );
@@ -744,13 +754,14 @@ export async function getAppDeploymentLogs(
   deploymentId: string,
   options: AppLogsOptions = {},
 ): Promise<AppLogsResponse> {
-  const query = new URLSearchParams();
-  if (options.after !== undefined) query.set('after', String(options.after));
-  if (options.limit !== undefined) query.set('limit', String(options.limit));
-  const suffix = query.size ? `?${query.toString()}` : '';
+  // after/limit are numbers: string them so a value of 0 is not read as "unset".
+  const suffix = appendQuery({
+    after: options.after === undefined ? undefined : String(options.after),
+    limit: options.limit === undefined ? undefined : String(options.limit),
+  });
   return unwrap(
     await backendApi.get<AppLogsResponse>(
-      `/projects/${projectId}/apps/${appId}/deployments/${deploymentId}/logs${suffix}`,
+      `${appPath(projectId, appId)}/deployments/${deploymentId}/logs${suffix}`,
     ),
     'Failed to load App logs',
   );
@@ -811,15 +822,16 @@ export async function listAppEvents(
   appId: string,
   options: ListAppEventsOptions = {},
 ): Promise<AppEventList> {
-  const query = new URLSearchParams();
-  if (options.limit !== undefined) query.set('limit', String(options.limit));
-  if (options.cursor) query.set('cursor', options.cursor);
-  if (options.status) query.set('status', options.status);
-  if (options.trigger) query.set('trigger', options.trigger);
-  if (options.id) query.set('id', options.id);
-  const suffix = query.size ? `?${query.toString()}` : '';
+  // limit is a number: string it so 0 is not read as "unset".
+  const suffix = appendQuery({
+    limit: options.limit === undefined ? undefined : String(options.limit),
+    cursor: options.cursor,
+    status: options.status,
+    trigger: options.trigger,
+    id: options.id,
+  });
   return unwrap(
-    await backendApi.get<AppEventList>(`/projects/${projectId}/apps/${appId}/events${suffix}`),
+    await backendApi.get<AppEventList>(`${appPath(projectId, appId)}/events${suffix}`),
     'Failed to load App events',
   );
 }
@@ -861,7 +873,7 @@ export async function sendAppTestEvent(
   input: (AppEventInput | { events: AppEventInput[] }) & { trigger?: string },
 ): Promise<AppTestEventResult> {
   return unwrap(
-    await backendApi.post<AppTestEventResult>(`/projects/${projectId}/apps/${appId}/events/test`, input),
+    await backendApi.post<AppTestEventResult>(`${appPath(projectId, appId)}/events/test`, input),
     'Failed to send the test event',
   );
 }
@@ -876,21 +888,21 @@ export interface AppEventCredentials {
 /** The URL and token an App posts events with, for code that runs outside the App. Needs project.app.admin. */
 export async function getAppEventCredentials(projectId: string, appId: string): Promise<AppEventCredentials> {
   return unwrap(
-    await backendApi.get<AppEventCredentials>(`/projects/${projectId}/apps/${appId}/events/credentials`),
+    await backendApi.get<AppEventCredentials>(`${appPath(projectId, appId)}/events/credentials`),
     'Failed to read the App event credentials',
   );
 }
 
 export async function startApp(projectId: string, appId: string): Promise<App> {
   return unwrap(
-    await backendApi.post<App>(`/projects/${projectId}/apps/${appId}/start`, {}),
+    await backendApi.post<App>(`${appPath(projectId, appId)}/start`, {}),
     'Failed to start App',
   );
 }
 
 export async function stopApp(projectId: string, appId: string): Promise<App> {
   return unwrap(
-    await backendApi.post<App>(`/projects/${projectId}/apps/${appId}/stop`, {}),
+    await backendApi.post<App>(`${appPath(projectId, appId)}/stop`, {}),
     'Failed to stop App',
   );
 }
@@ -920,7 +932,7 @@ export async function deleteAppDeployment(
 ): Promise<DeleteAppDeploymentResult> {
   return unwrap(
     await backendApi.delete<DeleteAppDeploymentResult>(
-      `/projects/${projectId}/apps/${appId}/deployments/${deploymentId}`,
+      `${appPath(projectId, appId)}/deployments/${deploymentId}`,
     ),
     'Failed to delete App deployment',
   );
@@ -932,7 +944,7 @@ export async function rollbackApp(
   deploymentId: string,
 ): Promise<AppRollback> {
   return unwrap(
-    await backendApi.post<AppRollback>(`/projects/${projectId}/apps/${appId}/rollback`, {
+    await backendApi.post<AppRollback>(`${appPath(projectId, appId)}/rollback`, {
       deployment_id: deploymentId,
     }),
     'Failed to roll back App',

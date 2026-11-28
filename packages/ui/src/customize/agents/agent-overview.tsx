@@ -45,6 +45,7 @@ import { useState } from 'react';
 import { useTranslations as useI18nTranslations } from '../../i18n';
 import { agentDisplayName } from '../../internal/components/agent-mark';
 import { cn } from '../../internal/lib/utils';
+import { InlineCodeText } from '../../markdown/inline-code-text';
 import { Input } from '../../primitives/input';
 import {
   Select,
@@ -57,7 +58,7 @@ import {
 import { StatusDot } from '../../primitives/status';
 import { SettingsSectionHeader } from '../../primitives/settings-section-header';
 import { Switch } from '../../primitives/switch';
-import { AGENT_MODE_LABEL, AGENT_MODES } from '../sections/view/agent-editor-catalog';
+import { agentPromotes, AGENT_MODE_LABEL, AGENT_MODES } from '../sections/view/agent-editor-catalog';
 import { EditorSection, EditorSectionStyleProvider, SettingRow } from '../sections/view/agent-editor-primitives';
 import {
   type AgentConfigSectionKey,
@@ -151,7 +152,7 @@ function fitHeight(el: HTMLTextAreaElement | null) {
  * it becomes a field in the same box; Enter or leaving keeps the edit in the
  * draft, Escape puts back what was there.
  */
-function AboutDescription({
+export function AboutDescription({
   value,
   onChange,
   subagent,
@@ -166,7 +167,9 @@ function AboutDescription({
   const box = 'bg-popover block w-full rounded-md border px-3 py-2.5 text-left text-sm text-pretty';
   if (!onChange) {
     return value ? (
-      <p className={cn(box, 'text-foreground')}>{value}</p>
+      <p className={cn(box, 'text-foreground')}>
+        <InlineCodeText text={value} />
+      </p>
     ) : (
       <p className="text-muted-foreground text-sm">{tTabs('noDescription')}</p>
     );
@@ -223,7 +226,8 @@ function AboutDescription({
         value ? 'text-foreground' : 'text-muted-foreground',
       )}
     >
-      <span className="min-w-0 flex-1">{value || t('descriptionPlaceholder')}</span>
+      {/* Code spans as chips, as the Instructions below draw them; the field keeps the raw text. */}
+      <span className="min-w-0 flex-1">{value ? <InlineCodeText text={value} /> : t('descriptionPlaceholder')}</span>
       <PencilSimpleIcon className="text-muted-foreground group-hover/about:text-foreground mt-1.5 size-3.5 shrink-0 transition-colors duration-fast" />
     </button>
   );
@@ -422,7 +426,7 @@ function OverviewSettings({
   return (
     <>
       <EditorSection title={t('properties')}>
-        <SettingRow label={t('enabled')} help={t('enabledHelp', { name: agentDisplayName(agent.name) })}>
+        <SettingRow label={t('enabled')} help={t('enabledHelp', { name: agentDisplayName(agent.name, agent.title) })}>
           <div className="flex sm:justify-end">
             {editor ? (
               <Switch aria-label={t('enabled')} checked={enabled} onCheckedChange={(v) => editor.set('enabled', v ? undefined : false)} />
@@ -438,7 +442,13 @@ function OverviewSettings({
           {editor ? (
             <Select
               value={behavior.mode ?? INHERIT}
-              onValueChange={(v) => editor.setOc('mode', v === INHERIT ? undefined : (v as (typeof AGENT_MODES)[number]))}
+              onValueChange={(v) => {
+                const next = v === INHERIT ? undefined : (v as (typeof AGENT_MODES)[number]);
+                editor.setOc('mode', next);
+                // The select is the promote control: promoting a subagent (KRTX-4810) also
+                // clears "Show in pickers", so the promoted agent lands in the pickers.
+                if (agentPromotes(behavior.mode, next)) editor.setOc('hidden', undefined);
+              }}
             >
               <SelectTrigger aria-label={t('whoStarts')} size="sm" className="w-full">
                 <SelectValue />

@@ -31,6 +31,8 @@
  * worker's system prompt.
  */
 
+import { withWorkspaceRouteFallback } from '@/lib/kortix-api/workspace-routes'
+
 /** `runtime_context` key: this session is a router (a front). */
 export const FRONT_CONTEXT_KEY = 'kortix.front'
 /** `runtime_context` key: this session is the worker of a router. */
@@ -62,6 +64,7 @@ export const FRONT_PROMPT = [
   '- No technical dumps, tool names, step lists, logs or explanations of how you work, unless the person asks.',
   '- Never invent a result. Never say an agent did what you did, or that you did what an agent did.',
   '- You may name who is on it in plain words ("I\'ll have research look into it"). Never mention sessions, tools, task ids or handles.',
+  '- Pages you read yourself show under your answer: do not end with a Sources section or a list of links for them, and link a page inline only where one claim needs it. The pages an agent read do not show there: keep the sources its report gives. When the person asks for sources or links, give them.',
   '',
   '## Do it yourself when it is quick',
   '- Do it yourself: an answer from what you know, reading or searching this conversation, the thread folder and the space folder, a short piece of writing (a message, a summary, a poem, a translation), or one quick lookup. Reply with the result at once.',
@@ -268,7 +271,7 @@ export async function fetchFrontAgents(
   const trimmed = api.apiUrl.trim().replace(/\/+$/, '')
   const origin = trimmed.endsWith('/v1') ? trimmed.slice(0, -'/v1'.length) : trimmed
   try {
-    const res = await fetchImpl(`${origin}/v1/projects/${encodeURIComponent(api.projectId)}/detail`, {
+    const res = await withWorkspaceRouteFallback(fetchImpl)(`${origin}/v1/workspaces/${encodeURIComponent(api.projectId)}/detail`, {
       headers: { authorization: `Bearer ${api.token}` },
       signal: AbortSignal.timeout(timeoutMs),
     })

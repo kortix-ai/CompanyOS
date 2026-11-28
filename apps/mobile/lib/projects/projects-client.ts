@@ -21,6 +21,13 @@ export type { KortixAccount } from '@kortix/sdk';
 
 export { listAccounts } from '@kortix/sdk';
 
+// ── Workspaces ───────────────────────────────────────────────────────────────
+// A workspace is one account and its one project; `workspace_id` = `project_id`.
+// The SDK names, for new mobile code. The project names below keep working.
+
+export type { Workspace, WorkspaceSummary, WorkspaceRole } from '@kortix/sdk';
+export { listWorkspaces, getWorkspace, updateWorkspace, workspaceFromProject } from '@kortix/sdk';
+
 // ── Projects ───────────────────────────────────────────────────────────────
 
 export type {
@@ -75,17 +82,6 @@ export type { SessionListState } from '@kortix/sdk';
 export type { SessionMessageAuthor, SessionMessageAuthors, SessionParticipant, SessionParticipants } from '@kortix/sdk';
 export { getSessionMessageAuthors, getSessionParticipants } from '@kortix/sdk';
 
-// ── Session public shares (KRTX-248: the public transcript link) ────────────
-// `createSessionPublicShare(pid, sid, { transcript: true })` returns the live
-// transcript share when one exists (200) or mints one (201).
-export type { SessionPublicShare } from '@kortix/sdk';
-export {
-  createSessionPublicShare,
-  findActiveTranscriptShare,
-  listSessionPublicShares,
-  revokeSessionPublicShare,
-} from '@kortix/sdk';
-
 export type { SessionStartStage, SessionStartResult } from '@kortix/sdk';
 
 /**
@@ -104,7 +100,7 @@ export type { ProjectSessionSandbox } from '@kortix/sdk';
 // ── Project config detail (agents / skills / commands) ───────────────────────
 // Web parity: GET /projects/:id/detail. The SDK's `ProjectConfigSummary` is a
 // strict superset of mobile's old hand-rolled one (adds `signals`,
-// `manifest_raw`, `open_code_raw`, `agent_discovery`, richer `agents[].scope`)
+// `manifest_raw`, `agent_discovery`, richer `agents[].scope`)
 // — re-exported wholesale; existing consumers only read the fields they
 // already used, extra fields are ignored.
 export type { ProjectConfigSummary, ProjectDetail, ProjectLlmCatalogResponse } from '@kortix/sdk';

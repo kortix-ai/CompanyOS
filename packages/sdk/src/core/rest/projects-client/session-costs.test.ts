@@ -1,11 +1,15 @@
 import { beforeEach, expect, mock, test } from 'bun:test';
 import { configureKortix } from '../../http/config';
+import { withSizelessURLSearchParams } from '../../test-fixtures';
 import {
+  analyzeCostExport,
   costExportUrl,
+  countCsvDataRows,
   fetchCostExportCsv,
   getCostSummary,
   getSessionCostRecord,
-  listCostByProject,
+  isCostExportCapped,
+  listCostByWorkspace,
   listSessionCosts,
   type CostSummary,
   type CostSummaryTotals,
@@ -14,6 +18,8 @@ import {
   type SessionCostSummary,
   type SessionCostDetail,
   type SessionCostsPage,
+  type SessionCostLlmLedgerEntry,
+  type SessionCostComputeLedgerEntry,
 } from './session-costs';
 
 let calls: { url: string; method: string }[] = [];
@@ -228,7 +234,7 @@ const projectCostPage = {
 test('listCostByProject targets the rollup route with account, window, sort and paging', async () => {
   nextResponse = projectCostPage;
 
-  const result = await listCostByProject({
+  const result = await listCostByWorkspace({
     accountId: 'acct-1',
     from: '2026-07-01T00:00:00.000Z',
     to: '2026-08-01T00:00:00.000Z',
@@ -250,7 +256,7 @@ test('listCostByProject targets the rollup route with account, window, sort and 
 test('listCostByProject omits the query string when no options are supplied', async () => {
   nextResponse = projectCostPage;
 
-  await listCostByProject();
+  await listCostByWorkspace();
 
   expect(last().url).toBe('http://test.local/usage/cost-by-project');
 });
@@ -258,7 +264,7 @@ test('listCostByProject omits the query string when no options are supplied', as
 test('listCostByProject accepts the project-only name_asc sort', async () => {
   nextResponse = projectCostPage;
 
-  await listCostByProject({ sort: 'name_asc' });
+  await listCostByWorkspace({ sort: 'name_asc' });
 
   expect(last().url).toBe('http://test.local/usage/cost-by-project?sort=name_asc');
 });
@@ -436,6 +442,92 @@ test('fetchCostExportCsv throws with the response body on a non-OK response', as
   await expect(fetchCostExportCsv('projects')).rejects.toThrow('Forbidden');
 });
 
+// ── analyzeCostExport / countCsvDataRows / isCostExportCapped ─────────────
+// Record analysis of a fetched export: how many data records the CSV holds
+// and whether that count reached the route's row cap. Moved out of the web
+// export button so any host can tell a capped export from a complete one.
+
+/** A CSV in the shape `toCsv` emits: header, CRLF-joined, no trailing newline. */
+function exportCsv(...rows: string[]): string {
+  return ['session_id,total_cost_usd', ...rows].join('\r\n');
+}
+
+function exportRows(count: number): string[] {
+  return Array.from({ length: count }, (_, index) => `s${index},1.00`);
+}
+
+test('countCsvDataRows counts records, not physical lines, and never the header', () => {
+  expect(countCsvDataRows('')).toBe(0);
+  expect(countCsvDataRows(exportCsv())).toBe(0);
+  expect(countCsvDataRows(exportCsv(...exportRows(3)))).toBe(3);
+  expect(countCsvDataRows('session_id,total_cost_usd\ns0,1.00\ns1,2.00')).toBe(2);
+  expect(countCsvDataRows('session_id,total_cost_usd\r\ns0,1.00\ns1,2.00\r\n')).toBe(2);
+});
+
+test('countCsvDataRows keeps quoted CRLF and doubled quotes inside their record', () => {
+  expect(countCsvDataRows(exportCsv('s0,"line one\r\nline two"', 's1,1.00'))).toBe(2);
+  expect(countCsvDataRows(exportCsv('s0,"he said ""hi""\r\nstill the same row"'))).toBe(1);
+});
+
+test('countCsvDataRows skips blank and trailing records', () => {
+  expect(countCsvDataRows(`${exportCsv(...exportRows(2))}\r\n`)).toBe(2);
+  expect(countCsvDataRows('session_id,total_cost_usd\r\n\r\ns0,1.00\n\n\ns1,2.00\r\n\r\n')).toBe(2);
+});
+
+test('countCsvDataRows reads an unterminated quote to the end of the body (undercounts)', () => {
+  expect(countCsvDataRows('session_id,total_cost_usd\r\ns0,"never closed\r\ns1,1.00\r\ns2,2.00')).toBe(1);
+});
+
+test('isCostExportCapped fires at and above the cap, never below it or without a positive cap', () => {
+  expect(isCostExportCapped(9_999, 10_000)).toBe(false);
+  expect(isCostExportCapped(10_000, 10_000)).toBe(true);
+  expect(isCostExportCapped(10_001, 10_000)).toBe(true);
+  expect(isCostExportCapped(10_000, null)).toBe(false);
+  expect(isCostExportCapped(0, 0)).toBe(false);
+  expect(isCostExportCapped(5, -1)).toBe(false);
+});
+
+test('analyzeCostExport returns the same Blob with its record count and cap verdict', async () => {
+  const blob = new Blob([exportCsv(...exportRows(24))], { type: 'text/csv' });
+  const below = await analyzeCostExport({ blob, rowCap: 25 });
+  expect(below).toEqual({ blob, rowCap: 25, rowCount: 24, capped: false });
+  expect(below.blob).toBe(blob);
+
+  const atCap = await analyzeCostExport({ blob: new Blob([exportCsv(...exportRows(25))]), rowCap: 25 });
+  expect(atCap.rowCount).toBe(25);
+  expect(atCap.capped).toBe(true);
+
+  // 24 records, one spanning two physical lines: 25 data lines under a cap of 25.
+  const quoted = await analyzeCostExport({
+    blob: new Blob([exportCsv('s0,"line one\r\nline two"', ...exportRows(23))]),
+    rowCap: 25,
+  });
+  expect(quoted.rowCount).toBe(24);
+  expect(quoted.capped).toBe(false);
+});
+
+test('analyzeCostExport analyzes both projects and sessions exports as fetched', async () => {
+  for (const [kind, rowCapHeader, capped] of [
+    ['projects', '2', true],
+    ['sessions', '3', false],
+    ['sessions', 'not-a-number', false],
+  ] as const) {
+    globalThis.fetch = Object.assign(
+      async () =>
+        new Response('id,total_cost\r\na,1.00\r\nb,2.00', {
+          status: 200,
+          headers: { 'x-kortix-row-cap': rowCapHeader },
+        }),
+      { preconnect: globalThis.fetch.preconnect },
+    );
+    const result = kind === 'projects' ? await fetchCostExportCsv(kind) : await fetchCostExportCsv(kind);
+    const analysis = await analyzeCostExport(result);
+    expect(analysis.blob).toBe(result.blob);
+    expect(analysis.rowCount).toBe(2);
+    expect(analysis.capped).toBe(capped);
+  }
+});
+
 // The org-wide cost dashboard reads these three shapes. `llm_cost` alone was
 // `sum(final_cost)` — 0 for every BYOK request — so each shape has to carry
 // the Kortix / provider split behind the corrected total.
@@ -451,4 +543,21 @@ test('every account-wide cost shape carries the Kortix / provider LLM split', ()
   const projectRow: CarriesLlmSpendSplit<ProjectCostRow> = true;
   const sessionRow: CarriesLlmSpendSplit<SessionCostSummary> = true;
   expect([totals, projectRow, sessionRow]).toEqual([true, true, true]);
+});
+
+// Workspaces finding 31: a project that moved to another workspace keeps its
+// cost history; rows another workspace paid for are marked, and the payer's
+// rollup names the moved project without its new name.
+test('cost shapes mark rows billed to another workspace and moved projects', () => {
+  const entry: Pick<SessionCostLlmLedgerEntry, 'billed_elsewhere'> = { billed_elsewhere: true };
+  const compute: Pick<SessionCostComputeLedgerEntry, 'billed_elsewhere'> = { billed_elsewhere: true };
+  const detail: Pick<SessionCostDetail, 'billed_elsewhere_cost'> = { billed_elsewhere_cost: 1.25 };
+  const row: Pick<ProjectCostRow, 'moved'> = { moved: true };
+  expect([entry.billed_elsewhere, compute.billed_elsewhere, detail.billed_elsewhere_cost, row.moved]).toEqual([true, true, 1.25, true]);
+});
+
+test('listSessionCosts keeps its query under the mobile URLSearchParams polyfill (KRTX-4898)', async () => {
+  nextResponse = { ...page, sessions: [] };
+  await withSizelessURLSearchParams(() => listSessionCosts({ projectId: 'project-1', limit: 25 }));
+  expect(last().url).toBe('http://test.local/usage/session-costs?project_id=project-1&limit=25');
 });

@@ -10,6 +10,7 @@
 // ============================================================================
 
 
+import { STALE_RUNTIME_DELIVERY_ERROR } from '@kortix/shared';
 import { isQuestionTool } from '@kortix/sdk';
 
 import { UnifiedMarkdown } from '../../markdown/unified-markdown';
@@ -22,6 +23,7 @@ import {
   type SessionLogCompaction,
   type SessionLogMessage,
   type SessionLogSegment,
+  type SessionLogAgentRun,
   type SessionLogTurn,
   type SessionMessageAuthor,
   type SessionPrompt,
@@ -37,8 +39,10 @@ import {
   sessionLogTurnSegments,
   sessionPromptActions,
   splitSessionLogTurnWork,
+  sessionLogAgentRunLabel,
   isNoGroupActivityTool,
   toolCallMetadata,
+  toolCallConnectorSignIns,
   toolKind,
 } from '@kortix/sdk';
 import {
@@ -50,10 +54,10 @@ import {
   StopCircleIcon,
 } from '@phosphor-icons/react';
 import { AnimatePresence, m } from 'motion/react';
-import { memo, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
+import { Fragment, memo, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AfterFirstPromptContext } from './after-first-prompt';
 import { type TranscriptAuthor, TranscriptRowsContext } from './transcript-rows';
-import { messageWorkerIds, ShowWork, WorkerStatusRows, WorkerTranscripts } from './show-work';
+import { messageWorkerIds, WorkerStatusRows } from './show-work';
 import { TypingIndicator } from './typing-indicator';
 import { AgentBusyRow } from './thread-boot-rows';
 import { MESSAGE_TEXT_CLASS, MessageRow } from '../turn/message-row';
@@ -67,7 +71,7 @@ import {
   stripSystemPtyText,
 } from './message-parsing';
 import { ActivityBurst } from '../turn/activity-burst';
-import { TurnWorkAccordion, WorkFoldContext, WorkTouchContext } from '../turn/turn-work-accordion';
+import { TurnWorkAccordion, WorkFoldContext } from '../turn/turn-work-accordion';
 import { CompactionFailedRow, CompactionMarker, compactionReset } from '../turn/compaction-card';
 import { ExpandableOutput } from '../turn/expandable-output';
 import { isPlanWriteTool } from '../turn/plan-anchor';
@@ -78,6 +82,7 @@ import {
   type QueuedPromptState,
   QueuedPromptFailure,
   QueuedPromptProgress,
+  QueuedPromptRecovery,
   type QueuedPromptStatusState,
 } from '../turn/queued-prompt-bubbles';
 import { ShowGroupRenderer } from '../tool/show-group-renderer';
@@ -86,6 +91,8 @@ import { ThrottledMarkdown } from '../turn/throttled-markdown';
 import { TurnViewport } from '../turn/turn-viewport';
 import { UserMessage } from '../turn/user-message';
 import { useOptionalSessionPanel } from '../panel/session-panel-provider';
+import { deriveTurnSources, type TurnSource } from '../panel/shared/derive-panels';
+import { TurnSourcesButton } from '../turn/turn-sources';
 import { Composer as SessionChatInput } from '../composer/composer';
 import { ConnectProviderDialog } from '../models/model-selector';
 import { TurnOutcomes } from '../outcomes/turn-outcomes';
@@ -97,8 +104,8 @@ import type {
 } from '../turn/user-message';
 import type { TurnServedModel } from '../turn/served-model';
 import { SessionBusyIndicator } from '../status/session-busy-indicator';
+import { useAnswerStreaming } from '../turn/answer-streaming';
 import { SessionTurnMeta } from './session-turn-meta';
-import { TurnShareButton } from './turn-share';
 import {
   sessionTurnDurationMs,
   sessionTurnEndedAt,
@@ -154,7 +161,7 @@ import {
   type TurnEndNotice,
 } from '@kortix/sdk';
 import type { ProviderListResponse } from '@kortix/sdk/react';
-import { isOptimisticSessionPrompt, useRuntimeReady, useSessionPrompts, useSessionWorking } from '@kortix/sdk/react';
+import { isOptimisticSessionPrompt, useRuntimeReady, useSessionPrompts, useSessionUnsentPrompts, useSessionWorking } from '@kortix/sdk/react';
 import { CodeBlockEndpoints, SandboxUrlDetector } from '../media/sandbox-url-detector';
 import { resolveLastTurnWorking } from '../composer/session-composer-readiness';
 import { HarnessSwitchMarker, RestoreNoteMarker, TurnFullText, type FullTextState } from './session-history';
@@ -426,8 +433,7 @@ interface SessionTurnProps {
   isLast: boolean;
   ownsPlan: boolean;
   sessionId: string;
-  /** The Kortix project and project-session ids. With both, a settled turn
-   *  offers Share (`TurnShareButton`). Absent (a child session): no Share. */
+  /** The Kortix project and project-session ids. */
   projectId?: string;
   projectSessionId?: string;
   sessionStatus: import('../../internal/session-types').SessionStatus | undefined;
@@ -445,7 +451,7 @@ interface SessionTurnProps {
   sessionWorking: boolean;
   /**
    * This turn is the one the agent is on — see `resolveWorkingTurn`. It used
-   * to be `isLast` by definition; a prompt queued mid-turn broke that: OpenCode
+   * to be `isLast` by definition; a prompt queued mid-turn broke that: the runtime
    * persists it as the last user message while the agent is still streaming
    * the turn before, so the shimmer sat under a bubble nobody had started and
    * the live turn looked settled.
@@ -476,7 +482,7 @@ interface SessionTurnProps {
   /**
    * A user message the agent has not reached yet — after the working turn,
    * with no assistant content. Drawn dimmed, like a queued prompt (it IS one:
-   * the server forwarded it and OpenCode holds it until the next step), and
+   * the server forwarded it and the runtime holds it until the next step), and
    * it fades up to full opacity the moment the agent takes it.
    */
   pending: boolean;
@@ -538,6 +544,47 @@ interface SessionTurnProps {
   onEditCancel?: () => void;
   /** Commit the edit: rewind the session at `messageId`, send `text` and the `kept` attachments. */
   onEditSend?: (messageId: string, text: string, kept: NormalizedAttachment[]) => void;
+  /**
+   * This turn answers an agent run (`sessionLogAgentRuns`, KRTX-4732): its "Worked for" row is
+   * the run's row ("Worked for 5m · 3 agents") and folds the run's reports and work. Every answer
+   * of the run stays in view under the row, in order: an agent may give the full answer before
+   * the last report arrives, so no answer is folded away.
+   */
+  agentRun?: SessionLogAgentRun;
+  /** The run's other turns, in order: the host draws no row for them. Keep its identity stable. */
+  runTurns?: readonly SessionLogTurn[];
+  /** Every agent this turn started has reported (`settledLaunches`): its agent rows fold too. */
+  foldStartedWork?: boolean;
+  /**
+   * A run's other turn, drawn by its anchor: `work` is its notice and work, inside the run fold;
+   * `answer` is its answer and footer, under the run row.
+   */
+  runMember?: 'work' | 'answer';
+}
+
+/** A `send_message` call: the agent relaying between colleagues. Inside a run it is noise. */
+function isRelayCall(block: SessionLogBlock): boolean {
+  return block.type === 'tool_call' && block.name.toLowerCase().replace(/[^a-z]/g, '') === 'sendmessage';
+}
+
+/** The segments without the relay calls (`isRelayCall`); the same array when there is none. */
+function withoutRelayCalls(segments: TurnSegments): TurnSegments {
+  let changed = false;
+  const kept = segments.flatMap((segment): TurnSegments => {
+    if (segment.kind === 'standalone' && isRelayCall(segment.block)) {
+      changed = true;
+      return [];
+    }
+    if (segment.kind === 'burst') {
+      const blocks = segment.blocks.filter((block) => !isRelayCall(block));
+      if (blocks.length !== segment.blocks.length) {
+        changed = true;
+        return blocks.length ? [{ ...segment, blocks }] : [];
+      }
+    }
+    return [segment];
+  });
+  return changed ? kept : segments;
 }
 
 /**
@@ -759,6 +806,12 @@ export function openTextBlock(
 
 /** The turn's reply blocks, each call in its open shape (`sessionLogOpenCall`). One array per turn object. */
 const openBlocks = new WeakMap<SessionLogTurn, SessionLogBlock[]>();
+
+const NO_SOURCES: TurnSource[] = [];
+
+function isToolCallBlock(block: SessionLogBlock): block is ToolCallBlock {
+  return block.type === 'tool_call';
+}
 function turnBlocks(turn: SessionLogTurn): SessionLogBlock[] {
   let list = openBlocks.get(turn);
   if (!list) {
@@ -787,7 +840,13 @@ function useTurnQueueTone({
   pending,
   pendingPrompt,
   interruptedBeforeRun,
-}: Pick<SessionTurnProps, 'pending' | 'pendingPrompt' | 'interruptedBeforeRun'>) {
+  sessionId,
+  projectSessionId,
+}: Pick<SessionTurnProps, 'pending' | 'pendingPrompt' | 'interruptedBeforeRun' | 'sessionId' | 'projectSessionId'>) {
+// A prompt sent while offline: its POST waits for the network, so it is not
+// "sending" yet (finding 07). The SDK keys unsent sends by the project session
+// (the id the prompt was posted to), not the runtime `ses_…` id of the turn.
+const unsentIds = useSessionUnsentPrompts(projectSessionId ?? sessionId);
 // A Stop ended the turn before a step opened under this message, or the
 // prompt still waits for delivery. Both keep the queue tone on the bubble;
 // only a delivery failure adds text.
@@ -801,9 +860,14 @@ const queuedStatus: QueuedPromptStatusState | null =
       : pendingPrompt?.reason === 'held'
         ? 'held'
         : pendingPrompt &&
-            (isOptimisticSessionPrompt(pendingPrompt) || pendingPrompt.state === 'delivering')
-          ? 'sending'
-          : statusState;
+            isOptimisticSessionPrompt(pendingPrompt) &&
+            // The SDK lists a held send by its wire message id, else its client id.
+            unsentIds.includes(pendingPrompt.message_id ?? pendingPrompt.client_message_id)
+          ? 'unsent'
+          : pendingPrompt &&
+              (isOptimisticSessionPrompt(pendingPrompt) || pendingPrompt.state === 'delivering')
+            ? 'sending'
+            : statusState;
   return { queueState, statusState, queuedStatus };
 }
 
@@ -822,7 +886,7 @@ const turnError = useMemo(() => resolveTurnError(turn), [turn]);
  * renders nothing, hides what really went wrong. The identity is right here
  * on the message; read it
  * through the SDK's single `isAbortError` classifier, which recognizes both
- * real producers: the opencode wire's `MessageAbortedError` and the client's
+ * real producers: the runtime wire's `MessageAbortedError` and the client's
  * synthesized `AbortError` patch applied when the user hits Stop.
  */
 const turnErrorIsAbort = useMemo(() => deriveTurnErrorAbortState(turn).isAbort, [turn]);
@@ -1471,7 +1535,7 @@ const segments = useMemo(() => {
 
 /**
  * Shell mode — a live shell tool replaces the whole turn scaffold.
- * @deprecated Renders an OpenCode shell turn (session.shell; pi has none). OpenCode is sunset (2026-10-23): no new code; delete with OpenCode.
+ * @deprecated Renders an OpenCode shell turn (session.shell; pi has none). Only a transcript OpenCode wrote holds one; this keeps it readable. No new code.
  */
 function TurnShellMode(
   props: Pick<SessionTurnProps, 'sessionId' | 'disableToolNavigation' | 'onPermissionReply' | 'providers' | 'permissions'> & {
@@ -1592,19 +1656,25 @@ function TurnSessionReport({ report }: { report: SessionReport }) {
 /** The user side of a turn: the report card, the system-pill line, and the
  *  user bubble (hidden for notification-only turns). */
 function TurnUserBlock(
-  props: Pick<SessionTurnProps, 'turn' | 'author' | 'showAuthor' | 'pending' | 'interruptedBeforeRun' | 'pendingPrompt' | 'onRetryQueued' | 'onRemoveQueued' | 'queuedPromptViewer' | 'pendingAttachments' | 'uploadStatus' | 'pendingText' | 'agentNames' | 'commandMessages' | 'commands' | 'sessionId' | 'ownsPlan' | 'onRewind' | 'rewindDisabled' | 'editingText' | 'editPending' | 'onEditCancel' | 'onEditSend' | 'onOpenPastedContent'> & {
+  props: Pick<SessionTurnProps, 'turn' | 'author' | 'showAuthor' | 'pending' | 'interruptedBeforeRun' | 'pendingPrompt' | 'onRetryQueued' | 'onRemoveQueued' | 'queuedPromptViewer' | 'pendingAttachments' | 'uploadStatus' | 'pendingText' | 'agentNames' | 'commandMessages' | 'commands' | 'sessionId' | 'projectId' | 'ownsPlan' | 'onRewind' | 'rewindDisabled' | 'editingText' | 'editPending' | 'onEditCancel' | 'onEditSend' | 'onOpenPastedContent'> & {
     model: TurnModelState;
     queueTone: TurnQueueTone;
     userContent: TurnUserContentState;
+    /** True when the turn's notice row renders in the work fold instead (KRTX-4732). */
+    noticeInWork?: boolean;
   },
 ) {
-  const { userContent } = props;
+  const { userContent, noticeInWork } = props;
   const { sessionReport, noticeBatch, subagentNotice, peerMessage, parkedAnswer, systemMessages, hasVisibleUserContent } = userContent;
   // P5.6: the note a partial restore left for the agent is a notice, not a person's prompt.
   if (isSessionLogRestoreNote(props.turn.user)) return <RestoreNoteMarker />;
   return (
     <>
-      {noticeBatch ? (
+      {/* A notice turn's row folds into the work fold (`workNotice`), so the
+          parent's answer is the only top-level message (KRTX-4732). A parked
+          answer and a session report cannot coexist with a notice row, so the
+          fold never hides one of those. */}
+      {!noticeInWork && (noticeBatch ? (
         <NoticeBatchGroup items={noticeBatch} />
       ) : subagentNotice ? (
         <SubagentNoticeRow notice={subagentNotice} />
@@ -1614,7 +1684,7 @@ function TurnUserBlock(
         <ParkedAnswerRow answer={parkedAnswer} />
       ) : (
         sessionReport && <TurnSessionReport report={sessionReport} />
-      )}
+      ))}
       {/* ── System message indicator — shown for kortix_system-only messages ── */}
       {!hasVisibleUserContent && !sessionReport && !noticeBatch && !peerMessage && !parkedAnswer && systemMessages.length > 0 && (
         <SystemMessageIndicator messages={systemMessages} />
@@ -1626,7 +1696,7 @@ function TurnUserBlock(
 
 /** The user message bubble — dimmed while the prompt waits in the queue. */
 function TurnUserBubble(
-  props: Pick<SessionTurnProps, 'turn' | 'author' | 'showAuthor' | 'pending' | 'interruptedBeforeRun' | 'pendingPrompt' | 'onRetryQueued' | 'onRemoveQueued' | 'queuedPromptViewer' | 'pendingAttachments' | 'uploadStatus' | 'pendingText' | 'agentNames' | 'commandMessages' | 'commands' | 'sessionId' | 'ownsPlan' | 'onRewind' | 'rewindDisabled' | 'editingText' | 'editPending' | 'onEditCancel' | 'onEditSend' | 'onOpenPastedContent'> & {
+  props: Pick<SessionTurnProps, 'turn' | 'author' | 'showAuthor' | 'pending' | 'interruptedBeforeRun' | 'pendingPrompt' | 'onRetryQueued' | 'onRemoveQueued' | 'queuedPromptViewer' | 'pendingAttachments' | 'uploadStatus' | 'pendingText' | 'agentNames' | 'commandMessages' | 'commands' | 'sessionId' | 'projectId' | 'ownsPlan' | 'onRewind' | 'rewindDisabled' | 'editingText' | 'editPending' | 'onEditCancel' | 'onEditSend' | 'onOpenPastedContent'> & {
     queueTone: TurnQueueTone;
     userContent: TurnUserContentState;
   },
@@ -1635,7 +1705,7 @@ function TurnUserBubble(
   const {
     turn, author, showAuthor, pending, pendingPrompt, interruptedBeforeRun,
     pendingAttachments, uploadStatus, pendingText, agentNames,
-    commandMessages, commands, sessionId, ownsPlan, onRewind, rewindDisabled,
+    commandMessages, commands, sessionId, projectId, ownsPlan, onRewind, rewindDisabled,
     editingText, editPending, onEditCancel, onEditSend,
     onRetryQueued, onRemoveQueued, queuedPromptViewer, onOpenPastedContent,
   } = props;
@@ -1677,7 +1747,9 @@ function TurnUserBubble(
           onEditSend={onEditSend}
           onOpenPastedContent={onOpenPastedContent}
           deliveryStatus={
-            queuedStatus === 'failed' ? (
+            pendingPrompt?.last_error === STALE_RUNTIME_DELIVERY_ERROR ? (
+              <QueuedPromptRecovery projectId={projectId} onRemove={onRemoveQueued && promptActions.removable ? () => onRemoveQueued(pendingPrompt.prompt_id) : undefined} />
+            ) : queuedStatus === 'failed' ? (
               <QueuedPromptFailure
                 lastError={pendingPrompt?.last_error}
                 onRetry={
@@ -1691,7 +1763,7 @@ function TurnUserBubble(
                     : undefined
                 }
               />
-            ) : queuedStatus === 'sending' || queuedStatus === 'queued' || queuedStatus === 'interrupted' ? (
+            ) : queuedStatus === 'sending' || queuedStatus === 'queued' || queuedStatus === 'interrupted' || queuedStatus === 'unsent' ? (
               <QueuedPromptProgress state={queuedStatus} />
             ) : undefined
           }
@@ -1715,47 +1787,61 @@ function TurnToolBlocks(
     /** False keeps today's flat render (inline text-and-questions mode). */
     fold: boolean;
     durationMs: number | null;
+    /** The turn's notice row (a sub-agent's report, a teammate's update) that
+     *  folds in here instead of the top level (KRTX-4732). */
+    workNotice?: ReactNode;
+    /** The turn hosts an agent run: its report turns draw after the answer (`SessionTurnImpl`). */
+    hasRun?: boolean;
+    /** The fold's state, owned by the turn so its run's reports fold with it (KRTX-5238). */
+    workOpen: boolean;
+    workMounted: boolean;
+    onToggleWork: () => void;
+    /** The run's row label, in place of "Worked for …". */
+    runLabel?: string;
+    foldStartedWork?: boolean;
+    /**
+     * A run member's half (KRTX-4732), with no row of its own: `work` draws only what the row
+     * would fold, `answer` only what stays in view under it.
+     */
+    part?: 'work' | 'answer';
   },
 ) {
   const {
     turn, sessionId, permissions, onPermissionReply, disableToolNavigation,
-    model, segments, conversationDensity, fold, durationMs,
+    model, segments, conversationDensity, fold, durationMs, workNotice, hasRun, runLabel, foldStartedWork, part, workOpen, workMounted,
   } = props;
   const { working, hasSteps, hasReasoning } = model;
-  // Every settled turn folds, live or reloaded (the T3 Code rule): one turn
-  // reads one way. A turn the reader touched while it worked (opened or closed
-  // a row) settles with its "Worked for" row open, so nothing they were
-  // reading disappears under them.
+  // The turn folds from its first step, live and settled alike (KRTX-5238): its steps sit
+  // behind the "Worked for" row, its words to the person stay in view in call order, and
+  // nothing moves into or out of view when the turn ends. Outstanding agent rows stay
+  // visible until every agent reports; only then can their launch rows fold.
   const split = useMemo(
-    () => (fold && !working ? splitSessionLogTurnWork(segments.filter(segmentRendersSomething), { working }) : null),
-    [fold, segments, working],
+    () => (fold ? splitSessionLogTurnWork(segments.filter(segmentRendersSomething), { working: false, foldStartedWork }) : null),
+    [fold, segments, foldStartedWork],
   );
-  const workSegments = useMemo(() => new Set<TurnSegments[number]>(split?.work ?? []), [split]);
-  const touchedLive = useRef(false);
-  const markTouched = useCallback(() => {
-    if (working) touchedLive.current = true;
-  }, [working]);
-  const [workOpen, setWorkOpen] = useState(false);
-  // A turn that mounted settled has not rendered its work yet; it mounts on the first open.
-  const [workMounted, setWorkMounted] = useState(working);
-  const [wasWorking, setWasWorking] = useState(working);
-  if (working !== wasWorking) {
-    setWasWorking(working);
-    if (working) setWorkMounted(true);
-    else setWorkOpen(touchedLive.current);
-  }
-  const toggleWork = useCallback(() => {
-    setWorkMounted(true);
-    setWorkOpen((open) => !open);
-  }, []);
+  // A settled turn whose prompt is another agent's notice folds the notice
+  // row into this work fold with the work it led to (KRTX-4732): the parent's
+  // answer below is the only top-level message, and the row stays reachable
+  // by opening the row. A turn with no work of its own still gets the fold,
+  // so the exchange never becomes unreachable. In the inline mode (text plus
+  // an answered question, no fold row) the row renders visible above the
+  // answer instead — the gate below keeps the block mounted for it.
+  // The run's other turns fold here too (KRTX-4732); while the turn still works, the run's
+  // row already stands, closed, over the reports that came before.
+  const noticeFold = (!!workNotice || !!hasRun) && fold;
+  // A turn whose only work started agents has no steps, but its agent rows are what the
+  // person tracks: they draw (and fold once every agent reported, `foldStartedWork`).
+  const startedWork = useMemo(
+    () => segments.some((segment) => segment.kind === 'standalone' && toolKind(segment.block.name) === 'task'),
+    [segments],
+  );
+  const foldRow = !part && (!!split || noticeFold || (fold && working));
+  // Text the agent wrote to the person never folds: only its steps do.
+  const workSegments = useMemo(
+    () => new Set<TurnSegments[number]>((split?.work ?? []).filter((segment) => segment.kind !== 'text' || !segment.block.text.trim())),
+    [split],
+  );
   const workContentId = useId();
-  // A click on any disclosure inside the live turn (a burst, a tool row, a thought).
-  const onClickCapture = useCallback(
-    (event: MouseEvent) => {
-      if (working && (event.target as Element | null)?.closest?.('[aria-expanded]')) touchedLive.current = true;
-    },
-    [working],
-  );
   // Settled turns only: while the turn runs, the next step has not happened yet.
   const recovered = useMemo(
     () => (working ? NO_RECOVERED_CALLS : recoveredShellFailures(turnBlocks(turn))),
@@ -1816,7 +1902,7 @@ function TurnToolBlocks(
 			      questions are dropped entirely. Additionally, answered
 			      questions are dropped when rendering inline content (below),
 			      since that mode shows them already, in natural order. */}
-    {(working || hasSteps || hasReasoning) && turn.assistant.length > 0 && (
+    {(working || hasSteps || hasReasoning || startedWork || noticeFold || !!workNotice || !!hasRun) && (turn.assistant.length > 0 || !!workNotice || !!hasRun) && (
       // Every tool row below — the bursts' rows and the standalone ones —
       // reads this to tell a call that has not spoken YET from one that never
       // will. Provided here rather than per-row because `working` is a fact
@@ -1829,8 +1915,7 @@ function TurnToolBlocks(
        <ImageGenRunsContext.Provider value={imageGenRuns}>
        <InTranscriptTurnContext.Provider value>
         {/* `gap`, not `space-y`: a hidden work segment takes no gap. */}
-        <WorkTouchContext.Provider value={markTouched}>
-        <div className="flex flex-col gap-3" onClickCapture={onClickCapture}>
+        <div className="flex flex-col gap-3 empty:hidden">
           {/* One keyed list in both states. Each segment keeps its wrapper and
               its position, so nothing remounts at settle or on a toggle: a
               `show` iframe does not reload, the final markdown does not
@@ -1838,25 +1923,41 @@ function TurnToolBlocks(
               "Worked for" row joins the list at the top and the work is
               hidden in place. The hoisted cards stay visible where they were
               called, so an opened row reads in call order. */}
-          {split && (
+          {foldRow && (
             <TurnWorkAccordion
               key="turn-work"
+              label={runLabel ?? (working ? 'Working' : undefined)}
               durationMs={durationMs}
               open={workOpen}
-              onToggle={toggleWork}
+              onToggle={props.onToggleWork}
               contentId={workContentId}
             />
           )}
+          {/* The notice row the turn's prompt carried: it reads first, before
+              the work it led to, in both states. Settled it is fold content —
+              hidden with the work until the reader opens the row (KRTX-4732). */}
+          {workNotice && (!noticeFold || workMounted) && (
+            <div
+              key="turn-notice"
+              id={workContentId}
+              hidden={!!(split || noticeFold) && !workOpen}
+              className="min-w-0"
+            >
+              <WorkFoldContext.Provider value={!working}>{workNotice}</WorkFoldContext.Provider>
+            </div>
+          )}
           {segments.map((segment) => {
             const isWork = workSegments.has(segment);
-            if (isWork && !workMounted) return null;
+            if (part === 'answer' && isWork) return null;
+            if (part === 'work' && split && !isWork) return null;
+            if (isWork && !workMounted && !part) return null;
             const node = renderSegment(segment);
             if (!node) return null;
-            const hidden = isWork && !workOpen;
+            const hidden = !part && isWork && !workOpen;
             return (
               <div
                 key={node.key}
-                id={isWork && segment === split?.work[0] ? workContentId : undefined}
+                id={!workNotice && isWork && segment === split?.work[0] ? workContentId : undefined}
                 hidden={hidden}
                 className="min-w-0"
               >
@@ -1865,7 +1966,6 @@ function TurnToolBlocks(
             );
           })}
         </div>
-        </WorkTouchContext.Provider>
        </InTranscriptTurnContext.Provider>
        </ImageGenRunsContext.Provider>
        </ImageGenDigestsContext.Provider>
@@ -1900,10 +2000,11 @@ function segmentRendersSomething(segment: SessionLogSegment): boolean {
 /**
  * The segments a messages-only thread (`TranscriptRows.messagesOnly`) draws:
  * the agent's words and the deliverables it showed on purpose (`show`,
- * `image_gen`), plus a call that waits on the person's permission. Never a
+ * `image_gen`), plus a call that waits on the person's permission or started a
+ * connector sign-in (its Connect card). Never a
  * burst (tools, thinking) or another standalone call (a sub-agent card).
- * Settled, the interim sentences are work too: only the deliverables and the
- * final text stay, the rule of the "Worked for" fold (`splitSessionLogTurnWork`).
+ * Settled, the agent's sentences between its steps stay, in order, before the
+ * deliverables and the final text: a chat keeps what was said to you.
  * Exported for its test.
  */
 export function messageOnlySegments(
@@ -1917,81 +2018,31 @@ export function messageOnlySegments(
     // element, and the words after it took the column's gap: a blank line above short answers.
     if (segment.kind === 'text') return segment.block.text.trim() !== '';
     if (segment.kind === 'show-group') return true;
-    return isNoGroupActivityTool(segment.block.name) || !!getPermissionForTool(options.permissions, segment.block.call_id);
+    return (
+      isNoGroupActivityTool(segment.block.name) ||
+      !!getPermissionForTool(options.permissions, segment.block.call_id) ||
+      // The call that started a connector sign-in: its Connect card waits on the person.
+      toolCallConnectorSignIns(segment.block).length > 0
+    );
   };
+  // Settled: the agent's own words stay where it said them (the sentences between its steps), then
+  // the cards, then the final answer. Only text and the kinds above pass `kept`: no tool rows.
   const split = options.working ? null : splitSessionLogTurnWork(visible, { working: false });
-  return (split ? [...split.hoisted, ...split.final] : visible).filter(kept);
+  return (split ? [...split.work, ...split.hoisted, ...split.final] : visible).filter(kept);
 }
 
 /**
- * "Show work" under a messages-only thread's agent message, and the work it
- * opens. A thread: the turn's segments the message does not show (its tools,
- * thinking, sub-agent rows and interim sentences), the "Worked for" fold's
- * content. A talk-only thread (`TranscriptRows.front`): the worker sessions
- * the turn started (`agent` calls) or whose report it answers, each as a
- * read-only transcript. Nothing to open: no control. Exported for its test.
+ * Under a messages-only thread's agent message: while a worker the turn
+ * started still runs, who it is and for how long. The work itself stays out
+ * of the chat (no "Show work"); the full session shows it. Exported for its test.
  */
 export function TurnMessageWork(
-  props: Pick<SessionTurnProps, 'turn' | 'sessionId' | 'permissions' | 'onPermissionReply' | 'disableToolNavigation' | 'isLast'> & {
-    model: TurnModelState;
-    segments: TurnSegments;
-    /** The segments the message itself draws (`messageOnlySegments`). */
-    shown: TurnSegments;
-    userContent: Pick<TurnUserContentState, 'sessionReport' | 'noticeBatch' | 'subagentNotice'>;
-    conversationDensity: ConversationDensity;
-    front: boolean;
-    defaultOpen?: boolean;
-  },
+  props: Pick<SessionTurnProps, 'turn'> & { front: boolean },
 ) {
-  const { turn, segments, shown, userContent, front } = props;
-  const work = useMemo(() => {
-    const kept = new Set(shown);
-    return segments.filter((segment) => segmentRendersSomething(segment) && !kept.has(segment));
-  }, [segments, shown]);
-  const { sessionReport, noticeBatch, subagentNotice } = userContent;
-  // A router thread shows each worker's work once: under the message that relays its report. The
-  // message that only started a worker ("On it.") shows it while it is the newest turn, as live progress.
-  const isLast = props.isLast;
-  const workers = useMemo(
-    () =>
-      front
-        ? messageWorkerIds(isLast ? turnBlocks(turn) : [], [
-            sessionReport?.sessionId,
-            subagentNotice?.sessionId,
-            ...(noticeBatch ?? []).map((item) => (item.kind === 'peer_idle' ? null : item.notice.sessionId)),
-          ])
-        : [],
-    [front, turn, sessionReport, subagentNotice, noticeBatch, isLast],
-  );
-  // The live status follows only the workers this turn started: a worker whose report this turn relays is done.
+  const { turn, front } = props;
   // Any turn: a follow-up sent while a worker runs must not hide it. A row shows only while its worker works.
   const started = useMemo(() => (front ? messageWorkerIds(turnBlocks(turn), []) : []), [front, turn]);
-  if (front ? workers.length === 0 : work.length === 0) return null;
-  return (
-    <>
-    {/* While a hidden worker runs: who, and for how long. It leaves when the worker is done. */}
-    {started.length > 0 ? <WorkerStatusRows sessionIds={started} /> : null}
-    <ShowWork defaultOpen={props.defaultOpen}>
-      {front ? (
-        <WorkerTranscripts sessionIds={workers} />
-      ) : (
-        <TurnToolBlocks
-          turn={turn}
-          sessionId={props.sessionId}
-          permissions={props.permissions}
-          onPermissionReply={props.onPermissionReply}
-          disableToolNavigation={props.disableToolNavigation}
-          model={props.model}
-          segments={work}
-          conversationDensity={props.conversationDensity}
-          // The work is already the fold's content: nothing is left to fold.
-          fold={false}
-          durationMs={null}
-        />
-      )}
-    </ShowWork>
-    </>
-  );
+  return started.length > 0 ? <WorkerStatusRows sessionIds={started} /> : null;
 }
 
 function TurnSegment({
@@ -2270,6 +2321,8 @@ function TurnFooter(
     hideActionBar?: boolean;
     /** The busy line says only that the agent works, never which tool runs (`messagesOnly`). */
     quietBusy?: boolean;
+    /** The web pages this response read (`deriveTurnSources`). */
+    sources: TurnSource[];
     model: TurnModelState;
     errors: TurnErrorState;
     answered: TurnAnsweredState;
@@ -2299,6 +2352,7 @@ function TurnFooter(
         turnError={turnError}
         tHardcodedUi={tHardcodedUi}
         hasText={model.response.trim() !== ''}
+        openText={model.openText?.block.text}
       />
     {/* ── Error (abort / failure banner) ──
         An automatic provider-error recovery chain (KRTX-2597) renders ONE
@@ -2335,7 +2389,7 @@ function TurnFooter(
         Gated on `!working` for the same reason the action bar is — an
         outcome is a settled fact, and a card that appears mid-stream would
         claim a change request exists before the server has one. */}
-      {!working && <TurnOutcomes turnKey={turn.id} />}
+      {!working && <TurnOutcomes turnKey={turn.id} text={response} />}
 
       {/* ── Action bar (copy + turn meta) ──
           Gated on `!working` only. A turn that ends in tool calls has no closing
@@ -2349,9 +2403,11 @@ function TurnFooter(
           duration / cost would be permanently invisible, and tap-emulated
           `:hover` would leave exactly one arbitrary turn's bar lit. */}
       {/* A turn that ended in tool calls alone ("Worked for 13s") has nothing to
-          copy or share: no bar, so no empty hover band under it. */}
+          copy: no bar, so no empty hover band under it. */}
       {!working && !props.hideActionBar && hasCopyableResponse(response, answered.inlineContentParts) && (
         <TurnActionBar
+          turnId={turn.id}
+          sources={props.sources}
           response={response}
           inlineContentParts={answered.inlineContentParts}
           turnEndedAt={turnEndedAt}
@@ -2359,17 +2415,6 @@ function TurnFooter(
           costInfo={costInfo}
           servedModel={servedModel}
           tHardcodedUi={tHardcodedUi}
-          // A continuation turn's id names a compaction marker, not a user
-          // message, so it has no response of its own to share.
-          share={
-            turn.continues
-              ? undefined
-              : {
-                  projectId,
-                  sessionId: projectSessionId,
-                  turnId: turn.id,
-                }
-          }
         />
       )}
     <ConnectProviderDialog
@@ -2435,10 +2480,12 @@ function TurnBusyRow(
     retry: TurnRetryState;
     status: TurnStatusState;
     tHardcodedUi: ReturnType<typeof useTranslations>;
-    /** "Kortix is typing…", no tool phrase or elapsed time (`messagesOnly`). */
+    /** Messages only: the agent's dots and its current step ("Searching the web · 3:19"), no tool rows. */
     quietBusy?: boolean;
     /** The answer already streams text: the dots are gone (the words are the signal). */
     hasText?: boolean;
+    /** The open text block's text (`openTextBlock`): while it grows, the row hides. */
+    openText?: string;
   },
 ) {
   const { working, turnError, suppressBusyIndicator, awaitingUser, sessionId, retry, status, tHardcodedUi, quietBusy } = props;
@@ -2448,9 +2495,12 @@ function TurnBusyRow(
   const tTurn = useTranslations('sessionUi.turn');
   // The thread's computer is not up yet: the wait is a start, not work.
   const runtimeReady = useRuntimeReady();
+  // The words streaming in are the busy signal: no "Gathering thoughts..." row
+  // glued under them. It returns when the block closes or the text goes quiet.
+  const answerStreaming = useAnswerStreaming(props.openText);
   return (
     <>
-    {showTurnBusyIndicator({
+    {!(answerStreaming && !quietBusy && !retryInfo) && showTurnBusyIndicator({
       working: working && !suppressBusyIndicator,
       hasError: !!turnError,
       isRetrying: !!retryInfo,
@@ -2466,21 +2516,21 @@ function TurnBusyRow(
           />
         )}
         {quietBusy && rows && !retryInfo ? (
-          props.hasText ? (
-            // Words already stream: no dots. A long turn keeps only its clock, in the dots' place.
-            status.statusElapsedLabel ? (
-              <p className="text-muted-foreground text-xs tabular-nums">{tTurn('workingFor', { time: status.statusElapsedLabel })}</p>
-            ) : null
-          ) : (
-            // Dots, then "Working · 0:42" once the wait passes the stall mark: a long turn never reads as frozen.
+          // While new words stream in, the words are the signal. Otherwise the agent's dots and what it
+          // does right now ("Searching the web · 3:19"), so a long turn never reads as finished or frozen.
+          answerStreaming ? null : (
             <TypingIndicator
               name={rows.agent}
               detail={
                 !runtimeReady
                   ? tTurn('starting')
-                  : status.statusElapsedLabel
-                    ? tTurn('workingFor', { time: status.statusElapsedLabel })
-                    : null
+                  : statusPhrase && status.statusElapsedLabel
+                    ? `${statusPhrase} · ${status.statusElapsedLabel}`
+                    : statusPhrase
+                      ? statusPhrase
+                      : status.statusElapsedLabel
+                        ? tTurn('workingFor', { time: status.statusElapsedLabel })
+                        : null
               }
               detailDelayMs={runtimeReady ? 0 : 2000}
             />
@@ -2522,10 +2572,14 @@ function TurnActionBar({
   servedModel,
   tHardcodedUi,
   inToolbar = false,
-  share,
+  turnId,
+  sources,
 }: {
   /** Inside a message row's toolbar, which owns the hover reveal. */
   inToolbar?: boolean;
+  turnId: string;
+  /** The web pages this response read: the bar's Sources button. */
+  sources: TurnSource[];
   response: string;
   inlineContentParts: TurnAnsweredState['inlineContentParts'];
   turnEndedAt: TurnSettledMeta['turnEndedAt'];
@@ -2533,7 +2587,6 @@ function TurnActionBar({
   costInfo: TurnSettledMeta['costInfo'];
   servedModel?: TurnServedModel;
   tHardcodedUi: ReturnType<typeof useTranslations>;
-  share?: { projectId?: string; sessionId?: string; turnId: string };
 }) {
   const [copied, setCopied] = useState(false);
 // ---- Copy response ----
@@ -2561,6 +2614,10 @@ const handleCopy = async () => {
     <div
       className={cn(
         'flex items-center gap-0.5',
+        // Under the answer, the first glyph sits on the text's left edge: each
+        // icon is centred in a `size-7` button, so pull the row left by the
+        // glyph's inset, (button − 1.05rem icon) / 2 ≈ 4.5px.
+        !inToolbar && '-ml-[calc((var(--spacing)*7-1.05rem)/2)]', // audit:allow optical alignment: icon inset inside its hit area
         !inToolbar &&
           'duration-normal opacity-0 transition-opacity group-hover/turn:opacity-100 focus-within:opacity-100 has-[[data-state=open]]:opacity-100 max-md:opacity-100',
       )}
@@ -2593,9 +2650,7 @@ const handleCopy = async () => {
             </span>
           </Button>
       ) : null}
-      {response && share ? (
-        <TurnShareButton projectId={share.projectId} sessionId={share.sessionId} turnId={share.turnId} />
-      ) : null}
+        <TurnSourcesButton turnId={turnId} sources={sources} />
         <SessionTurnMeta
           endedAt={turnEndedAt}
           durationMs={turnDurationMs}
@@ -2640,13 +2695,40 @@ function SessionTurnImpl(props: SessionTurnProps) {
   );
 
   const model = useTurnModelState({ turn, isWorkingTurn, sessionWorking, awaitingUser });
-  const queueTone = useTurnQueueTone({ pending, pendingPrompt, interruptedBeforeRun });
+  const queueTone = useTurnQueueTone({ pending, pendingPrompt, interruptedBeforeRun, sessionId, projectSessionId: props.projectSessionId });
   const errors = useTurnErrorState({ turn, turnOutcome });
   const answered = useAnsweredQuestionState({ turn, questions, sessionId, blocks: model.blocks, hasSteps: model.hasSteps });
   const userContent = useTurnUserContent({ turn, commandMessages, commands });
+  // A turn whose prompt is another agent's notice (a sub-agent's report, a
+  // teammate's update) folds that row into its work fold (KRTX-4732): the
+  // parent's answer is the only top-level message. A settled turn with no
+  // answer at all keeps the row at the top level, where it stays reachable;
+  // the main transcript only — space threads hide notices already.
+  const noticeRow = userContent.noticeBatch
+    ? <NoticeBatchGroup items={userContent.noticeBatch} />
+    : userContent.subagentNotice
+      ? <SubagentNoticeRow notice={userContent.subagentNotice} />
+      : userContent.peerMessage
+        ? <PeerMessageRow info={userContent.peerMessage} />
+        : undefined;
+  // A run's anchor folds its own notice too, answered or not: the run's row keeps it reachable.
+  const workNotice = rows
+    ? undefined
+    : isAgentNoticeTurn(turn) && (model.working || turn.assistant.length > 0 || !!props.agentRun)
+      ? noticeRow
+      : undefined;
   const status = useTurnLiveStatus({ turn, blocks: model.blocks, agentWorking: model.agentWorking });
   const retry = useTurnRetryState({ sessionStatus, isWorkingTurn });
   const meta = useTurnSettledMeta({ working: model.working, turn });
+  // The pages this response read, for its Sources button. Only a settled turn shows the bar.
+  // A run's report turns draw no bar of their own (KRTX-5238): their pages count on the host's.
+  const sources = useMemo(
+    () =>
+      model.working
+        ? NO_SOURCES
+        : deriveTurnSources([model.blocks, ...(props.runTurns ?? []).map(turnBlocks)].flat().filter(isToolCallBlock)),
+    [model.working, model.blocks, props.runTurns],
+  );
   const segments = useTurnSegments({
     blocks: model.blocks,
     answeredQuestionCallsById: answered.answeredQuestionCallsById,
@@ -2654,6 +2736,46 @@ function SessionTurnImpl(props: SessionTurnProps) {
     permissions,
     sessionId,
   });
+  // Inside an agent run, the agent's relays between colleagues (`send_message`) are noise:
+  // the reports say what happened (KRTX-4732).
+  const inRun = !!props.agentRun || !!props.runMember;
+  const turnSegments = useMemo(() => (inRun ? withoutRelayCalls(segments) : segments), [inRun, segments]);
+  const { runTurns, agentRun } = props;
+  // The run's report turns, each split in two: its work folds with this turn's, its words stay
+  // in view under it, in order (KRTX-5238). Memoized members only need a shallow prop comparison
+  // when their anchor streams.
+  const memberTurn = (member: SessionLogTurn, part: 'work' | 'answer') => (
+    <SessionTurn
+      {...props}
+      turn={member}
+      runMember={part}
+      agentRun={undefined}
+      runTurns={undefined}
+      foldStartedWork={false}
+      // The run's one busy row is the host's, under every report (KRTX-5238).
+      isWorkingTurn={false}
+      pending={false}
+      pendingPrompt={undefined}
+      interruptedBeforeRun={false}
+      isFirstTurn={false}
+      isLast={false}
+      ownsPlan={false}
+    />
+  );
+  // Only the reader opens or closes the fold: no turn start, turn end or report toggles it
+  // (KRTX-5238). A turn that mounted settled renders its work on the first open.
+  const [workOpen, setWorkOpen] = useState(false);
+  const [workMounted, setWorkMounted] = useState(model.working);
+  if (model.working && !workMounted) setWorkMounted(true);
+  const toggleWork = useCallback(() => {
+    setWorkMounted(true);
+    setWorkOpen((open) => !open);
+  }, []);
+  const runWorking = !!agentRun?.live && !!runTurns?.length && !model.working;
+  const runContent =
+    agentRun && runTurns?.length
+      ? runTurns.map((member) => ({ key: member.id, work: memberTurn(member, 'work'), answer: memberTurn(member, 'answer') }))
+      : null;
   // A compaction turn's message-state — `inFlight` (the marker still
   // streams its summary) is the half of "is this compaction running" the
   // working projection cannot see, because it deliberately knows nothing
@@ -2668,6 +2790,32 @@ function SessionTurnImpl(props: SessionTurnProps) {
     [genuiScope, genuiModel],
   );
 
+  // A run member (KRTX-4732): its report and the work it led to, in the anchor's fold...
+  if (props.runMember === 'work') {
+    return (
+      <div data-testid="agent-run-member" className="flex min-w-0 flex-col gap-3">
+        {noticeRow}
+        <GenuiTelemetryContext.Provider value={genuiTelemetry}>
+          <TurnToolBlocks {...props} model={model} segments={turnSegments} conversationDensity={conversationDensity} fold={!answered.shouldUseInlineContent} durationMs={null} part="work" {...MEMBER_WORK} />
+        </GenuiTelemetryContext.Provider>
+      </div>
+    );
+  }
+  // ...and its answer, with its error or stop row and its outcomes, under the run row. A silent
+  // report draws only the outcomes it left (a change request), which hide themselves when none.
+  if (props.runMember === 'answer') {
+    if (!turn.response && !turn.error && turn.status !== 'aborted') return <TurnOutcomes turnKey={turn.id} />;
+    return (
+      <div data-testid="agent-run-answer" className="flex flex-col gap-3">
+        <GenuiTelemetryContext.Provider value={genuiTelemetry}>
+          <TurnToolBlocks {...props} model={model} segments={turnSegments} conversationDensity={conversationDensity} fold={!answered.shouldUseInlineContent} durationMs={null} part="answer" {...MEMBER_WORK} />
+          <TurnAssistantBlock {...props} model={model} answered={answered} userContent={userContent} tHardcodedUi={tHardcodedUi} />
+        </GenuiTelemetryContext.Provider>
+        {/* One action bar per run: the host's, under the last reply (KRTX-5238). */}
+        <TurnFooter {...props} sources={sources} hideActionBar model={model} errors={errors} answered={answered} status={status} retry={retry} meta={meta} tHardcodedUi={tHardcodedUi} connectProviderOpen={connectProviderOpen} onConnectProviderOpenChange={setConnectProviderOpen} />
+      </div>
+    );
+  }
   // Shell mode: a synthetic prompt answered by one bare `bash` call.
   if (turn.shell) {
     return (
@@ -2805,6 +2953,8 @@ function SessionTurnImpl(props: SessionTurnProps) {
               model.working ? null : (
                 <TurnActionBar
                   inToolbar
+                  turnId={turn.id}
+                  sources={sources}
                   response={model.response}
                   inlineContentParts={answered.inlineContentParts}
                   turnEndedAt={meta.turnEndedAt}
@@ -2812,16 +2962,12 @@ function SessionTurnImpl(props: SessionTurnProps) {
                   costInfo={meta.costInfo}
                   servedModel={props.servedModel}
                   tHardcodedUi={tHardcodedUi}
-                  share={
-                    turn.continues
-                      ? undefined
-                      : { projectId: props.projectId, sessionId: props.projectSessionId, turnId: turn.id }
-                  }
                 />
               )
             }
           >
-            <div className="mt-0.5 space-y-2.5">
+            {/* No top margin: the answer starts right under its name, on the line a person's message starts on. */}
+            <div className="space-y-2.5">
               {messagesOnly ? null : <TurnFallbackRows working={model.working} events={props.servedModel?.fallbacks} />}
               <GenuiTelemetryContext.Provider value={genuiTelemetry}>
                 {/* Messages only, no steps: the response block draws the words, and the
@@ -2836,6 +2982,9 @@ function SessionTurnImpl(props: SessionTurnProps) {
                     // The segments are already the message's: nothing is left to fold.
                     fold={!messagesOnly && !answered.shouldUseInlineContent}
                     durationMs={meta.turnDurationMs}
+                    workOpen={workOpen}
+                    workMounted={workMounted}
+                    onToggleWork={toggleWork}
                   />
                 )}
                 <TurnAssistantBlock {...props} model={model} answered={answered} userContent={userContent} tHardcodedUi={tHardcodedUi} />
@@ -2844,17 +2993,9 @@ function SessionTurnImpl(props: SessionTurnProps) {
               {messagesOnly && !model.working && errors.turnErrorIsAbort && model.response.trim() === '' && shownSegments.length === 0 ? (
                 <p className="text-muted-foreground text-sm">{tTurnRows('stopped')}</p>
               ) : null}
-              <TurnFooter {...props} hideActionBar quietBusy={messagesOnly} model={model} errors={errors} answered={answered} status={status} retry={retry} meta={meta} tHardcodedUi={tHardcodedUi} connectProviderOpen={connectProviderOpen} onConnectProviderOpenChange={setConnectProviderOpen} />
+              <TurnFooter {...props} sources={sources} hideActionBar quietBusy={messagesOnly} model={model} errors={errors} answered={answered} status={status} retry={retry} meta={meta} tHardcodedUi={tHardcodedUi} connectProviderOpen={connectProviderOpen} onConnectProviderOpenChange={setConnectProviderOpen} />
               {messagesOnly && !model.working ? (
-                <TurnMessageWork
-                  {...props}
-                  model={model}
-                  segments={segments}
-                  shown={shownSegments}
-                  userContent={userContent}
-                  conversationDensity={conversationDensity}
-                  front={rows.front === true}
-                />
+                <TurnMessageWork turn={props.turn} front={rows.front === true} />
               ) : null}
             </div>
           </MessageRow>
@@ -2864,7 +3005,7 @@ function SessionTurnImpl(props: SessionTurnProps) {
   }
   return (
     <div className="group/turn text-factor-[2] space-y-2.5">
-      <TurnUserBlock {...props} model={model} queueTone={queueTone} userContent={userContent} />
+      <TurnUserBlock {...props} model={model} queueTone={queueTone} userContent={userContent} noticeInWork={!!workNotice} />
       {props.isFirstTurn ? afterFirstPrompt : null}
       {/* Model switches happened while the turn worked, so they sit above
           its work and its answer, not under the answer. */}
@@ -2873,17 +3014,42 @@ function SessionTurnImpl(props: SessionTurnProps) {
         <TurnToolBlocks
           {...props}
           model={model}
-          segments={segments}
+          segments={turnSegments}
           conversationDensity={conversationDensity}
           fold={!answered.shouldUseInlineContent}
           durationMs={meta.turnDurationMs}
+          workNotice={workNotice}
+          hasRun={!!runContent?.length}
+          runLabel={agentRun ? sessionLogAgentRunLabel(agentRun) : undefined}
+          foldStartedWork={props.foldStartedWork}
+          workOpen={workOpen}
+          workMounted={workMounted}
+          onToggleWork={toggleWork}
         />
         <TurnAssistantBlock {...props} model={model} answered={answered} userContent={userContent} tHardcodedUi={tHardcodedUi} />
+        {/* The run's report turns, after this turn's answer and in order: each one's report and
+            steps fold with this turn's row, its words to the person stay in view (KRTX-4732,
+            KRTX-5238). Content only ever appends under the row. */}
+        {runContent?.map((member) => (
+          <Fragment key={member.key}>
+            {workMounted && (
+              <div hidden={!workOpen} data-testid="agent-run-fold" className="flex min-w-0 flex-col gap-3">
+                <WorkFoldContext.Provider value>{member.work}</WorkFoldContext.Provider>
+              </div>
+            )}
+            <div className="flex min-w-0 flex-col gap-3">{member.answer}</div>
+          </Fragment>
+        ))}
       </GenuiTelemetryContext.Provider>
-      <TurnFooter {...props} model={model} errors={errors} answered={answered} status={status} retry={retry} meta={meta} tHardcodedUi={tHardcodedUi} connectProviderOpen={connectProviderOpen} onConnectProviderOpenChange={setConnectProviderOpen} />
+      {/* While the run works, its one busy row stands under the last report: a row per report
+          turn came and went with each reply, and the content shrank and grew under the reader. */}
+      <TurnFooter {...props} sources={sources} model={runWorking ? { ...model, working: true } : model} errors={errors} answered={answered} status={status} retry={retry} meta={meta} tHardcodedUi={tHardcodedUi} connectProviderOpen={connectProviderOpen} onConnectProviderOpenChange={setConnectProviderOpen} />
     </div>
   );
 }
+
+/** A run member's half draws inside its host's fold, which owns the open state. */
+const MEMBER_WORK = { workOpen: true, workMounted: true, onToggleWork: () => {} } as const;
 
 /**
  * The boundary that stops the transcript re-rendering with the stream.

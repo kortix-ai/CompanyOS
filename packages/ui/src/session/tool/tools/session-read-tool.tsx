@@ -101,13 +101,13 @@ export function SessionReadTool({ call, defaultOpen, forceOpen, locked }: ToolPr
           {toolEntries.map((entry) => (
             <div
               key={entry.at}
-              className="border-border/10 flex items-start gap-0 border-b last:border-b-0"
+              className="border-border flex items-start gap-0 border-b last:border-b-0"
             >
               <span className="w-6 shrink-0 py-1 text-center font-mono text-xs select-none">
                 {entry.status === 'completed' ? (
                   <Check className={cn('inline size-2.5', STATUS_TEXT.success)} />
                 ) : entry.status === 'pending' ? (
-                  <Clock className="text-muted-foreground/50 inline size-2.5" />
+                  <Clock className="text-muted-foreground inline size-2.5" />
                 ) : (
                   <CircleAlert className={cn('inline size-2.5', STATUS_TEXT.destructive)} />
                 )}
@@ -115,7 +115,7 @@ export function SessionReadTool({ call, defaultOpen, forceOpen, locked }: ToolPr
               <span className="text-foreground/80 w-24 shrink-0 truncate py-1 font-mono text-xs font-medium">
                 {entry.tool}
               </span>
-              <span className="text-muted-foreground/60 truncate py-1 pr-2 font-mono text-xs">
+              <span className="text-muted-foreground truncate py-1 pr-2 font-mono text-xs">
                 {entry.summary}
               </span>
             </div>

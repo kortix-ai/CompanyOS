@@ -36,7 +36,7 @@ export type ProviderActions = ReturnType<typeof useProviderActions>;
 
 /** What this provider has connected, and what the viewer may do with it. */
 export function useProviderConnection(projectId: string, entry: LlmProviderEntry, data: ProvidersData, cursor: number) {
-  const sheet = providerSheetKind(entry, data.pooled && Boolean(data.accountId));
+  const sheet = providerSheetKind(entry, Boolean(data.accountId));
   const subscription = PROVIDER_SUBSCRIPTIONS[entry.id];
 
   const accountProviderId =
@@ -256,7 +256,7 @@ export function useProviderActions({ projectId, entry, data, connection, signIn,
               return;
             }
             // The caller's own Claude accounts; one shared by someone else stays theirs to remove.
-            if (!accountId) throw new Error('Could not find this project’s account.');
+            if (!accountId) throw new Error('Could not find this workspace.');
             const { secrets } = await listAccountSecretResources(accountId, projectId);
             for (const secret of secrets.filter(
               (item) => item.provider_id === 'claude-agent' && item.created_by === data.viewerId,

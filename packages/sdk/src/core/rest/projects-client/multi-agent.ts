@@ -8,6 +8,7 @@
 // the API answers with, never a silent drop.
 
 import { backendApi } from '../../http/api-client';
+import { appendQuery } from '../../http/url';
 import { unwrap } from './shared';
 
 /** Largest message body a session may send another, in characters. */
@@ -25,6 +26,15 @@ export type SessionInbound = 'accept' | 'hold' | 'refuse';
 
 /** Board state of a session, as Claude Code's agent view groups them. */
 export type SessionBoardState = 'working' | 'needs_input' | 'idle' | 'completed' | 'failed' | 'stopped';
+
+/**
+ * Is the session's work done: the one field a script waits on.
+ * `running` covers a live turn and a session that waits for its person
+ * (`attention`). Not the row lifecycle (`status`) and not the computer
+ * (`runtime_status`): a finished child keeps `status: 'running'` and
+ * `runtime_status: 'active'` until its idle computer stops.
+ */
+export type SessionWorkState = 'running' | 'completed' | 'failed' | 'stopped' | 'idle';
 
 /** What a session waits for from its person, or null. */
 export type SessionAttention = 'question' | 'approval' | null;
@@ -169,9 +179,15 @@ export interface WorkflowRunAgent {
   model?: string;
   structured?: true;
   attempt?: number;
-  /** Epoch ms. */
+  /** Epoch ms: when the current attempt started (a restart starts a new clock). */
   startedAt?: number;
   endedAt?: number;
+  /** `stopped` by a person (its row's Stop, or the run's Stop): not a failure. */
+  stoppedBy?: 'person';
+  /** While it runs: when its session log last changed (epoch ms), read at most once a minute. */
+  quietSince?: number;
+  /** The sessions of its earlier attempts (a restart or a stall retry), oldest first. */
+  earlierSessionIds?: string[];
 }
 
 export interface WorkflowRunMetadata {
@@ -193,17 +209,24 @@ export interface WorkflowRunMetadata {
   background?: { sessionId: string };
   /** The person paused the run: no new agent starts until `resume`; running agents finish. */
   paused?: boolean;
+  /** The approval question is open: no run exists yet, so nothing can be paused or stopped. */
+  awaitingApproval?: true;
+  /** The person said no at the approval, so no agent started: `cancel` or `chat` (Answer in chat instead). */
+  declined?: 'cancel' | 'chat';
+  /** How long the approval question waited for the person (ms). */
+  approvalWaitMs?: number;
 }
 
 /**
  * - `pause`: no new `agent()` starts; running agents finish.
  * - `resume`: starts resume.
  * - `restart_agent`: stop that agent's session (`session_id`) and start it again.
+ * - `stop_agent`: stop that agent (`session_id`) for good, as the person's stop; the run goes on.
  * - `stop`: stop every agent and end the run.
  */
 export interface WorkflowControlBody {
-  action: 'pause' | 'resume' | 'restart_agent' | 'stop';
-  /** `restart_agent` only: the agent's child session id. */
+  action: 'pause' | 'resume' | 'restart_agent' | 'stop_agent' | 'stop';
+  /** `restart_agent` and `stop_agent` only: the agent's child session id. */
   session_id?: string;
 }
 
@@ -215,7 +238,7 @@ export interface WorkflowControlResult {
 // ── Routes ────────────────────────────────────────────────────────────────
 
 const session = (projectId: string, sessionId: string) =>
-  `/projects/${encodeURIComponent(projectId)}/sessions/${encodeURIComponent(sessionId)}`;
+  `/workspaces/${encodeURIComponent(projectId)}/sessions/${encodeURIComponent(sessionId)}`;
 
 /** The agents this session can message: `mine` (default) or every live session of the project. */
 export async function getSessionReachableAgents(
@@ -223,7 +246,7 @@ export async function getSessionReachableAgents(
   sessionId: string,
   options: { scope?: ReachableScope } = {},
 ): Promise<ReachableAgents> {
-  const query = options.scope && options.scope !== 'mine' ? `?scope=${options.scope}` : '';
+  const query = appendQuery({ scope: options.scope && options.scope !== 'mine' ? options.scope : undefined });
   return unwrap(
     await backendApi.get<ReachableAgents>(`${session(projectId, sessionId)}/reachable${query}`, { showErrors: false }),
   );
@@ -244,7 +267,7 @@ export async function listPeerMessages(
   sessionId: string,
   options: { direction?: 'in' | 'out' } = {},
 ): Promise<{ messages: PeerMessage[] }> {
-  const query = options.direction ? `?direction=${options.direction}` : '';
+  const query = appendQuery({ direction: options.direction });
   return unwrap(
     await backendApi.get<{ messages: PeerMessage[] }>(`${session(projectId, sessionId)}/peer-messages${query}`, {
       showErrors: false,

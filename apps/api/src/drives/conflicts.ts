@@ -11,9 +11,10 @@ import { driveConflicts, drives, sessionSandboxes } from '@kortix/db';
 import { and, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { db } from '../shared/db';
 import { conflictOriginal } from './access';
+import { createDriveBackoff } from './backoff';
 import { noteDriveIndexDue } from './search-index/due';
 import { DRIVE_MOUNTS_METADATA_KEY, type DriveRow, driveVolume, recordedDriveMounts, refreshDriveNotes } from './service';
-import { type DriveVolume, getDriveVolume, isMissingVolume, listVolumeFiles, readVolumeFile } from './volumes';
+import { type DriveVolume, getDriveVolume, isKortixInternalPath, isMissingVolume, listVolumeFiles, readVolumeFile } from './volumes';
 
 /** Drives written through the API lately: scanned even when no session mounts them. */
 // replica-local: a hint for the scanner on this replica. The scanner also
@@ -55,7 +56,16 @@ export async function scanDriveConflicts(drive: DriveRow): Promise<string[]> {
   if (!drive.platinumVolumeId) return [];
   let head: string | null;
   try {
-    head = (await getDriveVolume(driveVolume(drive), AbortSignal.timeout(5_000))).head_commit_id ?? null;
+    const info = await getDriveVolume(driveVolume(drive), AbortSignal.timeout(5_000));
+    // A shared volume is live: nothing merges, so storage makes no conflict
+    // copy to find, and a conflict found while it was a block volume can no
+    // longer be resolved by a merge. Close the open ones (their copies stay as
+    // ordinary files), or they would stay open forever.
+    if (info.type === 'sharedfs') {
+      await closeOpenConflicts(drive.driveId);
+      return [];
+    }
+    head = info.head_commit_id ?? null;
   } catch (err) {
     if (isMissingVolume(err)) return [];
     throw err;
@@ -64,6 +74,7 @@ export async function scanDriveConflicts(drive: DriveRow): Promise<string[]> {
   const entries = await listVolumeFiles(driveVolume(drive), '/', true, AbortSignal.timeout(30_000));
   const found = new Map<string, string>();
   for (const e of entries) {
+    if (isKortixInternalPath(e.path)) continue;
     const original = conflictOriginal(e.path);
     if (original) found.set(e.path, original);
   }
@@ -108,6 +119,14 @@ export async function scanDriveConflicts(drive: DriveRow): Promise<string[]> {
   return fresh;
 }
 
+/** Close every open conflict of a drive. One indexed UPDATE; nothing to do once they are closed. */
+async function closeOpenConflicts(driveId: string): Promise<void> {
+  await db
+    .update(driveConflicts)
+    .set({ resolvedAt: new Date() })
+    .where(and(eq(driveConflicts.driveId, driveId), isNull(driveConflicts.resolvedAt)));
+}
+
 const SAME_BYTES_LIMIT = 4 * 1024 * 1024;
 
 /** Whether a conflict copy holds exactly the bytes of the file it was made from (small files only). */
@@ -133,6 +152,10 @@ async function sessionsMounting(driveIds: string[]): Promise<string[]> {
 
 let scanning = false;
 
+/** A drive whose scan failed waits this long (doubling) before it is scanned again. */
+const SCAN_BACKOFF_MAX_MS = 30 * 60_000;
+const scanBackoff = createDriveBackoff(SCAN_BACKOFF_MAX_MS);
+
 /** One pass over the active drives; new conflicts update the notes file of every session that mounts the drive. */
 export async function runConflictScan(): Promise<void> {
   if (scanning) return;
@@ -140,7 +163,10 @@ export async function runConflictScan(): Promise<void> {
   try {
     const ids = await activeDriveIds();
     if (!ids.length) return;
-    const rows = await db.select().from(drives).where(inArray(drives.driveId, ids));
+    const waiting = scanBackoff.waiting();
+    const rows = (await db.select().from(drives).where(inArray(drives.driveId, ids))).filter(
+      (d) => !waiting.has(d.driveId),
+    );
     const changed: string[] = [];
     let i = 0;
     const worker = async () => {
@@ -148,12 +174,15 @@ export async function runConflictScan(): Promise<void> {
         const drive = rows[i++]!;
         try {
           const fresh = await scanDriveConflicts(drive);
+          scanBackoff.ok(drive.driveId);
           if (fresh.length) {
             changed.push(drive.driveId);
             logger.info(`[drives] ${fresh.length} new conflict copy(ies) on drive ${drive.driveId}`);
           }
         } catch (err) {
-          logger.warn(`[drives] conflict scan of ${drive.driveId} failed:`, { error: err instanceof Error ? err.message : String(err) });
+          const { firstFailure } = scanBackoff.fail(drive.driveId, err);
+          if (firstFailure)
+            logger.warn(`[drives] conflict scan of ${drive.driveId} failed:`, { error: err instanceof Error ? err.message : String(err) });
         }
       }
     };

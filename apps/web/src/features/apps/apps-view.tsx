@@ -20,18 +20,30 @@ import {
 import { CapabilityPageShell } from '@kortix/ui/customize/shared/capability-page-shell';
 import { Hint } from '@kortix/ui/hint';
 
+import { ButtonGroup } from '@kortix/ui/button-group';
+import { ExpandableSearch } from '@kortix/ui/expandable-search';
+import { relativeTime } from '@kortix/ui/internal/lib/relative-time';
+import { uiRoutes } from '@kortix/ui';
 import { Skeleton } from '@kortix/ui/skeleton';
+import { SortMenu, useStoredSort } from '@kortix/ui/sort-menu';
 import { errorToast } from '@kortix/ui/toast';
 
 import { EmptyState } from '@kortix/ui/empty-state';
 import { ErrorState } from '@kortix/ui/error-state';
 import { ProjectPageHeader, PROJECT_ACTIONS, useProjectCan } from '@kortix/ui/workspace';
-import { useTranslations } from '@/i18n/use-translations';
+import { useLocale, useTranslations } from '@/i18n/use-translations';
 
 import { useDebounce, cn } from '@kortix/ui';
 import { createAppAccessSession, type App } from '@kortix/sdk';
-import { useAppAccess, useProjectApps, useProjectTriggers } from '@kortix/sdk/react';
-import { HardDrivesIcon, InfoIcon, SquaresFourIcon } from '@phosphor-icons/react';
+import { useAppAccess, useArtifacts, useProjectApps, useProjectTriggers } from '@kortix/sdk/react';
+import {
+  HardDrivesIcon,
+  InfoIcon,
+  ListBulletsIcon,
+  MagnifyingGlassIcon,
+  PlusIcon,
+  SquaresFourIcon,
+} from '@phosphor-icons/react';
 
 import Link from '@/components/site-link';
 import { useSearchParams } from 'next/navigation';
@@ -48,10 +60,47 @@ import {
 } from '@kortix/ui/apps';
 import { APP_GRID_CONTAINER, APP_GRID_COLUMN_OPTIONS, AppGridColumnsControl, useAppGridColumns, type AppGridColumns } from './app-density';
 import { AppDetailModal } from './app-detail';
+import {
+  ArtifactTile,
+  LIBRARY_TABS,
+  LibraryTabs,
+  artifactKind,
+  itemKey,
+  itemName,
+  itemTimes,
+  type LibraryItem,
+  type LibraryTab,
+} from './apps-library';
+import { artifactHref } from '@/features/artifacts/artifact-meta';
+import { useDesktopTabsEnabled } from '@/features/desktop-tabs/desktop-tabs-gate';
 import { BackgroundApps } from './app-background-list';
 export { DEPLOYMENT_COPY, deployNotice, appHost } from '@kortix/ui/apps';
 export { AppPreview, AppPreviewOverlay, PREVIEW_SPINNER_DELAY_MS, scheduleSlowPreview, PREVIEW_VIEWPORT_WIDTH, PREVIEW_VIEWPORT_HEIGHT, PREVIEW_TILE_ASPECT, previewScale } from '@kortix/ui/apps';
 export { APP_GRID_CONTAINER, APP_GRID_DEFAULT_COLUMNS, APP_GRID_COLUMN_OPTIONS, APP_GRID_COLUMN_ORDER, APP_GRID_COLUMNS_STORAGE_KEY, parseAppGridColumns, type AppGridColumns } from './app-density';
+
+type AppSort = 'activity' | 'name' | 'created';
+/** The artifact list route's maximum page. */
+const ARTIFACT_PAGE = 200;
+/** The page's layout: preview tiles, or one row per App. */
+type AppView = 'grid' | 'list';
+const APP_VIEWS: AppView[] = ['grid', 'list'];
+const APP_SORTS: AppSort[] = ['activity', 'name', 'created'];
+
+/** Apps in the picked order: last change, name, or newest first. */
+function sortApps(apps: App[], sort: AppSort): App[] {
+  const sorted = [...apps];
+  if (sort === 'name') return sorted.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+  const at = (app: App) => (sort === 'created' ? app.created_at : app.updated_at);
+  return sorted.sort((a, b) => at(b).localeCompare(at(a)));
+}
+
+/** Apps and artifacts together, in the picked order. */
+function sortItems(items: LibraryItem[], sort: AppSort): LibraryItem[] {
+  const sorted = [...items];
+  if (sort === 'name') return sorted.sort((a, b) => itemName(a).localeCompare(itemName(b), undefined, { sensitivity: 'base' }));
+  const at = (item: LibraryItem) => (sort === 'created' ? itemTimes(item).created : itemTimes(item).updated);
+  return sorted.sort((a, b) => at(b).localeCompare(at(a)));
+}
 
 function AppsControls({
   columns,
@@ -70,7 +119,7 @@ function AppsControls({
   showColumns: boolean;
 }) {
   return showColumns ? (
-    <div className="flex shrink-0 items-center pr-1">
+    <div className="flex shrink-0 items-center">
       <AppGridColumnsControl value={columns} onChange={onColumnsChange} />
     </div>
   ) : null;
@@ -80,7 +129,7 @@ function AppsControls({
  * The Apps screen in two variants (the agent editor's resource-page contract,
  * `packages/ui/src/customize/shared/agent-resource-scope.tsx`):
  *
- *  - `global` (default): `/projects/<id>/apps`, every App in the project.
+ *  - `global` (default): `/workspaces/<id>/apps`, every App in the project.
  *  - `agent`: the same screen on one agent's page, inside the agent editor's
  *    pane. Every App carries a checkbox that grants it to the agent
  *    (`agents.<name>.apps`, by slug), driven by `grant`; the page's All ·
@@ -115,12 +164,17 @@ export function AppsView({
   const canDeploy = useProjectCan(projectId, PROJECT_ACTIONS.PROJECT_APP_DEPLOY).allowed === true;
   // Exec, a volume restore or destroy: project.app.admin.
   const canAdmin = useProjectCan(projectId, PROJECT_ACTIONS.PROJECT_APP_ADMIN).allowed === true;
+  // Create app opens `/apps/new`, whose composer starts a session.
+  const canCreate = useProjectCan(projectId, PROJECT_ACTIONS.PROJECT_SESSION_START).allowed === true;
+  const newAppHref = `${uiRoutes().project(projectId)}/apps/new`;
   // Which App the detail modal is showing. Held by id, not by object, so a
   // refetch (a lifecycle toggle, a rollback) re-renders the modal against the
   // fresh row instead of a stale copy captured at click time. `?app=<id>`
   // opens one on arrival: the links the CLI prints and the retired
   // `/backends/<id>` routes land here.
   const [openAppId, setOpenAppId] = useState<string | null>(() => searchParams.get('app'));
+  // An App opens in its tab only where there are tabs (desktop, flag on).
+  const inlineApp = useDesktopTabsEnabled(projectId);
   // A link to `?app=<id>` followed while this page is open (the sidebar Apps
   // card) does not remount it, so the initializer above never sees it. Only a
   // new id opens: the mirror below writes the same key back, and removing it
@@ -131,8 +185,62 @@ export function AppsView({
   }, [requestedAppId]);
   const [gridColumns, setGridColumns] = useAppGridColumns();
   const triggers = useProjectTriggers(projectId);
-  const grid = apps.data ? gridApps(apps.data, canAdmin) : [];
-  const background = apps.data ? hiddenApps(apps.data, canAdmin) : [];
+  // The page's header search and order. The agent editor's pane has no header: its list stays as served.
+  const tApps = useTranslations('appsList');
+  const tSort = useTranslations('listSort');
+  const [search, setSearch] = useState('');
+  const [sort, setSort] = useStoredSort<AppSort>('kortix:apps-sort', APP_SORTS, 'activity');
+  // The agent editor's pane keeps the grid: its grant switch lives in the tile caption.
+  const [storedView, setView] = useStoredSort<AppView>('kortix:apps-view', APP_VIEWS, 'grid');
+  const view: AppView = agentGrant ? 'grid' : storedView;
+  const sortLabel: Record<AppSort, string> = {
+    activity: tSort('lastActivity'),
+    name: tSort('name'),
+    created: tSort('created'),
+  };
+  const query = agentGrant ? '' : search.trim().toLowerCase();
+  const arrange = (list: App[]) =>
+    agentGrant
+      ? list
+      : sortApps(
+          list.filter((app) => !query || app.name.toLowerCase().includes(query) || app.slug.toLowerCase().includes(query)),
+          sort,
+        );
+  const grid = apps.data ? arrange(gridApps(apps.data, canAdmin)) : [];
+  const background = apps.data ? arrange(hiddenApps(apps.data, canAdmin)) : [];
+  // The project page also lists the artifacts agents publish, a tab per kind.
+  // The agent editor's pane grants Apps only: no artifacts, no tabs.
+  const [tab, setTab] = useState<LibraryTab>('all');
+  // The list route serves at most 200 newest-first and has no cursor. A full
+  // list means older artifacts exist: a search then asks the server, as the
+  // Artifacts gallery does, so they still match.
+  const artifacts = useArtifacts(agentGrant ? null : projectId, { scope: 'all', limit: ARTIFACT_PAGE });
+  const listFull = (artifacts.data?.length ?? 0) >= ARTIFACT_PAGE;
+  const searched = useArtifacts(listFull && query ? projectId : null, { scope: 'all', q: query, limit: ARTIFACT_PAGE });
+  const serverSearch = listFull && !!query;
+  const searchSource = serverSearch ? (searched.data ?? []) : (artifacts.data ?? []);
+  // The artifact query the page is showing: the list, or the server search over it.
+  const artifactQuery = serverSearch ? searched : artifacts;
+  const artifactEntries = searchSource
+    .filter((artifact) => !query || artifact.title.toLowerCase().includes(query))
+    .map((artifact): LibraryItem => ({ type: 'artifact', artifact, kind: artifactKind(artifact) }));
+  // A picked kind with nothing left in it (a delete elsewhere) shows All: its tab is gone.
+  const kindCount = (key: LibraryTab) =>
+    key === 'app' ? (apps.data ? gridApps(apps.data, canAdmin).length : 0) : (artifacts.data ?? []).filter((a) => artifactKind(a) === key).length;
+  if (tab !== 'all' && !apps.isLoading && !artifacts.isLoading && kindCount(tab) === 0) setTab('all');
+  const showApps = tab === 'all' || tab === 'app';
+  const appItems = grid.map((app): LibraryItem => ({ type: 'app', app }));
+  const tabArtifacts = artifactEntries.filter((item) => tab === 'all' || (item.type === 'artifact' && item.kind === tab));
+  const items: LibraryItem[] = agentGrant
+    ? appItems
+    : sortItems([...(showApps ? appItems : []), ...tabArtifacts], sort);
+  // Which tabs exist: the project's kinds, not what the search leaves.
+  const counts = Object.fromEntries(
+    LIBRARY_TABS.map((key) => [key, key === 'all' ? 1 : kindCount(key)]),
+  ) as Record<LibraryTab, number>;
+  const loading = apps.isLoading || (!agentGrant && (artifacts.isLoading || (serverSearch && searched.isLoading)));
+  const shownBackground = showApps ? background : [];
+  const hasApps = (apps.data?.length ?? 0) > 0 || (artifacts.data?.length ?? 0) > 0;
   // Open or closed is the reader's call and survives a reload. Until they
   // choose, it opens only when there is no grid above it to look at instead.
   const backgroundKey = `kortix:apps:background-open:${projectId}`;
@@ -218,46 +326,61 @@ export function AppsView({
   );
   const body = (
     <>
-          {apps.isLoading ? (
-            <AppGridSkeleton columns={gridColumns} />
-          ) : apps.isError ? (
+          {loading ? (
+            view === 'list' ? <AppListSkeleton /> : <AppGridSkeleton columns={gridColumns} />
+          ) : apps.isError || (!agentGrant && artifactQuery.isError) ? (
             <ErrorState
               size="sm"
               title={tI18nComplete.raw('text17168ad2af4a')}
-              description={(apps.error as Error).message}
+              description={((apps.error ?? artifactQuery.error) as Error).message}
               action={
-                <Button size="sm" variant="outline" onClick={() => apps.refetch()}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    if (apps.isError) void apps.refetch();
+                    if (artifactQuery.isError) void artifactQuery.refetch();
+                  }}
+                >
                   {tI18nComplete.raw('text942087cc2d41')}
                 </Button>
               }
             />
-          ) : grid.length ? (
+          ) : items.length && view === 'list' ? (
+            <AppList projectId={projectId} items={items} onOpen={setOpenAppId} />
+          ) : items.length ? (
             /* A gallery grid, sized by the space it has rather than by the
                window (`APP_GRID_COLUMN_OPTIONS`). `gap-y` is larger than `gap-x`
                because each tile's caption hangs BELOW it with no border to
                close it off — an equal gap would let the next row's thumbnail
                crowd the previous row's text. */
             <ul className={cn('grid gap-6', APP_GRID_COLUMN_OPTIONS[gridColumns].grid)}>
-              {grid.map((app) => (
-                <AppCard
-                  key={app.app_id}
-                  projectId={projectId}
-                  app={app}
-                  shown={cardPreviewApp(apps.data!, app, canAdmin)}
-                  onOpen={() => setOpenAppId(app.app_id)}
-                  select={selectFor(app)}
-                />
-              ))}
+              {items.map((item) =>
+                item.type === 'app' ? (
+                  <AppCard
+                    key={itemKey(item)}
+                    projectId={projectId}
+                    app={item.app}
+                    shown={cardPreviewApp(apps.data!, item.app, canAdmin)}
+                    onOpen={() => setOpenAppId(item.app.app_id)}
+                    select={selectFor(item.app)}
+                  />
+                ) : (
+                  <ArtifactTile key={itemKey(item)} projectId={projectId} artifact={item.artifact} kind={item.kind} />
+                ),
+              )}
             </ul>
-          ) : background.length ? (
+          ) : query && !shownBackground.length ? (
+            <EmptyState size="sm" icon={MagnifyingGlassIcon} title={tApps('noMatch')} />
+          ) : shownBackground.length ? (
             <p className="text-muted-foreground mb-7 text-sm text-pretty">{tI18nComplete.raw('text0d209cd1f377')}</p>
           ) : (
-            <AppsEmptyState />
+            <AppsEmptyState createHref={canCreate && !agentGrant ? newAppHref : null} />
           )}
-          {background.length && !apps.isLoading ? (
-            <section className={cn(grid.length && 'mt-10')} aria-label={tI18nComplete.raw('textea2b8a878841')} data-testid="apps-background">
+          {shownBackground.length && !apps.isLoading ? (
+            <section className={cn(items.length && 'mt-10')} aria-label={tI18nComplete.raw('textea2b8a878841')} data-testid="apps-background">
               <BackgroundApps
-                apps={background}
+                apps={shownBackground}
                 triggers={triggers.data?.triggers ?? []}
                 open={backgroundOpen}
                 onOpenChange={setBackgroundOpen}
@@ -287,6 +410,28 @@ export function AppsView({
       ) : null}
     </>
   );
+
+  // Desktop: an open App takes the page, in its tab under the tab strip, with
+  // the sidebar beside it, instead of a sheet over the whole window. Close
+  // returns to the grid in the same tab.
+  if (openApp && inlineApp && !agentGrant) {
+    return (
+      <AppDetailModal
+        key={openApp.app_id}
+        projectId={projectId}
+        app={openApp}
+        canWrite={canWrite}
+        canDeploy={canDeploy}
+        canAdmin={canAdmin}
+        focusEventId={focusEventId}
+        open
+        inline
+        onOpenChange={(next) => {
+          if (!next) setOpenAppId(null);
+        }}
+      />
+    );
+  }
 
   if (agentGrant) {
     // Granted slugs with no App behind them (deleted, or renamed): listed
@@ -361,8 +506,35 @@ export function AppsView({
             </Link>
           </Hint>
         }
+       
       >
-        {controls}
+        {hasApps ? (
+          <>
+            <ExpandableSearch
+              value={search}
+              onValueChange={setSearch}
+              label={tApps('search')}
+              size="sm"
+              buttonVariant="outline"
+              className="w-40 sm:w-56"
+            />
+            <SortMenu
+              value={sort}
+              onValueChange={setSort}
+              options={APP_SORTS.map((mode) => ({ value: mode, label: sortLabel[mode] }))}
+              label={tSort('sortBy', { mode: sortLabel[sort] })}
+            />
+            <AppViewControl value={view} onChange={setView} />
+            {canCreate ? (
+              <Button asChild size="sm" className="gap-1.5">
+                <Link href={newAppHref} prefetch={false}>
+                  <PlusIcon className="size-3.5 shrink-0" aria-hidden />
+                  {tApps('create')}
+                </Link>
+              </Button>
+            ) : null}
+          </>
+        ) : null}
       </ProjectPageHeader>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -386,6 +558,11 @@ export function AppsView({
             APP_GRID_CONTAINER,
           )}
         >
+          {hasApps ? (
+            <div className="mb-6">
+              <LibraryTabs value={tab} onValueChange={setTab} counts={loading ? null : counts} />
+            </div>
+          ) : null}
           {body}
         </div>
       </div>
@@ -429,16 +606,147 @@ function AppGridSkeleton({ columns }: { columns: AppGridColumns }) {
  * `kortix apps deploy .` run in a project directory is the whole path from
  * this screen to a card.
  */
-function AppsEmptyState() {
+function AppsEmptyState({ createHref }: { createHref: string | null }) {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
-  // One muted line and a hint (brand D4g): Apps are what agents build, so the
-  // hint points at an agent, not at a CLI command.
+  const tApps = useTranslations('appsList');
+  // The header hides Create app while there is nothing to search: the empty
+  // state carries it instead, for a viewer who may start a session.
   return (
     <EmptyState
       icon={SquaresFourIcon}
       title={tI18nComplete.raw('textdb4764b8b3e7')}
       description={tI18nComplete.raw('texta7a8d2a5fb25')}
+      action={
+        createHref ? (
+          <Button asChild variant="outline" size="sm" className="gap-1.5">
+            <Link href={createHref} prefetch={false}>
+              <PlusIcon className="size-3.5 shrink-0" aria-hidden />
+              {tApps('create')}
+            </Link>
+          </Button>
+        ) : undefined
+      }
     />
+  );
+}
+
+/** Grid or list: two outline icon buttons, the chosen one filled (as the search and sort beside it). */
+function AppViewControl({ value, onChange }: { value: AppView; onChange: (next: AppView) => void }) {
+  const tApps = useTranslations('appsList');
+  const options = { grid: { label: tApps('viewGrid'), icon: SquaresFourIcon }, list: { label: tApps('viewList'), icon: ListBulletsIcon } };
+  return (
+    <ButtonGroup aria-label={tApps('viewLabel')}>
+      {APP_VIEWS.map((key) => {
+        const Glyph = options[key].icon;
+        const active = value === key;
+        return (
+          <Hint key={key} side="bottom" label={options[key].label}>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-base"
+              aria-pressed={active}
+              aria-label={options[key].label}
+              onClick={() => onChange(key)}
+              className={active ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:text-foreground'}
+              data-testid={`apps-view-${key}`}
+            >
+              <Glyph className="size-4" />
+            </Button>
+          </Hint>
+        );
+      })}
+    </ButtonGroup>
+  );
+}
+
+/**
+ * List layout: one row per App or artifact: its name, its kind, its state
+ * (an App: whether it is up; an artifact: who can see it), and when it last
+ * changed. An App row opens the App; an artifact row opens the artifact.
+ */
+function AppList({ projectId, items, onOpen }: { projectId: string; items: LibraryItem[]; onOpen: (appId: string) => void }) {
+  const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
+  const tApps = useTranslations('appsList');
+  const tArtifacts = useTranslations('artifacts');
+  const locale = useLocale();
+  const row = 'hover:bg-hover focus-visible:bg-hover flex w-full items-center gap-3 px-4 py-3 text-left transition-colors duration-(--duration-fast) outline-none';
+  return (
+    <div className="bg-background overflow-hidden rounded-lg border" data-testid="apps-list">
+      <div className="text-muted-foreground flex items-center gap-3 border-b px-4 py-2 text-xs" aria-hidden>
+        <span className="min-w-0 flex-1">{tApps('columnName')}</span>
+        <span className="hidden w-20 shrink-0 sm:block">{tApps('columnKind')}</span>
+        <span className="w-28 shrink-0">{tApps('columnStatus')}</span>
+        <span className="hidden w-24 shrink-0 text-right md:block">{tApps('columnUpdated')}</span>
+      </div>
+      <ul className="divide-border divide-y">
+        {items.map((item) => {
+          const cells =
+            item.type === 'app' ? (
+              (() => {
+                const status = appStatus(item.app, tI18nComplete);
+                return (
+                  <>
+                    <span className="text-foreground min-w-0 flex-1 truncate text-sm font-medium">{item.app.name}</span>
+                    <span className="text-muted-foreground hidden w-20 shrink-0 text-xs sm:block">{tApps('kind.app')}</span>
+                    <span className="text-muted-foreground flex w-28 shrink-0 items-center gap-1.5 text-xs">
+                      {item.app.external_url ? null : <span aria-hidden className={cn('size-1.5 shrink-0 rounded-full', status.dot)} />}
+                      <span className="truncate">{status.label}</span>
+                    </span>
+                  </>
+                );
+              })()
+            ) : (
+              <>
+                <span className="text-foreground min-w-0 flex-1 truncate text-sm font-medium">{item.artifact.title}</span>
+                <span className="text-muted-foreground hidden w-20 shrink-0 text-xs sm:block">{tApps(`kind.${item.kind}`)}</span>
+                <span className="text-muted-foreground w-28 shrink-0 truncate text-xs">
+                  {tArtifacts(`visibility.${item.artifact.visibility}`)}
+                </span>
+              </>
+            );
+          const updated = (
+            <span className="text-muted-foreground hidden w-24 shrink-0 text-right text-xs tabular-nums md:block">
+              {relativeTime(itemTimes(item).updated, locale)}
+            </span>
+          );
+          return (
+            <li key={itemKey(item)}>
+              {item.type === 'app' ? (
+                <button type="button" onClick={() => onOpen(item.app.app_id)} aria-label={`Open ${item.app.name}`} className={row}>
+                  {cells}
+                  {updated}
+                </button>
+              ) : (
+                <Link href={artifactHref(projectId, item.artifact.artifact_id)} className={row} data-kind={item.kind}>
+                  {cells}
+                  {updated}
+                </Link>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+/** The list's placeholder: the same frame and row height as `AppList`. */
+function AppListSkeleton() {
+  return (
+    <div className="overflow-hidden rounded-lg border">
+      <div className="border-b px-4 py-2">
+        <Skeleton className="h-3 w-24 rounded-sm" />
+      </div>
+      <div className="divide-border divide-y">
+        {Array.from({ length: 6 }).map((_, index) => (
+          <div key={index} className="flex items-center gap-3 px-4 py-3">
+            <Skeleton className="h-3.5 w-48 rounded-sm" />
+            <Skeleton className="ml-auto h-3 w-20 rounded-sm" />
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

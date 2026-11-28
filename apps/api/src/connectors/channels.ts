@@ -13,6 +13,7 @@ import { CHANNELS, type ChannelPlatformId, channelConnectorSlug, isChannelPlatfo
 import { config } from '../config';
 import type { ConnectorAuth } from './call';
 import type { ActionBinding, NormalizedAction, Risk } from './types';
+import { actionInputSchema } from './types';
 
 /**
  * Reserved, platform-owned connector slug for the built-in Slack channel.
@@ -51,7 +52,7 @@ export function channelAuth(platform: string): ConnectorAuth {
 
 /** Per-platform API base, read at call time from `config` where it is configurable. */
 const API_BASE: Record<ChannelPlatformId, () => string> = {
-  slack: () => 'https://slack.com/api',
+  slack: () => config.SLACK_API_URL,
   teams: () => 'https://graph.microsoft.com/v1.0',
   email: () => config.RESEND_API_URL,
   telegram: () => config.TELEGRAM_API_URL,
@@ -275,7 +276,8 @@ const SLACK_ACTIONS: ChannelActionDef[] = [
     method: 'conversations.join',
     verb: 'POST',
     name: 'Join channel',
-    description: 'Join a public channel so the bot can post in it. Requires `channel`.',
+    description:
+      'Join a public channel so the bot can post in it. Requires `channel`. Not needed to read: a read of a public channel the bot is not in joins it by itself. A private channel needs a person to invite the bot.',
     risk: 'write',
     properties: {
       channel: { type: 'string', description: 'Channel ID to join.' },
@@ -509,13 +511,7 @@ function toAction(def: ChannelActionDef): NormalizedAction {
       ...(def.method.includes(`{${key}}`) ? { 'x-in': 'path' } : {}),
     };
   }
-  const inputSchema = Object.keys(def.properties).length
-    ? {
-        type: 'object',
-        properties,
-        ...(def.required.length ? { required: def.required } : {}),
-      }
-    : null;
+  const inputSchema = actionInputSchema(properties, def.required);
   return {
     path: def.path,
     name: def.name,

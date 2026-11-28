@@ -1,3 +1,4 @@
+import { AnnouncementsView } from './announcements-view';
 import { getLocale, getTranslations } from '@/i18n/get-translations';
 
 import { MarketingButton } from '@/features/marketing/kit/marketing-button';
@@ -9,6 +10,7 @@ import Link from 'next/link';
 import { ChangelogAnchorRedirect } from './anchor-redirect';
 import { ReleaseNotes } from './changelog-view';
 import { CopyLinkButton } from './copy-link-button';
+import { WeeklyCover } from './weekly-cover';
 import { changelogPageHref } from './paging';
 import type { ChangelogWeek, ChangelogWeekly } from './types';
 
@@ -89,7 +91,7 @@ export async function WeeklyView({ data }: { data: ChangelogWeekly }) {
           // releases that shipped it). Right: the week's headline features
           // and a link to the week page, which lists every change.
           <>
-            {weeks.map((week) => {
+            {weeks.map((week, index) => {
               const weekHref = `/changelog/${week.slug}`;
               return (
                 <Band key={week.id} className="-mt-px first:mt-0">
@@ -140,6 +142,8 @@ export async function WeeklyView({ data }: { data: ChangelogWeekly }) {
                     </div>
 
                     <div className="min-w-0 px-6 pb-12 lg:px-11 lg:py-20">
+                      {index === 0 && <AnnouncementsView announcements={week.announcements} />}
+                      {week.media && <WeeklyCover media={week.media} />}
                       {week.summary ? (
                         <WeekSummary lines={week.summary} />
                       ) : week.highlights.length > 0 ? (

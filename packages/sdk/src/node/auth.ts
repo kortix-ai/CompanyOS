@@ -26,6 +26,8 @@ import { createScopedKortix, forwardKortixRequest } from './scoped-client';
 import type { Kortix } from '../core/client/kortix';
 import type { AccountIdentity } from '../core/rest/projects-client/accounts';
 import { stripTrailingSlashes } from '../platform/strings';
+import { withWorkspaceRouteFallback } from '../core/http/workspace-routes';
+import { b64url, fromB64url } from './b64url';
 
 /** The subset of `fetch` the kit needs — assignable from any fetch-shaped function. */
 export type KortixFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -144,20 +146,6 @@ const EXPIRY_SKEW_S = 30;
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
-function b64url(bytes: Uint8Array): string {
-  let s = '';
-  for (const b of bytes) s += String.fromCharCode(b);
-  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-function fromB64url(value: string): Uint8Array<ArrayBuffer> {
-  const padded = value.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (value.length % 4)) % 4);
-  const s = atob(padded);
-  const out = new Uint8Array(new ArrayBuffer(s.length));
-  for (let i = 0; i < s.length; i += 1) out[i] = s.charCodeAt(i);
-  return out;
-}
-
 function randomB64url(bytes: number): string {
   const buf = new Uint8Array(bytes);
   crypto.getRandomValues(buf);
@@ -271,7 +259,8 @@ export function createKortixAuth(options: KortixAuthOptions): KortixAuth {
   const txnCookie = secure ? '__Host-kortix_oauth_txn' : 'kortix_oauth_txn';
   const scopes = options.scopes?.length ? options.scopes : DEFAULT_SCOPES;
   const sessionTtl = options.sessionTtlSeconds ?? DEFAULT_SESSION_TTL_S;
-  const fetchImpl: KortixFetch = options.fetch ?? ((input, init) => fetch(input, init));
+  // A canonical workspace name reaches an older API too (`workspace-routes.ts`).
+  const fetchImpl: KortixFetch = withWorkspaceRouteFallback(options.fetch ?? ((input, init) => fetch(input, init)));
   let now = options.now ?? (() => Date.now());
   const nowS = () => Math.floor(now() / 1000);
 
@@ -359,7 +348,7 @@ export function createKortixAuth(options: KortixAuthOptions): KortixAuth {
 
   async function identity(token: string): Promise<AccountIdentity | null> {
     try {
-      const res = await fetchImpl(`${backendUrl}/accounts/me`, {
+      const res = await fetchImpl(`${backendUrl}/me`, {
         headers: { authorization: `Bearer ${token}`, accept: 'application/json' },
       });
       if (!res.ok) return null;
@@ -461,14 +450,10 @@ export function createKortixAuth(options: KortixAuthOptions): KortixAuth {
   }
 
   async function handleRefresh(request: Request): Promise<Response> {
-    const url = new URL(request.url);
-    const returnTo = safeReturnTo(url.searchParams.get('return_to'));
-    const session = await readSession(request);
-    if (!session) return redirectTo(signInUrl(returnTo), [clearLine(sessionCookie)]);
-    if (isLive(session)) return redirectTo(returnTo);
-    const refreshed = await tokenRequest({ grant_type: 'refresh_token', refresh_token: session.rt });
-    if (!refreshed.ok) return redirectTo(signInUrl(returnTo), [clearLine(sessionCookie)]);
-    return redirectTo(returnTo, [await sessionCookieLine(refreshed.session)]);
+    const returnTo = safeReturnTo(new URL(request.url).searchParams.get('return_to'));
+    const live = await liveSession(request);
+    if (!live) return redirectTo(signInUrl(returnTo), [clearLine(sessionCookie)]);
+    return redirectTo(returnTo, live.setCookie ? [live.setCookie] : []);
   }
 
   async function handleSignOut(request: Request): Promise<Response> {

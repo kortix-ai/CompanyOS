@@ -14,7 +14,9 @@
  * The read, `GET /:projectId/sessions/:sessionId/log` (P4.2), is a session read: the
  * transcript route's gate, so a session-bound token (a box's `KORTIX_TOKEN`) reads every
  * session the v1 transcript route serves it. A read claims nothing; the restore claims.
- * Postgres only (`../session-log-read.ts`).
+ * The stored log (`../session-log-read.ts`), or with `live=1` the running box's own page
+ * (`../session-log-live.ts`), which the stored log lags by the journal. `source` names which.
+ * One endpoint: a client never reads the box's log itself.
  *
  * The switch preflight, `POST /:projectId/sessions/:sessionId/log/switch-preflight` (P7.1), has the
  * read's gate and changes nothing: the loss report of the stored log on another harness
@@ -53,6 +55,7 @@ import { logger } from '../../lib/logger';
 import { PROJECT_ACTIONS } from '../../iam';
 import { callerKortixSessionId } from '../../middleware/caller-session';
 import { isSessionSandboxCredential } from '../../middleware/session-sandbox-credential';
+import { storedLogReadDenial } from '../../middleware/rate-limit';
 import { auth, boundedIssues, errors, json } from '../../openapi';
 import type { AppEnv } from '../../types';
 import { assertProjectCapability, loadVisibleSession, sessionIsTombstoned } from '../lib/access';
@@ -60,15 +63,17 @@ import { projectsApp } from '../lib/app';
 import { parseBoundedPositiveInt } from '../lib/serializers';
 import { findSessionLogBlob, storeSessionLogBlob } from '../session-log-blobs';
 import { ingestSessionLogJournal, readSessionLogManifest, sessionExists, type SessionLogScope } from '../session-log-ingest';
+import { readLiveSessionLogPage } from '../session-log-live';
 import { readSessionLogPage } from '../session-log-read';
 import { claimSessionLog } from '../session-log-restore';
 import { sessionLogSwitchPreflight } from '../session-log-switch';
 import { resolveSessionBinding } from './lib/route-bindings';
+import { workspaceIdParam } from '../../shared/route-params';
 
 const MAX_GZIP_BYTES = 2 * 1024 * 1024;
 const MAX_RAW_BYTES = 16 * 1024 * 1024;
 
-const params = z.object({ projectId: z.string(), sessionId: z.string() });
+const params = z.object({ workspaceId: z.string(), sessionId: z.string() });
 const blobParams = params.extend({ sha256: z.string().regex(/^[0-9a-f]{64}$/) });
 const BlobRefSchema = z.object({ ref: z.string().nullable() });
 const TOO_LARGE = 'Session-log attachments must be 50 MiB or smaller';
@@ -128,7 +133,7 @@ function sandboxScope(c: Context<AppEnv>): SessionLogScope | null {
   const sessionId = c.req.param('sessionId') ?? '';
   const accountId = c.get('accountId');
   if (!isSessionSandboxCredential(c) || c.get('sessionId') !== sessionId || !accountId) return null;
-  return { sessionId, projectId: c.req.param('projectId') ?? '', accountId };
+  return { sessionId, projectId: workspaceIdParam(c) ?? '', accountId };
 }
 
 type BodyRead = { ok: true; body: unknown } | { ok: false; status: 400 | 413; error: string };
@@ -160,30 +165,35 @@ async function readJournalBody(c: Context<AppEnv>): Promise<BodyRead> {
   }
 }
 
-/** The session read gate of `GET …/transcript`: the project row when the caller may read the session, else the response. */
+/** The session read gate: the project row when the caller may read the session, else the response. */
 async function sessionReadGate(
   c: Context<AppEnv>,
   projectId: string,
   sessionId: string,
-): Promise<{ denied: Response } | { denied: null; projectMetadata: unknown }> {
+): Promise<{ denied: Response } | { denied: null; projectMetadata: unknown; userId: string }> {
   const binding = await resolveSessionBinding(c, projectId, sessionId, 'read');
   if (binding.kind === 'error') return { denied: binding.response };
   const { loaded } = binding;
   await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_SESSION_READ);
-  const visible = await loadVisibleSession(loaded, sessionId, c.get('sessionId') ?? null, callerKortixSessionId(c));
-  // A deleted session reads nothing (KRTX-2744, as `GET …/transcript`): its stored log and
+  // A read: a subagent reads the conversation of the sessions that spawned it.
+  const visible = await loadVisibleSession(loaded, sessionId, c.get('sessionId') ?? null, callerKortixSessionId(c), {
+    spawnAncestorRead: true,
+    triggerReaderRead: true,
+    personRead: true,
+  });
+  // A deleted session reads nothing (KRTX-2744): its stored log and
   // loss report are content of a session the trash model advertises as gone. The restore
   // claim takes the session sandbox credential, not this gate, so a fresh box still claims.
   return !visible || sessionIsTombstoned(visible.row)
     ? { denied: c.json({ error: 'Not found' }, 404) }
-    : { denied: null, projectMetadata: loaded.row.metadata };
+    : { denied: null, projectMetadata: loaded.row.metadata, userId: loaded.userId };
 }
 
 export function registerSessionLogRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/sessions/{sessionId}/log/blobs/{sha256}',
+      path: '/{workspaceId}/sessions/{sessionId}/log/blobs/{sha256}',
       tags: ['projects'],
       summary: 'Find the stored object of a session-log attachment by its sha256',
       description: 'Session sandbox credential only. `{ ref }`: the `kortix-attachment://` ref of the object, or null when the session has none.',
@@ -203,7 +213,7 @@ export function registerSessionLogRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'put',
-      path: '/{projectId}/sessions/{sessionId}/log/blobs/{sha256}',
+      path: '/{workspaceId}/sessions/{sessionId}/log/blobs/{sha256}',
       tags: ['projects'],
       summary: 'Store the bytes of a session-log attachment',
       description:
@@ -243,7 +253,7 @@ export function registerSessionLogRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post',
-      path: '/{projectId}/sessions/{sessionId}/log/journal',
+      path: '/{workspaceId}/sessions/{sessionId}/log/journal',
       tags: ['projects'],
       summary: 'Journal session-log records from the session daemon',
       description:
@@ -262,7 +272,7 @@ export function registerSessionLogRoutes(): void {
       const scope = sandboxScope(c);
       if (!scope) {
         // kortixd keeps the batch and backs off: a credential that regains access sends it.
-        journalRejected({ projectId: c.req.param('projectId') ?? '', sessionId: c.req.param('sessionId') ?? '' }, 403, 'not_session_credential');
+        journalRejected({ projectId: workspaceIdParam(c) ?? '', sessionId: c.req.param('sessionId') ?? '' }, 403, 'not_session_credential');
         return c.json({ error: 'The session log takes the session sandbox credential' }, 403);
       }
       if (!config.SESSION_LOG_INGEST_ENABLED) return c.json({ error: 'Session log ingest is off' }, 503);
@@ -303,7 +313,7 @@ export function registerSessionLogRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/sessions/{sessionId}/log/manifest',
+      path: '/{workspaceId}/sessions/{sessionId}/log/manifest',
       tags: ['projects'],
       summary: 'Read the session-log manifest for the daemon boot reconcile',
       ...auth,
@@ -326,7 +336,7 @@ export function registerSessionLogRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post',
-      path: '/{projectId}/sessions/{sessionId}/log/restore',
+      path: '/{workspaceId}/sessions/{sessionId}/log/restore',
       tags: ['projects'],
       summary: 'Claim the session and read its whole session log, for a fresh box',
       description:
@@ -359,27 +369,48 @@ export function registerSessionLogRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/sessions/{sessionId}/log',
+      path: '/{workspaceId}/sessions/{sessionId}/log',
       tags: ['sessions'],
       summary: 'Read a page of the session log',
       description:
-        'One page of one thread of the stored session log (`SessionLogPage`), from Postgres only. ' +
+        'One page of one thread of the session log (`SessionLogPage`). Without `live`, the stored log (Postgres). ' +
+        'With `live=1` and no `before_seq`, the running box\'s own newest page (`source: box`), ahead of the stored log ' +
+        'by the journal; the stored log (`source: store`) when the session has no running box, or the box does not ' +
+        'answer a whole page of the current generation within 2 s. The box is never woken. ' +
         '`thread` defaults to the root thread; `messages` are the newest `limit` (default 40, max 500) ' +
-        'with `seq < before_seq`, ascending by seq, tombstoned messages left out. Session read permission, ' +
-        'the same gate as `GET .../transcript`: a session-bound token reads the sessions that route serves it. ' +
+        'with `seq < before_seq`, ascending by seq, tombstoned messages left out. A page carries whole ' +
+        'messages up to `SESSION_LOG_PAGE_MAX_BYTES` of stored payload (default 2 MiB): an over-budget ' +
+        'window answers fewer than `limit` with `has_more: true`, the newest message served however large it is. ' +
+        'Session read permission, ' +
+        'the session read gate: a session-bound token reads its own session and the sessions of its project it may see. ' +
+        'Per-session read guard: past `KORTIX_SESSION_LOG_READS_PER_MIN` (300) reads a minute the route answers ' +
+        '429 `rate_limit_exceeded` with `Retry-After` (KRTX-4696: a hot CLI poll loop against one session ' +
+        'degraded the route and the API with it). ' +
         '404 when the session has no stored log (`code: session_log_missing`) or no such thread.',
       ...auth,
       request: {
         params,
-        query: z.object({ thread: z.string().optional(), before_seq: z.string().optional(), limit: z.string().optional() }),
+        query: z.object({
+          thread: z.string().optional(),
+          before_seq: z.string().optional(),
+          limit: z.string().optional(),
+          live: z.string().optional().openapi({ description: '`1` or `true`: the running box\'s page when it answers (`source: box`).' }),
+        }),
       },
       responses: {
         200: json(SessionLogPageSchema, 'One page of the session log'),
-        ...errors(400, 403, 404),
+        ...errors(400, 403, 404, 429),
       },
     }),
     async (c) => {
-      const { projectId, sessionId } = c.req.valid('param');
+      const { workspaceId: projectId, sessionId } = c.req.valid('param');
+      // In front of the gate: a hot poller costs one in-memory check per poll, not
+      // the IAM stack. The guard is keyed on (caller, session), so a caller can only
+      // spend their own bucket. The request deadline may have answered this request
+      // already, so the 429 headers are inline (KRTX-2737); the body shape is the one
+      // the SDK's log sync already backs off on.
+      const denied = storedLogReadDenial(c, sessionId);
+      if (denied) return c.json(denied.body, 429, { 'Retry-After': denied.retryAfter });
       const query = c.req.valid('query');
       const limit = parseBoundedPositiveInt(query.limit, 40, 1, 500, 'limit');
       if (!limit.ok) return c.json({ error: limit.error }, 400);
@@ -394,23 +425,35 @@ export function registerSessionLogRoutes(): void {
       const gate = await sessionReadGate(c, projectId, sessionId);
       if (gate.denied) return gate.denied as never;
 
-      const page = await readSessionLogPage({ sessionId, threadId: query.thread ?? null, beforeSeq, limit: limit.value });
+      const threadId = query.thread ?? null;
+      // The box's page answers for the newest messages only: an older page is the stored log's.
+      if ((query.live === '1' || query.live === 'true') && beforeSeq === null) {
+        const started = Date.now();
+        const live = await readLiveSessionLogPage({ sessionId, userId: gate.userId, threadId, limit: limit.value });
+        // Serialized once and shared by every caller of the same read.
+        if (live.body !== null) return c.body(live.body, 200, { 'Content-Type': 'application/json' }) as never;
+        // A session with no running box is the ordinary case; a box that did not answer is worth a line.
+        if (!live.reason.startsWith('sandbox_') && live.reason !== 'no_sandbox') {
+          logger.info('[session-log] live read answered the stored log', { sessionId, reason: live.reason, ms: Date.now() - started });
+        }
+      }
+      const page = await readSessionLogPage({ sessionId, threadId, beforeSeq, limit: limit.value });
       // The code tells a client this API serves the log and the session has nothing saved (a new
       // session): it stays on the log and reads it again at the next turn end (`useSessionLogSync`).
       if (!page) return c.json({ error: 'No session log for this session', code: 'session_log_missing' }, 404);
       if (page === 'unknown_thread') return c.json({ error: 'Unknown thread' }, 404);
-      return c.json(page, 200);
+      return c.json({ ...page, source: 'store' as const }, 200);
     },
   );
 
   projectsApp.openapi(
     createRoute({
       method: 'post',
-      path: '/{projectId}/sessions/{sessionId}/log/switch-preflight',
+      path: '/{workspaceId}/sessions/{sessionId}/log/switch-preflight',
       tags: ['sessions'],
       summary: 'List what a session would lose on another harness',
       description:
-        'Read only: claims nothing, changes nothing. Body `{ to: "pi" | "opencode" }`. Answers `SessionLogSwitchPreflight`: ' +
+        'Read only: claims nothing, changes nothing. Body `{ to: "pi" }`. Answers `SessionLogSwitchPreflight`: ' +
         '`available` and `reason` (`same_harness`: a switch that cannot happen is still a 200), ' +
         '`restores` (the project restores session logs; false puts a `history` line first in `losses`), ' +
         '`losses` (each feature or runtime control the stored log uses that `to` handles worse, with counts; `degraded`: ' +
@@ -425,7 +468,7 @@ export function registerSessionLogRoutes(): void {
       },
     }),
     async (c) => {
-      const { projectId, sessionId } = c.req.valid('param');
+      const { workspaceId: projectId, sessionId } = c.req.valid('param');
       const { to } = c.req.valid('json');
       const gate = await sessionReadGate(c, projectId, sessionId);
       if (gate.denied) return gate.denied as never;

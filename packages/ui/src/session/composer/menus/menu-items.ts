@@ -1,4 +1,5 @@
 import type { Agent, Session } from '@kortix/sdk/react';
+import { agentDisplayName } from '@kortix/shared';
 import { translateUiCatalogText } from '../../../i18n/ui-catalog/localize-ui-catalog';
 import { REMAINING_UI_TRANSLATION_KEYS } from '../../../i18n/ui-catalog/remaining-ui-translation-keys.generated';
 import type { UiTranslator } from '../../../i18n';
@@ -15,6 +16,8 @@ export interface MenuRow {
   avatar?: { kind: 'person' | 'agent'; key: string; name: string; url: string | null };
   /** A space's `@` menu: an agent not in the space yet; picking it adds it. */
   addToSpace?: boolean;
+  /** A Drive file's bytes: one past the message limit is refused before it downloads. */
+  size?: number;
 }
 
 export interface MentionSection {
@@ -34,10 +37,22 @@ export function formatRelativeTime(timestamp: number, now: number): string {
   return `${Math.floor(days / 7)}w ago`;
 }
 
+/** A Drive search hit (`searchProject`), as the `@` menu reads it. */
+export interface DriveFileHit {
+  path: string;
+  name: string;
+  kind: 'file' | 'dir';
+  size: number;
+}
+
 export interface BuildMentionSectionsInput {
   agents: Agent[];
   sessions: Session[];
   files: string[];
+  /** Drive hits for `query`, already filtered by the server to what the viewer may read. */
+  driveFiles?: readonly DriveFileHit[];
+  /** The Drive section's heading, in the host's words. */
+  driveHeading?: string;
   query: string;
   currentSessionId: string | undefined;
   /** Injected so the test is deterministic. */
@@ -47,6 +62,13 @@ export interface BuildMentionSectionsInput {
 
 const SESSION_LIMIT = 5;
 const FILE_LIMIT = 20;
+const DRIVE_LIMIT = 8;
+
+/** The folder a Drive path sits in: `/Company/a.png` → `/Company`, `/a.png` → `/`. */
+export function driveFolderOf(path: string): string {
+  const cut = path.lastIndexOf('/');
+  return cut > 0 ? path.slice(0, cut) : '/';
+}
 
 /**
  * A session also matches when the query hits a file path it changed
@@ -70,6 +92,8 @@ export function buildMentionSections({
   agents,
   sessions,
   files,
+  driveFiles = [],
+  driveHeading = 'Drive',
   query,
   currentSessionId,
   now = 0,
@@ -94,8 +118,11 @@ export function buildMentionSections({
   // something to fold into this refactor — see the pinning test below.
   const agentRows: MenuRow[] = [];
   for (const a of agents) {
-    if (!(a.name || '').toLowerCase().includes(q)) continue;
-    agentRows.push({ index: index++, kind: 'agent', label: a.name || '', value: a.name || '' });
+    const name = a.name || '';
+    // The row reads the name every other surface shows; the slug stays the value.
+    const label = name ? agentDisplayName(name, a.title) : '';
+    if (!name.toLowerCase().includes(q) && !label.toLowerCase().includes(q)) continue;
+    agentRows.push({ index: index++, kind: 'agent', label, value: name });
   }
   if (agentRows.length) sections.push({ kind: 'agent', heading: heading('Agents'), items: agentRows });
 
@@ -122,6 +149,18 @@ export function buildMentionSections({
     .slice(0, FILE_LIMIT)
     .map((f) => ({ index: index++, kind: 'file' as const, label: f, value: f }));
   if (fileRows.length) sections.push({ kind: 'file', heading: heading('Files'), items: fileRows });
+
+  // Files only, matched by name or folder (the search also matches text), one
+  // row per path. The folder is always shown: two `logo.png` differ only there.
+  const seen = new Set<string>();
+  const driveRows: MenuRow[] = [];
+  for (const hit of driveFiles) {
+    if (driveRows.length >= DRIVE_LIMIT) break;
+    if (hit.kind !== 'file' || seen.has(hit.path) || !hit.path.toLowerCase().includes(q)) continue;
+    seen.add(hit.path);
+    driveRows.push({ index: index++, kind: 'drive', label: hit.name, value: hit.path, description: driveFolderOf(hit.path), size: hit.size });
+  }
+  if (driveRows.length) sections.push({ kind: 'drive', heading: driveHeading, items: driveRows });
 
   return sections;
 }

@@ -1,9 +1,9 @@
 /**
  * RET-1 — retired routes. The API keeps each removed route as a stub that
  * answers `410 { error, code: "ENDPOINT_RETIRED" }` and runs no handler
- * (apps/api/src/routes/retired.ts). The `ALL /v1/router/<provider>[/*]` stubs
- * cannot be declared here (no flow declares method ALL); one concrete call to
- * them still proves the stub answers.
+ * (apps/api/src/routes/retired.ts). The `ALL /v1/router/<provider>[/*]` and
+ * `ALL /v1/marketplace[/*]` stubs cannot be declared here (no flow declares
+ * method ALL); concrete calls to them still prove the stubs answer.
  */
 import { flow } from '../core/flow';
 
@@ -41,6 +41,30 @@ const RETIRED: Array<[method: string, template: string]> = [
   ['DELETE', '/v1/admin/api/accounts/:id/trial'],
   ['POST', '/v1/admin/api/accounts/:id/enterprise-entitlement'],
   ['POST', '/v1/admin/api/accounts/:id/managed-models'],
+  // Artifact comments, live presence, doc co-editing and the activity feed
+  // (removed 2026-11-06, #11963).
+  ['GET', '/v1/projects/:workspaceId/artifacts/:artifactId/comments'],
+  ['POST', '/v1/projects/:workspaceId/artifacts/:artifactId/comments'],
+  ['GET', '/v1/projects/:workspaceId/artifacts/:artifactId/comments/context'],
+  ['POST', '/v1/projects/:workspaceId/artifacts/:artifactId/comments/send'],
+  ['GET', '/v1/projects/:workspaceId/artifacts/:artifactId/comments/:commentId/screenshot'],
+  ['POST', '/v1/projects/:workspaceId/artifacts/:artifactId/comments/:threadId/replies'],
+  ['PATCH', '/v1/projects/:workspaceId/artifacts/:artifactId/comments/:threadId'],
+  ['PATCH', '/v1/projects/:workspaceId/artifacts/:artifactId/comments/:threadId/:commentId'],
+  ['DELETE', '/v1/projects/:workspaceId/artifacts/:artifactId/comments/:threadId/:commentId'],
+  ['GET', '/v1/projects/:workspaceId/artifact-comment-threads/:threadId'],
+  ['GET', '/v1/projects/:workspaceId/artifacts/:artifactId/activity'],
+  ['GET', '/v1/projects/:workspaceId/artifacts/:artifactId/live'],
+  ['POST', '/v1/projects/:workspaceId/artifacts/:artifactId/live/ticket'],
+  ['POST', '/v1/projects/:workspaceId/artifacts/:artifactId/live/agent'],
+  ['GET', '/v1/projects/:workspaceId/artifacts/:artifactId/doc'],
+  ...(['seed', 'updates', 'lease', 'flushed', 'reset'] as const).map(
+    (step): [string, string] => ['POST', `/v1/projects/:workspaceId/artifacts/:artifactId/doc/${step}`],
+  ),
+  // The marketplace (removed 2026-11-20): the agent install. Published SDKs
+  // call the canonical workspace path, older ones the project path.
+  ['POST', '/v1/projects/:workspaceId/marketplace/install-session'],
+  ['POST', '/v1/workspaces/:workspaceId/marketplace/install-session'],
 ];
 
 const ANY_UUID = '00000000-0000-4000-a000-000000000000';
@@ -55,7 +79,7 @@ flow(
     await ctx.step('every retired route answers ANON with 410 ENDPOINT_RETIRED', async () => {
       for (const [method, template] of RETIRED) {
         const r = await ctx.client.as(ctx.P.ANON).request(method, template, {
-          params: { model: 'any-model', accountId: ANY_UUID, id: ANY_UUID },
+          params: { model: 'any-model', accountId: ANY_UUID, id: ANY_UUID, workspaceId: ANY_UUID, artifactId: ANY_UUID, commentId: ANY_UUID, threadId: ANY_UUID },
           body: method === 'GET' || method === 'DELETE' ? undefined : {},
         });
         r.status(410).body().has('$.code', 'ENDPOINT_RETIRED');
@@ -68,6 +92,18 @@ flow(
     await ctx.step('a retired provider passthrough answers 410', async () => {
       const r = await ctx.client.as(ctx.P.ANON).post('/v1/router/openai/chat/completions', {});
       r.status(410).body().has('$.code', 'ENDPOINT_RETIRED');
+    });
+    await ctx.step('the removed marketplace catalog and sources (ALL /v1/marketplace/*) answer 410 for ANON and OWNER', async () => {
+      for (const path of ['/v1/marketplace/items', '/v1/marketplace/items/pdf', '/v1/marketplace/marketplaces/featured']) {
+        const r = await ctx.client.as(ctx.P.ANON).get(path);
+        r.status(410).body().has('$.code', 'ENDPOINT_RETIRED');
+      }
+      const add = await ctx.client.as(ctx.P.OWNER).post('/v1/marketplace/sources', { address: 'https://github.com/acme/registry' });
+      add.status(410).body().has('$.code', 'ENDPOINT_RETIRED');
+      const install = await ctx.client
+        .as(ctx.P.OWNER)
+        .post('/v1/workspaces/:workspaceId/marketplace/install-session', { id: 'kortix-starter:pdf' }, { params: { workspaceId: ANY_UUID } });
+      install.status(410).body().has('$.code', 'ENDPOINT_RETIRED');
     });
     await ctx.step('the surviving /v1/account mount still serves deletion status', async () => {
       const r = await ctx.client.as(ctx.P.OWNER).get('/v1/account/deletion-status');

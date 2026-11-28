@@ -1,6 +1,6 @@
 ---
 name: compliance
-description: "Customer-facing compliance duties that code runs: the subprocessor list and its automatic 30-day DPA notice, Terms of Service changes, customer logo use (publicity), and the audit evidence it leaves. Load WHENEVER you add, remove or change a subprocessor (a new model provider, host, email or analytics vendor), route customer data to a new third party, touch apps/web/.../legal/subprocessors, packages/shared/src/subprocessors.ts or apps/api/src/billing/services/subprocessor-notices.ts, the Terms of Service text or packages/shared/src/terms.ts, or need proof for an auditor that customers were notified. Load too for staff access to a customer account: act-as impersonation, 'Open as admin', and its audit trail; and for a penetration test report: the status of each finding and the risks Kortix accepts. Load too for the 90-day deletion of a terminated account's data (the retention backstop, kortix.retention_erasures, RETENTION_ERASURE_MODE) and its monthly evidence."
+description: "Customer-facing compliance duties that code runs: the subprocessor list and its automatic 30-day DPA notice, Terms of Service changes, customer logo use (publicity), and the audit evidence it leaves. Load WHENEVER you add, remove or change a subprocessor (a new model provider, host, email or analytics vendor), route customer data to a new third party, touch apps/web/.../legal/subprocessors, packages/shared/src/subprocessors.ts or apps/api/src/billing/services/subprocessor-notices.ts, the Terms of Service text or packages/shared/src/terms.ts, or need proof for an auditor that customers were notified. Load too for staff access to a customer account: act-as impersonation, 'Open as admin', and its audit trail; and for a penetration test report: the status of each finding and the risks Kortix accepts. Load too for the 90-day deletion of a terminated account's data (the retention backstop, kortix.retention_erasures, RETENTION_ERASURE_MODE) and its monthly evidence. Load too for the Google OAuth verification of the Kortix Google connectors: a Google scope change, the privacy policy's Google user data section, the demo video, the yearly CASA security assessment."
 ---
 
 # Compliance
@@ -43,17 +43,44 @@ runs hourly in the billing worker, on prod only (`INTERNAL_KORTIX_ENV=prod`).
 - A row is open from the first sweep that sees it on prod until its effective
   date. The release has 7 days to reach prod, so every customer gets 30 to 37
   days.
-- Each open notice goes once to the owners and admins of every paid account
-  (`credit_accounts.tier` not `free` or `none`). Reply-To is
-  privacy@kortix.com: a reply is an objection.
-- Each notified account gets an audit event `legal.subprocessor_notice.sent`
-  (`resource_id` = `addedOn`, `output_summary` = recipient count, effective
-  date, vendor names). The customer sees it in the account's audit log.
-- privacy@kortix.com gets one report per sweep that sent. Subject "Subprocessor
+- Each open notice goes once to each owner and admin of every paid account
+  (`credit_accounts.tier` not `free` or `none`): one email per person, listing
+  their paid workspaces. Reply-To is privacy@kortix.com: a reply is an
+  objection. Claim rows in `kortix.chat_event_dedup`
+  (`legal:subprocessor-notice:<addedOn>:…`, per account, per person as a
+  SHA-256 of the address, and per report) keep every email once-only across
+  sweeps, replicas and retries. A person has a short send claim while a sweep
+  sends (taken over after 15 minutes if that sweep died) and a `:sent` row once
+  delivered; only the `:sent` row counts as notified. An account whose
+  manager's email is still in flight in another sweep is left to the next
+  sweep.
+- An account that turns paid later in the window is covered by a later sweep.
+  A manager who already has the notice gets no second email.
+- A delivery failure is retried by the next sweep for that recipient only.
+  The one exception is an address the transport itself refuses (a reserved
+  address): it is not retried and is counted as `undelivered`. Every provider
+  error (any status, a 422 included, since it does not prove the address is
+  bad) is retried hourly until the notice takes effect.
+- Each covered account gets one audit event `legal.subprocessor_notice.sent`
+  (`resource_id` = `addedOn`, `output_summary` = `recipients` delivered,
+  `previously_notified` = managers who had it from an earlier sweep,
+  `undelivered`, effective date, vendor names). It is written once no
+  temporary failure is left. The customer sees it in the account's audit log.
+- privacy@kortix.com gets one report per notice, for the sweep that started
+  its coverage (the `report-due` claim row keeps that time). A failed report
+  is retried by later sweeps with the same notice period. Subject "Subprocessor
   notice gave only N days" means the release took more than 7 days: hold the
-  vendor until 30 days after that report and move `addedOn`.
+  vendor until 30 days after the first notice email and move `addedOn`.
 
 ## Evidence for an auditor
+
+`kortix.audit_events` holds the last 14 days (`HOT_DAYS`,
+`apps/api/src/shared/audit-archive/format.ts`). Older weeks, up to 365 days,
+are in the account's archive: read them with
+`GET /v1/accounts/<account_id>/audit/export?action=legal.subprocessor_notice.sent`
+(owner or admin, Enterprise), or from the `<env>-audit-archive` bucket
+(`audit/<account_id>/<yyyy>/<week>.<part>.jsonl.gz`). The query below finds
+the last 14 days only.
 
 ```sql
 select account_id, created_at, output_summary
@@ -62,7 +89,8 @@ where action = 'legal.subprocessor_notice.sent' and resource_id = '<addedOn>'
 order by created_at;
 ```
 
-The privacy@kortix.com reports give the per-sweep totals.
+The privacy@kortix.com report gives the first sweep's total; the audit events
+give every account.
 
 ## Tests
 
@@ -171,7 +199,21 @@ where account_id = '<account_id>' and action like 'admin.impersonate.%'
 order by created_at desc;
 ```
 
+That query reaches 14 days back. Older events: the export,
+`GET /v1/accounts/<account_id>/audit/export?action=admin.impersonate.`.
+
 Contract: flows `IMP-1` and `IMP-2` (`pnpm test -- --id IMP-2`).
+
+## Google OAuth verification
+
+The Kortix Google connectors (Gmail, Calendar, Drive, Docs, Sheets) use the
+GCP project `kortix-connectors`. Google must verify it before prod uses it,
+and its restricted scopes need a CASA security assessment every 12 months.
+Scopes, justifications, the demo video, the privacy policy section, the
+obligations and the status log are in
+[references/google-oauth-verification.md](references/google-oauth-verification.md).
+A new Google scope changes that file, the privacy policy and the Data Access
+page in the same PR.
 
 ## Penetration test findings
 

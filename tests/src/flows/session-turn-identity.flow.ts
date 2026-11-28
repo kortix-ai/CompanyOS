@@ -35,9 +35,9 @@ flow(
     // A cold provider image build can take ~7 min before the first turn.
     timeoutMs: 1_200_000,
     routes: [
-      'PUT /v1/projects/:projectId/sessions/:sessionId/sharing',
-      'POST /v1/projects/:projectId/sessions/:sessionId/prompts',
-      'GET /v1/projects/:projectId/sessions/:sessionId/transcript',
+      'PUT /v1/workspaces/:projectId/sessions/:sessionId/sharing',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/prompts',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/log',
     ],
   },
   async (ctx) => {
@@ -57,7 +57,7 @@ flow(
       await waitForSessionReady(ctx, project.id, session.id, 540_000);
       const shared = await ctx.client
         .as(ctx.P.OWNER)
-        .put('/v1/projects/:projectId/sessions/:sessionId/sharing', { mode: 'project' }, { params });
+        .put('/v1/workspaces/:projectId/sessions/:sessionId/sharing', { mode: 'project' }, { params });
       shared.status(200);
     });
 
@@ -66,7 +66,7 @@ flow(
         if (!who.email) throw new Error(`${label} has no email in the principal matrix`);
         const nonce = `sess39-${run}-${n}`;
         const sent = await ctx.client.as(who).post(
-          '/v1/projects/:projectId/sessions/:sessionId/prompts',
+          '/v1/workspaces/:projectId/sessions/:sessionId/prompts',
           {
             client_message_id: crypto.randomUUID(),
             message_id: mintWireMessageId(),
@@ -113,11 +113,11 @@ flow(
     domain: 'sessions',
     requires: ['database'],
     routes: [
-      'POST /v1/projects/:projectId/sessions/:sessionId/prompts',
-      'GET /v1/projects/:projectId/sessions/:sessionId/prompts',
-      'PATCH /v1/projects/:projectId/sessions/:sessionId/prompts/:promptId',
-      'POST /v1/projects/:projectId/sessions/:sessionId/prompts/:promptId/retry',
-      'DELETE /v1/projects/:projectId/sessions/:sessionId/prompts/:promptId',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/prompts',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/prompts',
+      'PATCH /v1/workspaces/:projectId/sessions/:sessionId/prompts/:promptId',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/prompts/:promptId/retry',
+      'DELETE /v1/workspaces/:projectId/sessions/:sessionId/prompts/:promptId',
       'POST /v1/accounts/:accountId/iam/assignments',
     ],
   },
@@ -161,8 +161,8 @@ flow(
       userId: ctx.P.OWNER.userId!,
     });
     const params = { projectId: project.id, sessionId };
-    const PROMPTS = '/v1/projects/:projectId/sessions/:sessionId/prompts';
-    const PROMPT = '/v1/projects/:projectId/sessions/:sessionId/prompts/:promptId';
+    const PROMPTS = '/v1/workspaces/:projectId/sessions/:sessionId/prompts';
+    const PROMPT = '/v1/workspaces/:projectId/sessions/:sessionId/prompts/:promptId';
     type Listed = { prompt_id: string; full_text: string; author_user_id?: string | null };
     const send = async (as: typeof owner, text: string) => {
       const r = await as.post(
@@ -249,12 +249,12 @@ flow(
     domain: 'sessions',
     requires: ['database'],
     routes: [
-      'GET /v1/projects/:projectId/sessions/:sessionId/turn',
-      'POST /v1/projects/:projectId/sessions/:sessionId/prompts/hold',
-      'POST /v1/projects/:projectId/sessions/:sessionId/prompts',
-      'PATCH /v1/projects/:projectId/sessions/:sessionId/prompts/:promptId',
-      'GET /v1/projects/:projectId/sessions/:sessionId/prompts',
-      'GET /v1/projects/:projectId/sessions/:sessionId/message-authors',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/turn',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/prompts/hold',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/prompts',
+      'PATCH /v1/workspaces/:projectId/sessions/:sessionId/prompts/:promptId',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/prompts',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/message-authors',
       'POST /v1/accounts/:accountId/iam/assignments',
     ],
   },
@@ -296,11 +296,11 @@ flow(
     });
     ctx.track('session', sessionId, { projectId: project.id });
     const params = { projectId: project.id, sessionId };
-    const TURN = '/v1/projects/:projectId/sessions/:sessionId/turn';
-    const HOLD = '/v1/projects/:projectId/sessions/:sessionId/prompts/hold';
-    const PROMPTS = '/v1/projects/:projectId/sessions/:sessionId/prompts';
-    const PROMPT = '/v1/projects/:projectId/sessions/:sessionId/prompts/:promptId';
-    const AUTHORS = '/v1/projects/:projectId/sessions/:sessionId/message-authors';
+    const TURN = '/v1/workspaces/:projectId/sessions/:sessionId/turn';
+    const HOLD = '/v1/workspaces/:projectId/sessions/:sessionId/prompts/hold';
+    const PROMPTS = '/v1/workspaces/:projectId/sessions/:sessionId/prompts';
+    const PROMPT = '/v1/workspaces/:projectId/sessions/:sessionId/prompts/:promptId';
+    const AUTHORS = '/v1/workspaces/:projectId/sessions/:sessionId/message-authors';
     const canStop = async (as: typeof owner) => {
       const r = await as.get(TURN, { params });
       r.status(200);
@@ -344,8 +344,10 @@ flow(
       if (held.length > 0) throw new Error(`${held.length} prompt(s) held by a refused stop`);
     });
 
-    await ctx.step('another member\'s "Stop and send" → 403, on a new prompt and on a queued one', async () => {
-      refused(
+    await ctx.step('another member\'s old "Stop and send" stops nothing: the prompt is accepted and the member\'s run keeps running', async () => {
+      // One delivery mode (2026-11-11): `delivery: interrupt` is served as steer. A row from someone who is not
+      // the turn's identity waits for the next turn (inbox-admission.ts `turnIdentity`).
+      (
         await asBystander.post(
           PROMPTS,
           {
@@ -357,8 +359,8 @@ flow(
             overrides: { agent: AGENT },
           },
           { params },
-        ),
-      );
+        )
+      ).status([200, 202]);
       const queued = await asBystander.post(
         PROMPTS,
         {
@@ -374,7 +376,9 @@ flow(
       );
       queued.status([200, 202]);
       const promptId = queued.json<{ prompt_id: string }>().prompt_id;
-      refused(await asBystander.patch(PROMPT, { delivery: 'interrupt' }, { params: { ...params, promptId } }));
+      (await asBystander.patch(PROMPT, { delivery: 'interrupt' }, { params: { ...params, promptId } })).status(200);
+      if ((await canStop(asPrompter)) !== true) throw new Error("the prompter can no longer stop their run: it was stopped");
+      if ((await canStop(asBystander)) !== false) throw new Error('no member run is running any more');
     });
 
     await ctx.step("the owner stops the member's run → 200; once it ends, every member reads the owner as its stopper", async () => {

@@ -6,6 +6,7 @@ import {
   TRIGGER_MAX_EXPECT_EVENT_WITHIN_SECONDS,
   formatDurationSeconds,
   normalizeTriggerList,
+  parseTriggerReaders,
   parseChangeRequestFilter,
   parseDurationSeconds,
   parseTriggerFilter,
@@ -131,7 +132,7 @@ export function parseTargetField(
   if (payload !== undefined && (!isPlainObject(payload) || JSON.stringify(payload).length > 64 * 1024)) {
     return { error: 'target.payload must be an object of at most 64 KiB' };
   }
-  if (typeof app !== 'string' || !APP_SLUG_RE.test(app.trim())) return { error: 'target.app must be the slug of an App in this project' };
+  if (typeof app !== 'string' || !APP_SLUG_RE.test(app.trim())) return { error: 'target.app must be the slug of an App in this workspace' };
   if (typeof path !== 'string' || !path.startsWith('/') || /[\r\n]/.test(path) || path.length > 2048) return { error: 'target.path must be an HTTP path starting with /' };
   if (method !== 'POST' && method !== 'GET') return { error: 'target.method must be POST or GET' };
   return { target: { app: app.trim(), path, method, ...(payload ? { payload: payload as Record<string, unknown> } : {}) } };
@@ -178,8 +179,8 @@ export function parseExpectEventWithin(
  */
 export function parseRunCaps(
   row: Record<string, unknown>,
-): { maxRunsPerHour?: number; maxRunsPerDay?: number } | { error: string } {
-  const caps: { maxRunsPerHour?: number; maxRunsPerDay?: number } = {};
+): { maxRunsPerHour?: number; maxRunsPerDay?: number; hardRunCaps?: boolean } | { error: string } {
+  const caps: { maxRunsPerHour?: number; maxRunsPerDay?: number; hardRunCaps?: boolean } = {};
   for (const [field, key] of [['max_runs_per_hour', 'maxRunsPerHour'], ['max_runs_per_day', 'maxRunsPerDay']] as const) {
     const raw = row[field];
     if (raw === undefined || raw === null) continue;
@@ -187,6 +188,10 @@ export function parseRunCaps(
       return { error: `${field} must be a whole number of at least 1` };
     }
     caps[key] = raw;
+  }
+  if (row.hard_run_caps !== undefined) {
+    if (typeof row.hard_run_caps !== 'boolean') return { error: 'hard_run_caps must be a boolean' };
+    caps.hardRunCaps = row.hard_run_caps;
   }
   return caps;
 }
@@ -230,6 +235,23 @@ function parseMonitorDuration(
  * entry. Never throws — bad entries land in `errors` with a slug + reason
  * so the UI can render them alongside the good ones.
  */
+/** Who runs code instead of a model (`agents.<name>.run`), and the agent of a trigger that names none. */
+interface ProgramAgents {
+  names: ReadonlySet<string>;
+  defaultAgent: string | null;
+}
+
+function programAgentsOf(manifest: ParsedManifest): ProgramAgents {
+  const agents = isPlainObject(manifest.raw.agents) ? (manifest.raw.agents as Record<string, unknown>) : {};
+  const names = new Set(
+    Object.entries(agents).flatMap(([name, block]) =>
+      isPlainObject(block) && typeof (block as { run?: unknown }).run === 'string' && ((block as { run: string }).run).trim() ? [name] : [],
+    ),
+  );
+  const raw = manifest.raw.default_agent;
+  return { names, defaultAgent: typeof raw === 'string' && raw.trim() ? raw.trim() : null };
+}
+
 export function extractTriggers(manifest: ParsedManifest): LoadedTriggers {
   const filename = manifest.path || MANIFEST_FILENAME;
   // `on:` / `run:` entries read as the flat fields they mean (@kortix/manifest-schema).
@@ -250,6 +272,8 @@ export function extractTriggers(manifest: ParsedManifest): LoadedTriggers {
     };
   }
 
+  const sharedReaders = manifest.raw.trigger_session_readers === undefined ? null : parseTriggerReaders(manifest.raw.trigger_session_readers);
+  if (sharedReaders && 'error' in sharedReaders) return { specs: [], errors: [{ slug: '(top-level)', path: filename, error: sharedReaders.error }] };
   const specs: GitTriggerSpec[] = [];
   const errors: GitTriggerParseError[] = [];
   const seenSlugs = new Set<string>();
@@ -260,7 +284,7 @@ export function extractTriggers(manifest: ParsedManifest): LoadedTriggers {
     const slug = (entry as { slug?: unknown } | null)?.slug;
     const declaredIn =
       (typeof slug === 'string' ? manifest.imports?.origins.triggers[slug] : undefined) ?? filename;
-    const result = parseTriggerEntry(entry, index, declaredIn);
+    const result = parseTriggerEntry(entry, index, declaredIn, programAgentsOf(manifest));
     if (!result.ok) {
       errors.push(result.error);
       return;
@@ -274,7 +298,7 @@ export function extractTriggers(manifest: ParsedManifest): LoadedTriggers {
       return;
     }
     seenSlugs.add(result.spec.slug);
-    specs.push(result.spec);
+    specs.push({ ...result.spec, ...(sharedReaders && 'readers' in sharedReaders ? { defaultSessionReaders: sharedReaders.readers } : {}) });
   });
 
   specs.sort((a, b) => a.slug.localeCompare(b.slug));
@@ -357,10 +381,12 @@ export function triggerSpecToFlatEntry(spec: GitTriggerSpec): Record<string, unk
     type: spec.type,
     agent: spec.agent,
   };
+  if (spec.sessionReaders) entry.session_readers = spec.sessionReaders;
   // Only emit model when set so manifests on the "Default" path stay byte-stable.
   if (spec.model) entry.model = spec.model;
   entry.enabled = spec.enabled;
   // Only when set, like model: an uncapped manifest stays byte-stable.
+  if (spec.hardRunCaps) entry.hard_run_caps = true;
   if (spec.maxRunsPerHour) entry.max_runs_per_hour = spec.maxRunsPerHour;
   if (spec.maxRunsPerDay) entry.max_runs_per_day = spec.maxRunsPerDay;
   if (spec.overlap) entry.overlap = spec.overlap;
@@ -414,6 +440,7 @@ export function triggerSpecToFlatEntry(spec: GitTriggerSpec): Record<string, unk
   if (spec.expectEventWithinSeconds) entry.expect_event_within = formatDurationSeconds(spec.expectEventWithinSeconds);
   if (spec.target) entry.target = spec.target;
   if (spec.promptTemplate) entry.prompt = spec.promptTemplate;
+  if (spec.runPayload) entry.payload = spec.runPayload;
   return entry;
 }
 
@@ -453,7 +480,9 @@ export function triggerSpecToOnRunEntry(spec: GitTriggerSpec): Record<string, un
       }
     : {
         ...(spec.agent !== 'default' ? { agent: spec.agent } : {}),
-        prompt: spec.promptTemplate,
+        // An omitted prompt (a program agent's payload input) stays omitted.
+        ...(spec.promptTemplate ? { prompt: spec.promptTemplate } : {}),
+        ...(spec.runPayload ? { payload: spec.runPayload } : {}),
         ...(spec.sessionMode !== 'fresh' && !keyedByKey ? { session: spec.sessionMode } : {}),
         ...(spec.sessionMode === 'pinned' && spec.pinnedSessionId ? { session_id: spec.pinnedSessionId } : {}),
         ...(keyedByKey ? { session_key: spec.sessionKey } : {}),
@@ -461,11 +490,13 @@ export function triggerSpecToOnRunEntry(spec: GitTriggerSpec): Record<string, un
       };
   return {
     slug: spec.slug,
+    ...(spec.sessionReaders ? { session_readers: spec.sessionReaders } : {}),
     ...(spec.name !== spec.slug ? { name: spec.name } : {}),
     on,
     run,
     ...(spec.enabled ? {} : { enabled: false }),
     ...(Object.keys(filter).length > 0 ? { filter } : {}),
+    ...(spec.hardRunCaps ? { hard_run_caps: true } : {}),
     ...(spec.maxRunsPerHour ? { max_runs_per_hour: spec.maxRunsPerHour } : {}),
     ...(spec.maxRunsPerDay ? { max_runs_per_day: spec.maxRunsPerDay } : {}),
     ...(spec.overlap ? { overlap: spec.overlap } : {}),
@@ -487,6 +518,7 @@ function parseTriggerEntry(
   entry: unknown,
   index: number,
   filename: string = MANIFEST_FILENAME,
+  programAgents: ProgramAgents = { names: new Set(), defaultAgent: null },
 ): ParseOk | ParseErr {
   const err = (slug: string, message: string): ParseErr =>
     makeTriggerError(slug, message, filename);
@@ -524,6 +556,8 @@ function parseTriggerEntry(
   if ('error' in lateness) return err(slug, lateness.error);
   const silence = parseExpectEventWithin(row, type);
   if ('error' in silence) return err(slug, silence.error);
+  const readers = row.session_readers === undefined ? null : parseTriggerReaders(row.session_readers);
+  if (readers && 'error' in readers) return err(slug, readers.error);
   const caps = parseRunCaps(row);
   if ('error' in caps) return err(slug, caps.error);
   const overlap = parseOverlap(row);
@@ -547,8 +581,18 @@ function parseTriggerEntry(
         : '';
   const parsedTarget = parseTargetField(row, type);
   if ('error' in parsedTarget) return err(slug, parsedTarget.error);
-  // An App target receives the payload, not a prompt.
-  if (!prompt.trim() && !parsedTarget.target) {
+  // An agent run's `payload`: static input merged under each fire's payload.
+  let runPayload: Record<string, unknown> | undefined;
+  if (row.payload !== undefined && row.payload !== null && !parsedTarget.target) {
+    if (!isPlainObject(row.payload) || JSON.stringify(row.payload).length > 64 * 1024) {
+      return err(slug, 'payload must be an object of at most 64 KiB');
+    }
+    runPayload = row.payload as Record<string, unknown>;
+  }
+  // An App target receives the payload, not a prompt; so does a program agent (its input is the payload).
+  const namedAgent = typeof row.agent === 'string' && row.agent.trim() ? row.agent.trim() : typeof row.agent_name === 'string' && row.agent_name.trim() ? row.agent_name.trim() : 'default';
+  const runsProgram = programAgents.names.has(namedAgent === 'default' ? (programAgents.defaultAgent ?? '') : namedAgent);
+  if (!prompt.trim() && !parsedTarget.target && !runsProgram) {
     return err(slug, 'prompt is required and may not be empty');
   }
 
@@ -637,6 +681,8 @@ function parseTriggerEntry(
     model,
     enabled,
     promptTemplate: prompt,
+    ...(readers && 'readers' in readers ? { sessionReaders: readers.readers } : {}),
+    ...(runPayload ? { runPayload } : {}),
     ...parsedTarget,
     sessionMode,
     pinnedSessionId,

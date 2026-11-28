@@ -53,6 +53,7 @@
  */
 
 import type { Context, Next } from 'hono';
+import { joinChunks } from '../shared/join-chunks';
 
 /**
  * The smallest body worth compressing, and the exact number of bytes this
@@ -140,8 +141,13 @@ export function compressionCandidate(input: {
   contentEncoding: string | null;
   hasBody: boolean;
   isWebSocket?: boolean;
+  cacheControl?: string | null;
 }): 'gzip' | 'deflate' | null {
   if (input.method === 'HEAD') return null;
+  // RFC 9111 §5.2.2.6: the body must reach the client untransformed. A route
+  // that streams JSON (keep-alive bytes before the answer) says so; the 1 KB
+  // peek would otherwise hold its bytes until the answer.
+  if (input.cacheControl && /(?:^|,)\s*no-transform\s*(?:,|$)/i.test(input.cacheControl)) return null;
   if (input.isWebSocket) return null;
   if (!input.hasBody) return null;
   if (BODILESS_STATUSES.has(input.status)) return null;
@@ -179,18 +185,6 @@ async function peekBody(
     total += value.byteLength;
   }
   return { chunks, total, complete: false };
-}
-
-/** One buffer from the peeked chunks. Only ever called on a completed peek. */
-function joinChunks(chunks: Uint8Array[], total: number): Uint8Array {
-  if (chunks.length === 1) return chunks[0]!;
-  const out = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    out.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return out;
 }
 
 /** The peeked prefix, then everything still to come from the original body. */
@@ -240,6 +234,7 @@ export async function compressResponse(c: Context, next: Next): Promise<void> {
     contentEncoding: res.headers.get('content-encoding'),
     hasBody: res.body !== null,
     isWebSocket: Boolean((res as { webSocket?: unknown }).webSocket),
+    cacheControl: res.headers.get('cache-control'),
   });
 
   // Advertise that the answer varies by encoding whether or not THIS one was

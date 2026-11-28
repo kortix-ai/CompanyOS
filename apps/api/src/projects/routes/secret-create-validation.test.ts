@@ -8,13 +8,13 @@
  * status code or a precedence: every case here returns BEFORE the first DB
  * read in the handler, so the test runs hermetically — no database, no
  * Docker. Cases that need a DB row (value-required on a new secret, the
- * secrets_egress gate, the identifier-key conflict, the boundary destination
- * conflict) are covered by unit-project-secret-strategy-route.test.ts and the
+ * identifier-key conflict, the boundary destination conflict) are covered by unit-project-secret-strategy-route.test.ts and the
  * REST flows, not here.
  */
 import { describe, expect, mock, test } from 'bun:test';
 import { Hono } from 'hono';
 import * as realAccess from '../lib/access';
+import { SECRET_DELIVERY_NEEDS_PERSON } from '../lib/secret-write-input';
 
 const PROJECT_ID = '33333333-3333-4333-8333-333333333333';
 const ACCOUNT_ID = '44444444-4444-4444-8444-444444444444';
@@ -28,7 +28,7 @@ mock.module('../lib/access', () => ({
     row: {
       accountId: ACCOUNT_ID,
       projectId: PROJECT_ID,
-      metadata: { experimental: { secrets_egress: true } },
+      metadata: {},
     },
     userId: USER_ID,
     effectiveRole: 'owner',
@@ -155,18 +155,18 @@ const CASES: Case[] = [
     json: { error: 'consumer requires a strategy' },
   },
   {
-    name: 'an agent session cannot set broker/llm_gateway delivery',
+    name: 'an agent session hands broker/llm_gateway delivery to a person',
     body: { name: 'VALID_NAME', value: 'x', strategy: 'broker', consumer: 'llm_gateway' },
     caller: AGENT,
     status: 403,
-    json: { error: 'Agent sessions cannot change secret delivery policy' },
+    json: { error: SECRET_DELIVERY_NEEDS_PERSON, code: 'secret_delivery_needs_person' },
   },
   {
-    name: 'an agent session cannot set egress delivery',
+    name: 'an agent session hands egress delivery to a person',
     body: { name: 'VALID_NAME', value: 'x', strategy: 'egress', consumer: 'network' },
     caller: AGENT,
     status: 403,
-    json: { error: 'Agent sessions cannot change secret delivery policy' },
+    json: { error: SECRET_DELIVERY_NEEDS_PERSON, code: 'secret_delivery_needs_person' },
   },
   {
     name: 'an outbound policy on a plain secret',

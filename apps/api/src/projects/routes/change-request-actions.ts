@@ -1,23 +1,30 @@
 /** Change request resolution: merge, close, and reopen. */
 import { createRoute, z } from '@hono/zod-openapi';
-import { changeRequests } from '@kortix/db';
-import { eq } from 'drizzle-orm';
 import { PROJECT_ACTIONS } from '../../iam';
 import { agentMayPerform, assertAgentScope, getAgentGrant, isProjectSessionPrincipal } from '../../iam/agent-scope';
 import { logger } from '../../lib/logger';
-import { refusesSelfMerge } from '../change-request-policy';
+import { refusesSelfMerge, secretMergeRefusal } from '../change-request-policy';
 // Its own module, not the `../git` barrel: several route suites replace the
 // barrel wholesale with `mock.module`.
-import { manifestChange } from '../change-request-governance';
+import { classifyMerge, type MergeClassification } from '../change-request-governance';
 import { assertNoGrantEscalation } from '../../iam/agent-grant-ceiling';
+import { actorOf } from '../../iam/actor';
+import { actsAsFullIdentity } from '../../iam/person-credential';
 import { auth, boundedIssues, errors, json, lenientBody } from '../../openapi';
-import { db } from '../../shared/db';
 import { kickProjectTemplatePrebuilds } from '../../snapshots/builder';
 import { kickPiPackageBundle } from '../../pi-packages/bundle';
 import { resolveManifestPiPackageLists } from '../lib/compile-agent-config';
-import { getCrById, markChangeRequestsLanded, serializeChangeRequest } from '../change-requests';
+import {
+  closeChangeRequest,
+  getCrById,
+  markChangeRequestsLanded,
+  recordChangeRequestMerge,
+  reopenChangeRequest,
+  serializeChangeRequest,
+} from '../change-requests';
 import { wakeGoalForMergedChangeRequest } from '../lib/goal-wake';
 import {
+  HeadMovedError,
   headRefsLandedIn,
   invalidateProjectMirror,
   MergeConflictError,
@@ -31,6 +38,7 @@ import { enqueueProjectSnapshot } from '../../git-proxy/project-snapshot';
 import { normalizeString } from '../lib/serializers';
 import { readJsonObject } from '../../shared/http-body';
 import { rethrowDatabaseError } from '../../shared/database-errors';
+import { workspaceIdParam } from '../../shared/route-params';
 
 export function registerChangeRequestActionsRoutes(): void {
   // POST /v1/projects/:projectId/change-requests/:crId/merge
@@ -39,23 +47,27 @@ export function registerChangeRequestActionsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post',
-      path: '/{projectId}/change-requests/{crId}/merge',
+      path: '/{workspaceId}/change-requests/{crId}/merge',
       tags: ['change-requests'],
       summary: 'Merge a change request',
       ...auth,
       request: {
-        params: z.object({ projectId: z.string(), crId: z.string() }),
+        params: z.object({ workspaceId: z.string(), crId: z.string() }),
         body: { content: { 'application/json': { schema: lenientBody({
             message: z.string().optional().openapi({ description: 'Merge commit message. Optional; the body itself is optional.' }),
+            allow_secrets: z.boolean().optional().openapi({
+              description:
+                'Merge although the secret check flags what the change adds (409 `CR_SECRET_DETECTED`). A person only: any other credential gets 403 `CR_SECRET_OVERRIDE_REFUSED`. A change the check could not read in full needs no override from a person; it is recorded in `metadata.secret_scan_skipped`.',
+            }),
           }) } } },
       },
       responses: {
         200: json(z.any(), '`{change_request, merge, also_merged}`. `also_merged` lists the other open requests on the same base whose commits the merge carried; each is now merged.'),
-        ...errors(404, 409, 422, 502),
+        ...errors(403, 404, 409, 422, 502, 503),
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const crId = c.req.param('crId');
       const body = await readJsonObject(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
@@ -110,41 +122,101 @@ export function registerChangeRequestActionsRoutes(): void {
       }
 
       const customMessage = normalizeString(body.message);
+      const allowSecrets = body.allow_secrets === true;
       const projectForGit = await withProjectGitAuth(loaded.row);
 
-      // A merge that changes `agents`, `triggers` or `default_agent` needs the
-      // permission the direct route for that change asserts. A person's role
-      // holds them through project.gitops.merge's `implies`; an agent's
-      // kortix_permissions list is flat, so an agent with merge alone cannot
-      // merge a change that widens itself. Same rule for every principal.
-      if (isProjectSessionPrincipal(c)) {
-        let change: Awaited<ReturnType<typeof manifestChange>>;
-        try {
-          change = await manifestChange(projectForGit, cr);
-        } catch (err) {
-          logger.warn('[cr-merge] could not read the manifest to classify the merge; refusing it', {
-            cr: cr.number,
-            error: err instanceof Error ? err.message : String(err),
-          });
-          // Header inline, never `c.header(...)` first — same race as the
-          // journal 429 (KRTX-2737): the deadline may have answered already.
-          return c.json(
-            {
-              error:
-                `Could not read the project manifest to check what change request #${cr.number} ` +
-                'changes. The merge was not applied. Retry it.',
-              code: 'CR_GOVERNANCE_UNVERIFIED',
-              action: PROJECT_ACTIONS.PROJECT_GITOPS_MERGE,
-            },
-            503,
-            { 'Retry-After': '5' },
-          );
-        }
-        for (const action of change.required) {
-          await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, action);
-        }
-        // And a merging agent grants only what it holds (iam/agent-grant-ceiling.ts).
-        await assertNoGrantEscalation(c, projectId, change.grantsBefore, change.grantsAfter);
+      // Classify the change before it lands, for every principal. A change to
+      // `agents`, `default_agent`, `triggers`, `connectors`, `policies` or
+      // `policy` needs the permission the direct route for that change
+      // asserts: a merge never does what its merger could not do directly. A
+      // person's built-in role holds them; a custom role may not (the API
+      // takes one without them), and an agent's kortix_permissions list is
+      // flat. The classification also reads what the change's commits add,
+      // for the secret check below. Both read one head commit, and the merge
+      // lands exactly that commit.
+      let change: MergeClassification;
+      try {
+        change = await classifyMerge(projectForGit, cr);
+      } catch (err) {
+        // The error's name and code only: a manifest parse error quotes the
+        // line it failed on, and that line can hold a key.
+        logger.warn('[cr-merge] could not read the change to classify the merge; refusing it', {
+          cr: cr.number,
+          error: err instanceof Error ? err.name : typeof err,
+          code: (err as { code?: unknown } | null)?.code ?? null,
+        });
+        // Header inline, never `c.header(...)` first — same race as the
+        // journal 429 (KRTX-2737): the deadline may have answered already.
+        return c.json(
+          {
+            error:
+              `Could not read change request #${cr.number} to check what it changes. ` +
+              'The merge was not applied. Retry it.',
+            code: 'CR_GOVERNANCE_UNVERIFIED',
+            action: PROJECT_ACTIONS.PROJECT_GITOPS_MERGE,
+          },
+          503,
+          { 'Retry-After': '5' },
+        );
+      }
+      for (const action of change.required) {
+        await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, action);
+      }
+      // And a merging agent grants only what it holds (iam/agent-grant-ceiling.ts).
+      await assertNoGrantEscalation(c, projectId, change.grantsBefore, change.grantsAfter);
+
+      // Secret check: a key the change's commits add would reach the base
+      // branch and its history, and a change the scan could not read in full
+      // is not clean. A person who checked it may merge anyway
+      // (`allow_secrets`); an agent session may not. A finding names file,
+      // line, commit and rule, never the value.
+      // Only the person's full identity overrides: a browser session or a
+      // personal key bound to no workspace. Never a session, a service
+      // account, a workspace key or an OAuth token (iam/person-credential.ts).
+      const actorIsPerson =
+        !isProjectSessionPrincipal(c) &&
+        actsAsFullIdentity(c.get('authType') as string | undefined, await actorOf(c, loaded.row.accountId));
+      const refusal = secretMergeRefusal({
+        crNumber: cr.number,
+        baseRef: cr.baseRef,
+        scan: change.secrets,
+        actorIsPerson,
+        allowSecrets,
+      });
+      if (refusal) return c.json(refusal.body, refusal.status);
+      // What lets a person's merge through is recorded on the request and
+      // logged: a finding they overrode, or a check that could not read it all.
+      // Never a value.
+      const at = new Date().toISOString();
+      const secretOverride =
+        change.secrets.total > 0
+          ? {
+              by: loaded.userId,
+              at,
+              findings: change.secrets.findings.map(({ commit, file, line, rule }) => ({ commit, file, line, rule })),
+              findings_total: change.secrets.total,
+              ...(change.secrets.unscanned ? { unscanned: change.secrets.unscanned } : {}),
+            }
+          : null;
+      const secretScanSkipped =
+        !secretOverride && change.secrets.unscanned ? { reason: change.secrets.unscanned, by: loaded.userId, at } : null;
+      if (secretOverride) {
+        logger.warn('[cr-merge] a person merged past the secret check', {
+          projectId,
+          cr: cr.number,
+          userId: loaded.userId,
+          rules: [...new Set(secretOverride.findings.map((f) => f.rule))],
+          findings: secretOverride.findings_total,
+          unscanned: change.secrets.unscanned ?? null,
+        });
+      }
+      if (secretScanSkipped) {
+        logger.warn('[cr-merge] a person merged a change the secret check could not read', {
+          projectId,
+          cr: cr.number,
+          userId: loaded.userId,
+          reason: secretScanSkipped.reason,
+        });
       }
 
       // Manifest gate: a CR cannot merge if the would-be-merged manifest doesn't
@@ -161,7 +233,7 @@ export function registerChangeRequestActionsRoutes(): void {
         const found = await readManifestFromRepo(
           projectForGit,
           manifestCandidatePaths(projectForGit.manifestPath),
-          cr.headRef,
+          change.manifestRef,
         ).catch((err: unknown) => {
           if (err instanceof ManifestImportError) return { importError: err.message } as const;
           throw err;
@@ -205,8 +277,13 @@ export function registerChangeRequestActionsRoutes(): void {
           message: customMessage ?? `Merge CR #${cr.number}: ${cr.title}`,
           authorName: 'Kortix',
           authorEmail: 'noreply@kortix.ai',
+          expectedHeadSha: change.headSha,
+          expectedBaseSha: change.baseSha,
         });
       } catch (error) {
+        if (error instanceof HeadMovedError) {
+          return c.json({ error: error.message, code: error.code }, 409);
+        }
         if (error instanceof MergeConflictError) {
           return c.json(
             {
@@ -241,28 +318,33 @@ export function registerChangeRequestActionsRoutes(): void {
         });
       });
 
-      const [row] = await db
-        .update(changeRequests)
-        .set({
-          status: 'merged',
-          mergedAt: new Date(),
-          mergedBy: loaded.userId,
-          mergeCommitSha: result.merge_commit_sha,
-          // Capture the SHAs that were active at merge time. head_commit_sha
-          // intentionally stays at the head branch's tip (not the merge commit)
-          // so the merged-CR diff can re-render the changes via base...head.
-          headCommitSha: result.fast_forward
-            ? result.merge_commit_sha
-            : (cr.headCommitSha ?? result.merge_commit_sha),
-          baseCommitSha: result.base_sha_before,
-          updatedAt: new Date(),
-        })
-        // crId here is whatever the caller sent (a UUID, a number, "#233"):
-        // bind the write to the RESOLVED row's canonical id, never the raw path
-        // param — a numeric id that matched above must not 22P02 this update
-        // after the merge has already landed.
-        .where(eq(changeRequests.crId, cr.crId))
-        .returning();
+      // crId here is whatever the caller sent (a UUID, a number, "#233"):
+      // bind the write to the RESOLVED row's canonical id, never the raw path
+      // param — a numeric id that matched above must not 22P02 this update
+      // after the merge has already landed. A close that raced this merge
+      // loses to it (the code is on the base branch); a second merge of the
+      // same request that raced this one records nothing and answers 409.
+      const merged = await recordChangeRequestMerge(cr.crId, {
+        mergedAt: new Date(),
+        mergedBy: loaded.userId,
+        mergeCommitSha: result.merge_commit_sha,
+        // Capture the SHAs that were active at merge time. head_commit_sha
+        // intentionally stays at the head branch's tip (not the merge commit)
+        // so the merged-CR diff can re-render the changes via base...head.
+        headCommitSha: result.fast_forward
+          ? result.merge_commit_sha
+          : (cr.headCommitSha ?? result.merge_commit_sha),
+        baseCommitSha: result.base_sha_before,
+      }, secretOverride || secretScanSkipped
+        ? {
+            ...(secretOverride ? { secret_override: secretOverride } : {}),
+            ...(secretScanSkipped ? { secret_scan_skipped: secretScanSkipped } : {}),
+          }
+        : undefined);
+      if (!merged.applied) {
+        return c.json({ error: 'Change request is merged' }, 409);
+      }
+      const row = merged.row;
 
       // The merge can carry other open requests' commits (the requests below
       // it in a stack, or a second request on the same branch): they landed
@@ -362,12 +444,12 @@ export function registerChangeRequestActionsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post',
-      path: '/{projectId}/change-requests/{crId}/close',
+      path: '/{workspaceId}/change-requests/{crId}/close',
       tags: ['change-requests'],
       summary: 'Close a change request',
       ...auth,
       request: {
-        params: z.object({ projectId: z.string(), crId: z.string() }),
+        params: z.object({ workspaceId: z.string(), crId: z.string() }),
       },
       responses: {
         200: json(z.any(), 'OK'),
@@ -375,7 +457,7 @@ export function registerChangeRequestActionsRoutes(): void {
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const crId = c.req.param('crId');
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -390,17 +472,16 @@ export function registerChangeRequestActionsRoutes(): void {
         return c.json({ error: 'Cannot close a merged change request' }, 409);
       }
 
-      const [row] = await db
-        .update(changeRequests)
-        .set({
-          status: 'closed',
-          closedAt: new Date(),
-          closedBy: loaded.userId,
-          updatedAt: new Date(),
-        })
-        // Bind the write to the resolved row's canonical id (see the merge route).
-        .where(eq(changeRequests.crId, cr.crId))
-        .returning();
+      // Bind the write to the resolved row's canonical id (see the merge route).
+      const closed = await closeChangeRequest(cr.crId, loaded.userId);
+      if (!closed.applied) {
+        // The row moved after the read: a merge that raced the close wins,
+        // and a close that raced another close answers with that close.
+        const now = await getCrById(cr.crId, projectId);
+        if (now?.status === 'closed') return c.json(serializeChangeRequest(now));
+        return c.json({ error: 'Cannot close a merged change request' }, 409);
+      }
+      const row = closed.row;
       return c.json(serializeChangeRequest(row));
     },
   );
@@ -410,12 +491,12 @@ export function registerChangeRequestActionsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post',
-      path: '/{projectId}/change-requests/{crId}/reopen',
+      path: '/{workspaceId}/change-requests/{crId}/reopen',
       tags: ['change-requests'],
       summary: 'Reopen a change request',
       ...auth,
       request: {
-        params: z.object({ projectId: z.string(), crId: z.string() }),
+        params: z.object({ workspaceId: z.string(), crId: z.string() }),
       },
       responses: {
         200: json(z.any(), 'OK'),
@@ -423,7 +504,7 @@ export function registerChangeRequestActionsRoutes(): void {
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const crId = c.req.param('crId');
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -438,17 +519,13 @@ export function registerChangeRequestActionsRoutes(): void {
         return c.json({ error: `Cannot reopen a ${cr.status} change request` }, 409);
       }
 
-      const [row] = await db
-        .update(changeRequests)
-        .set({
-          status: 'open',
-          closedAt: null,
-          closedBy: null,
-          updatedAt: new Date(),
-        })
-        // Bind the write to the resolved row's canonical id (see the merge route).
-        .where(eq(changeRequests.crId, cr.crId))
-        .returning();
+      // Bind the write to the resolved row's canonical id (see the merge route).
+      const reopened = await reopenChangeRequest(cr.crId);
+      if (!reopened.applied) {
+        const now = await getCrById(cr.crId, projectId);
+        return c.json({ error: `Cannot reopen a ${now?.status ?? cr.status} change request` }, 409);
+      }
+      const row = reopened.row;
       return c.json(serializeChangeRequest(row));
     },
   );

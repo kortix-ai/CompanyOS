@@ -20,15 +20,20 @@ export function ChangelogAnchorRedirect({
 }) {
   const router = useRouter();
   useEffect(() => {
-    let tag: string;
-    try {
-      tag = decodeURIComponent(window.location.hash.slice(1));
-    } catch {
-      return;
-    }
-    if (!tag || document.getElementById(tag)) return;
-    const target = tagPages[tag];
-    if (target && target !== page) router.replace(`${changelogPageHref(target)}#${tag}`);
+    const redirect = () => {
+      let tag: string;
+      try {
+        tag = decodeURIComponent(window.location.hash.slice(1));
+      } catch {
+        return;
+      }
+      if (!tag || document.getElementById(tag)) return;
+      const target = tagPages[tag];
+      if (target && target !== page) router.replace(`${changelogPageHref(target)}#${tag}`);
+    };
+    redirect();
+    window.addEventListener('hashchange', redirect);
+    return () => window.removeEventListener('hashchange', redirect);
   }, [page, tagPages, router]);
   return null;
 }

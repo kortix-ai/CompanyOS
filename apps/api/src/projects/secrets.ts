@@ -1,6 +1,6 @@
-import { connectors, projectSecrets, projectSecretTombstones, projects } from '@kortix/db';
+import { connectors, projectSecrets, projectSecretTombstones } from '@kortix/db';
 import type { Database } from '@kortix/db';
-import { and, desc, eq, gt, inArray, isNull, lt, or } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNull, lt, ne, or } from 'drizzle-orm';
 import { isGatewayManagedEnv } from '../llm-gateway/sandbox-credentials';
 import {
   type SecretConsumer,
@@ -24,6 +24,8 @@ import {
 import { decryptNamedProjectSecret, encryptProjectSecret } from './secrets/envelope';
 import { projectSecretsRevision, resolveGrantedSecretSelection } from './secrets/grant-policy';
 import { mintSessionSecretHandle } from './secrets/handles';
+import { projectsView } from '../workspaces/rows';
+import { projectSecretRowNotMoved } from '../secrets/llm-credential-ledger';
 
 /**
  * Upsert the SHARED (owner_user_id IS NULL) row for a project secret to a new
@@ -58,7 +60,10 @@ export async function writeSharedProjectSecret(input: {
       scope: serverSide ? 'connector' : 'runtime',
       strategy: serverSide ? 'broker' : 'runtime',
       consumer: serverSide ? 'connector' : 'sandbox',
-      strategyLocked: serverSide,
+      // Connector-only is where the value starts, not a lock: the person who
+      // typed it may move it to environment delivery later. Only a model
+      // subscription credential is locked (secretStrategyLockHolds).
+      strategyLocked: false,
       createdBy: input.createdBy ?? null,
       // A value a person just typed was never exposed: it is a fresh rotation.
       rotatedAt: now,
@@ -75,15 +80,25 @@ export async function writeSharedProjectSecret(input: {
               scope: 'connector' as const,
               strategy: 'broker' as const,
               consumer: 'connector' as const,
-              strategyLocked: true,
             }
           : {}),
         rotatedAt: now,
         updatedAt: now,
       },
+      // A website login keeps its `{ username, password }` shape: a plain
+      // value never overwrites it (`browser-logins.ts`). The intake refuses
+      // that case with a 409 before it gets here.
+      setWhere: notBrowserLogin(),
     })
     .returning({ secretId: projectSecrets.secretId });
-  return row!.secretId;
+  if (!row) throw new Error(`${identifier} is a website login; a plain value cannot replace it`);
+  return row.secretId;
+}
+
+/** Rows that are not website logins. A login's value is JSON with a password
+ *  in it: only the browser consumer reads it, never a generic secret map. */
+function notBrowserLogin() {
+  return or(isNull(projectSecrets.consumer), ne(projectSecrets.consumer, 'browser'));
 }
 
 /** A deletion older than the longest setup-link TTL (MAX_TTL_MINUTES in
@@ -117,8 +132,8 @@ export async function recordProjectSecretTombstone(
   name: string,
   tx: SecretWriteTx,
 ): Promise<void> {
-  await tx.select({ status: projects.status }).from(projects)
-    .where(eq(projects.projectId, projectId)).limit(1).for('update');
+  await tx.select({ status: projectsView.status }).from(projectsView)
+    .where(eq(projectsView.projectId, projectId)).limit(1).for('update');
   await tx.insert(projectSecretTombstones)
     .values({ projectId, name, deletedAt: new Date() })
     .onConflictDoUpdate({
@@ -154,7 +169,29 @@ export async function projectSecretsDeletedSince(
   return rows.map((row) => row.name);
 }
 
-/** Lock a legacy runtime secret to the server-side connector boundary. */
+/**
+ * The identifiers among `identifiers` that name a website login (consumer
+ * `browser`). A connector may never bind one: its value is a person's password
+ * for one site, and a connector would send it to the connector's own host.
+ */
+export async function websiteLoginIdentifiers(projectId: string, identifiers: string[]): Promise<Set<string>> {
+  if (identifiers.length === 0) return new Set();
+  const rows = await db
+    .select({ identifier: projectSecrets.identifier })
+    .from(projectSecrets)
+    .where(
+      and(
+        eq(projectSecrets.projectId, projectId),
+        inArray(projectSecrets.identifier, identifiers),
+        isNull(projectSecrets.ownerUserId),
+        eq(projectSecrets.consumer, 'browser'),
+      ),
+    );
+  return new Set(rows.map((row) => row.identifier));
+}
+
+/** Lock a legacy runtime secret to the server-side connector boundary. A
+ *  website login is never rewritten: it stays the browser's alone. */
 export async function confineSharedProjectSecretToConnector(
   projectId: string,
   identifier: string,
@@ -173,6 +210,7 @@ export async function confineSharedProjectSecretToConnector(
         eq(projectSecrets.projectId, projectId),
         eq(projectSecrets.identifier, identifier),
         isNull(projectSecrets.ownerUserId),
+        notBrowserLogin(),
       ),
     );
 }
@@ -204,7 +242,7 @@ export async function listProjectSecrets(projectId: string): Promise<Record<stri
         updatedAt: projectSecrets.updatedAt,
       })
       .from(projectSecrets)
-      .where(and(eq(projectSecrets.projectId, projectId), isNull(projectSecrets.ownerUserId)))
+      .where(and(eq(projectSecrets.projectId, projectId), isNull(projectSecrets.ownerUserId), notBrowserLogin()))
       .orderBy(desc(projectSecrets.updatedAt)),
   });
 
@@ -284,9 +322,15 @@ export async function listResolvedProjectSecrets(
       and(
         eq(projectSecrets.projectId, projectId),
         eq(projectSecrets.scope, 'runtime'),
+        // A website login never enters an env, an App or a capability list.
+        notBrowserLogin(),
         userId
           ? or(isNull(projectSecrets.ownerUserId), eq(projectSecrets.ownerUserId, userId))
           : isNull(projectSecrets.ownerUserId),
+        // A provider key that moved to the named store is never decrypted
+        // here again: the gateway strips it anyway, and an undecryptable
+        // moved row must not fail session start.
+        projectSecretRowNotMoved(),
       ),
     );
 
@@ -344,7 +388,7 @@ export type SecretHandleMinter = (row: ResolvedProjectSecret) => Promise<string>
  * Does the LLM-gateway strip apply to this row?
  *
  * The strip exists so a PLATFORM-managed model credential never reaches
- * opencode while the gateway owns that provider. It used to key off the NAME
+ * the sandbox while the gateway owns that provider. It used to key off the NAME
  * alone, via `isGatewayManagedEnv`, which answers from the models.dev catalog —
  * a 204-provider registry that maps `github-copilot` to `GITHUB_TOKEN`. So a
  * project's own `GITHUB_TOKEN`, stored by the secrets UI as
@@ -365,7 +409,7 @@ export type SecretHandleMinter = (row: ResolvedProjectSecret) => Promise<string>
  *
  * What this deliberately does NOT weaken: managed credentials and anything the
  * provider-connect flow stored keep their stamp and stay withheld, and
- * `CODEX_AUTH_JSON`/`OPENCODE_AUTH_JSON` are unconditionally gateway-managed.
+ * `CODEX_AUTH_JSON` is unconditionally gateway-managed.
  *
  * Pure so the rule is testable without a model catalog.
  */

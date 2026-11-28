@@ -4,8 +4,8 @@ import { openFlowDb, seedTurnSession } from '../fixtures/turn-end';
 
 /** sha256 hex the daemon sends for a call (`permissionArgsHash`): any 64 hex digits name one call. */
 const PUSH_HASH = 'b'.repeat(64);
-const asksRoute = '/v1/projects/:projectId/asks';
-const answerRoute = '/v1/projects/:projectId/asks/:askId/answer';
+const asksRoute = '/v1/workspaces/:projectId/asks';
+const answerRoute = '/v1/workspaces/:projectId/asks/:askId/answer';
 
 interface Ask {
   id: string;
@@ -14,6 +14,7 @@ interface Ask {
   surface_session_id: string;
   request_id: string;
   title: string;
+  agent_name: string | null;
 }
 
 async function team(ctx: FlowContext) {
@@ -32,10 +33,10 @@ flow(
     domain: 'sessions',
     requires: ['database'],
     routes: [
-      'POST /v1/projects/:projectId/turn-permission',
-      'POST /v1/projects/:projectId/turn-question',
-      'GET /v1/projects/:projectId/asks',
-      'POST /v1/projects/:projectId/asks/:askId/answer',
+      'POST /v1/workspaces/:projectId/turn-permission',
+      'POST /v1/workspaces/:projectId/turn-question',
+      'GET /v1/workspaces/:projectId/asks',
+      'POST /v1/workspaces/:projectId/asks/:askId/answer',
     ],
   },
   async (ctx) => {
@@ -51,7 +52,7 @@ flow(
     const params = { projectId: project.id };
     const relayPermission = (requestId: string, session = watched) =>
       session.sandbox.post(
-        '/v1/projects/:projectId/turn-permission',
+        '/v1/workspaces/:projectId/turn-permission',
         {
           session_id: session.sessionId,
           request_id: requestId,
@@ -83,6 +84,9 @@ flow(
         if (ask!.kind !== 'permission' || ask!.title !== 'bash: git push origin main' || ask!.surface_session_id !== watched.sessionId) {
           throw new Error(JSON.stringify(ask));
         }
+        // The bot that asks: the agent of the surface session.
+        const { rows } = await db.query('SELECT agent_name FROM kortix.project_sessions WHERE session_id = $1', [watched.sessionId]);
+        if (ask!.agent_name !== (rows[0]?.agent_name ?? null)) throw new Error(`agent_name ${ask!.agent_name}, want ${rows[0]?.agent_name}`);
         permissionAskId = ask!.id;
         const onSession = await asksOf(launcher, { surface_session_id: watched.sessionId });
         if (onSession.map((a) => a.id).join() !== permissionAskId) throw new Error(JSON.stringify(onSession));
@@ -116,7 +120,7 @@ flow(
       await ctx.step('in an unattended session an ask parks at once (live_wait_ms 0) and waits in the list', async () => {
         (await relayPermission('perm_sess63_trigger', unattended)).status(200).body().has('$.live_wait_ms', 0);
         const question = await unattended.sandbox.post(
-          '/v1/projects/:projectId/turn-question',
+          '/v1/workspaces/:projectId/turn-question',
           {
             session_id: unattended.sessionId,
             request_id: 'que_sess63',

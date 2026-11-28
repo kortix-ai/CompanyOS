@@ -279,15 +279,16 @@ describe('the pointer', () => {
 describe('quarantine and pruning', () => {
   test('a quarantined release is recorded by release_id; another release_id is not blocked', async () => {
     const bad = 'd'.repeat(64)
-    await quarantineRelease(store, bad, 'the new opencode did not start')
+    await quarantineRelease(store, bad, 'the new runtime did not start')
     const entries = await readQuarantine(store)
     expect(Object.keys(entries)).toEqual([bad])
-    expect(entries[bad]!.reason).toBe('the new opencode did not start')
+    expect(entries[bad]!.reason).toBe('the new runtime did not start')
     expect(entries['e'.repeat(64)]).toBeUndefined()
   })
 
-  test('pruning keeps the named releases with their manifests, the pointer and the quarantine', async () => {
-    const first = await materialize(release('v1'))
+  test('pruning retains old release paths and manifests, the pointer and the quarantine', async () => {
+    const firstBuilt = release('v1')
+    const first = await materialize(firstBuilt)
     write(repo, `${REL}/agents/kortix.md`, 'PROMPT v2\n')
     const secondBuilt = release('v2')
     const second = await materialize(secondBuilt)
@@ -306,14 +307,22 @@ describe('quarantine and pruning', () => {
 
     await pruneBootConfigs(store, [secondBuilt.descriptor.release_id!, thirdBuilt.descriptor.release_id!])
 
-    expect(existsSync(first.dir)).toBe(false)
-    expect(existsSync(`${first.dir}.json`)).toBe(false)
+    expect(existsSync(first.dir)).toBe(true)
+    expect(existsSync(`${first.dir}.json`)).toBe(true)
     expect(existsSync(join(store, 'f'.repeat(40)))).toBe(false)
     expect(existsSync(second.dir)).toBe(true)
     expect(await readReleaseManifest(store, secondBuilt.descriptor.release_id!)).not.toBeNull()
     expect(existsSync(third.dir)).toBe(true)
     expect(await readBootConfigPointer(store)).not.toBeNull()
     expect(Object.keys(await readQuarantine(store))).toEqual(['d'.repeat(64)])
+    expect(await verify(firstBuilt, first.dir)).toBe(true)
+    const agentPath = join(first.dir, REL, 'agents/kortix.md')
+    chmodSync(agentPath, 0o644)
+    writeFileSync(agentPath, 'tampered')
+    expect(await verify(firstBuilt, first.dir)).toBe(false)
+    chmodSync(dirname(agentPath), 0o755)
+    rmSync(agentPath)
+    expect(await verify(firstBuilt, first.dir)).toBe(false)
   })
 })
 describe('JSON store publication characterization', () => {

@@ -5,13 +5,13 @@
  * off never loads them (`turn-context.ts` holds the rest).
  */
 import { MEMORY_TURN_SYSTEM_MAX_CHARS } from '@kortix/api-contract';
-import { projects } from '@kortix/db';
 import { eq } from 'drizzle-orm';
 import { driveStorageAvailable } from '../drives/volumes';
 import { resolveFeatureFlag } from '../feature-flags/registry';
 import { classifyRuntimeRequest } from '../sandbox-proxy/runtime-request';
 import { db } from '../shared/db';
 import { ttlMemo } from '../shared/ttl-memo';
+import { projectsView } from '../workspaces/rows';
 
 /**
  * `chat` of a project, read at most once per 30 s per replica: a
@@ -21,14 +21,14 @@ export const memoryChannelsOn = ttlMemo({
   ttlMs: 30_000,
   keyFn: (projectId: string) => projectId,
   loader: async (projectId: string) => {
-    const [row] = await db.select({ metadata: projects.metadata }).from(projects).where(eq(projects.projectId, projectId)).limit(1);
+    const [row] = await db.select({ metadata: projectsView.metadata }).from(projectsView).where(eq(projectsView.projectId, projectId)).limit(1);
     return driveStorageAvailable() && resolveFeatureFlag(row?.metadata, 'chat');
   },
 });
 
 
 
-/** Only the Kortix prompt route carries the memory `system`: not `/steer`, not OpenCode's `prompt_async`. */
+/** Only the Kortix prompt route carries the memory `system`: not `/steer`, not the box's OpenCode-shaped `prompt_async`. */
 export function isMemoryTurnRoute(method: string, path: string): boolean {
   const request = classifyRuntimeRequest(method, path);
   return request.kind === 'turn-start' && request.verb === 'prompt';
@@ -48,15 +48,33 @@ function jsonObject(body: ArrayBuffer | undefined): Record<string, unknown> | nu
 const encode = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).buffer as ArrayBuffer;
 
 /**
- * The body without a `system` (or `thread_files`) a client sent: only the API
- * sets a turn's system text, so a member who may prompt a thread cannot add to
- * its agent's system prompt. A body without `system` is returned as it is (byte for byte).
+ * The body without a `system` (or `thread_files`, `space_agents`, `author`) a
+ * client sent: only the API sets a turn's system text, so a member who may
+ * prompt a thread cannot add to its agent's system prompt, and only the API
+ * names who wrote a prompt, so a member cannot write as another person. A body
+ * without any of them is returned as it is (byte for byte).
  */
 export function withoutClientSystem(body: ArrayBuffer | undefined): ArrayBuffer | undefined {
   const parsed = jsonObject(body);
-  if (!parsed || (!('system' in parsed) && !(THREAD_FILES_BODY_KEY in parsed) && !(SPACE_AGENTS_BODY_KEY in parsed))) return body;
-  const { system: _client, [THREAD_FILES_BODY_KEY]: _files, [SPACE_AGENTS_BODY_KEY]: _agents, ...rest } = parsed;
+  if (!parsed || ![
+    'system', THREAD_FILES_BODY_KEY, SPACE_AGENTS_BODY_KEY, PROMPT_AUTHOR_BODY_KEY,
+  ].some((key) => key in parsed)) return body;
+  const { system: _client, [THREAD_FILES_BODY_KEY]: _files, [SPACE_AGENTS_BODY_KEY]: _agents, [PROMPT_AUTHOR_BODY_KEY]: _author, ...rest } = parsed;
   return encode(rest);
+}
+
+/**
+ * The prompt body key of the person who wrote the prompt (`{ name }`,
+ * KRTX-5121); only the API sets it. kortixd puts the name above the message
+ * for the model (`harness/pi/prompt-author.ts`).
+ */
+export const PROMPT_AUTHOR_BODY_KEY = 'author';
+
+/** The JSON object body with `author` set to `name`; any other body is returned as it is. */
+export function withPromptAuthor(body: ArrayBuffer | undefined, name: string): ArrayBuffer | undefined {
+  const parsed = jsonObject(body);
+  if (!parsed) return body;
+  return encode({ ...parsed, [PROMPT_AUTHOR_BODY_KEY]: { name } });
 }
 
 /**

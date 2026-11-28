@@ -1,47 +1,6 @@
 import { and, eq, inArray, isNotNull, ne, sql, type SQL } from 'drizzle-orm';
 import type { AnyPgColumn, PgTable } from 'drizzle-orm/pg-core';
-import {
-  accountDeletionRequests,
-  accountTokens,
-  accounts,
-  appDeploymentEvents,
-  appDeployments,
-  appSiteBlobs,
-  apps,
-  changeRequests,
-  connectorCalls,
-  connectorConnections,
-  gatewayRequestLogs,
-  gatewayApiKeys,
-  oauthAccessTokens,
-  oauthAuthorizationCodes,
-  oauthRefreshTokens,
-  scimTokens,
-  serviceAccounts,
-  impersonationGrants,
-  kortixApiKeys,
-  legacySandboxMigrations,
-  platformUserRoles,
-  projectSessionConnectorBindings,
-  projectSessions,
-  projectTriggerExecutions,
-  projectTriggerRuntime,
-  projects,
-  providerEvents,
-  pushDeviceTokens,
-  reviewItems,
-  sandboxes,
-  sandboxComputeSessions,
-  sessionLifecycleCommands,
-  sessionPendingQuestions,
-  sessionSandboxes,
-  sessionTurns,
-  sunaAccountMigrations,
-  tunnelAuditLogs,
-  tunnelConnections,
-  tunnelDeviceAuthRequests,
-  usageEvents,
-} from '@kortix/db';
+import { accountDeletionRequests, accountTokens, appDeploymentEvents, appDeployments, appSiteBlobs, apps, changeRequests, connectorCalls, connectorConnections, gatewayRequestLogs, gatewayApiKeys, oauthAccessTokens, oauthAuthorizationCodes, oauthRefreshTokens, scimTokens, serviceAccounts, impersonationGrants, kortixApiKeys, legacySandboxMigrations, platformUserRoles, projectSessionConnectorBindings, projectSessions, projectTriggerExecutions, projectTriggerRuntime, providerEvents, pushDeviceTokens, reviewItems, sandboxes, sandboxComputeSessions, sessionLifecycleCommands, sessionPendingQuestions, sessionSandboxes, sessionTurns, sunaAccountMigrations, tunnelAuditLogs, tunnelConnections, tunnelDeviceAuthRequests, usageEvents } from '@kortix/db';
 import { getSupabase } from '../../shared/supabase';
 import { deleteAccountSiteObjects } from '../../apps/static-site';
 import { getStripe } from '../../shared/stripe';
@@ -59,23 +18,84 @@ import {
   reconcileSandboxRemovedByExternalId,
   reconcileSandboxStoppedByExternalId,
 } from '../../projects/sandbox-reaper';
-import { getCreditAccount, updateCreditAccount } from '../repositories/credit-accounts';
+import { getCreditAccount } from '../repositories/credit-accounts';
+import { listStripeCustomerIdsByAccountId } from '../repositories/customers';
+import { applyAdminOverride, applyStripeSync } from './account-write-owner';
 import { wallet } from '../wallet';
 import {
   getActiveDeletionRequest,
+  hasRunningDeletionRequest,
   createDeletionRequest,
   cancelDeletionRequest,
   markDeletionCompleted,
   countOverdueBacklog,
   getScheduledDeletions,
   claimDeletionRequest,
+  claimDeletionRequestNow,
   releaseDeletionRequest,
 } from '../repositories/account-deletion';
-import { deleteUserSessionStates, releaseProjectEventSubscriptions } from '../../projects/surface';
+import { deleteUserSessionStates, releaseProjectEventSubscriptions, settleLiveSessionsOfAccounts } from '../../projects/surface';
 import { deleteAccountExternalStores } from './account-erasure-stores';
+import { accountsView, deleteAccountRows, projectsView } from '../../workspaces/rows';
+import { isWorkspaceDeletion } from '../../workspaces/deletion-reason';
 
 const GRACE_PERIOD_DAYS = 14;
 const ACTIVE_DELETION_REQUEST_EXISTS = 'An active deletion request already exists for this account';
+const DELETION_ALREADY_RUNNING = 'Account deletion is already running and can no longer be cancelled';
+
+/**
+ * Revoke every credential of an account: workspace and personal tokens in it,
+ * API keys, gateway keys, OAuth codes and tokens, SCIM tokens, and its
+ * service accounts. Runs inside the caller's transaction (`withDbTransaction`
+ * routes `db` to it). `requestAccountDeletion` (the person deletes the
+ * account) calls it in the transaction that opens the request.
+ *
+ * `scope: 'workspace'` is the workspace close (`workspaces/lifecycle.ts`, K2):
+ * it revokes only what belongs to the workspace — keys bound to it
+ * (`project_id` set), OAuth grants whose consent named it, API and gateway
+ * keys, SCIM tokens and service accounts. A personal key (`project_id` null)
+ * and an unbound OAuth grant act as their person in every workspace; closing
+ * one workspace never ends them (design.md §3.2 C4a).
+ */
+export async function revokeAccountCredentials(
+  accountId: string,
+  actorUserId: string,
+  scope: 'account' | 'workspace' = 'account',
+): Promise<void> {
+  const workspaceOnly = scope === 'workspace';
+  await db.update(accountTokens)
+    .set({ status: 'revoked', revokedAt: new Date() })
+    .where(and(
+      eq(accountTokens.accountId, accountId),
+      eq(accountTokens.status, 'active'),
+      workspaceOnly ? isNotNull(accountTokens.projectId) : undefined,
+    ));
+  await db.update(kortixApiKeys)
+    .set({ status: 'revoked' })
+    .where(and(eq(kortixApiKeys.accountId, accountId), eq(kortixApiKeys.status, 'active')));
+  await db.update(gatewayApiKeys)
+    .set({ status: 'revoked', revokedAt: new Date() })
+    .where(and(eq(gatewayApiKeys.accountId, accountId), eq(gatewayApiKeys.status, 'active')));
+  await db.delete(oauthAuthorizationCodes).where(and(
+    eq(oauthAuthorizationCodes.accountId, accountId),
+    workspaceOnly ? isNotNull(oauthAuthorizationCodes.boundWorkspaceId) : undefined,
+  ));
+  await db.update(oauthAccessTokens).set({ revokedAt: new Date() })
+    .where(and(
+      eq(oauthAccessTokens.accountId, accountId),
+      workspaceOnly ? isNotNull(oauthAccessTokens.boundWorkspaceId) : undefined,
+    ));
+  await db.update(oauthRefreshTokens).set({ revokedAt: new Date() })
+    .where(and(
+      eq(oauthRefreshTokens.accountId, accountId),
+      workspaceOnly ? isNotNull(oauthRefreshTokens.boundWorkspaceId) : undefined,
+    ));
+  await db.update(scimTokens).set({ revokedAt: new Date() })
+    .where(eq(scimTokens.accountId, accountId));
+  await db.update(serviceAccounts)
+    .set({ status: 'disabled', disabledAt: new Date(), disabledBy: actorUserId })
+    .where(and(eq(serviceAccounts.accountId, accountId), eq(serviceAccounts.status, 'active')));
+}
 
 export async function requestAccountDeletion(
   accountId: string,
@@ -92,25 +112,7 @@ export async function requestAccountDeletion(
   try {
     request = await withDbTransaction(async () => {
       const pending = await createDeletionRequest(accountId, userId, scheduledFor, reason);
-      await db.update(accountTokens)
-        .set({ status: 'revoked', revokedAt: new Date() })
-        .where(and(eq(accountTokens.accountId, accountId), eq(accountTokens.status, 'active')));
-      await db.update(kortixApiKeys)
-        .set({ status: 'revoked' })
-        .where(and(eq(kortixApiKeys.accountId, accountId), eq(kortixApiKeys.status, 'active')));
-      await db.update(gatewayApiKeys)
-        .set({ status: 'revoked', revokedAt: new Date() })
-        .where(and(eq(gatewayApiKeys.accountId, accountId), eq(gatewayApiKeys.status, 'active')));
-      await db.delete(oauthAuthorizationCodes).where(eq(oauthAuthorizationCodes.accountId, accountId));
-      await db.update(oauthAccessTokens).set({ revokedAt: new Date() })
-        .where(eq(oauthAccessTokens.accountId, accountId));
-      await db.update(oauthRefreshTokens).set({ revokedAt: new Date() })
-        .where(eq(oauthRefreshTokens.accountId, accountId));
-      await db.update(scimTokens).set({ revokedAt: new Date() })
-        .where(eq(scimTokens.accountId, accountId));
-      await db.update(serviceAccounts)
-        .set({ status: 'disabled', disabledAt: new Date(), disabledBy: userId })
-        .where(and(eq(serviceAccounts.accountId, accountId), eq(serviceAccounts.status, 'active')));
+      await revokeAccountCredentials(accountId, userId);
       // A personal-account deletion ends existing sign-ins, not the identity:
       // a fresh sign-in can still cancel during the grace period. Deleting a
       // team account must not end the owner's access to their other accounts.
@@ -137,10 +139,11 @@ export async function requestAccountDeletion(
   };
 }
 
+/** Personal-deletion status; a workspace close must not replace Profile’s account controls. */
 export async function getAccountDeletionStatus(accountId: string) {
   const request = await getActiveDeletionRequest(accountId);
 
-  if (!request) {
+  if (!request || isWorkspaceDeletion(request.reason)) {
     return {
       has_pending_deletion: false,
       deletion_scheduled_for: null,
@@ -160,10 +163,16 @@ export async function getAccountDeletionStatus(accountId: string) {
 export async function cancelAccountDeletion(accountId: string) {
   const request = await getActiveDeletionRequest(accountId);
   if (!request) {
+    // The worker claimed it already: its irreversible work runs.
+    if (await hasRunningDeletionRequest(accountId)) throw new BillingError(DELETION_ALREADY_RUNNING, 409);
     throw new BillingError('No active deletion request found');
   }
 
-  await cancelDeletionRequest(request.id);
+  // The worker may have claimed the request since the read above. Its
+  // irreversible work is running then, so the cancel must not report success.
+  if (!(await cancelDeletionRequest(request.id))) {
+    throw new BillingError(DELETION_ALREADY_RUNNING, 409);
+  }
 
   return { success: true, message: 'Account deletion cancelled' };
 }
@@ -183,35 +192,73 @@ export async function cancelAccountDeletion(accountId: string) {
  *      account.
  *
  * The requester's login goes only with their personal account, whose id is
- * the user id (`bootstrapPersonalAccount`). Deleting any other account keeps
+ * the user id (a legacy account: sign-up created one until Workspaces D3). Deleting any other account keeps
  * the requester's login and leaves the sandboxes of their other accounts
  * alone: a team account the requester owns, or a request an operator made
  * while acting as a customer (impersonation refuses these routes now, but a
- * pending row from before keeps the operator as its requester).
+ * pending row from before keeps the operator as its requester). A workspace
+ * close (`request.reason`) shares the queue but never deletes the person or
+ * reclaims their other workspaces, even when account_id = user_id (KRTX-4946).
  *
  * Every step is idempotent and throws on failure, so the caller can retry the
  * whole routine. The caller owns the request row (`completed` only after this
  * returns).
  */
-export async function runAccountDeletion(accountId: string, userId?: string, requestId?: string) {
-  const requester = userId === accountId ? userId : undefined;
+export async function runAccountDeletion(
+  accountId: string,
+  userId?: string,
+  request?: { id: string; reason?: string | null } | null,
+) {
+  const requester = userId === accountId && !isWorkspaceDeletion(request?.reason) ? userId : undefined;
   await performDeletion(accountId, requester);
-  await deleteAccountData(accountId, requestId);
-  if (requester) {
-    await deleteUserAvatars(requester);
-    await clearLegacyAuthUserReferences(requester);
-    // A device token is the person's data; it has no foreign key to cascade.
-    await db.delete(pushDeviceTokens).where(eq(pushDeviceTokens.userId, requester));
-    // So are their notifications, watcher rows, preferences and browser push
-    // subscriptions, in every account (KRTX-1742).
-    await deleteUserNotificationData(requester);
-    // Their session pins and archive, in every account (KRTX-2418).
-    await deleteUserSessionStates(requester);
-    const { error } = await getSupabase().auth.admin.deleteUser(requester);
-    // A user the auth schema no longer has (an admin-side delete, or a retry
-    // after step 3 already ran) is the state this step produces.
-    if (error && !isAuthUserNotFound(error)) throw error;
-  }
+  await deleteAccountData(accountId, request?.id);
+  if (requester) await deleteLogin(requester);
+}
+
+/**
+ * Delete a person's login and the personal data that has no account: avatars,
+ * blocking auth references, device tokens, notifications, session pins, then
+ * the Supabase auth user. Step 3 of `runAccountDeletion`, and the whole
+ * deletion for a person who belongs to no workspace (`deleteLoginWithoutAccount`).
+ * Idempotent: a retry after the auth user is gone succeeds.
+ */
+export async function deleteLogin(userId: string): Promise<void> {
+  await deleteUserAvatars(userId);
+  await clearAuthUserReferences(userId);
+  // A device token is the person's data; it has no foreign key to cascade.
+  await db.delete(pushDeviceTokens).where(eq(pushDeviceTokens.userId, userId));
+  // So are their notifications, watcher rows, preferences and browser push
+  // subscriptions, in every account (KRTX-1742).
+  await deleteUserNotificationData(userId);
+  // Their session pins and archive, in every account (KRTX-2418).
+  await deleteUserSessionStates(userId);
+  const { error } = await getSupabase().auth.admin.deleteUser(userId);
+  // A user the auth schema no longer has (an admin-side delete, or a retry
+  // after step 3 already ran) is the state this step produces.
+  if (error && !isAuthUserNotFound(error)) throw error;
+}
+
+/**
+ * Delete the login of a person with no workspace. No account exists to
+ * delete or to keep for a grace period (no account is created at sign-up,
+ * Workspaces D3), so this is the immediate path's whole job.
+ */
+export async function deleteLoginWithoutAccount(userId: string) {
+  await deleteLogin(userId);
+  return { success: true, message: 'Account deleted' };
+}
+
+/**
+ * Delete one workspace of a person who is deleting their login
+ * (`workspaces/person-deletion.ts`): the account's sandboxes, external stores,
+ * money and rows, with no requester. The sandbox sweep stays inside this
+ * account, and the login is the caller's last step. An open request of the
+ * account is closed as its receipt.
+ */
+export async function deleteAccountForPerson(accountId: string): Promise<void> {
+  const request = await getActiveDeletionRequest(accountId);
+  await runAccountDeletion(accountId, undefined, request);
+  if (request) await markDeletionCompleted(request.id);
 }
 
 /** Storage objects must go before GoTrue removes their owner. */
@@ -230,99 +277,37 @@ async function deleteUserAvatars(userId: string): Promise<void> {
   }
 }
 
-/** Legacy tables whose rows die with the user (NOT NULL or secret-bearing reference). */
-const LEGACY_ROWS_DELETED_WITH_USER = new Set(['basejump.invitations', 'public.google_oauth_tokens']);
-
 /**
  * Clear every NO ACTION / RESTRICT foreign key into `auth.users` that would make
- * GoTrue's delete of the user fail with "Database error deleting user".
+ * GoTrue's delete of the user fail with "Database error deleting user". The FKs
+ * come from the catalog, not a hard-coded list, so a table this code never heard
+ * of is handled the same way. One transaction, idempotent, a no-op where no such
+ * FK exists (every environment on 2026-11-12, after drop_legacy_suna_schemas):
  *
- * Prod and dev still carry the legacy `basejump` schema: each user owns a
- * personal `basejump.accounts` row (`primary_owner_user_id`, NO ACTION), and
- * other legacy tables point at the user too. The FKs come from the catalog, not
- * a hard-coded list, so a table this code never heard of is handled the same
- * way. One transaction, idempotent, a no-op where no such FK exists (local,
- * self-host):
- *
- *   1. refuse (throw) while the user owns a NON-personal basejump account:
- *      that is team data, never deleted here;
- *   2. clear nullable attribution to personal basejump accounts, refuse unknown
- *      NOT NULL references, then delete the personal accounts;
- *   3. nullable references from other rows are set NULL; invitations and
- *      Google OAuth tokens of the user are deleted;
- *   4. any other NOT NULL reference (an admin audit actor) refuses: an audit
- *      row is never rewritten or dropped.
- *
- * Why not a migration that changes the FKs: the legacy tables exist only in
- * some environments, the change would alter 12 constraints on live tables, and
- * the routine already runs inside the one place that knows which rows belong to
- * the deleted person.
+ *   1. nullable references from other rows are set NULL;
+ *   2. any NOT NULL reference (an audit actor) refuses: such a row is never
+ *      rewritten or dropped here.
  */
-async function clearLegacyAuthUserReferences(userId: string): Promise<void> {
+async function clearAuthUserReferences(userId: string): Promise<void> {
   type Ref = { tbl: string; col: string; notnull: boolean };
-  const refsInto = (target: string) => sql`
-    SELECT format('%I.%I', n.nspname, r.relname) AS tbl, quote_ident(a.attname) AS col, a.attnotnull AS notnull
-      FROM pg_constraint c
-      JOIN pg_class r ON r.oid = c.conrelid
-      JOIN pg_namespace n ON n.oid = r.relnamespace
-      JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY (c.conkey)
-     WHERE c.contype = 'f' AND c.confrelid = ${target}::regclass AND c.confdeltype IN ('a', 'r')`;
   await db.transaction(async (tx) => {
-    const personal: string[] = [];
-    const [exists] = (await tx.execute(
-      sql`SELECT to_regclass('basejump.accounts') IS NOT NULL AS has`,
-    )) as unknown as Array<{ has: boolean }>;
-    if (exists?.has) {
-      const owned = (await tx.execute(sql`
-        SELECT id::text AS id, personal_account FROM basejump.accounts WHERE primary_owner_user_id = ${userId}
-      `)) as unknown as Array<{ id: string; personal_account: boolean }>;
-      if (owned.some((row) => !row.personal_account)) {
-        throw new Error(
-          `user ${userId} owns a non-personal basejump account; its team data is not deleted by account deletion`,
-        );
-      }
-      personal.push(...owned.map((row) => row.id));
-      if (personal.length > 0) {
-        const ids = sql.join(personal.map((id) => sql`${id}::uuid`), sql`, `);
-        const dependents = (await tx.execute(refsInto('basejump.accounts'))) as unknown as Ref[];
-        for (const ref of dependents) {
-          if (!ref.notnull) {
-            await tx.execute(
-              sql`UPDATE ${sql.raw(ref.tbl)} SET ${sql.raw(ref.col)} = NULL WHERE ${sql.raw(ref.col)} IN (${ids})`,
-            );
-          } else {
-            const rows = await tx.execute(sql`SELECT 1 FROM ${sql.raw(ref.tbl)} WHERE ${sql.raw(ref.col)} IN (${ids}) LIMIT 1`);
-            if (rows.length > 0) {
-              throw new Error(`personal account is still referenced by ${ref.tbl}.${ref.col} (NOT NULL); not rewritten or deleted`);
-            }
-          }
-        }
-        // Legacy threads cascade with their account, but their runs do not.
-        // Ownership comes from the thread, never from creator attribution.
-        const [legacyThreads] = await tx.execute(sql`
-          SELECT to_regclass('public.threads') IS NOT NULL
-             AND to_regclass('public.agent_runs') IS NOT NULL AS has`);
-        if (legacyThreads?.has) {
-          await tx.execute(sql`
-            DELETE FROM public.agent_runs WHERE thread_id IN (
-              SELECT thread_id FROM public.threads WHERE account_id IN (${ids})
-            )`);
-        }
-        await tx.execute(sql`DELETE FROM basejump.accounts WHERE id IN (${ids})`);
-      }
-    }
-    const refs = (await tx.execute(refsInto('auth.users'))) as unknown as Ref[];
+    const refs = (await tx.execute(sql`
+      SELECT format('%I.%I', n.nspname, r.relname) AS tbl, quote_ident(a.attname) AS col, a.attnotnull AS notnull
+        FROM pg_constraint c
+        JOIN pg_class r ON r.oid = c.conrelid
+        JOIN pg_namespace n ON n.oid = r.relnamespace
+        JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY (c.conkey)
+       WHERE c.contype = 'f' AND c.confrelid = 'auth.users'::regclass AND c.confdeltype IN ('a', 'r')`)) as unknown as Ref[];
     for (const ref of refs) {
-      const target = sql`${sql.raw(ref.tbl)} WHERE ${sql.raw(ref.col)} = ${userId}`;
-      if (LEGACY_ROWS_DELETED_WITH_USER.has(ref.tbl)) {
-        await tx.execute(sql`DELETE FROM ${target}`);
-      } else if (!ref.notnull) {
+      if (!ref.notnull) {
         await tx.execute(sql`UPDATE ${sql.raw(ref.tbl)} SET ${sql.raw(ref.col)} = NULL WHERE ${sql.raw(ref.col)} = ${userId}`);
-      } else {
-        const [row] = (await tx.execute(sql`SELECT 1 AS hit FROM ${target} LIMIT 1`)) as unknown as Array<{ hit: number }>;
-        if (row) {
-          throw new Error(`user ${userId} is still referenced by ${ref.tbl}.${ref.col} (NOT NULL); not rewritten or deleted`);
-        }
+        continue;
+      }
+      const [row] = (await tx.execute(
+        sql`SELECT 1 AS hit FROM ${sql.raw(ref.tbl)} WHERE ${sql.raw(ref.col)} = ${userId} LIMIT 1`,
+      )) as unknown as Array<{ hit: number }>;
+      if (row) {
+        throw new Error(`user ${userId} is still referenced by ${ref.tbl}.${ref.col} (NOT NULL); not rewritten or deleted`);
       }
     }
   });
@@ -340,8 +325,20 @@ function isAuthUserNotFound(error: { status?: number; code?: string }): boolean 
  * survive the deletion. See `reclaimableAccountIds`.
  */
 export async function deleteAccountImmediately(accountId: string, userId?: string) {
-  const request = await getActiveDeletionRequest(accountId);
-  await runAccountDeletion(accountId, userId ?? request?.userId, request?.id);
+  const pending = await getActiveDeletionRequest(accountId);
+  // Claim the pending request before the irreversible work, as the scheduled
+  // worker does: a cancel that lands during the run then loses instead of
+  // reading `cancelled` over an erased account.
+  const request = pending ? await claimDeletionRequestNow(pending.id) : null;
+  if (pending && !request) {
+    throw new BillingError('The deletion request changed while it was read. Reload and try again.', 409);
+  }
+  try {
+    await runAccountDeletion(accountId, userId ?? request?.userId, request);
+  } catch (err) {
+    if (request) await releaseDeletionRequest(request.id).catch(() => {});
+    throw err;
+  }
   if (request) {
     await markDeletionCompleted(request.id);
   }
@@ -373,7 +370,7 @@ export async function processScheduledDeletions(): Promise<{
     try {
       // The request row carries the requester, so the scheduled path gets the
       // same owner-wide sweep as the immediate one.
-      await runAccountDeletion(request.accountId, request.userId, request.id);
+      await runAccountDeletion(request.accountId, request.userId, request);
       await markDeletionCompleted(request.id);
       processed++;
     } catch (err) {
@@ -411,14 +408,6 @@ const STOP_CONCURRENCY = 8;
  * 47 sessions in exactly these non-`active` states with live Daytona boxes.
  */
 const RECLAIMABLE_SANDBOX_STATUSES = ['provisioning', 'active', 'error'] as const;
-
-/** `project_sessions` states that still claim the session is doing something. */
-const LIVE_SESSION_STATUSES = [
-  'queued',
-  'branching',
-  'provisioning',
-  'running',
-] as const;
 
 export interface SandboxReclaimSummary {
   accounts: number;
@@ -607,16 +596,9 @@ async function reclaimAccountSandboxes(accountIds: string[]): Promise<SandboxRec
   // `running` forever. Those are the rows the manual playbook had to fix by
   // hand. Terminal statuses are left alone.
   try {
-    const settled = await db
-      .update(projectSessions)
-      .set({ status: 'stopped', updatedAt: new Date() })
-      .where(
-        and(
-          inArray(projectSessions.accountId, accountIds),
-          inArray(projectSessions.status, [...LIVE_SESSION_STATUSES]),
-        ),
-      )
-      .returning({ sessionId: projectSessions.sessionId });
+    // The canonical live set (`reconcileStuck`): the states that still claim
+    // the session is doing something.
+    const settled = await settleLiveSessionsOfAccounts(accountIds);
     summary.sessionsSettled = settled.length;
   } catch (err) {
     summary.errors++;
@@ -631,6 +613,51 @@ async function reclaimAccountSandboxes(accountIds: string[]): Promise<SandboxRec
   return summary;
 }
 
+/** Stripe subscription statuses that never bill again. */
+const ENDED_SUBSCRIPTION_STATUSES = new Set(['canceled', 'incomplete_expired']);
+
+/**
+ * Cancel every subscription of the account that can still bill: each live
+ * subscription of each of its Stripe customers, and the stored one. Already
+ * gone at Stripe (`resource_missing`) is the state we want.
+ */
+async function cancelLiveStripeSubscriptions(
+  accountId: string,
+  account: Awaited<ReturnType<typeof getCreditAccount>>,
+): Promise<void> {
+  const stripe = getStripe();
+  const live = new Set<string>();
+  if (account?.stripeSubscriptionId && account.stripeSubscriptionStatus !== 'canceled') {
+    live.add(account.stripeSubscriptionId);
+  }
+  for (const customer of await listStripeCustomerIdsByAccountId(accountId)) {
+    let startingAfter: string | undefined;
+    for (;;) {
+      const page = await stripe.subscriptions.list({
+        customer,
+        status: 'all',
+        limit: 100,
+        ...(startingAfter ? { starting_after: startingAfter } : {}),
+      });
+      for (const subscription of page.data) {
+        if (!ENDED_SUBSCRIPTION_STATUSES.has(subscription.status)) live.add(subscription.id);
+      }
+      if (!page.has_more || page.data.length === 0) break;
+      startingAfter = page.data[page.data.length - 1].id;
+    }
+  }
+  for (const subscriptionId of live) {
+    try {
+      await stripe.subscriptions.cancel(subscriptionId);
+    } catch (err) {
+      if ((err as { code?: string }).code !== 'resource_missing') {
+        logger.error(`[AccountDeletion] Failed to cancel Stripe subscription ${subscriptionId} for ${accountId}:`, { error: String(err) });
+        throw err;
+      }
+    }
+  }
+}
+
 async function performDeletion(accountId: string, userId?: string) {
   const reclaimed = await reclaimAccountSandboxes(await reclaimableAccountIds(accountId, userId));
   // Parked boxes, session files and managed repos, before the money steps: a
@@ -639,28 +666,37 @@ async function performDeletion(accountId: string, userId?: string) {
 
   const account = await getCreditAccount(accountId);
 
-  // Cancel the Stripe subscription. A failure aborts the deletion: the request
-  // must not read `completed` while the customer is still billed.
-  if (account?.stripeSubscriptionId && account.stripeSubscriptionStatus !== 'canceled') {
-    try {
-      await getStripe().subscriptions.cancel(account.stripeSubscriptionId);
-    } catch (err) {
-      // Already gone at Stripe: the state we want.
-      if ((err as { code?: string }).code !== 'resource_missing') {
-        logger.error(`[AccountDeletion] Failed to cancel Stripe subscription for ${accountId}:`, { error: String(err) });
-        throw err;
-      }
-    }
-  }
+  // An active Enterprise license ends through its owner, so the license and
+  // `enterprise_entitled` end together. Its subscription is cancelled below
+  // with every other one.
+  const { endContractForClosedAccount } = await import('./enterprise-contracts');
+  await endContractForClosedAccount(accountId);
+
+  // Cancel EVERY live subscription of the account's Stripe customers, not only
+  // the stored one: a legacy machine subscription, a second plan, an
+  // Enterprise contract's subscription. A failure aborts the deletion: the
+  // request must not read `completed` while the customer is still billed.
+  await cancelLiveStripeSubscriptions(accountId, account);
 
   // Record any remaining balance as forfeited and empty every bucket.
   await wallet.forfeit(accountId);
 
-  await updateCreditAccount(accountId, {
-    tier: 'free',
-    stripeSubscriptionStatus: 'canceled',
-    paymentStatus: 'deleted',
-  } as any);
+  // An Enterprise tier is operator-owned; the provider writer below skips it.
+  if (account?.tier === 'enterprise') {
+    await applyAdminOverride(accountId, { tier: 'free' }, { userId: null, action: 'account.closed' });
+  }
+  // `deleted` is terminal (applyStripeSync refuses every later write). The
+  // subscription id is cleared: nothing on a closed account is current.
+  await applyStripeSync(
+    accountId,
+    {
+      tier: 'free',
+      stripeSubscriptionId: null,
+      stripeSubscriptionStatus: 'canceled',
+      paymentStatus: 'deleted',
+    },
+    { account, mode: 'update', reason: 'account.closed' },
+  );
 
   logger.info(`[AccountDeletion] Account deleted: ${accountId}`);
 }
@@ -741,18 +777,18 @@ async function deleteAccountData(accountId: string, keepRequestId?: string): Pro
   // Provider-side app-event instances live outside our database: release them
   // before the cascade drops the rows that name them.
   for (const { projectId } of await db
-    .select({ projectId: projects.projectId })
-    .from(projects)
-    .where(eq(projects.accountId, accountId))) {
+    .select({ projectId: projectsView.projectId })
+    .from(projectsView)
+    .where(eq(projectsView.accountId, accountId))) {
     await releaseProjectEventSubscriptions(projectId);
   }
 
   await db.transaction(async (tx) => {
     // Scopes for the child rows that carry no account_id of their own.
     const accountProjects = tx
-      .select({ projectId: projects.projectId })
-      .from(projects)
-      .where(eq(projects.accountId, accountId));
+      .select({ projectId: projectsView.projectId })
+      .from(projectsView)
+      .where(eq(projectsView.accountId, accountId));
     const accountApps = tx.select({ appId: apps.appId }).from(apps).where(eq(apps.accountId, accountId));
     const accountDeployments = tx
       .select({ deploymentId: appDeployments.deploymentId })
@@ -813,6 +849,6 @@ async function deleteAccountData(accountId: string, keepRequestId?: string): Pro
       );
 
     // Pass 3 — the row itself: the FK cascade takes every remaining table.
-    await tx.delete(accounts).where(eq(accounts.accountId, accountId));
+    await deleteAccountRows(eq(accountsView.accountId, accountId), tx);
   });
 }

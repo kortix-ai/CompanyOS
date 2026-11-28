@@ -1,9 +1,10 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { accounts, gatewayRequestLogs, projects } from '@kortix/db';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { db } from './db';
-import { llmValueFields } from './llm-value';
 import { totalSpendSql } from './llm-spend';
+import { estimateLlmValue, llmValueFields } from './llm-value';
+import { gatewaySeriesRows } from '../projects/lib/gateway-series';
 import { listProjectGatewaySourceSpend } from './session-costs';
 
 const accountId = crypto.randomUUID();
@@ -13,6 +14,7 @@ beforeAll(async () => {
   await db.insert(accounts).values({ accountId, name: 'LLM value test' });
   await db.insert(projects).values(
     [projectId, otherProjectId].map((id) => ({
+      splitPending: true,
       projectId: id,
       accountId,
       name: 'Synthetic',
@@ -50,6 +52,9 @@ test('SQL values reconcile with sources; estimates never alter charges or duplic
     {
       ...base,
       requestId: crypto.randomUUID(),
+      // KRTX-4023: the flag is a real column now; the writer sets column and
+      // metadata key together (gateway-trace-row.ts), so the seed does too.
+      usageEstimated: true,
       metadata: { usageEstimated: true },
     },
     { ...base, requestId: crypto.randomUUID(), cachedTokens: 1001 },
@@ -86,9 +91,39 @@ test('SQL values reconcile with sources; estimates never alter charges or duplic
   expect(other.total.estimated_usage_value).toBe(0.00205);
 });
 
+// KRTX-4023 rework: an ECS rollout replaces pods gradually, so old writers
+// keep inserting rows after the one-shot backfill ran. Their INSERT predates
+// the promoted columns — the flag rides in metadata only — and the table is
+// insert-only, so nothing heals them later. The fill trigger
+// (20261108090000100) lifts the key at insert; without it the gate reads the
+// row as not-estimated and prices a usage its own writer marked estimated.
+test('a row the old writer inserts during the rollout (the key in metadata, no column) stays unpriced', async () => {
+  const id = crypto.randomUUID();
+  await db.insert(projects).values({
+    projectId: id,
+    accountId,
+    name: 'Rollout window',
+    repoUrl: 'https://example.test/repo.git',
+  });
+  await db.execute(sql`
+    insert into kortix.gateway_request_logs
+      (request_id, account_id, project_id, requested_model, resolved_model,
+       provider, status, ok, billing_mode, final_cost, input_tokens, output_tokens, cached_tokens, metadata)
+    values (${crypto.randomUUID()}, ${accountId}::uuid, ${id}::uuid,
+            'codex/gpt-6.1-sol', 'gpt-6.1-sol', 'openai-codex', 200, true, 'none', '0', 1000, 100, 500,
+            '{"usageEstimated":true}'::jsonb)
+  `);
+  const [sum] = await db
+    .select({ ...llmValueFields })
+    .from(gatewayRequestLogs)
+    .where(eq(gatewayRequestLogs.projectId, id));
+  expect(sum).toEqual({ estimated_usage_value: null, priced_requests: 0, unpriced_requests: 1 });
+});
+
 test('an unsupported-only window remains unknown, never a guessed zero', async () => {
   const id = crypto.randomUUID();
   await db.insert(projects).values({
+    splitPending: true,
     projectId: id,
     accountId,
     name: 'Unknown rates',
@@ -111,4 +146,83 @@ test('an unsupported-only window remains unknown, never a guessed zero', async (
   });
   expect(report.total.estimated_usage_value).toBeNull();
   expect(report.total.unpriced_requests).toBe(1);
+});
+
+// `GET /gateway/overview` reports `requests` (every row), `errors` (not ok),
+// and the estimate's `priced_requests` / `unpriced_requests` (ok rows only).
+// The Costs page shows priced + unpriced + failed under the Requests headline,
+// so the three buckets must add up to it, for any mix of rows.
+test('priced + unpriced + errors equals requests: the estimate buckets explain the headline', async () => {
+  const id = crypto.randomUUID();
+  await db.insert(projects).values({
+    splitPending: true,
+    projectId: id,
+    accountId,
+    name: 'Bucket invariant',
+    repoUrl: 'https://example.test/buckets.git',
+  });
+  const base = {
+    accountId,
+    projectId: id,
+    requestedModel: 'codex/gpt-6.1-sol',
+    resolvedModel: 'gpt-6.1-sol',
+    provider: 'openai-codex',
+    status: 200,
+    ok: true,
+    inputTokens: 1000,
+    outputTokens: 100,
+    cachedTokens: 500,
+  };
+  await db.insert(gatewayRequestLogs).values([
+    { ...base, requestId: crypto.randomUUID() },
+    { ...base, requestId: crypto.randomUUID(), resolvedModel: 'unknown' },
+    { ...base, requestId: crypto.randomUUID(), status: 500, ok: false },
+    { ...base, requestId: crypto.randomUUID(), resolvedModel: 'unknown', status: 429, ok: false },
+  ]);
+  const [row] = await db
+    .select({
+      ...llmValueFields,
+      requests: sql<number>`count(*)::int`,
+      errors: sql<number>`count(*) filter (where not ok)::int`,
+    })
+    .from(gatewayRequestLogs)
+    .where(eq(gatewayRequestLogs.projectId, id));
+  expect(row).toMatchObject({ requests: 4, errors: 2, priced_requests: 1, unpriced_requests: 1 });
+  expect(row!.priced_requests + row!.unpriced_requests + row!.errors).toBe(row!.requests);
+});
+
+
+test.each([
+  ['openai-codex', 'gpt-6.1-terra'],
+  ['morph_abliterated', 'morph-dsv41flash-abliterated'],
+  ['claude-agent', 'claude-opus-5-5'],
+  ['claude-agent', 'claude-sonnet-5-5'],
+])('SQL values match request estimates for %s/%s', async (provider, model) => {
+  const requestId = crypto.randomUUID();
+  await db.insert(gatewayRequestLogs).values({ accountId, projectId, requestId,
+    requestedModel: model, resolvedModel: model, provider, status: 200, ok: true,
+    billingMode: 'none', inputTokens: 300001, outputTokens: 53, cachedTokens: 23, cacheWriteTokens: 37 });
+  const [row] = await db.select(llmValueFields).from(gatewayRequestLogs).where(eq(gatewayRequestLogs.requestId, requestId));
+  expect(row?.estimated_usage_value).toBeCloseTo(estimateLlmValue({ provider, model, input: 300001, output: 53, cached: 23, cacheWrite: 37 }) ?? -1, 10);
+  expect(row?.priced_requests).toBe(1);
+});
+
+
+test('daily gateway series includes every newly priced model without changing billed cost', async () => {
+  const isolatedProjectId = crypto.randomUUID();
+  await db.insert(projects).values({ projectId: isolatedProjectId, accountId, name: 'Synthetic series', repoUrl: 'https://example.test/repo.git' });
+  const models = [
+    { provider: 'openai-codex', model: 'gpt-6.1-terra' },
+    { provider: 'morph_abliterated', model: 'morph-dsv41flash-abliterated' },
+    { provider: 'claude-agent', model: 'claude-opus-5-5' },
+  ];
+  await db.insert(gatewayRequestLogs).values(models.map(({ provider, model }) => ({
+    accountId, projectId: isolatedProjectId, requestId: crypto.randomUUID(),
+    requestedModel: model, resolvedModel: model, provider,
+    status: 200, ok: true, billingMode: 'none', inputTokens: 1000, outputTokens: 100, cachedTokens: 500,
+  })));
+  const rows = await gatewaySeriesRows(isolatedProjectId, 1);
+  expect(rows).toHaveLength(1);
+  expect(rows[0]?.estimated_usage_value).toBeCloseTo(0.005398, 10);
+  expect(rows[0]?.priced_requests).toBe(3);
 });

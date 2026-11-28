@@ -7,13 +7,14 @@
 
 # Kortix CompanyOS
 
-**The open-source CompanyOS: the cloud-native agent harness for companies.**
+**The open-source CompanyOS: the operating system for the AI-native company.**
 
 Open Source &nbsp;·&nbsp; Extensible &nbsp;·&nbsp; Multiplayer &nbsp;·&nbsp; Sovereign
 
-Always-on agents that start on events, run in parallel and share one memory of your company.
+Connect every data source, orchestrate agents, and keep their skills, memory and connectors in one
+git repo you own.
 
-Build custom agents on pi and ship them from one git repo. Schedules, webhooks, your tools' events
+Build custom agents on pi and ship them from that repo. Schedules, webhooks, your tools' events
 and your team's messages start them. My Kortix routes the work, and swarms of agents run it in
 parallel, each on its own cloud computer with state that persists.
 
@@ -186,7 +187,7 @@ The **[Guide](https://kortix.com/docs/guide)** walks you through Kortix CompanyO
 ## What runs on Kortix CompanyOS
 
 - **SciencePal**, the AI research assistant of the Hong Kong Institute of AI for Science at City University of Hong Kong, built from Kortix's open-source code.
-- **Platinum**, a sandbox cloud for AI agents, built and tested by agents on Kortix.
+- **[Platinum](https://www.platinum.dev)**, a microVM sandbox cloud for AI agents, built and tested by agents on Kortix.
 - **Kortix itself**: an intake agent triages every issue and worker agents fix it on their own machines.
 - **An AI-run hedge fund desk**, our own, on real public SEC data with simulated capital.
 - **A US telecommunications infrastructure company** whose agents design fiber routes, self-hosted in its own cloud.

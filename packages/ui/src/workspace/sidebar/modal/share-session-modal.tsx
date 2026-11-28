@@ -1,7 +1,7 @@
 'use client';
 
 import { Button } from '../../../primitives/button';
-import { InfoBanner } from '../../../primitives/info-banner';
+import { Alert as BannerAlert, AlertDescription as BannerAlertDescription, AlertMedia as BannerAlertMedia } from '../../../primitives/alert';
 import Loading from '../../../primitives/loading';
 import {
   Modal,
@@ -29,9 +29,9 @@ import { sessionOversightQueryKey } from '../../../access/iam/session-oversight-
 import { ShieldCheckIcon } from '@phosphor-icons/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { SessionEmbedSection } from './session-embed-section';
 import { sessionAccessSummary, sessionAccessView } from './share-session-access';
 import { refreshAfterShare } from './share-session-cache';
+import { SessionPeoplePicker } from './session-people-picker';
 
 /**
  * The three options, worded from the EDITOR's seat.
@@ -44,7 +44,7 @@ import { refreshAfterShare } from './share-session-cache';
  */
 const SESSION_SHARING_COPY: SharingCopy = {
   heading: 'Who can open this session',
-  project: { label: 'Whole project', desc: 'Every member of this project.' },
+  project: { label: 'Whole workspace', desc: 'Every member of this workspace.' },
   private: { label: 'Only you', desc: 'Nobody else can open this session.' },
   members: { label: 'Specific people', desc: 'Only the members and groups you choose.' },
 };
@@ -91,7 +91,7 @@ export function ShareSessionModal({
   // while the dialog is open (a user action), and silently absent on any error
   // — the IAM read never toasts (`showErrors: false`).
   const accountId = session?.account_id ?? null;
-  const { accountApiEnabled, publicSharesEnabled } = useUiHostConfig();
+  const { accountApiEnabled } = useUiHostConfig();
   const oversightQuery = useQuery({
     queryKey: sessionOversightQueryKey(accountId ?? ''),
     queryFn: () => getSessionOversight(accountId!),
@@ -168,6 +168,9 @@ export function ShareSessionModal({
                   : delegateCopy(view.ownerLabel, tI18nComplete)
               }
               disabledModes={view.disabledModes}
+              renderMembers={(selection, change) => (
+                <SessionPeoplePicker projectId={projectId} session={session} value={selection} onChange={change} />
+              )}
             />
           ) : (
             // Read-only, not hidden: a person a session was shared with should
@@ -178,20 +181,9 @@ export function ShareSessionModal({
             </p>
           )}
           {oversightOn ? (
-            <InfoBanner
-              tone="neutral"
-              icon={ShieldCheckIcon}
-              data-testid="session-oversight-disclosure"
-            >
+            <BannerAlert variant="default" data-testid="session-oversight-disclosure"><BannerAlertMedia><ShieldCheckIcon /></BannerAlertMedia><BannerAlertDescription>
               {tOversight.raw('shareDisclosure')}
-            </InfoBanner>
-          ) : null}
-          {/* Next to the in-team picker: who in the project can open the
-              session, and an embed snippet for the actual session page (the
-              viewer inside the frame signs in). Same server verdict as the
-              picker (`can_manage_sharing`). */}
-          {view.canEdit && session && publicSharesEnabled ? (
-            <SessionEmbedSection projectId={projectId} sessionId={session.session_id} />
+            </BannerAlertDescription></BannerAlert>
           ) : null}
         </ModalBody>
         <ModalFooter className="sm:justify-between">

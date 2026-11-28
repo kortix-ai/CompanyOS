@@ -20,6 +20,7 @@ import { matchesProvidersBinding as is } from './keys.ts';
 import { ProviderSheet } from './provider-sheet.tsx';
 import { type ProviderRow, providerMeta, providerRows } from './providers-model.ts';
 import { useProviders } from './use-providers.ts';
+import { PICK_WORKSPACE_TEXT } from '../../lib/workspaces.ts';
 
 export interface ProvidersScreenProps {
   projectId: string | null;
@@ -39,7 +40,7 @@ const SPLIT_MIN_WIDTH = 90;
 
 export function ProvidersScreen(props: ProvidersScreenProps) {
   if (!props.projectId) {
-    return <text fg={theme.faint}>No project selected. Type /projects to pick one.</text>;
+    return <text fg={theme.faint}>{PICK_WORKSPACE_TEXT}</text>;
   }
   return <ProvidersScreenBody {...props} projectId={props.projectId} />;
 }
@@ -162,13 +163,7 @@ function ProvidersScreenBody({
           onSearch={setSearch}
           onFilterDone={() => setFiltering(false)}
           active={pane === 'list'}
-          note={
-            data.pooled
-              ? 'New API keys, ChatGPT and Claude accounts are private to you until you share them.'
-              : data.canWrite
-                ? null
-                : 'Ask an owner of this project to add a key.'
-          }
+          note="New API keys, ChatGPT and Claude accounts are shared with every workspace member. You can make one private."
           width={listWidth}
           height={height}
         />

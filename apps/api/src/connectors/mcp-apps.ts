@@ -26,10 +26,11 @@
  */
 import type { OAuth2ApplicationInput } from '@kortix/api-contract';
 import { CHANNEL_PLATFORM_IDS, CHANNELS } from '@kortix/shared/channel-descriptors';
-import { config } from '../config';
-import { logger } from '../lib/logger';
 import { composioVisibleToolkits, publicToolkit } from './composio-catalog-search';
+import { connectorIdentity } from './catalog-install';
 import { appNameKey } from './connect-direct-twins';
+import { googleMcpUrl } from './google/host';
+import { kortixOAuthClients } from './kortix-oauth-clients';
 import {
   type ComposioCatalogCard,
   type ConnectorCatalogItem,
@@ -55,6 +56,15 @@ export interface KortixClientAuth {
   tokenEndpointAuthMethod: 'client_secret_basic' | 'client_secret_post';
   scopes: string[];
   authorizationParams?: Record<string, string>;
+  /** The provider's userinfo endpoint and the field that names the account (`connected_as`). */
+  identity?: { url: string; field: string };
+  /**
+   * The provider keeps ONE grant per account for this client: revoking any of
+   * its tokens revokes every token of the account (Google). Disconnect then
+   * revokes upstream only for the account's last live connection
+   * (`revokeConnectionOAuth2`).
+   */
+  oneGrantPerAccount?: boolean;
 }
 
 export interface McpApp {
@@ -69,6 +79,12 @@ export interface McpApp {
   /** `apps/web/public/connector-icons/<slug>.svg` exists. */
   icon: boolean;
   auth: { kind: 'dcr' } | { kind: 'none' } | KortixClientAuth;
+  /**
+   * What a sign-in lets agents do, in plain words, written from `auth.scopes`.
+   * Every app that asks Kortix's client for scopes has one (mcp-apps.test.ts):
+   * My Kortix names it before the person says yes to a sign-in.
+   */
+  access?: string;
 }
 
 const DCR = { kind: 'dcr' } as const;
@@ -84,14 +100,19 @@ const GOOGLE = {
   tokenEndpointAuthMethod: 'client_secret_post',
   // Google issues a refresh token only for offline access, on a fresh consent.
   authorizationParams: { access_type: 'offline', prompt: 'consent' },
+  identity: { url: 'https://openidconnect.googleapis.com/v1/userinfo', field: 'email' },
+  oneGrantPerAccount: true,
 } as const;
 
-/** The scopes each Google Workspace MCP server requires (developers.google.com,
- *  "Configure the Google Workspace MCP servers"). */
-const DRIVE_SCOPES = [
-  'https://www.googleapis.com/auth/drive.readonly',
-  'https://www.googleapis.com/auth/drive.file',
-];
+/**
+ * Google scopes. Gmail and Drive need restricted scopes, Calendar, Docs,
+ * Sheets and contacts sensitive ones: the OAuth consent screen of the
+ * deployment's Google project must list every one (GCP `kortix-connectors`
+ * for staging and prod, `kortix-connectors-dev` for local and dev).
+ */
+const GOOGLE_IDENTITY = ['openid', 'https://www.googleapis.com/auth/userinfo.email', 'https://www.googleapis.com/auth/userinfo.profile'];
+const googleScope = (name: string) => `https://www.googleapis.com/auth/${name}`;
+const DRIVE = googleScope('drive');
 
 export const MCP_APPS: readonly McpApp[] = [
   { slug: 'linear', name: 'Linear', description: 'Issues, projects and cycles.', domain: 'linear.app', categories: ['productivity', 'developer-tools'], url: 'https://mcp.linear.app/mcp', icon: true, auth: DCR },
@@ -121,33 +142,42 @@ export const MCP_APPS: readonly McpApp[] = [
   { slug: 'deepwiki', name: 'DeepWiki', description: 'Ask about any public GitHub repository.', domain: 'deepwiki.com', categories: ['developer-tools'], url: 'https://mcp.deepwiki.com/mcp', icon: false, auth: NONE },
   { slug: 'context7', name: 'Context7', description: 'Up-to-date docs for libraries and frameworks.', domain: 'context7.com', categories: ['developer-tools'], url: 'https://mcp.context7.com/mcp', icon: false, auth: NONE },
   { slug: 'cloudflare', name: 'Cloudflare', description: 'Accounts, Workers and DNS.', domain: 'cloudflare.com', categories: ['developer-tools', 'hosting'], url: 'https://mcp.cloudflare.com/mcp', icon: true, auth: DCR },
+  // Kortix's own Google MCP servers (./google): Composio-compatible tools over
+  // Google's REST APIs, served in-process. The URLs never reach the network.
   {
-    slug: 'gmail', name: 'Gmail', description: 'Read, search and draft email.', domain: 'gmail.com', categories: ['email'], url: 'https://gmailmcp.googleapis.com/mcp/v1', icon: true,
-    auth: { ...GOOGLE, scopes: ['https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/gmail.compose'] },
+    slug: 'gmail', name: 'Gmail', description: 'Read, search, send and organize email in your inbox.', domain: 'gmail.com', categories: ['email'], url: googleMcpUrl('gmail'), icon: true,
+    auth: { ...GOOGLE, scopes: [...GOOGLE_IDENTITY, googleScope('gmail.modify'), googleScope('gmail.settings.basic'), googleScope('contacts.readonly'), googleScope('contacts.other.readonly')] },
+    access: 'Read, search, send, label and archive mail, and move it to the trash; change basic mail settings such as filters and the vacation reply; read your contacts; see your name and email address.',
   },
   {
-    slug: 'google_calendar', name: 'Google Calendar', description: 'Calendars, events and free time.', domain: 'calendar.google.com', categories: ['productivity', 'meetings'], url: 'https://calendarmcp.googleapis.com/mcp/v1', icon: true,
-    auth: { ...GOOGLE, scopes: ['https://www.googleapis.com/auth/calendar.calendarlist.readonly', 'https://www.googleapis.com/auth/calendar.events.freebusy', 'https://www.googleapis.com/auth/calendar.events.readonly'] },
+    slug: 'google_calendar', name: 'Google Calendar', description: 'Calendars, events and free time.', domain: 'calendar.google.com', categories: ['productivity', 'meetings'], url: googleMcpUrl('calendar'), icon: true,
+    auth: { ...GOOGLE, scopes: [...GOOGLE_IDENTITY, googleScope('calendar')] },
+    access: 'See, create, change and delete events on every calendar you can open, and change who calendars are shared with; see your name and email address.',
   },
   {
-    slug: 'google_drive', name: 'Google Drive', description: 'Files and folders.', domain: 'drive.google.com', categories: ['productivity'], url: 'https://drivemcp.googleapis.com/mcp/v1', icon: true,
-    auth: { ...GOOGLE, scopes: DRIVE_SCOPES },
+    slug: 'google_drive', name: 'Google Drive', description: 'Find, read, upload and share files.', domain: 'drive.google.com', categories: ['productivity'], url: googleMcpUrl('drive'), icon: true,
+    auth: { ...GOOGLE, scopes: [...GOOGLE_IDENTITY, DRIVE] },
+    access: 'See, create, change, share and delete every file in your Google Drive; see your name and email address.',
   },
   {
-    slug: 'google_docs', name: 'Google Docs', description: 'Documents.', domain: 'docs.google.com', categories: ['productivity'], url: 'https://docsmcp.googleapis.com/mcp/v1', icon: true,
-    auth: { ...GOOGLE, scopes: [...DRIVE_SCOPES, 'https://www.googleapis.com/auth/documents.readonly', 'https://www.googleapis.com/auth/documents'] },
+    slug: 'google_docs', name: 'Google Docs', description: 'Read, write and edit documents.', domain: 'docs.google.com', categories: ['productivity'], url: googleMcpUrl('docs'), icon: true,
+    auth: { ...GOOGLE, scopes: [...GOOGLE_IDENTITY, googleScope('documents'), DRIVE] },
+    access: 'See, create and change all your Google Docs, and see, create, change, share and delete every file in your Google Drive; see your name and email address.',
   },
   {
-    slug: 'google_sheets', name: 'Google Sheets', description: 'Spreadsheets.', domain: 'sheets.google.com', categories: ['productivity', 'data'], url: 'https://sheetsmcp.googleapis.com/mcp/v1', icon: true,
-    auth: { ...GOOGLE, scopes: [...DRIVE_SCOPES, 'https://www.googleapis.com/auth/spreadsheets.readonly', 'https://www.googleapis.com/auth/spreadsheets'] },
+    slug: 'google_sheets', name: 'Google Sheets', description: 'Read and update spreadsheets.', domain: 'sheets.google.com', categories: ['productivity', 'data'], url: googleMcpUrl('sheets'), icon: true,
+    auth: { ...GOOGLE, scopes: [...GOOGLE_IDENTITY, googleScope('spreadsheets'), DRIVE] },
+    access: 'See, create and change all your Google Sheets, and see, create, change, share and delete every file in your Google Drive; see your name and email address.',
   },
   {
     slug: 'github', name: 'GitHub', description: 'Repositories, issues and pull requests.', domain: 'github.com', categories: ['developer-tools'], url: 'https://api.githubcopilot.com/mcp/', icon: true,
     auth: { kind: 'kortix_client', client: 'github', issuer: 'https://github.com/login/oauth', authorizationUrl: 'https://github.com/login/oauth/authorize', tokenUrl: 'https://github.com/login/oauth/access_token', tokenEndpointAuthMethod: 'client_secret_post', scopes: ['repo', 'read:org', 'read:user', 'user:email'] },
+    access: 'Read and change code, issues and pull requests in every repository you can reach, public and private; read your organizations, your profile and your email address.',
   },
   {
     slug: 'slack', name: 'Slack', description: 'Search and post as you in Slack.', domain: 'slack.com', categories: ['messaging'], url: 'https://mcp.slack.com/mcp', icon: true,
     auth: { kind: 'kortix_client', client: 'slack', issuer: 'https://mcp.slack.com', authorizationUrl: 'https://slack.com/oauth/v2_user/authorize', tokenUrl: 'https://slack.com/api/oauth.v2.user.access', tokenEndpointAuthMethod: 'client_secret_post', scopes: ['channels:history', 'channels:read', 'chat:write', 'groups:history', 'groups:read', 'im:history', 'im:read', 'search:read.public', 'users:read'] },
+    access: 'Read messages in the public and private channels and direct messages you are in, post messages as you, search public channels, and see the people in the workspace.',
   },
   {
     slug: 'hubspot', name: 'HubSpot', description: 'Contacts, companies and deals.', domain: 'hubspot.com', categories: ['crm', 'marketing'], url: 'https://mcp.hubspot.com/', icon: true,
@@ -156,6 +186,7 @@ export const MCP_APPS: readonly McpApp[] = [
   {
     slug: 'asana', name: 'Asana', description: 'Tasks, projects and portfolios.', domain: 'asana.com', categories: ['productivity'], url: 'https://mcp.asana.com/v2/mcp', icon: true,
     auth: { kind: 'kortix_client', client: 'asana', issuer: 'https://app.asana.com', authorizationUrl: 'https://app.asana.com/-/oauth_authorize', tokenUrl: 'https://app.asana.com/-/oauth_token', revocationUrl: 'https://app.asana.com/-/oauth_revoke', tokenEndpointAuthMethod: 'client_secret_post', scopes: ['default'] },
+    access: 'Full access to your Asana account: read and change the tasks, projects and portfolios you can reach.',
   },
   {
     slug: 'box', name: 'Box', description: 'Files, folders and Box AI.', domain: 'box.com', categories: ['productivity'], url: 'https://mcp.box.com', icon: true,
@@ -168,35 +199,11 @@ export const MCP_APPS: readonly McpApp[] = [
     // X issue a refresh token, without it the 2 h access token cannot renew.
     slug: 'x', name: 'X', description: 'Read and post on X as you.', domain: 'x.com', categories: ['marketing', 'socialmedia'], url: 'https://api.x.com/mcp', icon: false,
     auth: { kind: 'kortix_client', client: 'x', issuer: 'https://api.x.com', authorizationUrl: 'https://x.com/i/oauth2/authorize', tokenUrl: 'https://api.x.com/2/oauth2/token', revocationUrl: 'https://api.x.com/2/oauth2/revoke', tokenEndpointAuthMethod: 'client_secret_basic', scopes: ['tweet.read', 'tweet.write', 'users.read', 'offline.access'] },
+    access: 'Read posts and accounts, and post as you; the access lasts until you remove it.',
   },
 ];
 
-interface KortixOAuthClient {
-  client_id: string;
-  client_secret: string;
-}
-
-let parsedClients: { raw: string; clients: Map<string, KortixOAuthClient> } | null = null;
-
-/** `KORTIX_OAUTH_CLIENTS`, parsed once per value. A malformed value lists no client. */
-export function kortixOAuthClients(raw: string = config.KORTIX_OAUTH_CLIENTS ?? ''): Map<string, KortixOAuthClient> {
-  if (parsedClients?.raw === raw) return parsedClients.clients;
-  const clients = new Map<string, KortixOAuthClient>();
-  if (raw.trim()) {
-    try {
-      for (const [name, value] of Object.entries(JSON.parse(raw) as Record<string, unknown>)) {
-        const entry = value as Partial<KortixOAuthClient> | null;
-        if (typeof entry?.client_id === 'string' && entry.client_id && typeof entry.client_secret === 'string' && entry.client_secret) {
-          clients.set(name, { client_id: entry.client_id, client_secret: entry.client_secret });
-        }
-      }
-    } catch {
-      logger.warn('[mcp-apps] KORTIX_OAUTH_CLIENTS is not valid JSON; no Kortix OAuth client is configured');
-    }
-  }
-  parsedClients = { raw, clients };
-  return clients;
-}
+export { kortixOAuthClients };
 
 /** An app is usable when it needs no client of Kortix's, or that client is configured. */
 export function mcpAppAvailable(app: McpApp, clients = kortixOAuthClients()): boolean {
@@ -252,6 +259,46 @@ export function kortixClientApplication(
   };
 }
 
+/** The `kortix_client` sign-in a stored OAuth application was issued through, matched by issuer and client id. */
+function kortixClientAuthFor(application: Pick<OAuth2ApplicationInput, 'issuer' | 'client_id'>, clients = kortixOAuthClients()): KortixClientAuth | null {
+  for (const app of MCP_APPS) {
+    if (app.auth.kind !== 'kortix_client' || app.auth.issuer !== application.issuer) continue;
+    if (clients.get(app.auth.client)?.client_id === application.client_id) return app.auth;
+  }
+  return null;
+}
+
+/**
+ * A stored application with the deployment's CURRENT secret for Kortix's own
+ * client. Every credential row keeps the application it signed in with, so a
+ * rotated client secret would otherwise break every refresh. Any other
+ * application is returned unchanged.
+ */
+export function withCurrentKortixClientSecret<T extends Pick<OAuth2ApplicationInput, 'issuer' | 'client_id' | 'client_secret'>>(
+  application: T,
+  clients = kortixOAuthClients(),
+): T {
+  const auth = kortixClientAuthFor(application, clients);
+  const secret = auth ? clients.get(auth.client)?.client_secret : undefined;
+  return secret && secret !== application.client_secret ? { ...application, client_secret: secret } : application;
+}
+
+/** Whether a stored application signed in through a Kortix client whose provider keeps one grant per account (Google). */
+export function kortixClientHasOneGrantPerAccount(
+  application: Pick<OAuth2ApplicationInput, 'issuer' | 'client_id'>,
+  clients = kortixOAuthClients(),
+): boolean {
+  return kortixClientAuthFor(application, clients)?.oneGrantPerAccount === true;
+}
+
+/** The userinfo endpoint that names the account a Kortix-client sign-in authorized, or null. */
+export function kortixClientIdentity(
+  application: Pick<OAuth2ApplicationInput, 'issuer' | 'client_id'>,
+  clients = kortixOAuthClients(),
+): { url: string; field: string } | null {
+  return kortixClientAuthFor(application, clients)?.identity ?? null;
+}
+
 /** The Popular section, in this order. */
 const POPULAR = ['gmail', 'google_calendar', 'slack', 'github', 'notion', 'linear', 'google_drive', 'hubspot', 'atlassian', 'figma', 'airtable', 'stripe'];
 
@@ -279,6 +326,7 @@ export function mcpAppCatalogItem(app: McpApp): ConnectorCatalogItem {
     mcpUrl: app.url,
     oauth: true,
     oneClick: true,
+    ...(app.access ? { access: app.access } : {}),
   };
 }
 
@@ -399,6 +447,14 @@ export function composioCatalogItem(card: ComposioCatalogCard, domain: string | 
   };
 }
 
+/** The name label of a domain: `wisprflow` for `wisprflow.ai`, `acme` for `app.acme.co.uk`. */
+export function domainLabel(domain: string): string {
+  const labels = domain.toLowerCase().split('.').filter(Boolean);
+  if (labels.length < 2) return labels[0] ?? '';
+  const secondLevel = labels.length > 2 && labels.at(-2)!.length <= 3 && labels.at(-1)!.length === 2;
+  return labels.at(secondLevel ? -3 : -2)!;
+}
+
 /** One app across the catalogues: `appNameKey`, a trailing "API" or
  *  "GraphQL" dropped too ("Bitbucket API" is Bitbucket). Empty: no key. */
 export function v2AppKey(name: string): string {
@@ -453,6 +509,13 @@ export async function connectorsV2Items(
     const key = v2AppKey(item.name);
     if (key && !domainOf.has(key)) domainOf.set(key, item.domain);
   }
+  // A discovered record is named after its domain ("wisprflow.ai"): its app
+  // name is the domain's label, so Composio's "Wispr Flow MCP" joins it.
+  for (const item of direct) {
+    if (item.name.toLowerCase() !== item.domain) continue;
+    const key = v2AppKey(domainLabel(item.domain));
+    if (key && !domainOf.has(key)) domainOf.set(key, item.domain);
+  }
   // A toolkit whose name matches no record joins the registry's `<slug>.com`:
   // Composio's YouTube (`youtube`) is the registry's "YouTube Data"
   // (youtube.com), Twitter is "twitter.com – current". Without this the app
@@ -497,6 +560,14 @@ export async function connectorsV2Items(
   }
   const placed = new Set([...curatedApps, ...turns]);
   return [...curatedApps, ...turns, ...groups.filter((group) => !placed.has(group))].flat();
+}
+
+/** The catalogue publishes `url` as an app's MCP server: a registry record or a Kortix app. */
+export async function catalogPublishesMcpUrl(url: string): Promise<boolean> {
+  const key = connectorIdentity({ provider: 'mcp', url });
+  if (!key) return false;
+  const items = await connectorsV2Items();
+  return items.some((item) => item.mcpUrl && connectorIdentity({ provider: 'mcp', url: item.mcpUrl }) === key);
 }
 
 /** The Discover catalogue every project browses. */

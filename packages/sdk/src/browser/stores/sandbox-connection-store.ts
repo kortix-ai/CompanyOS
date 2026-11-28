@@ -18,9 +18,11 @@ interface SandboxConnectionStore {
 	reconnectAttempts: number;
 	/** Timestamp when status changed to unreachable/connecting (for "down since") */
 	disconnectedAt: number | null;
-	/** OpenCode server version from /global/health (e.g. "1.2.10") */
+	/** The session runtime's harness version from `/kortix/health` (e.g. "1.4.0"); null until a probe answers. */
+	harnessVersion: string | null;
+	/** @deprecated Renamed to `harnessVersion` (same value). Removed in the next major. */
 	openCodeVersion: string | null;
-	/** Whether the OpenCode server reports healthy */
+	/** Whether the session runtime reports healthy */
 	healthy: boolean | null;
 	/** Last runtime boot/readiness error reported by /kortix/health */
 	runtimeError: string | null;
@@ -44,7 +46,7 @@ interface SandboxConnectionStore {
 	 * `disconnectedAt` (which tracks `status`, and is CLEARED the instant a
 	 * "booting" 503 classification calls `setSandboxStatus('connected')`), this
 	 * survives an indefinite `connected`-but-not-`healthy` stretch — the case a
-	 * wedged OpenCode boot produces: every probe gets a 503, which resets the
+	 * wedged runtime boot produces: every probe gets a 503, which resets the
 	 * failure counter each time, so `status` never crosses the unreachable
 	 * threshold and `disconnectedAt` never even gets set. Without a clock that
 	 * survives that shape, that case has no time bound at all. See
@@ -125,6 +127,7 @@ export const useSandboxConnectionStore = create<SandboxConnectionStore>(() => ({
 	wasConnected: loadWasConnected(),
 	reconnectAttempts: 0,
 	disconnectedAt: null,
+	harnessVersion: null,
 	openCodeVersion: null,
 	healthy: null,
 	runtimeError: null,
@@ -272,60 +275,41 @@ export function resetForServerSwitch(serverUrl?: string) {
 	lastResetServerUrl = serverUrl || null;
 	clearRuntimeReadyVerified();
 
-	if (runtimeReady) {
-		// /start already resolved stage==='ready' (markRuntimeReadyVerified is set
-		// ONLY then — page.tsx), which the backend returns only after it reached the
-		// daemon and OpenCode answered: the runtime is PROVEN healthy server-side.
-		// So seed healthy=true (optimistic) — NOT healthy=null. The SSE event stream
-		// (use-opencode-events) AND message sync (use-session-sync) both gate on this
-		// same `healthy` flag, so seeding null left the FE UNSUBSCRIBED until the
-		// ~350ms client health poll flipped it green — by which point the server-side
-		// first turn (claimed from the API and delivered during boot) had accumulated
-		// and bulk-rendered AT ONCE instead of streaming. healthy=true subscribes at
-		// the switch, so part.updated events render token-by-token, and also reclaims
-		// the redundant health RTT. The 350ms poller still runs and self-corrects to
-		// healthy=false (reconnect pill) if the browser genuinely can't reach the box,
-		// so this only narrows to the ready path where health was actually proven.
-		useSandboxConnectionStore.setState({
-			status: "connected",
-			failCount: 0,
-			initialCheckDone: true,
-			wasConnected: true,
-			reconnectAttempts: 0,
-			disconnectedAt: null,
-			openCodeVersion: null,
-			healthy: true,
-			runtimeError: null,
-			// A different runtime: its features are unknown until it answers.
-			runtimeCapabilities: null,
-			manualRetryNonce: 0,
-			lastRuntimeEvidenceAt: null,
-			bootingSinceAt: null,
-			parked: false,
-		});
-		saveWasConnected(true);
-		return;
-	}
-
+	// The fields that differ follow `runtimeReady`:
+	// /start already resolved stage==='ready' (markRuntimeReadyVerified is set
+	// ONLY then — page.tsx), which the backend returns only after it reached the
+	// daemon and the runtime answered: it is PROVEN healthy server-side.
+	// So seed healthy=true (optimistic) — NOT healthy=null. The SSE event stream
+	// (use-runtime-events) AND message sync (use-session-sync) both gate on this
+	// same `healthy` flag, so seeding null left the FE UNSUBSCRIBED until the
+	// ~350ms client health poll flipped it green — by which point the server-side
+	// first turn (claimed from the API and delivered during boot) had accumulated
+	// and bulk-rendered AT ONCE instead of streaming. healthy=true subscribes at
+	// the switch, so part.updated events render token-by-token, and also reclaims
+	// the redundant health RTT. The 350ms poller still runs and self-corrects to
+	// healthy=false (reconnect pill) if the browser genuinely can't reach the box,
+	// so this only narrows to the ready path where health was actually proven.
 	useSandboxConnectionStore.setState({
-		status: "connecting",
+		status: runtimeReady ? "connected" : "connecting",
 		failCount: 0,
-		initialCheckDone: false,
-		wasConnected: false,
+		initialCheckDone: runtimeReady,
+		wasConnected: runtimeReady,
 		reconnectAttempts: 0,
 		disconnectedAt: null,
+		harnessVersion: null,
 		openCodeVersion: null,
-		healthy: null,
+		healthy: runtimeReady ? true : null,
 		runtimeError: null,
+		// A different runtime: its features are unknown until it answers.
 		runtimeCapabilities: null,
 		manualRetryNonce: 0,
 		lastRuntimeEvidenceAt: null,
-		bootingSinceAt: Date.now(),
+		bootingSinceAt: runtimeReady ? null : Date.now(),
 		// A different box. Whatever the previous one was doing says nothing
 		// about this one.
 		parked: false,
 	});
-	saveWasConnected(false);
+	saveWasConnected(runtimeReady);
 }
 
 /**
@@ -379,7 +363,10 @@ export function setRuntimeHealth(
 	// leaving a stale claim behind. A healthy box is never parked.
 	const nextParked = healthy ? false : options?.parked === true;
 	if (state.parked !== nextParked) updates.parked = nextParked;
-	if (version !== undefined && state.openCodeVersion !== version) updates.openCodeVersion = version;
+	if (version !== undefined && state.harnessVersion !== version) {
+		updates.harnessVersion = version;
+		updates.openCodeVersion = version;
+	}
 	const nextRuntimeError = healthy ? null : runtimeError;
 	if (runtimeError !== undefined && state.runtimeError !== nextRuntimeError) {
 		updates.runtimeError = nextRuntimeError;

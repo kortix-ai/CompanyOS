@@ -53,7 +53,8 @@
 import * as React from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { BottomSheetScrollView, type BottomSheetModal } from '@gorhom/bottom-sheet';
+import type { BottomSheetModal } from '@gorhom/bottom-sheet';
+import { SheetScrollView } from '@/components/kortix/sheet-parts';
 import Animated from 'react-native-reanimated';
 import { View } from 'react-native';
 import { useTranslation } from 'react-i18next';
@@ -84,7 +85,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
 import { SettingsGroup, SettingsRow } from '@/components/kortix/settings-list';
-import { KortixBottomSheetModal, useCloseThen } from '@/components/kortix/sheet';
+import { KortixBottomSheetModal, useCloseThen, useContentSheetBottomInset } from '@/components/kortix/sheet';
 import { POP_IN, PUSH_IN, SheetBackButton } from '@/components/kortix/sheet-push';
 import { useToast } from '@/components/kortix/toast-provider';
 import { useConfirmDialog } from '@/components/kortix/confirm-dialog';
@@ -92,11 +93,6 @@ import { useSessionPromptRequestStore } from '@/stores/session-prompt-request-st
 import { SessionChangeFileView, SessionChangesList } from '@/components/session/SessionChangesView';
 import { SessionRenameForm } from '@/components/session/SessionRenameForm';
 import { SessionShareForm } from '@/components/session/SessionShareForm';
-import {
-  PUBLIC_SHARE_CONFIRM_TITLE,
-  SessionShareLinkConfirm,
-  type PublicShareConfirmKind,
-} from '@/components/session/SessionPublicShareRows';
 import { useSandboxContext } from '@/contexts/SandboxContext';
 import { haptics } from '@/lib/haptics';
 import { REVIEW_CONTROL_ACTIONS, changeRequestControlsFrom } from '@kortix/sdk';
@@ -135,15 +131,11 @@ import {
 } from '@/lib/session/session-cache-write';
 import { useTabStore } from '@/stores/tab-store';
 
-/**
- * The sheet's view: its actions, or a form pushed over them. The public
- * link's confirms push over Share, and Back returns to Share.
- */
-type SheetView = 'options' | 'rename' | 'share' | PublicShareConfirmKind | 'changes' | 'change-file';
+/** The sheet's view: its actions, or a form pushed over them. */
+type SheetView = 'options' | 'rename' | 'share' | 'changes' | 'change-file';
 const PUSHED_VIEW_TITLE: Record<Exclude<SheetView, 'options'>, string> = {
   rename: 'Rename session',
   share: 'Share session',
-  ...PUBLIC_SHARE_CONFIRM_TITLE,
   changes: 'Changes',
   // The pushed file's name replaces this while one shows.
   'change-file': 'Changes',
@@ -152,8 +144,6 @@ const PUSHED_VIEW_TITLE: Record<Exclude<SheetView, 'options'>, string> = {
 const PARENT_VIEW: Record<Exclude<SheetView, 'options'>, SheetView> = {
   rename: 'options',
   share: 'options',
-  'create-link': 'share',
-  'stop-link': 'share',
   changes: 'options',
   'change-file': 'changes',
 };
@@ -185,6 +175,7 @@ export interface SessionActionsSheetProps {
 export const SessionActionsSheet = React.forwardRef<SessionActionsSheetRef, SessionActionsSheetProps>(
   function SessionActionsSheet({ projectId, onOpenFiles }, ref) {
     const insets = useSafeAreaInsets();
+    const sheetBottomInset = useContentSheetBottomInset();
     const toast = useToast();
     const queryClient = useQueryClient();
     const { t } = useTranslation();
@@ -578,10 +569,10 @@ export const SessionActionsSheet = React.forwardRef<SessionActionsSheetRef, Sess
           keyboardBlurBehavior="restore">
           {/* One scrollable child: dynamic sizing needs it, and Share's member
               list can be taller than the screen. */}
-          <BottomSheetScrollView
+          <SheetScrollView
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) + 8 }}>
+            contentContainerStyle={{ paddingBottom: Math.max(sheetBottomInset, 16) + 8 }}>
             {!menuSession ? null : sheetView === 'options' ? (
               <Animated.View key="options" entering={returning ? POP_IN : undefined}>
                 {/* Board 11b: one group of Rename/Share/Pin/Archive/Restart/Stop, then
@@ -714,28 +705,13 @@ export const SessionActionsSheet = React.forwardRef<SessionActionsSheetRef, Sess
                   onDone={closeSheet}
                 />
               </Animated.View>
-            ) : sheetView === 'share' ? (
-              // Share pushes in place of the options. Back from a link confirm
-              // slides it back in from the left.
-              <Animated.View key="share" entering={returning ? POP_IN : PUSH_IN}>
-                <SessionShareForm
-                  projectId={projectId}
-                  session={liveRow(menuSession)}
-                  onDone={closeSheet}
-                  onConfirmPublicLink={pushView}
-                />
-              </Animated.View>
             ) : (
-              <Animated.View key={sheetView} entering={PUSH_IN}>
-                <SessionShareLinkConfirm
-                  projectId={projectId}
-                  session={liveRow(menuSession)}
-                  kind={sheetView}
-                  onDone={popView}
-                />
+              // Share pushes in place of the options.
+              <Animated.View key="share" entering={PUSH_IN}>
+                <SessionShareForm projectId={projectId} session={liveRow(menuSession)} onDone={closeSheet} />
               </Animated.View>
             )}
-          </BottomSheetScrollView>
+          </SheetScrollView>
         </KortixBottomSheetModal>
 
         <AlertDialog

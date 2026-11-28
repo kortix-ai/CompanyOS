@@ -106,11 +106,14 @@ describe('an account that requires MFA', () => {
   const MEMBER = crypto.randomUUID();
   const NO_ROLE = crypto.randomUUID();
   let mfa: SeededProject;
+  let mfaSecond: SeededProject;
   let sharedLogin: string;
 
   beforeAll(async () => {
     // A fresh account, set to require MFA before anything authorizes in it.
     mfa = await seedProject('usable-gateway-secrets-mfa');
+    // A second active project makes the account a split_pending legacy account: there a member reaches a project only through a grant, which is what this suite tests (on a 1:1 workspace membership is access, design.md C3).
+    mfaSecond = await seedProject('usable-gateway-secrets-mfa-second', { accountId: mfa.account_id });
     await db.update(accounts).set({ mfaRequired: true }).where(eq(accounts.accountId, mfa.account_id));
     await insertIntoView(db, accountMembers, [
       { userId: MEMBER, accountId: mfa.account_id, accountRole: 'member', isSuperAdmin: false },
@@ -135,7 +138,7 @@ describe('an account that requires MFA', () => {
   });
 
   afterAll(async () => {
-    await removeSeeded([mfa]);
+    await removeSeeded([mfaSecond, mfa]);
   });
 
   test('a member`s session still reaches the ChatGPT login shared with the project', async () => {
@@ -292,8 +295,17 @@ describe('resolveProjectSharedProviderSecrets: the ChatGPT accounts an unconfigu
   });
 
   test('a principal that cannot read the project, or is not an account member, gets nothing', async () => {
+    // No `withheld` count either: only a member who reads the project learns it.
     expect(await shared(OUTSIDER, null)).toEqual({ coolingDown: false, secrets: [] });
     expect(await shared(STRANGER, null)).toEqual({ coolingDown: false, secrets: [] });
+  });
+
+  test('a member who reads the project but may use none of its accounts learns how many are withheld', async () => {
+    const restricted = await resolveProjectSharedProviderSecrets({
+      accountId, projectId, userId: READER, grantUserId: null, providerId: 'codex', name: CODEX,
+      ids: [codex['restricted-ungranted']!],
+    });
+    expect(restricted).toEqual({ coolingDown: false, secrets: [], withheld: 1 });
   });
 
   test('an account cooling down is skipped; when every usable account cools down, the earliest retry is reported', async () => {

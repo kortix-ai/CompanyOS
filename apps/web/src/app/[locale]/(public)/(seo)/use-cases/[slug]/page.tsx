@@ -6,6 +6,7 @@ import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
 
 import { BlogProse } from '@/components/blog/blog-prose';
+import { PostCard } from '@/components/blog/post-card';
 import {
   Callout,
   CopyBlock,
@@ -21,8 +22,7 @@ import {
   ToolList,
   ToolNeed,
 } from '@/components/use-cases/mdx';
-import { UseTemplateButton } from '@/components/use-cases/template-install-dialog';
-import { UseCaseCard, UseCaseCover } from '@/components/use-cases/use-case-card';
+import { UseCaseCover } from '@/components/use-cases/use-case-card';
 import { UseCaseMdxImage } from '@/components/use-cases/use-case-mdx-image';
 import { UseCaseToc, type TocItem } from '@/components/use-cases/use-case-toc';
 import { MarketingButton } from '@/features/marketing/kit/marketing-button';
@@ -132,9 +132,6 @@ export default async function UseCasePage(props: PageProps) {
   const readingTime = post?.readingTime ?? 1;
   const more = allUseCases.filter((p) => p.slug !== slug).slice(0, 3);
   const toc = (data.toc ?? []) as TocItem[];
-  // Default-on kill-switch shared with the API (KORTIX_TEMPLATES_ENABLED) — set it
-  // to 'false' to hide the "Use this template" button.
-  const templatesEnabled = process.env.KORTIX_TEMPLATES_ENABLED !== 'false';
 
   const postUrl = `${siteMetadata.url}/use-cases/${slug}`;
   const jsonLd = {
@@ -230,33 +227,15 @@ export default async function UseCasePage(props: PageProps) {
             </div>
 
             <div className="border-border border-t pt-6">
-              {templatesEnabled && data.template ? (
-                <>
-                  <h2 className="text-foreground text-base font-medium">
-                    {tI18nComplete.raw('text5bad1b115369')}
-                  </h2>
-                  <p className="text-muted-foreground mt-2 text-sm text-pretty">
-                    {tI18nComplete.raw('text512241b9824c')}
-                  </p>
-                  <UseTemplateButton
-                    templateId={data.template}
-                    title={data.title}
-                    className="hit-area-y-1 mt-6 w-full"
-                  />
-                </>
-              ) : (
-                <>
-                  <h2 className="text-foreground text-base font-medium">
-                    {tI18nComplete.raw('text8887e9d916d6')}
-                  </h2>
-                  <p className="text-muted-foreground mt-2 text-sm text-pretty">
-                    {tI18nComplete.raw('text31c48dd4f15a')}
-                  </p>
-                  <MarketingButton size="md" asChild className="hit-area-y-1 mt-6">
-                    <Link href="/auth">{tI18nComplete.raw('text61e8d44ad423')}</Link>
-                  </MarketingButton>
-                </>
-              )}
+              <h2 className="text-foreground text-base font-medium">
+                {tI18nComplete.raw('text8887e9d916d6')}
+              </h2>
+              <p className="text-muted-foreground mt-2 text-sm text-pretty">
+                {tI18nComplete.raw('text31c48dd4f15a')}
+              </p>
+              <MarketingButton size="md" asChild className="hit-area-y-1 mt-6">
+                <Link href="/auth">{tI18nComplete.raw('text61e8d44ad423')}</Link>
+              </MarketingButton>
             </div>
           </aside>
         </div>
@@ -269,7 +248,10 @@ export default async function UseCasePage(props: PageProps) {
             <ul className="grid grid-cols-1 gap-y-12 sm:grid-cols-2 lg:col-span-3 lg:grid-cols-3">
               {more.map((item) => (
                 <li key={item.slug} className="sm:pr-6 lg:pr-8">
-                  <UseCaseCard post={item} />
+                  <PostCard
+                    post={item}
+                    cover={<UseCaseCover post={item} className="aspect-video w-full shrink-0" />}
+                  />
                 </li>
               ))}
             </ul>

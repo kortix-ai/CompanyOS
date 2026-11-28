@@ -23,7 +23,12 @@ import {
   startWaitDeadline,
   type SessionImageStep,
 } from '@/lib/session/connect-step';
-import { firstPromptSeed, SEED_BUSY_WATCHDOG_MS, seedUndelivered } from '@/lib/session/first-prompt-seed';
+import {
+  firstPromptSeed,
+  rememberSeededPrompt,
+  SEED_BUSY_WATCHDOG_MS,
+  seedUndelivered,
+} from '@/lib/session/first-prompt-seed';
 import {
   addOptimisticMessage,
   markSeededPrompt,
@@ -147,6 +152,8 @@ export function useProjectSessionConnect(projectId: string, projectSessions: Pro
       // The server holds the prompt under an id this device never sees: the
       // first user message the runtime reports is its echo and replaces it.
       markSeededPrompt(root, seed.info.id);
+      // The thread retires it when the log holds the echo (`seedEchoed`).
+      rememberSeededPrompt(root, { id: seed.info.id, text: first.text.trim() });
       setLocalSessionStatus(root, { type: 'busy' });
       clearTimeout(seedWatchdogsRef.current[root]);
       seedWatchdogsRef.current[root] = setTimeout(() => {
@@ -328,7 +335,7 @@ export function useProjectSessionConnect(projectId: string, projectSessions: Pro
             if (health.bootError) {
               failConnect(sessionId, {
                 title: 'Session runtime is not ready',
-                message: 'The sandbox booted, but the project runtime did not become usable.',
+                message: 'The sandbox booted, but the session runtime did not become usable.',
                 detail: health.bootError,
               });
               return;

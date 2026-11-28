@@ -19,7 +19,7 @@
  * the change once, in terms of sessions, and never names a cache shape.
  */
 
-import type { Query, QueryClient } from '@tanstack/react-query';
+import { notifyManager, type Query, type QueryClient } from '@tanstack/react-query';
 import { sessionParentId, type ProjectSession } from '../core/rest/projects-client/sessions';
 import { qk } from './query-keys';
 
@@ -99,10 +99,16 @@ function sessionBelongsInList(projectId: string, query: Query, session: ProjectS
   if (!filters.startedBy) return true;
   const isMember = (session.initiator?.type ?? 'member') === 'member';
   if (filters.startedBy === 'automated') return !isMember;
+  // KRTX-4705: `humans` takes every member-started row, mine or shared.
+  if (filters.startedBy === 'humans') return isMember;
   return isMember && (filters.startedBy === 'me') === (session.is_owner !== false);
 }
 
+/** @deprecated Use `WorkspaceSessionsUpdater`. Kept permanently. */
 export type ProjectSessionsUpdater = (sessions: ProjectSession[]) => ProjectSession[];
+
+/** The workspace name of {@link ProjectSessionsUpdater}: the same type. */
+export type WorkspaceSessionsUpdater = ProjectSessionsUpdater;
 
 interface PagedSessionCache {
   pages: Array<{ items: ProjectSession[]; next_cursor: string | null }>;
@@ -142,6 +148,7 @@ export function applyToCachedSessionShape(cached: unknown, update: ProjectSessio
     // cached list, and most of them do not hold that session.
     let changed = false;
     const pages = cached.pages.map((page) => {
+      if (!Array.isArray(page?.items)) return page;
       const items = update(page.items);
       if (items === page.items) return page;
       changed = true;
@@ -173,22 +180,33 @@ export function applyToCachedSessionShape(cached: unknown, update: ProjectSessio
  * shapes by `isSessionCacheKey`: the prefix also holds each session's prompts,
  * messages and turn, which are not sessions.
  */
-export function updateCachedProjectSessions(
+export function updateCachedWorkspaceSessions(
   queryClient: QueryClient,
   projectId: string,
   update: ProjectSessionsUpdater,
 ): void {
-  queryClient.setQueriesData(
-    {
-      queryKey: qk.project.sessionsScope(projectId),
-      predicate: (query) => isSessionCacheKey(projectId, query),
-    },
-    (cached: unknown) => applyToCachedSessionShape(cached, update),
-  );
+  const entries = queryClient.getQueriesData({
+    queryKey: qk.project.sessionsScope(projectId),
+    predicate: (query) => isSessionCacheKey(projectId, query),
+  });
+  // One notification for every entry written, as `setQueriesData` gave.
+  notifyManager.batch(() => {
+    for (const [key, cached] of entries) {
+      // Only an entry the update changed is written. `setQueryData` stamps
+      // `dataUpdatedAt` even for the same object, which keeps a list from going
+      // stale and restarts its `refetchInterval` — a verdict re-sent every 20 s
+      // held off the sidebar's 60 s poll for good (F-025).
+      const next = applyToCachedSessionShape(cached, update);
+      if (next !== cached) queryClient.setQueryData(key, next);
+    }
+  });
 }
 
+/** @deprecated Use `updateCachedWorkspaceSessions`. Kept permanently. */
+export const updateCachedProjectSessions = updateCachedWorkspaceSessions;
+
 /** The first cached session row of this project, in any list shape, that `match` accepts. */
-export function findCachedProjectSession(
+export function findCachedWorkspaceSession(
   queryClient: QueryClient,
   projectId: string,
   match: (session: ProjectSession) => boolean,
@@ -207,6 +225,9 @@ export function findCachedProjectSession(
   }
   return undefined;
 }
+
+/** @deprecated Use `findCachedWorkspaceSession`. Kept permanently. */
+export const findCachedProjectSession = findCachedWorkspaceSession;
 
 /**
  * Insert a session at the top of the cached lists, or replace it where it is
@@ -260,7 +281,7 @@ export function upsertIntoCachedSessionShape(cached: unknown, session: ProjectSe
  * Returns a function that puts every entry back exactly as it was, for the
  * delete that the server refuses.
  */
-export function removeCachedProjectSession(
+export function removeCachedWorkspaceSession(
   queryClient: QueryClient,
   projectId: string,
   sessionId: string,
@@ -270,7 +291,7 @@ export function removeCachedProjectSession(
     predicate: (query: Query) => isSessionCacheKey(projectId, query),
   };
   const previous = queryClient.getQueriesData(filter);
-  updateCachedProjectSessions(queryClient, projectId, (rows) => {
+  updateCachedWorkspaceSessions(queryClient, projectId, (rows) => {
     const kept = rows.filter((row) => row.session_id !== sessionId);
     return kept.length === rows.length ? rows : kept;
   });
@@ -280,6 +301,9 @@ export function removeCachedProjectSession(
   };
 }
 
+/** @deprecated Use `removeCachedWorkspaceSession`. Kept permanently. */
+export const removeCachedProjectSession = removeCachedWorkspaceSession;
+
 /**
  * Move a cached session to the lists its new state belongs in: replace it, or
  * add it to page one, in every list it belongs in, and take it out of every
@@ -287,7 +311,7 @@ export function removeCachedProjectSession(
  * counterpart of filing a session into a group. Lists without a group filter
  * keep the row where it is: their membership did not change.
  */
-export function refileCachedProjectSession(
+export function refileCachedWorkspaceSession(
   queryClient: QueryClient,
   projectId: string,
   session: ProjectSession,
@@ -313,11 +337,14 @@ export function refileCachedProjectSession(
   }
 }
 
+/** @deprecated Use `refileCachedWorkspaceSession`. Kept permanently. */
+export const refileCachedProjectSession = refileCachedWorkspaceSession;
+
 /**
  * Insert a session into every cached list for this project, or replace it
  * wherever it is already cached. The optimistic counterpart of a create.
  */
-export function upsertCachedProjectSession(
+export function upsertCachedWorkspaceSession(
   queryClient: QueryClient,
   projectId: string,
   session: ProjectSession,
@@ -330,4 +357,48 @@ export function upsertCachedProjectSession(
     },
     (cached: unknown) => upsertIntoCachedSessionShape(cached, session),
   );
+}
+
+/** @deprecated Use `upsertCachedWorkspaceSession`. Kept permanently. */
+export const upsertCachedProjectSession = upsertCachedWorkspaceSession;
+
+/** The session rows a cache entry holds, in any of the three session shapes. */
+function sessionsInShape(data: unknown): ProjectSession[] {
+  if (!data || typeof data !== 'object') return [];
+  if (Array.isArray(data)) return data as ProjectSession[];
+  const paged = data as { pages?: { items?: ProjectSession[] }[] };
+  if (Array.isArray(paged.pages)) return paged.pages.flatMap((page) => page.items ?? []);
+  const single = data as ProjectSession;
+  return typeof single.session_id === 'string' ? [single] : [];
+}
+
+/**
+ * The cached rows of `sessionIds`, read from every SESSION cache of the
+ * project (lists, paged lists, children lists, single rows) and never from the
+ * prompt, message or turn caches that share the prefix. When two caches hold
+ * the same session, the most recently updated one wins, so a stale filtered
+ * list cannot mask the row the sidebar just polled. Sessions in no cache are
+ * absent from the map. Reads only; nothing is fetched.
+ */
+export function readCachedWorkspaceSessions(
+  queryClient: QueryClient,
+  projectId: string,
+  sessionIds: readonly string[],
+): Map<string, ProjectSession> {
+  const wanted = new Set(sessionIds);
+  const best = new Map<string, { row: ProjectSession; at: number }>();
+  if (wanted.size === 0) return new Map();
+  const queries = queryClient
+    .getQueryCache()
+    .findAll({ queryKey: qk.project.sessionsScope(projectId) })
+    .filter((query) => isSessionCacheKey(projectId, query));
+  for (const query of queries) {
+    const at = query.state.dataUpdatedAt;
+    for (const row of sessionsInShape(query.state.data)) {
+      if (!wanted.has(row.session_id)) continue;
+      const held = best.get(row.session_id);
+      if (!held || at > held.at) best.set(row.session_id, { row, at });
+    }
+  }
+  return new Map([...best].map(([id, { row }]) => [id, row]));
 }

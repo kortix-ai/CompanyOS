@@ -1,6 +1,7 @@
-import { accountModelPreferences, projectSessions, projects } from '@kortix/db';
+import { accountModelPreferences, projectSessions } from '@kortix/db';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '../shared/db';
+import { projectsView } from '../workspaces/rows';
 
 // Persistent store for account-scoped default model preferences. Drives the
 // server-side resolution of the synthetic `auto` model in the LLM gateway:
@@ -9,7 +10,7 @@ import { db } from '../shared/db';
 //   platform default.
 // Stored `model` values are gateway wire models (bare managed id like 'glm-5.3-flash',
 // a BYOK 'provider/model', or 'codex/<id>') — never the synthetic `auto` and
-// never the opencode-only `kortix/` prefix.
+// never the runtime's `kortix/` provider prefix.
 //
 // AGENT-SCOPE ROWS ARE PROJECT-SCOPED (see the `project_id` doc comment on
 // `accountModelPreferences` in packages/db/src/schema/kortix.ts for the full
@@ -20,7 +21,9 @@ import { db } from '../shared/db';
 // on. `project_id IS NULL` rows are PRE-migration/legacy pins: they keep
 // applying as an account-wide fallback to every project that hasn't set its
 // OWN project-scoped pin for that agent name yet — never deleted or
-// rewritten automatically, only shadowed once a project explicitly re-pins.
+// rewritten automatically, only shadowed once a project explicitly re-pins
+// or clears. An empty project-scoped model records a clear, so the legacy pin
+// cannot reappear on the next read. It is never returned as a wire model.
 
 export type ModelPreferenceScope = 'account' | 'agent' | 'project';
 
@@ -38,7 +41,8 @@ export interface AccountModelDefaults {
    * Per-agent default wire models, keyed by agent name — resolved for the ONE
    * `projectId` passed to `getAccountModelDefaults` (or, if omitted, the
    * legacy/global fallback pins only). A project-scoped pin always wins over
-   * a legacy global pin for the same agent name.
+   * a legacy global pin for the same agent name. An empty project model is
+   * an explicit clear: it suppresses that fallback and is omitted here.
    */
   agents: Record<string, string>;
   /** Per-project default wire models, keyed by project id. */
@@ -50,7 +54,8 @@ export interface AccountModelDefaults {
  * `agents` map: legacy `project_id IS NULL` rows always apply (the
  * account-wide fallback), and — when `projectId` is supplied — that
  * project's OWN pins are layered on top, overriding the legacy fallback for
- * any agent name both define. Omitting `projectId` returns ONLY the legacy
+ * any agent name both define (or suppressing it after an explicit clear).
+ * Omitting `projectId` returns ONLY the legacy
  * fallback, never another project's pins (safe default with no project
  * context — see resolveDefaultModelForPrincipal's project-less principals).
  */
@@ -81,7 +86,8 @@ export async function getAccountModelDefaults(
     // fallback set above, regardless of row order.
     for (const row of rows) {
       if (row.scope === 'agent' && row.scopeKey && row.projectId === projectId) {
-        defaults.agents[row.scopeKey] = row.model;
+        if (row.model) defaults.agents[row.scopeKey] = row.model;
+        else delete defaults.agents[row.scopeKey];
       }
     }
   }
@@ -151,11 +157,17 @@ export async function deleteAccountModelPreference(params: {
   accountId: string;
   scope: ModelPreferenceScope;
   scopeKey?: string;
-  /** scope='agent' only — deletes THIS project's pin, never another project's or the legacy global one. */
+  /** scope='agent' only — clears THIS project's pin without changing the legacy global fallback for other projects. */
   projectId?: string | null;
 }): Promise<void> {
   const scopeKey = preferenceScopeKey(params.scope, params.scopeKey);
   const projectId = params.scope === 'agent' ? (params.projectId ?? null) : null;
+  if (projectId) {
+    // Keep a durable shadow of the legacy fallback, including when no local
+    // pin exists yet. The same upsert arbiter makes repeated clears idempotent.
+    await upsertAccountModelPreference({ ...params, model: '' });
+    return;
+  }
   await db
     .delete(accountModelPreferences)
     .where(
@@ -163,7 +175,7 @@ export async function deleteAccountModelPreference(params: {
         eq(accountModelPreferences.accountId, params.accountId),
         eq(accountModelPreferences.scope, params.scope),
         eq(accountModelPreferences.scopeKey, scopeKey),
-        projectId ? eq(accountModelPreferences.projectId, projectId) : isNull(accountModelPreferences.projectId),
+        isNull(accountModelPreferences.projectId),
       ),
     );
 }
@@ -191,10 +203,10 @@ export async function getSessionAgentContext(
     .select({
       agentName: projectSessions.agentName,
       metadata: projectSessions.metadata,
-      projectMetadata: projects.metadata,
+      projectMetadata: projectsView.metadata,
     })
     .from(projectSessions)
-    .leftJoin(projects, eq(projects.projectId, projectSessions.projectId))
+    .leftJoin(projectsView, eq(projectsView.projectId, projectSessions.projectId))
     .where(eq(projectSessions.sessionId, sessionId))
     .limit(1);
   if (!row) return null;

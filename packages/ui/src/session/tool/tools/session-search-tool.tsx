@@ -50,21 +50,21 @@ export function SessionSearchTool({ call, defaultOpen, forceOpen, locked }: Tool
       locked={locked}
     >
       {hits.length > 0 ? (
-        <div data-scrollable className="divide-border/20 max-h-96 divide-y overflow-auto">
+        <div data-scrollable className="divide-border max-h-96 divide-y overflow-auto">
           {hits.map((h) => (
             <div key={h.id} className="hover:bg-muted/20 px-3 py-2 transition-colors">
               <div className="mb-0.5 flex items-center gap-2">
                 <span className="text-foreground flex-1 truncate text-xs font-medium">
                   {h.title || '(untitled)'}
                 </span>
-                <span className="text-muted-foreground/40 bg-muted/40 shrink-0 rounded px-1 font-mono text-xs">
+                <span className="text-muted-foreground bg-muted/40 shrink-0 rounded px-1 font-mono text-xs">
                   {h.score}
                 </span>
               </div>
               {h.snippet && (
-                <p className="text-muted-foreground/60 line-clamp-1 text-xs">{h.snippet}</p>
+                <p className="text-muted-foreground line-clamp-1 text-xs">{h.snippet}</p>
               )}
-              <div className="text-muted-foreground/40 mt-0.5 flex items-center gap-2 text-xs">
+              <div className="text-muted-foreground mt-0.5 flex items-center gap-2 text-xs">
                 <span className="font-mono">{h.id.slice(-12)}</span>
                 <span>{h.updated}</span>
               </div>

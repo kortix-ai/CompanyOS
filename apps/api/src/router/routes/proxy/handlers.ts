@@ -3,7 +3,6 @@ import { type ProxyServiceConfig } from '../../config/proxy-services';
 import { timeUpstream } from '../../../middleware/upstream-timing';
 import { config } from '../../../config';
 import { logger as appLogger } from '../../../lib/logger';
-import { resolveActorFromRequest } from '../../../shared/actor-context';
 import { assertSafeEgressUrl, UnsafeEgressError } from '../../../shared/ssrf-guard';
 import {
   matchAllowedRoute,
@@ -14,7 +13,8 @@ import {
   refundToolReservation,
   injectApiKey,
 } from './helpers';
-import { capFirecrawlCrawlLimit } from './crawl-limit';
+import { boundFirecrawlRequest } from './firecrawl-budget';
+import { serveWebFallback } from './web-fallback';
 
 // === Core Proxy Handler ===
 //
@@ -249,14 +249,15 @@ async function handleKortixProxy(
     });
   }
 
+  const requestBody = await getRequestBody(c, method);
   const kortixKey = service.getKortixApiKey();
   if (!kortixKey) {
+    const fallback = await serveWebFallback(service, subPath, requestBody, 'no key');
+    if (fallback) return fallback;
     throw new HTTPException(503, {
       message: `${service.name} not configured`,
     });
   }
-
-  const actor = resolveActorFromRequest(c, { logPrefix: '[PROXY]' });
 
   const targetUrl = `${service.targetBaseUrl}${subPath}${queryString}`;
   const headers = buildForwardHeaders(c);
@@ -264,16 +265,13 @@ async function handleKortixProxy(
   headers.delete('x-kortix-token');
   headers.delete('x-api-key');
   headers.delete('authorization');
-  let body = await getRequestBody(c, method);
-
-  body = injectApiKey(service, headers, body);
-  body = capFirecrawlCrawlLimit(service, method, subPath, body, headers);
+  let body = injectApiKey(service, headers, requestBody);
+  body = boundFirecrawlRequest(service, method, subPath, body, headers);
   // Route-specific billing overrides service default.
   const billingToolName = matchedRoute.billingToolName || service.billingToolName;
   const toolReservation = await reserveToolProxyCredits(
     accountId,
     billingToolName,
-    actor,
     `Proxy ${service.name}: ${method} ${subPath}`,
   );
 
@@ -282,7 +280,10 @@ async function handleKortixProxy(
   );
 
   const response = await forwardUpstream(service, method, subPath, targetUrl, headers, body, toolReservation);
-  return (await platformKeyRefusal(service, response)) ?? response;
+  const refusal = await platformKeyRefusal(service, response);
+  if (!refusal) return response;
+  // The provider refuses Kortix's account: serve the fallback (KRTX-5162).
+  return (await serveWebFallback(service, subPath, requestBody, `upstream ${response.status}`)) ?? refusal;
 }
 
 // === Kortix user with own key: passthrough, billed the tool price ===
@@ -304,7 +305,6 @@ async function handleKortixPassthrough(
   const toolReservation = await reserveToolProxyCredits(
     accountId,
     service.billingToolName,
-    null,
     `Passthrough ${service.name}: ${method} ${subPath}`,
   );
 

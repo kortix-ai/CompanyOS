@@ -3,7 +3,8 @@
  *  provider-transition-store.ts so the platform session-sandbox service imports
  *  this instead of the transition store. */
 import { eq } from 'drizzle-orm';
-import { projects, type Database } from '@kortix/db';
+import { type Database } from '@kortix/db';
+import { projectsView } from '../../workspaces/rows';
 
 export const PIN_META_KEY = 'default_sandbox_provider';
 export const ACTIVE_EXTERNAL_ID_META_KEY = 'active_sandbox_external_template_id';
@@ -19,6 +20,29 @@ export const ACTIVE_SNAPSHOT_NAME_META_KEY = 'active_sandbox_snapshot_name';
  *  response (which passes `metadata` through) is pollable without a schema
  *  change to @kortix/api-contract. */
 export const TRANSITION_META_KEY = 'sandbox_provider_transition';
+
+/** The `TRANSITION_META_KEY` entry activation and the pin set/clear write: the
+ *  one place the marker's keys are named. `snapshotName` / `externalTemplateId`
+ *  are written only when given (the pin set/clear path has neither). */
+export function transitionMarker(args: {
+  status: 'activated' | 'cleared';
+  target: string | null;
+  generation: number;
+  now: Date;
+  snapshotName?: string;
+  externalTemplateId?: string | null;
+}): Record<string, unknown> {
+  return {
+    [TRANSITION_META_KEY]: {
+      status: args.status,
+      target_provider: args.target,
+      generation: args.generation,
+      ...(args.snapshotName !== undefined && { snapshot_name: args.snapshotName }),
+      ...(args.externalTemplateId !== undefined && { external_template_id: args.externalTemplateId }),
+      activated_at: args.now.toISOString(),
+    },
+  };
+}
 
 function asMeta(v: unknown): Record<string, unknown> {
   return v && typeof v === 'object' && !Array.isArray(v) ? { ...(v as Record<string, unknown>) } : {};
@@ -72,9 +96,9 @@ function recoverLegacyActiveSnapshotName(
  */
 export async function readActiveRouting(db: Database, projectId: string): Promise<ActiveRouting | null> {
   const [row] = await db
-    .select({ metadata: projects.metadata, generation: projects.sandboxProviderGeneration })
-    .from(projects)
-    .where(eq(projects.projectId, projectId))
+    .select({ metadata: projectsView.metadata, generation: projectsView.sandboxProviderGeneration })
+    .from(projectsView)
+    .where(eq(projectsView.projectId, projectId))
     .limit(1);
   if (!row) return null;
   const meta = asMeta(row.metadata);

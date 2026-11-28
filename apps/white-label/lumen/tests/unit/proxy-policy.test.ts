@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { buildUpstreamPath } from '@kortix/white-label-shared/upstream-path';
 import {
   SESSION_CREATE,
   SESSION_ONE,
@@ -660,9 +661,9 @@ describe('proxy policy: the shared project detail lists only the caller firm age
   const detail = {
     project: { project_id: 'p1', name: 'lumen', account_id: 'acc_operator', repo_url: 'https://git.example/x' },
     config: {
-      default_agent: 'lumen-none', open_code_default_agent: 'lumen-none',
+      default_agent: 'lumen-none',
       agents: [{ name: 'lumen-f-firma' }, { name: 'lumen-f-firmb', description: 'firm b prompt' }, { name: 'lumen-none' }, { name: 'kortix' }],
-      manifest: { agents: { 'lumen-f-firmb': {} } }, manifest_raw: 'lumen-f-firmb', open_code_raw: '{}', env: { optional: ['K'] },
+      manifest: { agents: { 'lumen-f-firmb': {} } }, manifest_raw: 'lumen-f-firmb', env: { optional: ['K'] },
       skills: [{ name: 'agent-browser' }], commands: [],
     },
     files: [{ path: 'kortix.yaml' }], file_count: 174,
@@ -672,7 +673,6 @@ describe('proxy policy: the shared project detail lists only the caller firm age
     const out = redactIdentity(`${P}/detail`, detail, 'lumen-f-firma') as typeof detail;
     expect(out.config.agents).toEqual([{ name: 'lumen-f-firma' }]);
     expect(out.config.default_agent).toBe('lumen-f-firma');
-    expect(out.config.open_code_default_agent).toBe('lumen-f-firma');
     expect([out.files, out.file_count]).toEqual([[], 0]);
     expect(JSON.stringify(out)).not.toMatch(/firmb|acc_operator|git\.example/);
     expect(redactsIdentity(`${P}/detail`)).toBe(true);
@@ -717,5 +717,24 @@ describe('proxy response headers: the browser never sees the platform', () => {
       etag: 'W/"7"',
       'x-next-cursor': 'c2',
     });
+  });
+});
+
+describe('proxy policy: a canonical route is judged exactly like its legacy name', () => {
+  // The proxy judges and forwards `buildUpstreamPath(segments).path`, so the
+  // legacy map decides what a canonical name may reach (KRTX-4847).
+  const ID = '0b8c9d3e-1111-4222-8333-944455556666';
+  test.each([
+    [['workspaces', ID, 'sessions'], `projects/${ID}/sessions`],
+    [['workspaces', ID, 'members'], `accounts/${ID}/members`],
+    [['workspaces', ID, 'audit', 'events'], `projects/${ID}/audit`],
+    [['workspaces', ID, 'keys'], `accounts/${ID}/keys`],
+    [['webhooks', 'workspaces', ID, 'w1'], `webhooks/projects/${ID}/w1`],
+  ])('%j is judged as %s', (segments, legacy) => {
+    const built = buildUpstreamPath(segments);
+    if (!built.ok) throw new Error(built.reason);
+    for (const method of ['GET', 'POST']) {
+      expect(blockedReason(method, built.path)).toBe(blockedReason(method, legacy));
+    }
   });
 });

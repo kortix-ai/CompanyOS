@@ -60,7 +60,7 @@ function health(path: string): Response {
   return Response.json({ error: 'not found' }, { status: 404 });
 }
 
-logger.info('[worker] starting', { port: config.PORT, env: config.INTERNAL_KORTIX_ENV });
+logger.info('[worker] starting', { port: config.PORT, env: config.INTERNAL_KORTIX_ENV, pid: process.pid });
 await prepareProcess({ entry: true });
 
 const server = Bun.serve({ port: config.PORT, fetch: (req) => health(new URL(req.url).pathname) });

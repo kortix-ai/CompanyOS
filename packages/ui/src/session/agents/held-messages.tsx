@@ -3,7 +3,7 @@
 import { Button } from '../../primitives/button';
 import { errorToast } from '../../primitives/toast';
 import { useTranslations } from '../../i18n';
-import { AgentFace, AgentStatus } from './agent-surface';
+import { AgentChip, AgentStatus } from './agent-surface';
 import { peerHandleLabel } from '@kortix/shared';
 import { heldMessages, type PeerMessage } from '@kortix/sdk';
 import { usePeerMessages } from '@kortix/sdk/react';
@@ -36,14 +36,9 @@ export function HeldMessageCard({ message, pending, onApprove, onDeny }: HeldMes
       data-testid="held-message-card"
       className="border-border bg-background flex min-w-0 gap-1.5 rounded-lg border p-3 text-sm"
     >
-      <span className="flex h-5 shrink-0 items-center">
-        <AgentFace handle={handle} />
-      </span>
       <div className="flex min-w-0 flex-1 flex-col gap-2.5">
         <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
-          <span className="text-foreground max-w-40 min-w-0 truncate font-medium" title={name}>
-            {name}
-          </span>
+          <AgentChip handle={handle} name={name} />
           <span className="text-muted-foreground min-w-0 flex-1">{shutdown ? t('asksStop') : t('wantsToSend')}</span>
           <AgentStatus status="needs-you" label={t('needsApproval')} />
         </div>
@@ -100,8 +95,19 @@ export function HeldMessageList({
   );
 }
 
-/** A session's held messages, read on their own (for a host without the agent strip). */
-export function HeldMessages({ projectId, sessionId }: { projectId: string | undefined; sessionId: string | undefined }) {
-  const { data, approve, deny } = usePeerMessages(projectId, sessionId, 'in');
+/**
+ * A session's held messages, read on their own (for a host without the agent
+ * strip). They poll every 5 s while the session works (`live`), every 30 s idle.
+ */
+export function HeldMessages({
+  projectId,
+  sessionId,
+  live = false,
+}: {
+  projectId: string | undefined;
+  sessionId: string | undefined;
+  live?: boolean;
+}) {
+  const { data, approve, deny } = usePeerMessages(projectId, sessionId, 'in', { live });
   return <HeldMessageList messages={data} approve={approve} deny={deny} />;
 }

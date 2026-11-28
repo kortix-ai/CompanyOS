@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { withCostReadGuard } from './cost-read-guard';
 import { gatewayRequestLogs, projectSessions, sandboxComputeSessions } from '@kortix/db';
 import { Column, SQL, type SQLWrapper, Table, getTableColumns, is, sql } from 'drizzle-orm';
 import { PgDialect } from 'drizzle-orm/pg-core';
@@ -12,6 +13,7 @@ type QueryRecord = {
 };
 
 let queryRecords: QueryRecord[] = [];
+let executeQuery: ((record: QueryRecord, rows: unknown[]) => Promise<unknown[]>) | undefined;
 let resultForQuery: (fields: Record<string, unknown>, table: unknown) => unknown[] = () => [];
 
 // The mock never talks to Postgres, so render the recorded WHERE clause to real
@@ -210,7 +212,7 @@ function createQueryBuilder(record: QueryRecord, rows: unknown[]) {
   };
   // biome-ignore lint/suspicious/noThenProperty: The Drizzle query mock must be awaitable.
   builder.then = (resolve: (value: unknown[]) => unknown, reject: (error: unknown) => unknown) =>
-    Promise.resolve(rows).then(resolve, reject);
+    (executeQuery ? executeQuery(record, rows) : Promise.resolve(rows)).then(resolve, reject);
   return builder;
 }
 
@@ -289,6 +291,7 @@ const costWindow = {
 };
 
 beforeEach(() => {
+  executeQuery = undefined;
   queryRecords = [];
   resultForQuery = () => [];
 });
@@ -717,6 +720,86 @@ describe('getSessionCostRecord service', () => {
     });
   });
 
+  // Characterization: pins the exact wire record of an LLM ledger entry —
+  // field set, value coercion, and the billed_elsewhere conditional — so a
+  // refactor of the hand-built literal cannot change the payload silently.
+  test('llm ledger entries carry the exact wire fields, billed_elsewhere on a foreign payer', async () => {
+    resultForQuery = (fields, table) => {
+      if (table === projectSessions && 'projectName' in fields) return [baseSessionRow];
+      if (table === gatewayRequestLogs && 'occurredAt' in fields) {
+        return [
+          {
+            id: 'llm-elsewhere',
+            occurredAt: new Date('2026-07-01T11:05:00.000Z'),
+            cost: '0.75',
+            provider: 'bedrock',
+            model: 'anthropic/claude-sonnet-5',
+            requestId: 'request-two',
+            status: 429,
+            ok: false,
+            inputTokens: 30,
+            outputTokens: 40,
+            cachedTokens: 3,
+            cacheWriteTokens: 2,
+            accountId: '00000000-0000-4000-a000-000000000009',
+          },
+          {
+            id: 'llm-here',
+            occurredAt: new Date('2026-07-01T11:03:00.000Z'),
+            cost: '0.5',
+            provider: 'bedrock',
+            model: 'anthropic/claude-sonnet-5',
+            requestId: 'request-one',
+            status: 200,
+            ok: true,
+            inputTokens: 10,
+            outputTokens: 20,
+            cachedTokens: 2,
+            cacheWriteTokens: 1,
+            accountId,
+          },
+        ];
+      }
+      return [];
+    };
+
+    const detail = await getSessionCostRecord({ accountId, projectId, sessionId });
+
+    expect(detail?.ledger_entries).toEqual([
+      {
+        kind: 'llm',
+        id: 'llm-elsewhere',
+        occurred_at: '2026-07-01T11:05:00.000Z',
+        cost: 0.75,
+        provider: 'bedrock',
+        model: 'anthropic/claude-sonnet-5',
+        request_id: 'request-two',
+        status: 429,
+        ok: false,
+        input_tokens: 30,
+        output_tokens: 40,
+        cached_tokens: 3,
+        cache_write_tokens: 2,
+        billed_elsewhere: true,
+      },
+      {
+        kind: 'llm',
+        id: 'llm-here',
+        occurred_at: '2026-07-01T11:03:00.000Z',
+        cost: 0.5,
+        provider: 'bedrock',
+        model: 'anthropic/claude-sonnet-5',
+        request_id: 'request-one',
+        status: 200,
+        ok: true,
+        input_tokens: 10,
+        output_tokens: 20,
+        cached_tokens: 2,
+        cache_write_tokens: 1,
+      },
+    ]);
+  });
+
   test('returns null when the account and project scoped base session is absent', async () => {
     resultForQuery = () => [];
 
@@ -804,4 +887,37 @@ describe('listProjectGatewaySessionSpend service', () => {
       ],
     });
   });
+});
+
+test('the session report drains nested reconciliation before releasing the cost-read permit', async () => {
+  let release: () => void = () => { throw new Error('not initialized'); };
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const failure = new Error('reconciliation query failed');
+  const executions = new Map<QueryRecord, number>();
+  let active = 0;
+  executeQuery = async (record, rows) => {
+    executions.set(record, (executions.get(record) ?? 0) + 1);
+    if ('requests' in record.fields) throw failure;
+    if ('windows' in record.fields) {
+      active++;
+      try { await gate; } finally { active--; }
+    }
+    return rows;
+  };
+  const report = withCostReadGuard(() => listSessionCosts({
+    accountId, window: costWindow, sort: 'total_desc', limit: 25, offset: 0,
+  }));
+  const outcome = report.then(() => undefined, (error: unknown) => error);
+  let nextStarted = false;
+  let activeAtNext = -1;
+  const next = withCostReadGuard(async () => { nextStarted = true; activeAtNext = active; });
+  for (let i = 0; i < 30; i++) await Promise.resolve();
+  const premature = nextStarted;
+  release();
+  expect(await outcome).toBe(failure);
+  await next;
+  expect(premature).toBe(false);
+  expect(activeAtNext).toBe(0);
+  expect(executions.size).toBe(4);
+  expect([...executions.values()]).toEqual([1, 1, 1, 1]);
 });

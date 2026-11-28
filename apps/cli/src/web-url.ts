@@ -32,7 +32,8 @@
 import { sdkBackendUrl } from '@kortix/shared/host-config';
 import { sandboxEnvValue } from './api/sandbox-env.ts';
 
-function stripTrailingSlash(s: string): string {
+/** The one trailing-slash strip for a dashboard origin (`https://x/` → `https://x`). */
+export function stripTrailingSlash(s: string): string {
   return s.replace(/\/+$/, '');
 }
 
@@ -99,7 +100,7 @@ export function projectWebUrl(
   dashboardUrl?: string | null,
 ): string {
   if (dashboardUrl && dashboardUrl.trim()) return stripTrailingSlash(dashboardUrl.trim());
-  return `${webDashboardUrl(apiBase)}/projects/${projectId}`;
+  return `${webDashboardUrl(apiBase)}/workspaces/${projectId}`;
 }
 
 /** Web (dashboard) URL for a session within a project. */

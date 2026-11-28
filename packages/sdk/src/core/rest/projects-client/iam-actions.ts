@@ -1,3 +1,4 @@
+import { PROJECT_ACTIONS as LIVE_PROJECT_ACTIONS, WORKSPACE_ACTION_BY_LEGACY } from '../../../iam-actions';
 import type { ReviewVerdict } from './review';
 import { type ReviewItem, reviewItemTarget } from './review-items';
 
@@ -6,72 +7,21 @@ import { type ReviewItem, reviewItemTarget } from './review-items';
  * permission a project route asserts. Ask `useCan` / `useCans` for the leaf the
  * route you are about to call asserts, never for a role name.
  *
- * Byte-identical to `PROJECT_ACTIONS` in `apps/api/src/iam/actions.ts`: the
- * API answers an unknown leaf with 400, so a typo here means no verdict at all.
- * `iam-actions.test.ts` fails when the two catalogs differ.
+ * Derived from the live catalog, with deprecated Rooms leaves retained for
+ * published consumers until the next major.
  */
+// Keep the published insertion order: deprecated Rooms precede Artifacts.
+const {
+  PROJECT_ARTIFACT_READ,
+  PROJECT_ARTIFACT_WRITE,
+  PROJECT_ARTIFACT_MANAGE,
+  PROJECT_ARTIFACT_PUBLIC,
+  PROJECT_CREDENTIALS_ISSUE,
+  ...PROJECT_ACTIONS_BEFORE_ROOMS
+} = LIVE_PROJECT_ACTIONS;
+
 export const PROJECT_ACTIONS = {
-  PROJECT_READ: 'project.read',
-  PROJECT_WRITE: 'project.write',
-  /** Archiving the project (`DELETE /projects/:id`). Not implied by `project.write`. */
-  PROJECT_DELETE: 'project.delete',
-
-  PROJECT_SESSION_READ: 'project.session.read',
-  PROJECT_SESSION_START: 'project.session.start',
-  PROJECT_SESSION_STOP: 'project.session.stop',
-  PROJECT_SESSION_BINDINGS_WRITE: 'project.session.bindings.write',
-
-  PROJECT_MEMBERS_READ: 'project.members.read',
-  PROJECT_MEMBERS_MANAGE: 'project.members.manage',
-
-  PROJECT_TRIGGER_READ: 'project.trigger.read',
-  PROJECT_TRIGGER_CREATE: 'project.trigger.create',
-  PROJECT_TRIGGER_UPDATE: 'project.trigger.update',
-  PROJECT_TRIGGER_DELETE: 'project.trigger.delete',
-  PROJECT_TRIGGER_FIRE: 'project.trigger.fire',
-
-  PROJECT_GATEWAY_LOGS_READ: 'project.gateway.logs.read',
-  PROJECT_GATEWAY_SPEND_READ: 'project.gateway.spend.read',
-  PROJECT_USAGE_READ: 'project.usage.read',
-  PROJECT_GATEWAY_BUDGET_SET: 'project.gateway.budget.set',
-  PROJECT_GATEWAY_KEYS_MANAGE: 'project.gateway.keys.manage',
-
-  PROJECT_AGENT_READ: 'project.agent.read',
-  PROJECT_AGENT_WRITE: 'project.agent.write',
-  PROJECT_SKILL_READ: 'project.skill.read',
-  PROJECT_SKILL_WRITE: 'project.skill.write',
-  PROJECT_COMMAND_READ: 'project.command.read',
-  PROJECT_COMMAND_WRITE: 'project.command.write',
-  PROJECT_FILE_READ: 'project.file.read',
-  PROJECT_FILE_WRITE: 'project.file.write',
-  /** Project settings: name, branch, manifest path, icon, sandbox provider, feature flags. */
-  PROJECT_SETTINGS_WRITE: 'project.settings.write',
-  PROJECT_SANDBOX_WRITE: 'project.sandbox.write',
-  PROJECT_MODEL_READ: 'project.model.read',
-  PROJECT_MODEL_WRITE: 'project.model.write',
-  PROJECT_GITOPS_READ: 'project.gitops.read',
-  /** Opening a change request, and every push. */
-  PROJECT_GITOPS_PUSH: 'project.gitops.push',
-  /** Merging a change request into the base branch. */
-  PROJECT_GITOPS_MERGE: 'project.gitops.merge',
-  PROJECT_GITOPS_REF_ANY: 'project.gitops.ref.any',
-  PROJECT_GITOPS_REF_DELETE: 'project.gitops.ref.delete',
-  PROJECT_SECRET_READ: 'project.secret.read',
-  PROJECT_SECRET_WRITE: 'project.secret.write',
-  PROJECT_CONNECTOR_READ: 'project.connector.read',
-  PROJECT_CONNECTOR_CONNECTIONS_MANAGE: 'project.connector.connections.manage',
-  PROJECT_CONNECTOR_WRITE: 'project.connector.write',
-
-  PROJECT_APP_READ: 'project.app.read',
-  PROJECT_APP_WRITE: 'project.app.write',
-  PROJECT_APP_DEPLOY: 'project.app.deploy',
-  PROJECT_APP_ADMIN: 'project.app.admin',
-
-  PROJECT_REVIEW_READ: 'project.review.read',
-  PROJECT_REVIEW_SUBMIT: 'project.review.submit',
-  /** A verdict on a review item: approve, reject, request changes, answer. */
-  PROJECT_REVIEW_ACT: 'project.review.act',
-
+  ...PROJECT_ACTIONS_BEFORE_ROOMS,
   /**
    * List rooms and read their messages (`agent_rooms` flag).
    *
@@ -84,15 +34,52 @@ export const PROJECT_ACTIONS = {
    * @deprecated Rooms were removed (2026-11); the API no longer serves these routes. Removed in the next major.
    */
   PROJECT_ROOM_WRITE: 'project.room.write',
-  PROJECT_ARTIFACT_READ: 'project.artifact.read',
-  PROJECT_ARTIFACT_COMMENT: 'project.artifact.comment',
-  PROJECT_ARTIFACT_WRITE: 'project.artifact.write',
-  PROJECT_ARTIFACT_MANAGE: 'project.artifact.manage',
-  PROJECT_ARTIFACT_PUBLIC: 'project.artifact.public',
-
-  /** Minting a project CLI token or a project-scoped PAT. */
-  PROJECT_CREDENTIALS_ISSUE: 'project.credentials.issue',
+  PROJECT_ARTIFACT_READ,
+  PROJECT_ARTIFACT_WRITE,
+  PROJECT_ARTIFACT_MANAGE,
+  PROJECT_ARTIFACT_PUBLIC,
+  PROJECT_CREDENTIALS_ISSUE,
 } as const;
+
+/**
+ * The workspace name of every IAM action (Workspaces: one scope, PR #11857).
+ * `project.session.start` is `workspace.session.start`, `billing.read` is
+ * `workspace.billing.read`, `project.create` is `workspace.create`. The rename
+ * is 1:1, so a verdict for one name is the verdict for the other.
+ *
+ * The API accepts both names on every input, forever, and answers with both
+ * (`action` plus `workspace_action`). Ask `useCan` / `useCans` with either.
+ *
+ * Re-exported from the lightweight canonical catalog.
+ */
+export { WORKSPACE_ACTION_BY_LEGACY } from '../../../iam-actions';
+
+/** A legacy IAM action name, e.g. `'project.read'`. */
+export type LegacyIamAction = keyof typeof WORKSPACE_ACTION_BY_LEGACY;
+/** The workspace name of one IAM action, e.g. `'workspace.read'`. */
+export type WorkspaceAction = (typeof WORKSPACE_ACTION_BY_LEGACY)[LegacyIamAction];
+
+const LEGACY_BY_WORKSPACE: Readonly<Record<string, string>> = Object.freeze(
+  Object.fromEntries(Object.entries(WORKSPACE_ACTION_BY_LEGACY).map(([legacy, workspace]) => [workspace, legacy])),
+);
+
+/**
+ * The workspace name of `action` (`'project.read'` → `'workspace.read'`). A
+ * workspace name, a retired name or an unknown string is returned unchanged.
+ */
+export function toWorkspaceAction(action: string): string {
+  return Object.hasOwn(WORKSPACE_ACTION_BY_LEGACY, action)
+    ? WORKSPACE_ACTION_BY_LEGACY[action as LegacyIamAction]
+    : action;
+}
+
+/**
+ * The legacy name of `action` (`'workspace.read'` → `'project.read'`). A
+ * legacy name, a retired name or an unknown string is returned unchanged.
+ */
+export function toLegacyAction(action: string): string {
+  return Object.hasOwn(LEGACY_BY_WORKSPACE, action) ? LEGACY_BY_WORKSPACE[action]! : action;
+}
 
 /** One project leaf action, e.g. `'project.trigger.fire'`. */
 export type ProjectAction = (typeof PROJECT_ACTIONS)[keyof typeof PROJECT_ACTIONS];

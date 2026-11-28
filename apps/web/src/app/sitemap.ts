@@ -2,12 +2,7 @@ import { showsMarketingLink } from '@/lib/config';
 import type { MetadataRoute } from 'next';
 
 import { locales } from '@/i18n/config';
-import {
-  absoluteUrl,
-  areUseCasesPublic,
-  getPublicContentRecords,
-  STATIC_PUBLIC_ROUTES,
-} from '@/lib/seo/public-content';
+import { absoluteUrl, areUseCasesPublic, getPublicContentRecords } from '@/lib/seo/public-content';
 
 type SitemapEntry = MetadataRoute.Sitemap[number];
 
@@ -16,8 +11,8 @@ type SitemapEntry = MetadataRoute.Sitemap[number];
 // what puts its per-locale URLs and hreflang set in the sitemap. Every route
 // below renders fully translated (the strict i18n audit covers its copy), and
 // its layout emits the same hreflang set through localizedMarketingMetadata.
-// The docs tree, use cases, the changelog and the marketplace have English
-// bodies, so they stay English-only.
+// The docs tree, use cases and the changelog have English bodies, so they
+// stay English-only.
 export const LOCALIZED_ROUTES = [
   '/',
   '/about',
@@ -66,8 +61,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const records = getPublicContentRecords({ includeUseCases });
   const entries = new Map<string, SitemapEntry>();
 
-  for (const pathname of STATIC_PUBLIC_ROUTES) {
-    if (pathname === '/use-cases' && !includeUseCases) continue;
+  // The only public pages that are not content records.
+  for (const pathname of ['/a1o', '/changelog/releases']) {
     if (!showsMarketingLink(pathname)) continue;
     const entry = htmlEntry(pathname);
     entries.set(entry.url, entry);

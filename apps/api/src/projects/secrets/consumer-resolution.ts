@@ -1,6 +1,6 @@
-import { projectSecrets, projects } from '@kortix/db';
+import { projectSecrets } from '@kortix/db';
 import { and, eq, inArray, isNull, or } from 'drizzle-orm';
-import type { SecretConsumer, SecretStrategy } from '../../secrets/strategy';
+import type { SecretConsumer, SecretEgressPolicy, SecretStrategy } from '../../secrets/strategy';
 import { recordAuditEvent } from '../../shared/audit';
 import { createFirstInWindow } from '../../shared/audit-dedupe';
 import { db } from '../../shared/db';
@@ -8,6 +8,17 @@ import { filterSecretRowsByAudience, secretAudienceSubject } from '../lib/secret
 import { SecretUndecryptableError } from '../../secrets/undecryptable';
 import { decryptProjectSecret } from './envelope';
 import { secretAudienceRank } from './grant-policy';
+import { accountKeyOfWorkspace } from '../../workspaces/rows';
+import { legacySecretNotMoved } from '../../secrets/llm-credential-ledger';
+
+/**
+ * A legacy `llm_gateway` row that moved to the named store
+ * (`secrets/llm-credential-move.ts`) is never read again: its named account
+ * serves. Every other consumer reads as before.
+ */
+function notMovedFor(consumer: SecretConsumer) {
+  return consumer === 'llm_gateway' ? [legacySecretNotMoved(projectSecrets.secretId)] : [];
+}
 
 export interface ProjectSecretConsumerRead {
   projectId: string;
@@ -33,6 +44,15 @@ export interface ProjectSecretConsumerRead {
    * shared with someone else (KRTX-1719).
    */
   throwWhenUndecryptable?: boolean;
+  /**
+   * A second policy check on the shared row's `egress_policy`, run BEFORE the
+   * value is decrypted. A row it rejects is audited as
+   * `secret.consumer.denied` with `policy_denied: true` and is skipped. The
+   * browser consumer uses it to spend a login only on its own sites.
+   */
+  admitPolicy?: (policy: SecretEgressPolicy | null) => boolean;
+  /** Extra fields for every audit row this read writes (no secret values). */
+  auditMetadata?: Record<string, unknown>;
 }
 
 export interface ProjectSecretConsumerValue {
@@ -91,6 +111,7 @@ export async function getProjectSecretConsumerConfigurationStatus(input: {
         eq(projectSecrets.projectId, input.projectId),
         eq(projectSecrets.name, normalizedName),
         isNull(projectSecrets.ownerUserId),
+        ...notMovedFor(input.consumer),
       ),
     );
   if (rows.length === 0) return 'missing';
@@ -134,6 +155,7 @@ export async function listProjectSecretNamesForConsumer(input: {
               eq(projectSecrets.ownerUserId, input.principalUserId),
             )
           : isNull(projectSecrets.ownerUserId),
+        ...notMovedFor(input.consumer),
       ),
     );
 
@@ -199,14 +221,7 @@ async function loadProjectSecretConsumerRows(
   names: string[],
 ) {
   const accountId =
-    input.accountId ??
-    (
-      await db
-        .select({ accountId: projects.accountId })
-        .from(projects)
-        .where(eq(projects.projectId, input.projectId))
-        .limit(1)
-    )[0]?.accountId;
+    input.accountId ?? (await accountKeyOfWorkspace(input.projectId));
   if (!accountId) return null;
   const normalizedNames = names.map((name) => name.trim().toUpperCase());
   const rows = await db
@@ -220,6 +235,7 @@ async function loadProjectSecretConsumerRows(
       active: projectSecrets.active,
       strategy: projectSecrets.strategy,
       consumer: projectSecrets.consumer,
+      egressPolicy: projectSecrets.egressPolicy,
       updatedAt: projectSecrets.updatedAt,
     })
     .from(projectSecrets)
@@ -233,6 +249,7 @@ async function loadProjectSecretConsumerRows(
               eq(projectSecrets.ownerUserId, input.principalUserId),
             )
           : isNull(projectSecrets.ownerUserId),
+        ...notMovedFor(input.consumer),
       ),
     );
 
@@ -310,19 +327,22 @@ async function resolveOneConsumerSecretRow(
   row: ConsumerCandidateRow,
   policyRow: ConsumerCandidateRow,
 ): Promise<ProjectSecretConsumerValue | null | 'undecryptable'> {
-  const allowed = row.active && secretPolicyAllowsConsumer(policyRow, input.consumer);
-  if (!allowed) {
+  const consumerAllowed = row.active && secretPolicyAllowsConsumer(policyRow, input.consumer);
+  const policyAdmits = !consumerAllowed || !input.admitPolicy || input.admitPolicy(policyRow.egressPolicy ?? null);
+  if (!consumerAllowed || !policyAdmits) {
     await recordSecretConsumerAudit(input, accountId, {
       outcome: 'denied',
       action: 'secret.consumer.denied',
       resourceId: row.secretId,
       metadata: {
+        ...input.auditMetadata,
         identifier: row.identifier,
         name: normalizedName,
         requested_consumer: input.consumer,
         configured_consumer: policyRow.consumer,
         strategy: policyRow.strategy,
         value_source: row.ownerUserId ? 'personal' : 'shared',
+        ...(policyAdmits ? {} : { policy_denied: true }),
       },
     });
     return null;
@@ -350,6 +370,7 @@ async function resolveOneConsumerSecretRow(
       action: 'secret.consumer.used',
       resourceId: row.secretId,
       metadata: {
+        ...input.auditMetadata,
         identifier: row.identifier,
         name: normalizedName,
         consumer: input.consumer,
@@ -382,7 +403,7 @@ async function resolveSelectedRows(
       await recordSecretConsumerAudit(input, accountId, {
         outcome: 'denied',
         action: 'secret.consumer.missing',
-        metadata: { name: normalizedName, consumer: input.consumer },
+        metadata: { ...input.auditMetadata, name: normalizedName, consumer: input.consumer },
       });
     }
     return [];

@@ -6,6 +6,7 @@ import { existsPublicShare } from '../shared/session-public-shares';
 import { recordAuditEvent } from '../shared/audit';
 import { RATE_LIMIT_EXCEEDED_ACTION } from '../shared/rate-limit-audit';
 import { TokenBucketRateLimiter, type RateLimitPolicy, type RateLimitResult } from '../shared/rate-limit';
+import { workspaceIdParam } from '../shared/route-params';
 
 interface AuditContext {
   accountId?: string | null;
@@ -100,7 +101,115 @@ const projectWebhookRejectedRunLimiter = new TokenBucketRateLimiter('project_web
 const projectSecretWriteLimiter = new TokenBucketRateLimiter('project_secret_write');
 const llmGatewayLimiter = new TokenBucketRateLimiter('llm_gateway');
 const feedbackLimiter = new TokenBucketRateLimiter('feedback');
+const dictationLimiter = new TokenBucketRateLimiter('dictation');
+const setupEventLimiter = new TokenBucketRateLimiter('setup_event');
 const deviceTokenReleaseLimiter = new TokenBucketRateLimiter('device_token_release');
+
+/**
+ * Per-session ceiling on the stored-log reads (`GET …/log`,
+ * `GET …/snapshot` and its `/open-bundle` alias, `KORTIX_SESSION_LOG_READS_PER_MIN`,
+ * 300). INCIDENT 2026-11-10 23:38 UTC (KRTX-4696): one CLI client polled the stored
+ * log of ONE session in waves that peaked near 24 requests/s for minutes (about 50k
+ * requests against the one session in an evening). Every poll pays the full
+ * session-read gate plus the page read and a multi-100 kB serialize+gzip, so the
+ * route's p50 hit 1.25 s (p95 2.6 s) and the API-wide p95 rose with it.
+ *
+ * The bucket is keyed on (caller, session): a caller can only spend their own
+ * bucket, never another caller's or another session's (the caller part is the
+ * authenticated user id, else the client key). The guard runs in front of the
+ * session-read gate, so a hot poller costs one in-memory check per poll; 300/min
+ * per caller per session keeps every real watcher unthrottled (the CLI wait loop
+ * polls at 60/min per waiter, the web sync on events). Replica-local, like every
+ * limiter here.
+ */
+const sessionLogReadLimiter = new TokenBucketRateLimiter('session_log_read');
+
+/**
+ * The stored-log read denial for one GET (null = allowed). The handler answers it
+ * with `c.json(denied.body, 429, { 'Retry-After': denied.retryAfter })` — header
+ * inline, never `c.header(...)` first (KRTX-2737); the body fits the ErrorEnvelope
+ * the routes declare for 429, and the SDK's log sync backs off on `Retry-After`.
+ */
+export interface StoredLogReadDenial {
+  body: { error: string; message: string; retry_after_seconds: number };
+  retryAfter: string;
+}
+
+export function storedLogReadDenial(c: Context, sessionId: string): StoredLogReadDenial | null {
+  const userId = c.get('userId');
+  const caller = typeof userId === 'string' && userId ? userId : requestClientKey(c);
+  const result = sessionLogReadLimiter.check(`${caller}:${sessionId}`, {
+    limit: positiveInt(config.KORTIX_SESSION_LOG_READS_PER_MIN, 300),
+    windowMs: 60_000,
+  });
+  if (result.allowed) return null;
+  const retryAfterSeconds = Math.ceil((result.retryAfterMs ?? result.resetMs) / 1000);
+  return {
+    body: {
+      error: 'rate_limit_exceeded',
+      message: 'This session is being read faster than the stored-log read limit. Slow the polling or honor Retry-After.',
+      retry_after_seconds: retryAfterSeconds,
+    },
+    retryAfter: String(retryAfterSeconds),
+  };
+}
+
+const usageRollupLimiter = new TokenBucketRateLimiter('usage_rollup');
+/** Concurrent rollups one caller may hold; the DB pool is 6 connections (DEFAULT_DB_POOL_MAX). */
+const USAGE_ROLLUPS_IN_FLIGHT_PER_CALLER = 2;
+// replica-local: the pool this guards is per replica too, so each replica counts its own in-flight rollups.
+const usageRollupInFlight = new Map<string, number>();
+
+/**
+ * Per-caller ceiling on the cost reads (`GET /v1/usage`, `/session-costs`,
+ * `/session-costs/{sessionId}`, `/cost-by-project`, `/cost-summary`; `KORTIX_USAGE_ROLLUPS_PER_MIN`, 60 per
+ * route). INCIDENT 2026-11-13 22:09 UTC (KRTX-4895): one CLI client sent
+ * ~500–800 req/min for four minutes, 368 of them `GET /v1/usage/session-costs`.
+ * Each rollup is a heavy aggregation that holds a DB pool connection until the
+ * 25 s request deadline, so ~140 concurrent callers drained the pool; every other
+ * route (about 40, `GET /v1/notifications` among them) then waited in the auth
+ * lookup for a connection and answered 503 at 25 s (348 5xx of 4955 requests in
+ * one 5-min bucket). The bucket is keyed on (caller, route): a caller only spends
+ * their own budget. 60/min per route keeps every real dashboard, export and CLI
+ * report unthrottled. Replica-local, like every limiter here. Runs after auth, so
+ * the caller is the authenticated user id (else the client key); the 429 carries
+ * `Retry-After` and writes no audit row (a flood must not become an audit flood).
+ */
+export function createUsageRollupRateLimitMiddleware() {
+  const deny = (c: Context, retryAfterSeconds: number) =>
+    c.json(
+      {
+        error: 'rate_limit_exceeded',
+        message: 'Cost rollups are being requested faster than the limit. Slow the polling or honor Retry-After.',
+        retry_after_seconds: retryAfterSeconds,
+      },
+      429,
+      { 'Retry-After': String(retryAfterSeconds) },
+    );
+  return async (c: Context, next: Next) => {
+    const userId = c.get('userId');
+    const caller = typeof userId === 'string' && userId ? userId : requestClientKey(c);
+    // The bucket bounds requests per minute, not connections held: it starts full,
+    // so 60 simultaneous rollups would still park the whole pool until the 25 s
+    // deadline. Cap what one caller may have in flight across every rollup route.
+    const inFlight = usageRollupInFlight.get(caller) ?? 0;
+    if (inFlight >= USAGE_ROLLUPS_IN_FLIGHT_PER_CALLER) return deny(c, 1);
+    // Keyed on the route pattern: every `/session-costs/{sessionId}` read spends one bucket.
+    const result = usageRollupLimiter.check(`${caller}:${c.req.routePath}`, {
+      limit: positiveInt(config.KORTIX_USAGE_ROLLUPS_PER_MIN, 60),
+      windowMs: 60_000,
+    });
+    if (!result.allowed) return deny(c, Math.ceil((result.retryAfterMs ?? result.resetMs) / 1000));
+    usageRollupInFlight.set(caller, inFlight + 1);
+    try {
+      return await next();
+    } finally {
+      const left = (usageRollupInFlight.get(caller) ?? 1) - 1;
+      if (left <= 0) usageRollupInFlight.delete(caller);
+      else usageRollupInFlight.set(caller, left);
+    }
+  };
+}
 
 /**
  * Per-project budget on secret WRITES (POST/PUT/PATCH/DELETE under
@@ -121,7 +230,7 @@ export function createProjectSecretWriteRateLimitMiddleware() {
   return async (c: Context, next: Next) => {
     const method = c.req.method.toUpperCase();
     if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return next();
-    const projectId = c.req.param('projectId') || 'unknown';
+    const projectId = workspaceIdParam(c) || 'unknown';
     const result = projectSecretWriteLimiter.check(projectId, {
       limit: positiveInt((config as any).KORTIX_PROJECT_SECRET_WRITES_PER_HOUR, 100),
       windowMs: 60 * 60_000,
@@ -284,6 +393,53 @@ export function createFeedbackRateLimitMiddleware() {
 }
 
 /**
+ * Guards `POST /v1/projects/:id/dictation`, keyed on the caller's user id. A
+ * person dictates a few times a minute at most; 20 stops a loop from turning
+ * the route into a free-running transcription API. Reads pass through.
+ */
+export function createDictationRateLimitMiddleware() {
+  const guard = createAuditedRateLimitMiddleware(dictationLimiter, (c) => {
+    const userId = c.get('userId') as string | undefined;
+    const key = userId ? `user:${userId}` : `ip:${requestClientKey(c)}`;
+    return {
+      key,
+      policy: {
+        limit: positiveInt(config.KORTIX_DICTATION_REQS_PER_MIN, 20),
+        windowMs: 60_000,
+      },
+      auditContext: {
+        action: RATE_LIMIT_EXCEEDED_ACTION,
+        resourceType: 'dictation',
+        resourceId: userId ?? null,
+        metadata: { limiter: 'dictation' },
+      },
+    };
+  });
+  return async (c: Context, next: Next) => (c.req.method === 'POST' ? guard(c, next) : next());
+}
+
+/**
+ * Guards `POST /v1/cli/setup-events`, keyed on the caller's user id like
+ * feedback. A guided setup sends about ten events in an hour; 20 a minute stops
+ * a loop from spending the PostHog plan's monthly event limit.
+ */
+export function createSetupEventRateLimitMiddleware() {
+  return createAuditedRateLimitMiddleware(setupEventLimiter, (c) => {
+    const userId = c.get('userId') as string | undefined;
+    return {
+      key: userId ? `user:${userId}` : `ip:${requestClientKey(c)}`,
+      policy: { limit: 20, windowMs: 60_000 },
+      auditContext: {
+        action: RATE_LIMIT_EXCEEDED_ACTION,
+        resourceType: 'setup_event',
+        resourceId: userId ?? null,
+        metadata: { limiter: 'setup_event' },
+      },
+    };
+  });
+}
+
+/**
  * Guards the public, unauthenticated `POST /v1/system/demo-request` lead-capture
  * endpoint. No identity to key on (anyone on the marketing site can submit), so
  * it's keyed on client IP — deliberately tight, since every allowed request
@@ -342,7 +498,7 @@ export function createCheckEmailRateLimitMiddleware() {
  */
 export function createProjectWebhookRateLimitMiddleware() {
   return async (c: Context, next: Next) => {
-    const projectId = c.req.param('projectId') || 'unknown';
+    const projectId = workspaceIdParam(c) || 'unknown';
     const result = projectWebhookLimiter.check(`${projectId}:${requestClientKey(c)}`, {
       limit: positiveInt((config as any).KORTIX_PROJECT_WEBHOOK_REQS_PER_MIN, 120),
       windowMs: 60_000,
@@ -409,12 +565,14 @@ export function createDeviceTokenReleaseRateLimitMiddleware() {
 /**
  * A webhook delivery rejected before authentication is stored as a run, so
  * the owner can see it and replay it. Anyone holding the URL can send them,
- * so at most one is recorded per trigger per 10 s per replica: a request
- * flood never becomes a database-write flood. Over budget, the route still
+ * so at most one is recorded per trigger and reason per 10 s per replica: a
+ * request flood never becomes a database-write flood. The reason is part of
+ * the key (a closed set of about ten codes), so a bad signature does not hide
+ * the expired timestamp sent a second later. Over budget, the route still
  * answers 401; it only skips the write.
  */
-export function consumeProjectWebhookRejectedRunBudget(projectId: string, slug: string): boolean {
-  return projectWebhookRejectedRunLimiter.check(`${projectId}:${slug}`, {
+export function consumeProjectWebhookRejectedRunBudget(projectId: string, slug: string, reason: string): boolean {
+  return projectWebhookRejectedRunLimiter.check(`${projectId}:${slug}:${reason}`, {
     limit: 1,
     windowMs: 10_000,
   }).allowed;
@@ -484,5 +642,6 @@ export function resetRateLimiters() {
   projectSecretWriteLimiter.reset();
   llmGatewayLimiter.reset();
   feedbackLimiter.reset();
+  dictationLimiter.reset();
   deviceTokenReleaseLimiter.reset();
 }

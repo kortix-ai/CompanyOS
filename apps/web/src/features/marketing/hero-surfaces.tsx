@@ -207,7 +207,7 @@ function ChatSurface({ brand }: { brand: 'slack' | 'teams' }) {
         {/* The label is a signpost for a control that is already self-evident —
             three taps in a row under a thread. On a phone those ~22px are worth
             more to the thread above, so it only appears once there is room. */}
-        <p className="text-muted-foreground/60 mb-2 hidden px-0.5 font-mono text-[10px] tracking-widest uppercase sm:block">
+        <p className="text-muted-foreground mb-2 hidden px-0.5 font-mono text-[10px] tracking-widest uppercase sm:block">
           {tI18nComplete.raw('texteb236aeb8e4b')}
         </p>
         <div className="flex flex-wrap gap-1.5">
@@ -767,7 +767,7 @@ export function HeroSurfaces() {
 
   return (
     <div className="w-full">
-      <div className="border-border bg-card h-[340px] overflow-hidden rounded-lg border shadow-2xl lg:h-[clamp(600px,calc(100svh-20px),520px)]">
+      <div className="border-border bg-card h-[340px] overflow-hidden rounded-lg border shadow-md lg:h-[clamp(600px,calc(100svh-20px),520px)]">
         <SurfacePanel surface={active} />
       </div>
 

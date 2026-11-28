@@ -16,6 +16,7 @@ import {
   withNextDeliveryAttempt,
 } from './store';
 import { wireMessageIdMatches } from './wire-id-match';
+import { forwardedSql, notStopPausedSql } from './delivery-state';
 import type { PromptPartWire } from './prompt-payload';
 
 /**
@@ -35,8 +36,8 @@ export const MAX_PROMPT_REDELIVERIES = 3;
  * it errored terminally. A `delivering` record can survive both of those: the
  * acceptance write is a separate statement, and when it loses (the documented
  * `[turn-lifecycle] acceptance persistence failed … reaper will reconcile
- * delivery` path) the record still says `delivering` while OpenCode answers the
- * prompt to the end. Requeueing on those reasons re-runs the user's message and
+ * delivery` path) the record still says `delivering` while the runtime answers
+ * the prompt to the end. Requeueing on those reasons re-runs the user's message and
  * spends a second real LLM turn on it, which is the exact loss redelivery
  * exists to prevent — so the reason is a gate, not a label.
  */
@@ -149,7 +150,7 @@ const liveDeps: RedeliveryDeps = {
       .set({
         status: 'dead_lettered',
         // AND IT IS NO LONGER ON THE WIRE. Every reader of "is this row at
-        // OpenCode" keys on `result.status`, so a dead-lettered row that kept
+        // the runtime" keys on `result.status`, so a dead-lettered row that kept
         // `forwarded` read `delivering` for ever: filtered out of the composer's
         // queue strip, counted as live work by `countLiveInboxPrompts`, and
         // outside `reconcileForwardedPrompts`' scan — no retry, no remove, and
@@ -224,7 +225,7 @@ export async function requeueAbandonedPrompt(
   const lastError = `redelivered after ${input.endReason}`;
 
   // A STOP-PAUSED row is the prompt the user pressed Stop to get ahead of.
-  // Stop aborts the running turn, OpenCode drops the in-memory queue with it,
+  // Stop aborts the running turn, the runtime drops the in-memory queue with it,
   // and the reaper then sees a persisted message nothing will ever answer —
   // which is a genuine abandonment, so this function is right to act. What it
   // must not do is deliver it: coming back DUE would put the stopped prompt
@@ -261,6 +262,96 @@ export async function requeueAbandonedPrompt(
     resumable: !!input.resumable && !stopPaused,
   });
   return 'requeued';
+}
+
+export type DroppedSteerRequeue =
+  | 'requeued'
+  /** The row is still claimed: the steer POST has not come back. The daemon retries. */
+  | 'pending_delivery'
+  | 'no_prompt'
+  /** Not a forwarded steer, or a Stop paused it (the hold settle owns it). */
+  | 'already_settled'
+  /** `MAX_PROMPT_REDELIVERIES` reached; the command is dead-lettered. */
+  | 'exhausted';
+
+/**
+ * A steered message the runtime DROPPED unread gives its prompt back to the inbox.
+ *
+ * pi reads no steer on a stopped turn, and the turn's end drops what is unread
+ * (kortixd `stopPi`). The daemon reports each one (`steer_dropped`): that report
+ * is the proof, as a never-ran end reason is for `requeueAbandonedPrompt`.
+ * Without it the row stayed forwarded ("Read at next step") until the
+ * forwarded sweep closed it as delivered after 10 min, and the prompt never ran.
+ *
+ * The row comes back due, under a fresh delivery key, with `steerRefusedTurn`
+ * naming the turn it was steered into. Admission then does not steer it into
+ * that turn again: it starts the next turn, or steers a newer one. A row a Stop
+ * paused is not touched: the hold settle and its release own it
+ * (`inbox-hold-settle.ts`). The redelivery budget bounds a loop of drops.
+ */
+export async function requeueDroppedSteer(
+  sessionId: string,
+  wireMessageId: string,
+): Promise<DroppedSteerRequeue> {
+  const row = await liveDeps.findPromptByWireId(sessionId, wireMessageId);
+  if (!row) return 'no_prompt';
+  if (row.status === 'running') return 'pending_delivery';
+  const result = (row.result ?? {}) as { status?: unknown; steered_into_message_id?: unknown };
+  const turn = result.steered_into_message_id;
+  if (
+    row.status !== 'succeeded' ||
+    result.status !== 'forwarded' ||
+    typeof turn !== 'string' ||
+    turn.length === 0 ||
+    isStopPausedInboxRow(row.result)
+  ) {
+    return 'already_settled';
+  }
+  const payload = (row.payload ?? {}) as unknown as QueuedContinueSessionPayload;
+  const redeliveries = Number(payload.redeliveries ?? 0) + 1;
+  if (redeliveries > MAX_PROMPT_REDELIVERIES) {
+    await liveDeps.deadLetter({
+      commandId: row.commandId,
+      redeliveries: redeliveries - 1,
+      lastError: 'prompt redelivery exhausted after steer_dropped',
+    });
+    logger.error('[session-lifecycle] prompt redelivery exhausted', {
+      command_id: row.commandId,
+      session_id: row.sessionId,
+      project_id: row.projectId,
+      account_id: row.accountId,
+      end_reason: 'steer_dropped',
+      redeliveries: redeliveries - 1,
+    });
+    return 'exhausted';
+  }
+  const requeued = await db
+    .update(sessionLifecycleCommands)
+    .set({
+      status: 'queued',
+      availableAt: new Date(),
+      attempts: 0,
+      lockedBy: null,
+      lockedUntil: null,
+      lastError: 'redelivered after steer_dropped',
+      payload: withNextDeliveryAttempt(
+        sql`${sessionLifecycleCommands.payload} || ${JSON.stringify({ redeliveries, steerRefusedTurn: turn })}::jsonb`,
+      ),
+      result: { redelivered_from: 'steer_dropped' },
+      updatedAt: new Date(),
+    })
+    // The read above, re-checked in the write: a Stop that paused the row or
+    // a `steer_read` that closed it in between keeps it.
+    .where(
+      and(
+        eq(sessionLifecycleCommands.commandId, row.commandId),
+        eq(sessionLifecycleCommands.status, 'succeeded'),
+        forwardedSql,
+        notStopPausedSql,
+      ),
+    )
+    .returning({ commandId: sessionLifecycleCommands.commandId });
+  return requeued.length > 0 ? 'requeued' : 'already_settled';
 }
 
 /** A turn a runtime loss cut short, as its continuation names it. */

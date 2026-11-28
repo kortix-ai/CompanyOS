@@ -15,8 +15,22 @@ mock.module('@tanstack/react-query', () => ({
   }),
 }));
 
-const { appDeploymentKey, appDeploymentsKey, appEventsKey, projectAppsKey, useAppAccess, useAppDeployment, useAppDeployments, useAppEvents, useProjectApps, useSendAppTestEvent } =
-  await import('./use-project-apps');
+const {
+  appDeploymentKey,
+  appDeploymentsKey,
+  appEventsKey,
+  appMachinesKey,
+  appVolumesKey,
+  workspaceAppsKey,
+  useAppAccess,
+  useAppDeployment,
+  useAppDeployments,
+  useAppEvents,
+  useAppMachines,
+  useAppVolumes,
+  useWorkspaceApps,
+  useSendAppTestEvent,
+} = await import('./use-project-apps');
 
 beforeEach(() => {
   invalidated = [];
@@ -25,8 +39,8 @@ beforeEach(() => {
 
 describe('Kortix Apps React Query bindings', () => {
   test('uses stable project and App scoped query keys', () => {
-    expect((useProjectApps('project-1') as any).queryKey).toEqual(projectAppsKey('project-1'));
-    expect((useProjectApps(null) as any).enabled).toBe(false);
+    expect((useWorkspaceApps('project-1') as any).queryKey).toEqual(workspaceAppsKey('project-1'));
+    expect((useWorkspaceApps(null) as any).enabled).toBe(false);
     expect((useAppDeployments('project-1', 'app-1') as any).queryKey).toEqual(
       appDeploymentsKey('project-1', 'app-1'),
     );
@@ -72,7 +86,7 @@ describe('Kortix Apps React Query bindings', () => {
   });
 
   test('App mutations invalidate the App list and deployment history', () => {
-    const apps = useProjectApps('project-1') as any;
+    const apps = useWorkspaceApps('project-1') as any;
     apps.create.onSuccess();
     apps.update.onSuccess();
     apps.start.onSuccess();
@@ -94,7 +108,7 @@ describe('Kortix Apps React Query bindings', () => {
   });
 
   test('a delete refreshes the App list and the triggers, never the deleted App’s own queries', () => {
-    const apps = useProjectApps('project-1') as any;
+    const apps = useWorkspaceApps('project-1') as any;
     apps.remove.onSuccess({ ok: true, triggers_removed: ['status-check'] }, 'app-1');
     expect(invalidated).toEqual([qk.project.apps('project-1'), qk.project.triggers('project-1')]);
     // Its access, deployments and events would answer 404 while the detail closes.
@@ -105,6 +119,38 @@ describe('Kortix Apps React Query bindings', () => {
     expect(listRefresh({ queryKey: qk.project.apps('project-1') })).toBe(true);
     expect(listRefresh({ queryKey: qk.project.appEvents('project-1', 'app-2') })).toBe(true);
     expect(listRefresh({ queryKey: qk.project.spaceApps('project-1', 'S1') })).toBe(true);
+  });
+
+  test('machine lifecycle mutations refresh the machines list and the App list', () => {
+    const machines = useAppMachines('project-1', 'app-1') as any;
+    expect(machines.queryKey).toEqual(appMachinesKey('project-1', 'app-1'));
+    machines.start.onSuccess();
+    machines.stop.onSuccess();
+    machines.restart.onSuccess();
+    machines.scale.onSuccess();
+    machines.destroy.onSuccess();
+    // Each mutation takes both the machines key and the App list: an instance
+    // change shows in the list's instance status.
+    expect(invalidated).toEqual([
+      appMachinesKey('project-1', 'app-1'), qk.project.apps('project-1'),
+      appMachinesKey('project-1', 'app-1'), qk.project.apps('project-1'),
+      appMachinesKey('project-1', 'app-1'), qk.project.apps('project-1'),
+      appMachinesKey('project-1', 'app-1'), qk.project.apps('project-1'),
+      appMachinesKey('project-1', 'app-1'), qk.project.apps('project-1'),
+    ]);
+  });
+
+  test('volume mutations refresh the volumes list only', () => {
+    const volumes = useAppVolumes('project-1', 'app-1') as any;
+    expect(volumes.queryKey).toEqual(appVolumesKey('project-1', 'app-1'));
+    volumes.snapshot.onSuccess();
+    volumes.restore.onSuccess();
+    volumes.fork.onSuccess();
+    volumes.extend.onSuccess();
+    volumes.destroy.onSuccess();
+    expect(invalidated).toEqual(
+      Array.from({ length: 5 }, () => appVolumesKey('project-1', 'app-1')),
+    );
   });
 
   test('a channel’s Apps sit under the App list key, so every App invalidation refetches them', () => {
@@ -125,7 +171,7 @@ describe('Kortix Apps React Query bindings', () => {
   });
 
   test('the App list does not poll for an instance and has no credential mutation', () => {
-    const apps = useProjectApps('project-1') as any;
+    const apps = useWorkspaceApps('project-1') as any;
     expect(apps.refetchInterval({ state: { data: [{ instance: { status: 'provisioning', operation: 'resizing' } }] } })).not.toBe(2_000);
     expect('rotateCredentials' in apps).toBe(false);
   });

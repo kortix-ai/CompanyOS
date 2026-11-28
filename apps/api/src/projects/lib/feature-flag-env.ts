@@ -1,9 +1,10 @@
-import { projects } from '@kortix/db';
 import { eq } from 'drizzle-orm';
 
+import { config } from '../../config';
 import { resolveFeatureFlag, resolveFeatureFlags } from '../../feature-flags/registry';
 import { db } from '../../shared/db';
 import { isPlatinumConfigured } from '../../shared/platinum';
+import { projectsView } from '../../workspaces/rows';
 
 /**
  * Read by kortixd (lib/config/feature-flags.ts) and the CLI (feature-flags.ts): the project's
@@ -25,24 +26,50 @@ const FRONT_THREAD_MAX_DEPTH = 3;
 const LEGACY_IMAGE_FLAGS = ['genui'];
 
 /**
- * Graduated 2026-11-02 and still listed wherever the platform stores a Drive:
- * boxes, CLIs and managed skills built before then gate Drive features on them.
+ * Graduated and still listed wherever the platform stores a Drive: boxes, CLIs
+ * and managed skills built before then gate these features on them. `drives`
+ * and `volumes` graduated 2026-11-02; `artifacts` (paths in the Drive)
+ * 2026-11-06: an older image withholds the kortix-artifacts skill and an older
+ * CLI hides `kortix artifacts` unless it is listed.
  */
-const DRIVE_FLAGS = ['drives', 'volumes'];
+const DRIVE_FLAGS = ['artifacts', 'drives', 'volumes'];
+
+/**
+ * Graduated 2026-11-24 and listed wherever the API serves Kortix in Chrome
+ * (KORTIX_CHROME_ENABLED): kortixd withholds the kortix-chrome skill
+ * (`kortix-feature-flag: chrome`) and CLIs built before then hide
+ * `kortix chrome` unless it is listed.
+ */
+const CHROME_BOX_FLAG = 'chrome';
+
+/**
+ * Goal mode: a chat binds a goal to itself (`kortix goals new --here`) with no
+ * `goals` flag. Not a registry flag: the box token that shows `kortix goals`
+ * and loads kortixd's goal extension, wherever a Drive can hold a goal. The
+ * `goals` flag still gates the Goals page, page goals and the on-idle check.
+ */
+export const GOAL_MODE_BOX_FLAG = 'goal_mode';
 
 /** The enabled flags, sorted. */
 export function featureFlagsEnvValue(metadata: unknown): string {
   const flags = Object.entries(resolveFeatureFlags(metadata))
     .filter(([, on]) => on)
     .map(([key]) => key);
-  return [...flags, ...LEGACY_IMAGE_FLAGS, ...(isPlatinumConfigured() ? DRIVE_FLAGS : [])].sort().join(',');
+  return [
+    ...flags,
+    ...LEGACY_IMAGE_FLAGS,
+    ...(isPlatinumConfigured() ? [...DRIVE_FLAGS, GOAL_MODE_BOX_FLAG] : []),
+    ...(config.KORTIX_CHROME_ENABLED ? [CHROME_BOX_FLAG] : []),
+  ]
+    .sort()
+    .join(',');
 }
 
 export async function buildFeatureFlagSandboxEnv(projectId: string): Promise<Record<string, string>> {
   const [row] = await db
-    .select({ metadata: projects.metadata })
-    .from(projects)
-    .where(eq(projects.projectId, projectId))
+    .select({ metadata: projectsView.metadata })
+    .from(projectsView)
+    .where(eq(projectsView.projectId, projectId))
     .limit(1);
   return {
     [FEATURE_FLAGS_ENV_NAME]: featureFlagsEnvValue(row?.metadata),

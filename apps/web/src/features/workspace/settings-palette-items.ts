@@ -23,8 +23,8 @@
  * **Why the two constants below are mirrored rather than imported.**
  * `ACCOUNT_SCOPED_SETTINGS_TABS` lives in `settings/settings-panel.tsx` and
  * `STANDALONE_DEFAULT_SETTINGS_TAB` in `settings/standalone-settings-route.tsx`.
- * Importing either one drags the whole settings tab tree (`MarketplaceView`,
- * `ScheduleView`, twenty-odd tab modules) into the command-palette chunk —
+ * Importing either one drags the whole settings tab tree (`ScheduleView`,
+ * twenty-odd tab modules) into the command-palette chunk —
  * including on `/accounts/**`, where the palette mounts and the panel never
  * does. `settings-palette-items.test.ts`-style pinning happens instead:
  * `command-palette.test.tsx` imports the real constants and asserts these are
@@ -36,6 +36,7 @@ import { GearSixIcon } from '@phosphor-icons/react';
 import { railGroups, type SettingsRailTranslator } from '@kortix/ui/customize/settings/rail';
 import type { SettingsTab } from '@kortix/ui/customize/settings/settings-tabs';
 import type { RailItem } from '@kortix/ui/customize/settings/type';
+import { matchesAllWords, paletteWords } from './palette-match';
 
 /**
  * Mirrors `ACCOUNT_SCOPED_SETTINGS_TABS` (settings-panel.tsx) — the tabs that
@@ -49,10 +50,10 @@ export const PALETTE_ACCOUNT_SCOPED_TABS: readonly SettingsTab[] = [
   'preferences',
   'connected',
   'chrome',
-  'tokens',
   'credits',
   'plan',
   'mcp',
+  'personal-keys',
 ];
 
 /**
@@ -111,7 +112,9 @@ const TAB_KEYWORDS: Record<SettingsTab, string> = {
   // called Projects.
   workspace:
     'workspace general settings name rename title icon emoji glyph avatar picture logo archive delete danger zone repo git repository github clone branch remote',
-  profile: 'profile name email avatar personal you account display organizations',
+  profile: 'profile name email avatar personal you account display',
+  // The caller's keys bound to no workspace: the CLI login and older keys.
+  'personal-keys': 'personal keys cli login revoke my keys personal access token',
   security: 'security two-factor 2fa mfa totp authenticator factor devices sign out sessions',
   appearance:
     'appearance theme color mode dark light wallpaper shader shaders background density conversation',
@@ -164,7 +167,7 @@ const TAB_KEYWORDS: Record<SettingsTab, string> = {
   // Every other bag is gone with the tab it named. Thirteen project-
   // configuration tabs (General, Members, Secrets, Channels, Repositories,
   // Models, Sandbox templates, Snapshots, Marketplace, Review, Voice, Feature
-  // flags, Upgrades) moved to `/projects/<id>/config`, and eight
+  // flags, Upgrades) moved to `/workspaces/<id>/config`, and eight
   // account-scoped ones to `/accounts/[id]`. Their words moved with them, onto
   // the `proj-settings` and `account-*` rows in `lib/menu-registry.ts` — the
   // same place every other out-of-overlay destination is searched from. A tab
@@ -197,10 +200,8 @@ export interface SettingsPaletteParams {
   /** The platform offers Kortix in Chrome (`useChromeOffered`); off, its Settings row is not offered. */
   chromeOffered?: boolean;
   // `flags: RailFlags` used to sit here. Marketplace, Review and Voice were
-  // the only flag-gated rows and all three moved to `/projects/<id>/config`,
-  // whose own sub-nav composes them
-  // (`capabilities/project-settings/project-settings-sections.ts`). Nothing
-  // left in this rail varies by flag, so `railGroups()` takes none either.
+  // the only flag-gated rows and all three left the rail. Nothing left in this
+  // rail varies by flag, so `railGroups()` takes none either.
 }
 
 /**
@@ -268,8 +269,7 @@ export function settingsPaletteSearchText(item: SettingsPaletteItem): string {
  * the same affordance `filterRailGroups` gives the rail.
  */
 export function settingsPaletteItemMatches(item: SettingsPaletteItem, words: string[]): boolean {
-  const haystack = settingsPaletteSearchText(item).toLowerCase();
-  return words.every((word) => haystack.includes(word));
+  return matchesAllWords(settingsPaletteSearchText(item), words);
 }
 
 /** The grouped list narrowed to a query, with empty groups dropped. */
@@ -277,7 +277,7 @@ export function filterSettingsPaletteGroups(
   groups: SettingsPaletteGroup[],
   query: string,
 ): SettingsPaletteGroup[] {
-  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const words = paletteWords(query);
   if (words.length === 0) return groups;
   const filtered: SettingsPaletteGroup[] = [];
   for (const group of groups) {

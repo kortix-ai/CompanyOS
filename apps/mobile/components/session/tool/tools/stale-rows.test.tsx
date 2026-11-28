@@ -55,7 +55,7 @@ mock.module('@/components/session/chain-of-thought', () => ({
   DisclosureContent: ({ open, children }: HostProps) => (open ? React.createElement(React.Fragment, null, children) : null),
 }));
 mock.module('@/lib/session/turn-body', () => ({ toDisplayPath: (path: string) => path }));
-mock.module('@/lib/utils/theme', () => ({ THEME: { accent: { red: 'red' } } }));
+mock.module('@/lib/utils/theme', () => ({ THEME: { accent: { light: { red: 'red' }, dark: { red: 'red' } } } }));
 
 // The REAL `../shared/infrastructure` runs (its contexts, `BasicTool`, `ToolEmptyState`,
 // `useToolLive`, the `partOutput` accessors). Only its heavy leaf modules are stubbed.
@@ -75,7 +75,6 @@ mock.module('../shared/navigation', () => ({
 }));
 mock.module('../shared/code-card', () => ({
   HighlightedCode: none,
-  MD_FLUSH_CLASSES: '',
   MarkdownFrontmatterCard: none,
   ToolCode: none,
   ToolCodeCard: none,
@@ -90,7 +89,6 @@ mock.module('../shared/result-card', () => ({ ToolResultCard: Passthrough }));
 mock.module('../tool-error', () => ({ ToolError: none }));
 mock.module('../shared/surface', () => ({
   TOOL_INDENT: 0,
-  ToolCardFrame: Passthrough,
   ToolCaret: none,
   ToolCopyButton: none,
   ToolDetailContext: React.createContext(null),
@@ -98,7 +96,7 @@ mock.module('../shared/surface', () => ({
   ToolRowVariantContext: React.createContext({ chain: false, hideIcon: false }),
   ToolScroll: Passthrough,
   ToolSurfaceContext: React.createContext('inline'),
-  useToolCardFrame: () => null,
+  useToolCardFrame: () => ({ borderWidth: 1, borderColor: 'bd', backgroundColor: 'bg', borderRadius: 8 }),
   useToolCardPad: () => 0,
   useToolIndent: () => 0,
   useToolRowVariant: () => ({ chain: false, hideIcon: false }),

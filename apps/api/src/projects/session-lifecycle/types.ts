@@ -1,3 +1,4 @@
+import { STALE_RUNTIME_DELIVERY_ERROR } from '@kortix/shared';
 import type { Actor } from '../../iam/actor';
 import type { ProjectRow, ProjectSessionRow, RequestAuditContext } from '../lib/serializers';
 import type { PromptOverridesWire, PromptPartWire } from './prompt-payload';
@@ -25,7 +26,6 @@ export type SessionInvocationSource =
   | 'system:approval-resume'
   | 'system:secret-submitted'
   | 'system:connector-connected'
-  | 'system:artifact-comment'
   /** A background subagent finished a turn: its report, delivered into the parent (`projects/subagent-notice.ts`). */
   | 'system:subagent-finished'
   /** A cross-session message (`send_message`) or its idle notice (`projects/peer-messages`). */
@@ -41,8 +41,27 @@ export type SessionInvocationSource =
   | 'system:space-watcher'
   /** The goal engine (`projects/goals/`, flag `goals`): owner and verifier sessions and their prompts. */
   | 'system:goal'
+  /** The eval runner (`projects/evals/`, flag `evals`): one session per trial. */
+  | 'system:eval'
+  /**
+   * A trial in a workspace made for it (`projects/evals/trial-workspace.ts`): the
+   * person's own chat with the agent, origin `user`, so it runs the harness a
+   * person gets (their Drive and memory). The workspace is empty and theirs.
+   */
+  | 'eval:trial'
+  /**
+   * A QualiLoop test conversation (`qualiloop/`): one session per QualiLoop
+   * conversation. Not `system:`, so its origin is `user` and it runs as the
+   * project owner's own private chat, with their Drive and memory.
+   */
+  | 'qualiloop'
+  /** A person's reply on a calendar item an agent session created (`projects/calendar/`, flag `calendar`). */
+  | 'system:calendar'
+  /** The workspace cache's daily rebuild (`projects/workspace-cache/builder.ts`, flag `platinum_cache`): no model turn. */
+  | 'system:workspace-cache'
   | 'admin';
 
+/** `on_backpressure` is for trigger fires only; see `backpressure.ts`. */
 export type QueuePolicy = 'never' | 'on_backpressure' | 'always';
 
 export type SessionLifecyclePostCreateAction =
@@ -95,7 +114,6 @@ export type SessionLifecycleStatus =
   | 'deleted';
 
 export interface CreateSessionCommand {
-  artifactId?: string;
   /** Internal retained-upload authority from an already accepted create command. */
   attachmentSourceCommandId?: string;
   /**
@@ -160,8 +178,6 @@ export interface ContinueSessionCommand {
   /** Legacy plain-text form. Ignored when `parts` is present. */
   text: string;
   userId?: string | null;
-  /** Allow-listed env applied to OpenCode before server-side prompt delivery. */
-  opencodeEnv?: Record<string, string | null>;
   /** The full prompt body, when the producer has one (the prompt inbox). Text-only
    *  producers keep sending `text` and get the same single-part body as before. */
   parts?: PromptPartWire[];
@@ -178,12 +194,18 @@ export interface ContinueSessionCommand {
   wireMessageId?: string;
   /** Stable lifecycle row identity used only for deterministic workspace paths. */
   materializationKey?: string;
-  /** Persist the message without starting an agent loop (OpenCode `noReply`). */
+  /** Persist the message without starting an agent loop (`noReply`). */
   noReply?: boolean;
   /** `userId` is the person who sent this prompt: the session token acts as
    *  them from this turn on (`bindSessionTurnIdentity`). Set by the prompt
    *  route for a non-agent caller; absent keeps the token's identity. */
   bindTurnIdentity?: boolean;
+  /**
+   * The person who wrote this prompt (`inboxPromptPersonId`), when one did.
+   * The model reads their name above it (`author` on the runtime prompt body,
+   * KRTX-5121). Absent for a trigger, a channel relay or another session.
+   */
+  authorUserId?: string | null;
   /**
    * When an automation prompt (no `clientMessageId`) was queued. A user Stop
    * after it wins: the delivery does not wake the box, and the prompt waits
@@ -226,7 +248,7 @@ export interface StartSessionCommand {
  * How one hand-off of a prompt to the runtime ended.
  *
  * The RETRY CLASS is the whole point of the split:
- *  - `delivered`     — OpenCode holds the message. Terminal, success.
+ *  - `delivered`     — the runtime holds the message. Terminal, success.
  *  - `pending`       — the runtime did not become ready inside this attempt's
  *                      budget. Worth another pass soon.
  *  - `unreachable`   — the RUNTIME is down: the provider has the box stopped,
@@ -237,6 +259,8 @@ export interface StartSessionCommand {
  *                      `MAX_RUNTIME_UNREACHABLE_RETRIES`).
  *  - `no-session`    — the session does not exist, or the user deleted it.
  *                      Terminal: there is nothing to deliver to, ever.
+ *  - `stale-runtime` — the web session exists, but its computer calls an obsolete
+ *                      local API tunnel. Keep the failed prompt; start a new session.
  *  - `failed`        — a genuine delivery refusal that re-trying cannot fix.
  *                      Terminal.
  *
@@ -264,6 +288,7 @@ export const DELIVERY_FAILURE_COPY: Record<
   unreachable: "the session's machine could not be reached",
   'not-landed': 'the session accepted it but never recorded it',
   'no-session': 'that session no longer exists',
+  'stale-runtime': STALE_RUNTIME_DELIVERY_ERROR,
   failed: 'the session refused it',
 };
 
@@ -272,6 +297,7 @@ export type SessionDeliveryOutcome =
   | 'pending'
   | 'unreachable'
   | 'no-session'
+  | 'stale-runtime'
   | 'failed'
   /** The runtime ACCEPTED the prompt and then never wrote the message. Not a
    *  retry under the same key: the proxy's dedupe claim would answer that

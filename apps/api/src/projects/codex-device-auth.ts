@@ -1,8 +1,9 @@
 // OpenAI Codex (ChatGPT Plus/Pro) OAuth device grant — driven directly with
 // plain HTTPS calls to auth.openai.com. No subprocess, no OpenCode `serve`, no
 // pinned pod: `start` requests a device code, `poll` exchanges it once the user
-// authorizes in the browser. The resulting auth.json is exactly what the
-// sandbox materializes for OpenCode:
+// authorizes in the browser. The result is an auth.json-shaped login (the
+// format OpenCode used), saved as a secret only the LLM gateway decrypts
+// (llm-gateway/credentials/codex.ts):
 //
 //   { "openai": { "type":"oauth", "access", "refresh", "expires", "accountId" } }
 //
@@ -14,6 +15,7 @@
 //        code_verifier) → {access_token, refresh_token, expires_in, id_token}
 
 import { OPENCODE_USER_AGENT } from '@kortix/shared';
+import { DeviceAuthUnavailableError } from '../llm-gateway/credentials/codex-core';
 
 const OPENAI_AUTH_BASE = 'https://auth.openai.com';
 const CODEX_CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann';
@@ -40,6 +42,7 @@ export async function startCodexDeviceAuth(): Promise<CodexDeviceChallenge> {
     headers: { 'Content-Type': 'application/json', 'User-Agent': USER_AGENT },
     body: JSON.stringify({ client_id: CODEX_CLIENT_ID }),
   });
+  if (res.status >= 500) throw new DeviceAuthUnavailableError('ChatGPT');
   if (!res.ok) {
     throw new Error(`Failed to start ChatGPT device authorization (${res.status})`);
   }

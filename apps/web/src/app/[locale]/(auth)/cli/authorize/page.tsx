@@ -9,7 +9,10 @@ import { useRouter } from '@/lib/navigation/use-identity-router';
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Button } from '@kortix/ui/button';
+import { Checkbox } from '@kortix/ui/checkbox';
+import { EntityAvatar } from '@kortix/ui/entity-avatar';
 import { Input } from '@kortix/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@kortix/ui/select';
 import Loading from '@kortix/ui/loading';
 import { AuthFrame } from '@kortix/ui/internal/auth/auth-card-shell';
 import {
@@ -21,7 +24,17 @@ import {
 } from '@kortix/ui/internal/auth/auth-consent';
 import { ErrorStrip, FieldLabel, Rise, StepHeader } from '@kortix/ui/internal/auth/auth-primitives';
 import { useAuth } from '@/features/providers/auth-provider';
-import { approveCliDevice, createAccountToken, revokeAccountToken } from '@kortix/sdk';
+import {
+  approveCliDevice,
+  createAccountToken,
+  isNoWorkspaceError,
+  revokeAccountToken,
+  type KortixProject,
+} from '@kortix/sdk';
+import { PlusIcon } from '@phosphor-icons/react';
+import type { WorkspaceRow } from '@kortix/ui/workspace/project-selector/project-selector-model';
+import { useWorkspaceDirectory } from '@kortix/ui/workspace/sidebar/use-workspace-directory';
+import { InlineCreateWorkspace } from './inline-create-workspace';
 import { validateCallback } from './validate-callback';
 
 const normalizeCliCode = (code: string) => code.trim().toUpperCase().replace(/-/g, '');
@@ -66,7 +79,100 @@ function CliAuthorizeInner() {
 
   const [phase, setPhase] = useState<Phase>('idle');
   const [error, setError] = useState<string | null>(null);
-  const [typedCode, setTypedCode] = useState('');
+  // The link's `user_code` is the code the CLI printed: start the field from
+  // it (still editable). The prefill is convenience, not consent: a phished
+  // link carries a code too, so approval also needs `matchConfirmed`, which
+  // no URL can set.
+  const [typedCode, setTypedCode] = useState(() => userCode ?? '');
+  const [matchConfirmed, setMatchConfirmed] = useState(false);
+  const [noWorkspace, setNoWorkspace] = useState(false);
+  const tCli = useTranslations('workspaces.cli');
+  const tCommon = useTranslations('common');
+  // A CLI login acts in a workspace: with none, the API answers 409
+  // `no_workspace`. Say so up front instead of after a failed approve.
+  const directory = useWorkspaceDirectory();
+  // A failed list is UNKNOWN, not empty: offering workspace creation to a
+  // person whose workspaces merely failed to load is a dead end (KRTX-4788).
+  // The 409 `no_workspace` stays authoritative — it does not read the list.
+  const listFailed = directory.failedAccountIds.length > 0;
+  // A workspace created on this page (KRTX-4940). It is a choice as soon as
+  // the create answers, before the refetched list carries it.
+  const [created, setCreated] = useState<Pick<WorkspaceRow, 'workspaceId' | 'accountId' | 'project'> | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const withoutWorkspace =
+    noWorkspace || (!created && !directory.loading && !listFailed && directory.openable.length === 0);
+  const choices =
+    created && !directory.openable.some((row) => row.workspaceId === created.workspaceId)
+      ? [...directory.openable, created]
+      : directory.openable;
+  // A CLI key acts in ONE workspace. With 2+ the person picks which; the
+  // most recently opened one is preselected, a created one is selected. The
+  // key is account-scoped, so the choice is sent as the workspace's `account_id`.
+  const [pickedWorkspaceId, setPickedWorkspaceId] = useState<string | null>(null);
+  const pickedRow = choices.find((row) => row.workspaceId === pickedWorkspaceId) ?? choices[0] ?? null;
+  const targetAccountId = pickedRow?.accountId;
+  // Creating selects the new workspace by the account the server answered
+  // with. It never authorizes: Authorize stays a separate press.
+  const onWorkspaceCreated = (project: KortixProject) => {
+    setCreated({ workspaceId: project.project_id, accountId: project.account_id, project });
+    setPickedWorkspaceId(project.project_id);
+    setNoWorkspace(false);
+    setCreateOpen(false);
+    setError(null);
+    setPhase('idle');
+  };
+  // `/workspaces/new` comes back here once the workspace exists (`returnUrl`).
+  const moreOptionsHref = `/workspaces/new?returnUrl=${encodeURIComponent(`/cli/authorize?${params.toString()}`)}`;
+  const workspacePicker =
+    choices.length > 1 ? (
+      <div className="space-y-2">
+        <FieldLabel htmlFor="cli-workspace">{tCli('workspaceLabel')}</FieldLabel>
+        <Select value={pickedRow?.workspaceId ?? ''} onValueChange={setPickedWorkspaceId}>
+          <SelectTrigger id="cli-workspace" size="md" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {choices.map((row) => (
+              <SelectItem key={row.workspaceId} value={row.workspaceId} size="md">
+                <span className="flex min-w-0 items-center gap-2">
+                  <EntityAvatar
+                    label={row.project.name}
+                    glyph={row.project.icon_glyph}
+                    emoji={row.project.icon}
+                    size="xs"
+                  />
+                  <span className="truncate">{row.project.name}</span>
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    ) : null;
+  const workspaceChoice = (
+    <div className="space-y-3">
+      {workspacePicker}
+      {createOpen ? (
+        <InlineCreateWorkspace
+          moreOptionsHref={moreOptionsHref}
+          onCreated={onWorkspaceCreated}
+          onCancel={() => setCreateOpen(false)}
+        />
+      ) : (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="text-muted-foreground hover:text-foreground -ml-3"
+          disabled={phase === 'authorizing'}
+          onClick={() => setCreateOpen(true)}
+        >
+          <PlusIcon className="size-4 shrink-0" />
+          {tCli('createAction')}
+        </Button>
+      )}
+    </div>
+  );
   // Synchronous in-flight guard (the pattern of `tokens-tab.tsx`): two clicks
   // before the re-render that disables the button minted two API keys.
   const inFlightRef = useRef(false);
@@ -79,14 +185,45 @@ function CliAuthorizeInner() {
     }
   }, [isLoading, user, params, router]);
 
-  if (isLoading || !user) {
+  if (isLoading || !user || directory.loading) {
     return <AuthPendingScreen />;
   }
 
+  if (listFailed && !created && !withoutWorkspace && (userCode || (callback && state && validation.ok))) {
+    // The one way forward is a retry: approving needs a workspace, and the
+    // person may have one that this page just could not see. A workspace
+    // created here is known without the list.
+    return (
+      <AuthStatusScreen
+        title={tCli('loadFailedTitle')}
+        description={tCli('loadFailedBody')}
+        action={
+          <Button size="lg" className="w-full" onClick={directory.retryFailed}>
+            {tCommon('retry')}
+          </Button>
+        }
+      />
+    );
+  }
+
+  if (withoutWorkspace && (userCode || (callback && state && validation.ok))) {
+    // The first workspace is created right here; the consent below follows
+    // with it selected, and the person approves the sign-in there.
+    return (
+      <AuthStatusScreen
+        title={tCli('noWorkspaceTitle')}
+        description={tCli('noWorkspaceBody')}
+        action={<InlineCreateWorkspace moreOptionsHref={moreOptionsHref} onCreated={onWorkspaceCreated} />}
+      />
+    );
+  }
+
   if (userCode) {
-    // The URL carries the code, so a link from someone else could too. The
-    // person types the code their own terminal shows; only a match approves.
-    const confirmed = typedCode.trim().length > 0 && normalizeCliCode(typedCode) === normalizeCliCode(userCode);
+    // The URL carries the code, so a link from someone else could too
+    // (RFC 8628 §5.4). Approval needs the field to match the link's code AND
+    // the person's confirmation that it matches their own terminal.
+    const confirmed =
+      matchConfirmed && typedCode.trim().length > 0 && normalizeCliCode(typedCode) === normalizeCliCode(userCode);
     if (phase === 'success') {
       return (
         <AuthStatusScreen
@@ -103,18 +240,20 @@ function CliAuthorizeInner() {
         </Rise>
         <Rise delay={0.06}>
           {error ? <ErrorStrip message={error} /> : null}
+          <div className="mb-3">{workspaceChoice}</div>
           <form
             className="space-y-3"
             onSubmit={async (event) => {
               event.preventDefault();
-              if (!confirmed || approving || inFlightRef.current) return;
+              if (!confirmed || approving || createOpen || inFlightRef.current) return;
               inFlightRef.current = true;
               setPhase('authorizing');
               setError(null);
               try {
-                await approveCliDevice(userCode);
+                await approveCliDevice(userCode, targetAccountId ? { accountId: targetAccountId } : undefined);
                 setPhase('success');
               } catch (err) {
+                if (isNoWorkspaceError(err)) setNoWorkspace(true);
                 setError((err as Error).message);
                 setPhase('error');
               } finally {
@@ -133,7 +272,12 @@ function CliAuthorizeInner() {
               value={typedCode}
               onChange={(event) => setTypedCode(event.target.value)}
             />
-            <Button type="submit" size="lg" className="w-full" disabled={!confirmed || approving}>
+            <Checkbox
+              checked={matchConfirmed}
+              onCheckedChange={setMatchConfirmed}
+              label={tI18nComplete.raw('cliDeviceConfirm')}
+            />
+            <Button type="submit" size="lg" className="w-full" disabled={!confirmed || approving || createOpen}>
               {approving ? <Loading className="size-4 shrink-0" /> : null}
               {tI18nComplete.raw('cliDeviceAction')}
             </Button>
@@ -177,7 +321,8 @@ function CliAuthorizeInner() {
     try {
       const name = label ? `CLI · ${label}` : `CLI · ${new Date().toLocaleString()}`;
       const minted = await withTimeout(
-        createAccountToken({ name }),
+        // A CLI login renews on use: 90 days out, moved out again on every call.
+        createAccountToken({ name, accountId: targetAccountId, renews: true }),
         MINT_TIMEOUT_MS,
         'Timed out asking the Kortix API to mint an API key. Is the API reachable?',
         // The timeout does not cancel the mint. A key that arrives after it
@@ -224,6 +369,7 @@ function CliAuthorizeInner() {
 
       setPhase('success');
     } catch (err) {
+      if (isNoWorkspaceError(err)) setNoWorkspace(true);
       setError((err as Error).message);
       setPhase('error');
     } finally {
@@ -271,25 +417,22 @@ function CliAuthorizeInner() {
           {label ? <DetailRow label={tI18nComplete.raw('text6ba0bdeccb42')} value={label} /> : null}
         </DetailPanel>
 
-        <Button size="lg" className="mt-5 w-full" onClick={authorize} disabled={busy}>
+        <div className="mt-5">{workspaceChoice}</div>
+
+        <Button size="lg" className="mt-5 w-full" onClick={authorize} disabled={busy || createOpen}>
           {busy ? <Loading className="size-4 shrink-0" /> : null}
           {tI18nComplete.raw('textb6741b4ccf6d')}
         </Button>
 
-        <div className="text-muted-foreground mt-8 space-y-2 text-sm">
-          <p>
-            {tI18nComplete.raw('text702391f5d071')}{' '}
-            <span className="text-foreground">{tI18nComplete.raw('text7955091baf3b')}</span>.
-          </p>
-          <p>
-            <Link
-              href="/"
-              className="hover:text-foreground -my-2 inline-block py-2 transition-colors"
-            >
-              {tI18nComplete.raw('text19766ed6ccb2')}
-            </Link>
-          </p>
-        </div>
+        <p className="text-muted-foreground mt-5 text-sm">
+          {tI18nComplete.raw('text702391f5d071')}{' '}
+          <span className="text-foreground">{tI18nComplete.raw('text7955091baf3b')}</span>.
+        </p>
+        <p className="text-muted-foreground mt-2 text-sm">
+          <Link href="/" className="hover:text-foreground -my-2 inline-block py-2 transition-colors">
+            {tI18nComplete.raw('text19766ed6ccb2')}
+          </Link>
+        </p>
       </Rise>
     </AuthFrame>
   );

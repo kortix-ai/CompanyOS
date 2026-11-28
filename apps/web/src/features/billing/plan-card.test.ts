@@ -2,7 +2,7 @@ import type { AccountState } from '@kortix/sdk';
 import { describe, expect, test } from 'bun:test';
 
 import { describePlanStatus } from './account-overview';
-import { describePlanChange, planPickerView, scheduledDowngrade } from './plan-card';
+import { describePlanChange, planPickerView, recommendedPlanUsd, scheduledDowngrade } from './plan-card';
 
 /**
  * The Plan pane's model, tested without React.
@@ -236,8 +236,8 @@ describe('planPickerView', () => {
   const freePlan = { key: 'free', family: 'free', label: 'Free', sublabel: null, status: 'current', shape: 'none', rank: 1, monthly_usd: null } as AccountState['plan'];
   const creditsPlan = { key: 'credits', family: 'credits', label: 'Credits', sublabel: null, status: 'current', shape: 'credits', rank: 2, monthly_usd: 500 } as AccountState['plan'];
 
-  test('a Free account opens on the default tier', () => {
-    expect(view({ plan: freePlan })).toEqual({ currentUsd: null, initialUsd: 200 });
+  test('a Free account opens on the $50 entry tier', () => {
+    expect(view({ plan: freePlan })).toEqual({ currentUsd: null, initialUsd: 50 });
   });
 
   test('a paying account opens on the amount it pays', () => {
@@ -257,7 +257,7 @@ describe('planPickerView', () => {
   test('Enterprise demo or license still gets the picker: Enterprise never replaces the plan', () => {
     const demo = view({ plan: freePlan, enterprise: { state: 'demo' } });
     const licensed = view({ plan: creditsPlan, enterprise: { state: 'licensed' } }, { monthly_usd: 500, subscription_id: 'sub_1', status: 'active' });
-    expect(demo).toEqual({ currentUsd: null, initialUsd: 200 });
+    expect(demo).toEqual({ currentUsd: null, initialUsd: 50 });
     expect(licensed).toEqual({ currentUsd: 500, initialUsd: 500 });
   });
 
@@ -266,5 +266,38 @@ describe('planPickerView', () => {
       currentUsd: null,
       initialUsd: null,
     });
+  });
+});
+
+// The out-of-credits slider opens on the account's own number (Paper v3, M2).
+describe('recommendedPlanUsd', () => {
+  const subscriber = (monthlyUsd: number, usedUsd: number) =>
+    stateWith({
+      has_active_subscription: true,
+      plan: { key: 'credits', family: 'credits', label: 'Credits', sublabel: null, monthly_usd: monthlyUsd },
+      usage_this_period: {
+        compute_usd: usedUsd,
+        llm_usd: 0,
+        total_usd: usedUsd,
+        period_start: null,
+        period_end: null,
+      },
+    } as Partial<AccountState>);
+
+  test('no subscription: the $50 entry tier', () => {
+    expect(recommendedPlanUsd(stateWith({ has_active_subscription: false } as Partial<AccountState>))).toBe(50);
+  });
+
+  test('a subscriber: the smallest higher tier that covers usage with 20% to spare', () => {
+    // $184 used x 1.2 = $220.80, so $300 (the next tier above $200 that covers it).
+    expect(recommendedPlanUsd(subscriber(200, 184))).toBe(300);
+    // Light usage still moves one tier up: the plan ran out.
+    expect(recommendedPlanUsd(subscriber(200, 10))).toBe(300);
+    // Heavy usage skips tiers.
+    expect(recommendedPlanUsd(subscriber(100, 900))).toBe(1_500);
+  });
+
+  test('the top tier stays the top tier', () => {
+    expect(recommendedPlanUsd(subscriber(10_000, 80_000))).toBe(10_000);
   });
 });

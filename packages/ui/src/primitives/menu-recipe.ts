@@ -74,12 +74,7 @@ const MENU_ROW_BASE =
 
 /**
  * Keyboard focus and pointer hover resolve to the same treatment on purpose —
- * Radix marks the keyboard-focused row `data-highlighted`, and a row you
- * arrowed onto should look exactly like a row you hovered.
- */
-/**
- * Keyboard focus and pointer hover resolve to the same treatment on purpose —
- * Radix marks the keyboard-focused row `data-highlighted`, and a row you
+ * Base UI marks the keyboard-focused row `data-highlighted`, and a row you
  * arrowed onto should look exactly like a row you hovered.
  */
 const MENU_ROW_TONE: Record<MenuRowTone, string> = {
@@ -102,9 +97,9 @@ export function menuRow(size: MenuRowSize, tone: MenuRowTone, className?: string
  * They are the same object — a hairline-bordered card lifted off the canvas —
  * and they had four different descriptions of it:
  *
- *   dropdown  bg-background  radius calc(--radius+0.2rem)  shadow-lg  p-1
+ *   dropdown  bg-background  radius calc(--radius+0.2rem)  shadow-md  p-1
  *   context   bg-popover     radius --radius-md            shadow-md  p-1
- *   select    bg-background  radius calc(--radius+0.2rem)  shadow-lg  p-1  + hover:text-foreground
+ *   select    bg-background  radius calc(--radius+0.2rem)  shadow-md  p-1  + hover:text-foreground
  *   popover   bg-popover     radius --radius-lg            (none)     p-4
  *
  * `bg-popover` is the resolved answer. In light mode `--popover` and
@@ -115,7 +110,7 @@ export function menuRow(size: MenuRowSize, tone: MenuRowTone, className?: string
  * was the same colour as the page behind it.
  *
  * Popover also had no shadow at all, so it sat flat on the canvas while the
- * menus lifted. `shadow-lg` for all of them.
+ * menus lifted. One step for all of them: `shadow-xs` (the smooth stack).
  *
  * Four things are deliberately absent, because each is dictated by what the
  * panel holds rather than by what it is:
@@ -130,7 +125,7 @@ export function menuRow(size: MenuRowSize, tone: MenuRowTone, className?: string
  *   shared `overflow-hidden` would survive alongside a later `overflow-y-auto`
  *   and the winner would come down to Tailwind's generated property order.
  * - **Transform origin.** Anchored panels scale out of their trigger, and the
- *   Radix variable that carries it is named per primitive.
+ *   `--radix-*-transform-origin` variable that carries it is named per primitive.
  *
  * No `hover:text-foreground` here either — select had it. On the panel it
  * recoloured every row at once whenever the pointer entered, fighting the
@@ -145,8 +140,12 @@ export function menuRow(size: MenuRowSize, tone: MenuRowTone, className?: string
  * toward its first row, so the 150ms `animate-in` is 150ms of the row sliding
  * away from the cursor.
  */
+// `outline-none`: a menu popup takes focus itself when it opens from the
+// keyboard or loses its highlighted row. The browser then drew its focus
+// outline around the whole panel, a second heavy edge outside the hairline.
+// Focus inside a panel shows on the row (`data-highlighted`), never the panel.
 export const FLOATING_PANEL_SURFACE =
-  'bg-popover text-popover-foreground border-border rounded-lg border shadow-md';
+  'bg-popover text-popover-foreground border-border rounded-lg border shadow-xs outline-none';
 
 /** Enter/exit for panels that appear away from the pointer's path. */
 export const FLOATING_PANEL_MOTION =

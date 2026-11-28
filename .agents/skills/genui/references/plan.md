@@ -19,7 +19,7 @@
 | `plan.md` (this file) | Architecture, constraints, review focus, spec deltas, file map, contracts, order, delivery | — |
 | `plan-1-sdk.md` | `@kortix/sdk/genui` + `@kortix/sdk/genui/react` + default components (9 tasks) | PR 1 |
 | `plan-2-eval.md` | Phase 0 model evaluation script and go/no-go (2 tasks) | PR 1 |
-| `plan-3-runtime.md` | `genui` project flag, kill switch, prompt injection on OpenCode and pi, channel guards (5 tasks) | PR 1 |
+| `plan-3-runtime.md` | `genui` project flag, kill switch, channel guards (3 tasks; the prompt-injection tasks are removed) | PR 1 |
 | `plan-4-web.md` | Web renderer, components, map, settings toggle, copy/export, telemetry, desktop parity (8 tasks) | PR 2 |
 | `plan-5-mobile.md` | Mobile renderer, components, map WebView, settings toggle, copy (7 tasks) | PR 3 |
 
@@ -79,7 +79,7 @@ Research and prototyping found facts the spec did not have. Each delta is reflec
 ## Architecture
 
 ```
-Agent (OpenCode or pi)                                         ┌─ apps/web ───────────────────────────────┐
+Agent (pi)                                                     ┌─ apps/web ───────────────────────────────┐
   system prompt += buildGenuiPrompt()   (flag on only)          │ markdown-code.tsx                        │
   reply text: prose + ```openui … ```                           │   genuiVersionFromClassName → GenuiBlock │
         │                                                        │   components = webGenuiComponents        │
@@ -103,7 +103,7 @@ Modify: `packages/sdk/package.json`, `src/index.isomorphic.test.ts`, `src/root-c
 
 **plan-2 (eval)** — create `.agents/skills/genui/scripts/eval.ts`, `.agents/skills/genui/scripts/eval-prompts.json`, `.agents/skills/genui/references/eval-results.md`.
 
-**plan-3 (runtime)** — modify `apps/api/src/feature-flags/registry.ts`, `packages/api-contract/src/index.ts`, `packages/api-contract/src/__tests__/schemas.test.ts`, `packages/sdk/src/core/rest/projects-client/projects.ts`, `packages/sdk/src/core/rest/projects-client/projects.test.ts`, `packages/ui/src/internal/lib/use-project-feature-flags.ts`, `apps/web/translations/*.json` (9 locales), `apps/api/src/config.ts`, `apps/api/src/projects/lib/session-sandbox-env-build.ts`, `apps/kortix-sandbox-agent-server/package.json`, `apps/kortix-sandbox-agent-server/src/harness/open-code/lifecycle.ts`, `apps/kortix-sandbox-agent-server/src/harness/pi/runtime.ts`, `apps/kortix-sandbox-agent-server/src/__tests__/runtime-env-allowlist-completeness.test.ts`, `apps/api/src/projects/routes/turn-stream-handlers.ts`, `apps/cli/src/commands/sessions-chat.ts`; create `apps/kortix-sandbox-agent-server/src/services/sandbox-env/genui-instruction.ts` + test, `apps/api/src/projects/lib/genui-env.ts` + test.
+**plan-3 (runtime)** — modify `apps/api/src/feature-flags/registry.ts`, `packages/api-contract/src/index.ts`, `packages/api-contract/src/__tests__/schemas.test.ts`, `packages/sdk/src/core/rest/projects-client/projects.ts`, `packages/sdk/src/core/rest/projects-client/projects.test.ts`, `packages/sdk/src/react/use-feature-flag.ts` (`SERVED_FLAG_MAP_KEYS`, moved by KRTX-4414), `apps/web/translations/*.json` (9 locales), `apps/api/src/config.ts`, `apps/api/src/projects/lib/session-sandbox-env-build.ts`, `apps/kortix-sandbox-agent-server/package.json`, `apps/kortix-sandbox-agent-server/src/harness/open-code/lifecycle.ts`, `apps/kortix-sandbox-agent-server/src/harness/pi/runtime.ts`, `apps/kortix-sandbox-agent-server/src/__tests__/runtime-env-allowlist-completeness.test.ts`, `apps/api/src/projects/routes/turn-stream-handlers.ts`, `apps/cli/src/commands/sessions-chat.ts`; create `apps/kortix-sandbox-agent-server/src/services/sandbox-env/genui-instruction.ts` + test, `apps/api/src/projects/lib/genui-env.ts` + test.
 
 **plan-4 (web)** — create `apps/web/src/features/genui/` (`genui-message-block.tsx`, `genui-web-context.ts`, `use-genui-enabled.ts`, `components/layout.tsx`, `components/data.tsx`, `components/charts.tsx`, `components/map.tsx`, `components/inline.tsx`, `components/pending.tsx`, `components/index.ts`, tests), `packages/ui/src/primitives/map.tsx` (mapcn); modify `markdown-code.tsx`, `unified-markdown.tsx`, `packages/ui/src/internal/stores/user-preferences-store.ts`, `appearance-tab.tsx`, `transcript.tsx`, `export-transcript-modal.tsx`, `lib/track.ts`, `translations/*.json`, `package.json`, `tests/e2e/specs/` (one journey).
 

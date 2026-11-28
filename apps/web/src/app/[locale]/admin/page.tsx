@@ -38,9 +38,9 @@ const DESTINATIONS: { href: string; label: string; description: string; icon: Ic
     icon: UsersIcon,
   },
   {
-    href: '/admin/projects',
-    label: 'Projects',
-    description: 'Every project across every account, most-active first.',
+    href: '/admin/workspaces',
+    label: 'Workspaces',
+    description: 'Every workspace across every account, most-active first.',
     icon: KanbanIcon,
   },
   {
@@ -169,7 +169,7 @@ export default function AdminOverviewPage() {
             and the delay would be billed to the operator on every one. */}
         <nav
           aria-label={tI18nComplete.raw('text99c62879ad37')}
-          className="border-border/60 border-y"
+          className="border-border border-y"
         >
           {destinations.map((item, index) => (
             <Link
@@ -179,7 +179,7 @@ export default function AdminOverviewPage() {
               className={cn(
                 'group hover:bg-hover focus-visible:ring-ring relative -mx-3 flex items-center gap-4 rounded-md px-3 py-4',
                 'duration-fast transition-colors ease-out outline-none focus-visible:ring-2',
-                index > 0 && 'border-border/60 border-t',
+                index > 0 && 'border-border border-t',
               )}
             >
               <span className="bg-muted flex size-9 shrink-0 items-center justify-center rounded-sm">

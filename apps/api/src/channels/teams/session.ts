@@ -1,5 +1,5 @@
 import { and, eq } from 'drizzle-orm';
-import { chatEventDedup, chatThreads, projectSessions, projects } from '@kortix/db';
+import { chatEventDedup, chatThreads, projectSessions } from '@kortix/db';
 import { db } from '../../shared/db';
 import { config } from '../../config';
 import {
@@ -56,6 +56,7 @@ import {
 } from './types';
 import { describeTeamsConversation, isPersonalChat, stripTeamsMentions, teamsMessageText } from './util';
 import { ensureTeamsThreadParticipant, normalizeConversationPolicy, rememberTeamsThreadOwner } from './participants';
+import { projectsView } from '../../workspaces/rows';
 
 const defaultTeamsSessionLifecycle = {
   deliverFollowUp: deliverThroughQueue,
@@ -478,8 +479,8 @@ export async function createOrJoinTeamsConversationSession(input: {
 
   let [project] = await db
     .select()
-    .from(projects)
-    .where(eq(projects.projectId, projectId))
+    .from(projectsView)
+    .where(eq(projectsView.projectId, projectId))
     .limit(1);
   if (!project) return;
 
@@ -499,7 +500,7 @@ export async function createOrJoinTeamsConversationSession(input: {
   const authorizedResume = Boolean(input.authorizedResume) && route.kind === 'here';
   if (route.kind === 'thread_project') {
     projectId = route.projectId;
-    [project] = await db.select().from(projects).where(eq(projects.projectId, projectId)).limit(1);
+    [project] = await db.select().from(projectsView).where(eq(projectsView.projectId, projectId)).limit(1);
     if (!project) return;
   }
 
@@ -614,7 +615,7 @@ export async function createOrJoinTeamsConversationSession(input: {
   // of the conversation's agent cannot start a session on it from Teams.
   if (!(await userMayLaunchAgent({ projectId, accountId: project.accountId }, userId, selection?.agentName))) {
     if (claimKey) await releaseThreadCreate(claimKey);
-    const refusal = `You don't have access to the \`${selection?.agentName}\` agent in this project. Ask a project manager to grant it, or pick another agent with /agents.`;
+    const refusal = `You don't have access to the \`${selection?.agentName}\` agent in this Kortix workspace. Ask a workspace manager to grant it, or pick another agent with /agents.`;
     if (handle) await finalizeTurn(handle, { error: refusal });
     else if (shared) await tellSender(activity, tenantId, conversationId, projectId, refusal);
     return;
@@ -653,7 +654,6 @@ export async function createOrJoinTeamsConversationSession(input: {
       // markup Teams wraps around the bot's name in channels.
       title_source: activity.text ? stripTeamsMentions(activity.text) || null : null,
     },
-    queuePolicy: 'on_backpressure',
     // One key per inbound message, never per conversation. The lifecycle
     // keeps a key forever (a unique index, no retention) and a chat is one
     // conversation for life, so under the conversation's key its FIRST
@@ -734,8 +734,11 @@ export async function createOrJoinTeamsConversationSession(input: {
     return;
   }
 
+  // The create runs inline, so it ends `created` or `failed`. `queued` and
+  // `pending` come only from an earlier delivery of this same message, whose
+  // create still runs or waits for a retry under the same idempotency key.
   if (result.status === 'queued' || result.status === 'pending') {
-    if (handle) await finalizeTurn(handle, { answer: queuedMessage() });
+    if (handle) await finalizeTurn(handle, { answer: CREATE_IN_FLIGHT_MESSAGE });
     return;
   }
 
@@ -762,9 +765,8 @@ function startError(status: number | undefined, body: unknown): string {
   return startErrorMessage(status, body, TEAMS_START_ERROR_COMMANDS);
 }
 
-function queuedMessage(): string {
-  return "I've queued your task behind the sessions already starting in this project, and I'll reply right here the moment it begins.";
-}
+const CREATE_IN_FLIGHT_MESSAGE =
+  'Kortix is still starting a session for this message. The agent replies here when it is ready.';
 
 async function claimThreadCreate(key: string): Promise<boolean> {
   try {
@@ -802,7 +804,7 @@ async function waitForConversationSession(
       .where(
         and(
           eq(chatThreads.platform, 'teams'),
-          eq(chatThreads.workspaceId, tenantId),
+          eq(chatThreads.platformTeamId, tenantId),
           eq(chatThreads.threadId, conversationId),
           eq(chatThreads.projectId, projectId),
         ),

@@ -4,6 +4,13 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { SessionLifecycleCommandRow } from './store';
 
+// First, before any module binds it: the person rule stays real, only the name
+// read (auth.users) is faked.
+const realAuthors = await import('../lib/prompt-author');
+mock.module('../lib/prompt-author', () => ({
+  ...realAuthors,
+  promptAuthorName: async (userId: string | null) => (userId === 'user-1' ? 'Bruno Silva' : null),
+}));
 const realRuntimeClient = await import('./runtime-client');
 const realDeliver = await import('./deliver');
 const realStore = await import('./store');
@@ -12,7 +19,7 @@ const realPlacement = await import('./inbox-placement');
 const realAdmission = await import('./inbox-admission');
 const { mintWireMessageId } = await import('../wire-message-id');
 
-let awake: { externalId: string; opencodeSessionId: string; stage: string } | null = null;
+let awake: { externalId: string; runtimeSessionId: string; stage: string } | null = null;
 let answer: () => Promise<string> = async () => 'accepted';
 const posts: Array<{ key: string; opts: Record<string, unknown> }> = [];
 const forwarded: Array<{ wireMessageId: string; opts: unknown }> = [];
@@ -25,6 +32,7 @@ let keepsIds = false;
 let tip: Array<{ id: string; role: string; parentID?: string }> = [];
 
 mock.module('./deliver', () => ({ ...realDeliver, awakeDeliveryTarget: async () => awake }));
+
 mock.module('./inbox-delivery-hold', () => ({
   InboxDeliveryPaused: class extends Error {},
   assertInboxDeliveryActive: async () => undefined,
@@ -94,7 +102,7 @@ const payload = {
 const steer = () => deliverSteer(row, payload, payload.text, 'msg_turn1', new ProvisionTimeline('t', 'deliver'));
 
 beforeEach(() => {
-  awake = { externalId: 'box-1', opencodeSessionId: 'ses_1', stage: 'ready' };
+  awake = { externalId: 'box-1', runtimeSessionId: 'ses_1', stage: 'ready' };
   answer = async () => 'accepted';
   for (const list of [posts, forwarded, fallbacks, requeues, failures]) list.length = 0;
   remints = 0;
@@ -110,6 +118,18 @@ describe('deliverSteer', () => {
     expect(posts[0]!.opts).toMatchObject({ steer: true, wireMessageId: 'msg_steer1', parts: payload.parts });
     expect(forwarded).toEqual([{ wireMessageId: 'msg_steer1', opts: { steeredIntoMessageId: 'msg_turn1' } }]);
     expect(remints).toBe(0);
+  });
+
+  test('a person\'s steer names who wrote it; one another session sent names nobody (KRTX-5121)', async () => {
+    expect(await steer()).toBe('succeeded');
+    expect(posts[0]!.opts).toMatchObject({ steer: true, author: 'Bruno Silva' });
+    const fromAgent = { ...payload, authorSessionId: 'sess-other' };
+    expect(await deliverSteer(row, fromAgent, fromAgent.text, 'msg_turn1', new ProvisionTimeline('t', 'deliver'))).toBe('succeeded');
+    expect(posts[1]!.opts).not.toHaveProperty('author');
+    // A row of no prompt route (a trigger, a channel relay) has no person behind it either.
+    const automation = { text: 'nightly', delivery: 'steer' as const, wireMessageId: 'msg_auto1' };
+    expect(await deliverSteer(row, automation, automation.text, 'msg_turn1', new ProvisionTimeline('t', 'deliver'))).toBe('succeeded');
+    expect(posts[2]!.opts).not.toHaveProperty('author');
   });
 
   test('an id its producer could not place is re-minted above the live transcript before the POST', async () => {

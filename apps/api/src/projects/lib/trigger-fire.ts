@@ -1,5 +1,5 @@
 import { checkBillingAdmission } from '../../billing/services/billing-gate';
-import { servableProjectCatalog } from '../../llm-gateway/models/servable-catalog';
+import { agentPauseReason } from './agent-directory';
 import { toSessionModelRef } from '../../llm-gateway/resolution/effective';
 import type { PromptOverridesWire } from '../session-lifecycle/store';
 import { projectSessions, projectTriggerRuntime } from '@kortix/db';
@@ -10,7 +10,7 @@ import { db } from '../../shared/db';
 import { createSession, drainSessionLifecycleQueue, enqueueContinueSessionCommand, resolveProjectAutomationActor } from '../session-lifecycle';
 import type { GitTriggerSpec } from '../triggers';
 import type { ProjectRow, RequestAuditContext } from './serializers';
-import { renderSessionKey } from './trigger-payload';
+import { renderSessionKey, triggerFilterMatches } from './trigger-payload';
 import { keepRunFailure } from '../trigger-execution-store';
 import { TRIGGER_REUSE_RETIRED_AT } from './trigger-run-outcome';
 import { disableSessionReminder, reminderPromptText } from './session-reminders';
@@ -18,8 +18,10 @@ import { triggerTargetOf } from './runtime-triggers';
 import { accountMemberRow } from '../../iam/membership-read';
 import type { TriggerFireSource } from './trigger-webhook-auth';
 import { claimTriggerCreate, releaseTriggerCreate, triggerCreateKey } from './trigger-create-claim';
+import { triggerModelRefusal } from './trigger-model-gate';
+import { pauseTriggerOnAccountRefusal } from './trigger-setup-pause';
 import { alertTriggerAutoPaused, alertTriggerThrottled, clearTriggerAlert } from './trigger-alerts';
-import { autoPauseTrigger, readTriggerAutoPause, triggerAutoPauseReason, triggerRunCapVerdict } from './trigger-run-caps';
+import { autoPauseTrigger, readTriggerAutoPause, triggerAutoPauseReason, triggerRunCapVerdict, reserveTriggerRun } from './trigger-run-caps';
 import { triggerChecksOverlap, triggerOverlapReason } from './trigger-overlap';
 import { captureAccountProductEvent } from '../../iam/account-analytics';
 import { admitReminderFire, goalForSession, goalSuccessorAllowed, goalSuccessorMetadata } from '../goals/admission';
@@ -360,6 +362,18 @@ export async function fireGitTrigger(
   input: Parameters<typeof fireGitTriggerOnce>[0],
 ): ReturnType<typeof fireGitTriggerOnce> {
   const result = await fireGitTriggerOnce(input);
+  // No model or no credits: the account cannot run it, so the trigger pauses
+  // and resumes when the cause is gone (trigger-setup-pause.ts) instead of
+  // dead-lettering every slot.
+  if (result.status === 'failed' && result.errorCode) {
+    await pauseTriggerOnAccountRefusal({
+      projectId: input.project.projectId,
+      accountId: input.project.accountId,
+      slug: input.spec.slug,
+      errorCode: result.errorCode,
+      error: result.error,
+    });
+  }
   if (result.status === 'fired' || result.status === 'queued') {
     captureAccountProductEvent({
       accountId: input.project.accountId,
@@ -383,8 +397,10 @@ async function fireGitTriggerOnce(input: {
   source: TriggerFireSource;
   idempotencyKey?: string | null;
   request?: RequestAuditContext;
-  /** A person fired it (manual fire, replay): the run caps do not apply. */
+  /** Explicit manual fire bypasses soft caps only; hard caps always apply. */
   deliberate?: boolean;
+  /** Authenticated session dispatcher; never supplied by the payload. */
+  callerSessionId?: string | null;
 }): Promise<{
   /** `skipped`: a run cap or an auto-pause (KRTX-1721) held it; `reason` says which. */
   status: 'fired' | 'queued' | 'failed' | 'skipped';
@@ -403,9 +419,20 @@ async function fireGitTriggerOnce(input: {
   retryable?: boolean;
 }> {
   const { spec, project, payload } = input;
+  if (!triggerFilterMatches(spec, payload)) return { status: 'skipped', reason: 'delivery did not match the trigger filter' };
+  if (spec.sessionMode === 'keyed' && !renderSessionKey(spec, payload)) {
+    return { status: 'skipped', reason: 'keyed trigger requires a non-empty session key' };
+  }
+  if (spec.hardRunCaps) {
+    const admission = await reserveTriggerRun({ projectId: project.projectId, slug: spec.slug, caps: spec, now: new Date() });
+    if (!admission.admitted) return { status: 'skipped', reason: admission.reason };
+  }
   // Run caps (KRTX-1721) bound what automation starts, before any session or
-  // prompt work. A person's fire is never held, but it counts toward the cap.
+  // prompt work. A person's fire bypasses soft caps, not hard reservations.
   if (!input.deliberate) {
+    // A paused agent (flag `channels`, lib/agent-directory.ts): its agent starts no automatic run.
+    const botPaused = agentPauseReason(project.metadata, spec.agent);
+    if (botPaused) return { status: 'skipped', reason: botPaused };
     const now = new Date();
     const { pausedReason, resumedAt } = await readTriggerAutoPause(project.projectId, spec.slug);
     if (pausedReason) return { status: 'skipped', reason: pausedReason };
@@ -610,8 +637,8 @@ async function fireReminderSuccessor(
     await disableSessionReminder(project.projectId, spec.slug, new Date());
     return {
       status: 'failed',
-      error: "The goal's owner session failed and the goal has used all its sessions, so its heartbeat is paused",
-      errorCode: 'goal_session_cap',
+      error: "The goal's owner session failed and no successor session may start, so its heartbeat is paused",
+      errorCode: goal.goal?.blockedReason === 'owner_lost' ? 'goal_owner_lost' : 'goal_session_cap',
       retryable: false,
     };
   }
@@ -699,7 +726,7 @@ async function queueExistingTriggerSession(
 
   // Session reuse — when a trigger opts into `session_mode = "reuse"`, re-prompt
   // the canonical session this trigger already created (resuming its sandbox +
-  // opencode root) so ONE long-lived session accumulates context across fires,
+  // runtime root) so ONE long-lived session accumulates context across fires,
   // instead of minting a brand-new session every time. If no reusable session
   // exists yet, or the last one is gone/failed, we fall through to createSession
   // below and that fresh session becomes the canonical one for next time. Also
@@ -747,20 +774,8 @@ async function createGitTriggerSession(
   // the chat composer gates on: zero enabled models = nothing to run. Only
   // the fresh-create path gates — reminders and re-prompts of an existing
   // session keep their semantics.
-  const catalog = await servableProjectCatalog({
-    projectId: project.projectId,
-    accountId: project.accountId,
-    // The run executes as this actor (the account owner), so its personal
-    // keys count exactly as the gateway will count them for the session.
-    principalUserId: actor,
-  });
-  if (!Object.values(catalog.models).some((model) => model.enabled)) {
-    return {
-      status: 'failed',
-      error: 'No usable model for this account. Connect a provider key or upgrade the plan, then fire again.',
-      errorCode: 'no_usable_model',
-    };
-  }
+  const refusal = await triggerModelRefusal({ projectId: project.projectId, accountId: project.accountId, actor });
+  if (refusal) return { status: 'failed', error: refusal, errorCode: 'no_usable_model' };
   const sessionResult = await createSession({
     source: `trigger:${source}`,
     project,
@@ -769,6 +784,7 @@ async function createGitTriggerSession(
     // Fail closed until the post-create action resolves the trigger's current
     // account-local policy. Queued creates resolve it when the worker runs.
     visibility: 'private',
+    callerSessionId: input.callerSessionId,
     request: input.request,
     queuePolicy: 'on_backpressure',
     idempotencyKey: input.idempotencyKey ?? null,

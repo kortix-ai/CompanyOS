@@ -14,7 +14,7 @@ Most AI tools ask you to move the company into their product. Kortix is the open
 
 ## One repo holds the whole company
 
-Open a Kortix project and you open a git repository. That repository is the company: a manifest at the root, an `agents/` directory beside it, and markdown the rest of the way down. `kortix.yaml` names the machine image, the triggers, and what each agent may touch. Secret values never appear in it. An agent's behavior sits in `agents/<name>.md`; its governance sits in the `agents.<name>` block of the manifest. Company memory is the living company brain, and today it is plain files.
+Open a Kortix workspace and you open a git repository. That repository is the company: a manifest at the root, an `agents/` directory beside it, and markdown the rest of the way down. `kortix.yaml` names the machine image, the triggers, and what each agent may touch. Secret values never appear in it. An agent's behavior sits in `agents/<name>.md`; its governance sits in the `agents.<name>` block of the manifest. Company memory is the living company brain, and today it is plain files.
 
 So the arrangement answers to `grep`. Every prompt, skill, remembered fact and grant is a line in a file with an author, a timestamp and a diff, and undo is `git revert`. `kortix init` turns a directory into a Kortix; [`kortix ship`](https://kortix.com/docs/cli) validates the manifest, commits every change, asks for missing secrets, pushes the current branch, and asks you to connect the connectors the project declares. The repo behaves identically on your laptop and in the cloud.
 
@@ -76,7 +76,7 @@ Connector credentials are brokered server-side and never enter the machine. A se
 
 Each session has its own isolated machine and branch. A session boots a fresh sandbox, which clones the repository, cuts its own branch, and gives the agent a shell, a package manager and a filesystem. The machine is disposable: a bad install goes away with it, and only what the agent commits survives. Two sessions cannot touch each other, so thousands can run on one config.
 
-Platinum is the reference provider, and its sandboxes are Cloud Hypervisor microVMs. That is the isolation boundary, and it stops short of the network. Nothing enforces network egress: a session reaches the internet, and no rule polices where it goes. The credential is the boundary that holds, which is why connector credentials are brokered outside the machine.
+[Platinum](https://www.platinum.dev) is the reference provider, and its sandboxes are Cloud Hypervisor microVMs. That is the isolation boundary, and it stops short of the network. Nothing enforces network egress: a session reaches the internet, and no rule polices where it goes. The credential is the boundary that holds, which is why connector credentials are brokered outside the machine.
 
 ## Work arrives as a diff before main changes
 
@@ -88,7 +88,7 @@ That gate is what lets a company hand an agent real capabilities. The agent prop
 
 Run it on Kortix Cloud, in your VPC, or on your own on-prem network. Self-host is free, and [`kortix self-host start`](https://kortix.com/docs/host) brings the stack up on hardware you control. The offer has one limit worth stating plainly: the stack pulls its images from docker.io and the default sandbox provider is remote, so this is not an air-gapped deployment. Isolated topologies get scoped with us.
 
-The compliance facts are as plain as the limits. SOC 2 Type I is verified; GDPR is a posture we run, not a certificate. On price, the Free plan costs $0 and includes 500 credits a month, every feature and 1 project, on your own provider keys or ChatGPT subscription. Paid plans start at $50 a month.
+The compliance facts are as plain as the limits. SOC 2 Type I is verified; GDPR is a posture we run, not a certificate. On price, the Free plan costs $0 and includes 500 credits a month on your first workspace and every feature, on your own provider keys or ChatGPT subscription. Paid plans start at $50 a month.
 
 The point of the option is what it does to the relationship: the repository that ran on our cloud runs on yours, and the vendor becomes a hosting choice instead of the owner of the system.
 

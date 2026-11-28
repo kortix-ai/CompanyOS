@@ -5,8 +5,6 @@ import { connectorConnections, connectors, projectSessionConnectorBindings } fro
 import { and, eq, isNull } from 'drizzle-orm';
 import { ensureProjectComputer } from '../../connectors/sync';
 import { PROJECT_ACTIONS } from '../../iam';
-import { isProjectSessionPrincipal } from '../../iam/agent-scope';
-import { AGENT_REVOKED_ACCOUNT_REFUSAL, agentMayTouchConnection } from '../lib/connection-mutation';
 import { auth, errors, json } from '../../openapi';
 import { db } from '../../shared/db';
 import { isUniqueViolation } from '../../shared/postgres-errors';
@@ -38,6 +36,7 @@ import {
   connectionAuthorized,
   serializeConnection,
 } from '../lib/connection-view';
+import { workspaceIdParam } from '../../shared/route-params';
 
 /**
  * The owner/admin roster shape is narrower than Connection.
@@ -91,9 +90,7 @@ async function reconcileConnectionRow(input: {
   label: string;
   metadata: Record<string, unknown>;
   createdBy: string;
-  /** The caller is an agent session (`isProjectSessionPrincipal`): it may not revive a revoked row. */
-  agentSession: boolean;
-}): Promise<{ connection: typeof connectorConnections.$inferSelect | null; created: boolean; refused?: true }> {
+}): Promise<{ connection: typeof connectorConnections.$inferSelect | null; created: boolean }> {
   // Identity includes the LABEL: an owner may hold several connections on one
   // connector ("Work", "Personal"), so reconciling a NEW label adds a connection
   // while the same label stays idempotent (updates metadata in place). Matches
@@ -107,10 +104,6 @@ async function reconcileConnectionRow(input: {
     eq(connectorConnections.label, input.label),
   );
   const [existing] = await db.select().from(connectorConnections).where(identity).limit(1);
-  // A person revoked it: only a person adds it back (connection-mutation.ts `agentMayTouchConnection`).
-  if (existing && !agentMayTouchConnection(existing, { sessionBound: input.agentSession })) {
-    return { connection: null, created: false, refused: true };
-  }
   if (existing) {
     // Reconciling the label of a REVOKED row is a re-connect, not a metadata
     // touch: the caller is adding "this account" back, and the credential they
@@ -158,18 +151,18 @@ export function registerConnectionsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/connections',
+      path: '/{workspaceId}/connections',
       tags: ['connectors'],
       summary: 'List connections',
       ...auth,
-      request: { params: z.object({ projectId: z.string() }) },
+      request: { params: z.object({ workspaceId: z.string() }) },
       responses: {
         200: json(z.object({ connections: z.array(ConnectionViewSchema) }), 'Connections'),
         ...errors(403, 404),
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
       const actor: ConnectionReachabilityActor = {
@@ -285,11 +278,11 @@ export function registerConnectionsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/connections/all',
+      path: '/{workspaceId}/connections/all',
       tags: ['connectors'],
       summary: "List every member's connections",
       ...auth,
-      request: { params: z.object({ projectId: z.string() }) },
+      request: { params: z.object({ workspaceId: z.string() }) },
       responses: {
         200: json(
           z.object({ connections: z.array(ConnectionRosterEntrySchema) }),
@@ -299,7 +292,7 @@ export function registerConnectionsRoutes(): void {
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
       // A read-only roster of EVERY member's connection for this project: WHO has
@@ -353,12 +346,12 @@ export function registerConnectionsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post',
-      path: '/{projectId}/connections/me',
+      path: '/{workspaceId}/connections/me',
       tags: ['connectors'],
       summary: "Create or reconcile the calling member's connection",
       ...auth,
       request: {
-        params: z.object({ projectId: z.string() }),
+        params: z.object({ workspaceId: z.string() }),
         body: {
           content: {
             'application/json': {
@@ -380,7 +373,7 @@ export function registerConnectionsRoutes(): void {
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
       if (c.get('authType') === 'service_account') {
@@ -430,7 +423,7 @@ export function registerConnectionsRoutes(): void {
       // former `user`-strategy connector with no connect flow at all.
       const ownerType = 'member' as const;
       const ownerId = loaded.userId;
-      const { connection, created, refused } = await reconcileConnectionRow({
+      const { connection, created } = await reconcileConnectionRow({
         accountId: loaded.row.accountId,
         projectId,
         connectorId: connector.connectorId,
@@ -439,9 +432,7 @@ export function registerConnectionsRoutes(): void {
         label,
         metadata,
         createdBy: loaded.userId,
-        agentSession: isProjectSessionPrincipal(c),
       });
-      if (refused) return c.json(AGENT_REVOKED_ACCOUNT_REFUSAL, 403);
       if (!connection) return c.json({ error: 'Connection could not be reconciled' }, 409);
       return c.json(serializeConnection({ ...connection, connectorAlias }), created ? 201 : 200);
     },
@@ -450,12 +441,12 @@ export function registerConnectionsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post',
-      path: '/{projectId}/connections',
+      path: '/{workspaceId}/connections',
       tags: ['connectors'],
       summary: 'Create or reconcile a connection',
       ...auth,
       request: {
-        params: z.object({ projectId: z.string() }),
+        params: z.object({ workspaceId: z.string() }),
         body: {
           content: {
             'application/json': { schema: ReconcileConnectionInputSchema },
@@ -469,7 +460,7 @@ export function registerConnectionsRoutes(): void {
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
       await assertProjectCapability(
@@ -564,7 +555,7 @@ export function registerConnectionsRoutes(): void {
           409,
         );
       }
-      const { connection, created, refused } = await reconcileConnectionRow({
+      const { connection, created } = await reconcileConnectionRow({
         accountId: loaded.row.accountId,
         projectId,
         connectorId: connector.connectorId,
@@ -573,9 +564,7 @@ export function registerConnectionsRoutes(): void {
         label,
         metadata,
         createdBy: loaded.userId,
-        agentSession: isProjectSessionPrincipal(c),
       });
-      if (refused) return c.json(AGENT_REVOKED_ACCOUNT_REFUSAL, 403);
       if (!connection) return c.json({ error: 'Connection could not be reconciled' }, 409);
       const view = serializeConnection({ ...connection, connectorAlias });
       return c.json(view, created ? 201 : 200);

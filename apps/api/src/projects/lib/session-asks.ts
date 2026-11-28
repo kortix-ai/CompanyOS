@@ -15,16 +15,19 @@
  * a new message. A person sees every open ask in Review and as "Needs you" on
  * the session a person opens (`surface_session_id`).
  *
- * Three kinds share the model: a question (`session_pending_questions`), a
- * permission ask (`session_pending_permissions`) and a connector approval
- * (`connector_calls`, which never held a turn).
+ * Four kinds share the model: a question (`session_pending_questions`), a
+ * permission ask (`session_pending_permissions`), a connector approval
+ * (`connector_calls`, which never held a turn) and the access My Kortix asks
+ * for a colleague (`session_colleague_access`, colleague-access.ts, which never
+ * held a turn either).
  */
 
-import { connectorCalls, projectSessions, sessionPendingPermissions, sessionPendingQuestions } from '@kortix/db';
+import { connectorCalls, projectSessions, sessionColleagueAccess, sessionPendingPermissions, sessionPendingQuestions } from '@kortix/db';
 import { and, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm';
 import { isUnattendedSessionMetadata } from '../../channels/question-release';
 import { db } from '../../shared/db';
 import { isUnattendedSession } from '../session-lifecycle/unattended-runtime-recovery';
+import { describeColleagueAccess, listOpenColleagueAccessAsks } from './colleague-access';
 
 /** How long an ask holds its call while a person may be watching. Matches kortixd `DEFAULT_LIVE_WAIT_MS`. */
 export const ASK_LIVE_WAIT_MS = 180_000;
@@ -35,7 +38,7 @@ export const ASK_TTL_MS = 24 * 60 * 60 * 1000;
 /** How far `surfaceSessionIdOf` walks up `parent_session_id`. */
 const MAX_SURFACE_DEPTH = 8;
 
-export type AskKind = 'question' | 'permission' | 'approval';
+export type AskKind = 'question' | 'permission' | 'approval' | 'access';
 
 /** One open ask, as Review, the session and the "Needs you" state read it. */
 export interface SessionAsk {
@@ -46,7 +49,9 @@ export interface SessionAsk {
   session_id: string;
   /** The session a person opens for it. */
   surface_session_id: string;
-  /** The runtime's request id (question, permission); the execution id (approval). */
+  /** The agent of that session: the agent that asks (flag `channels`). Null when the session row is gone. */
+  agent_name: string | null;
+  /** The runtime's request id (question, permission); the execution id (approval); the ask's own id (access). */
   request_id: string;
   /** One line for a list row: the question header, the command, the connector action. */
   title: string;
@@ -56,6 +61,8 @@ export interface SessionAsk {
   permission?: { tool: string; permission: string; patterns: string[]; args: unknown };
   /** A connector call that waits for approval; it is decided over `/approvals/:executionId`. */
   approval?: { action: string };
+  /** Connectors and secrets My Kortix asks to hand a colleague; decided with `{ decision: 'allow' | 'deny' }`. */
+  access?: { colleague: string; connectors: string[]; secrets: string[] };
 }
 
 /** The session row fields the ask policy reads. */
@@ -108,8 +115,13 @@ export async function surfaceSessionIdOf(sessionId: string, first?: AskSessionFa
   return current;
 }
 
-const notExpired = (column: typeof sessionPendingQuestions.expiresAt | typeof sessionPendingPermissions.expiresAt) =>
-  or(isNull(column), gt(column, sql`NOW()`));
+export const pendingAskNotExpired = (
+  column:
+    | typeof sessionPendingQuestions.expiresAt
+    | typeof sessionPendingPermissions.expiresAt
+    | typeof connectorCalls.expiresAt
+    | typeof sessionColleagueAccess.expiresAt,
+) => or(isNull(column), gt(column, sql`NOW()`));
 
 function questionTitle(questions: unknown): string {
   const first = Array.isArray(questions) ? (questions[0] as { header?: unknown; question?: unknown } | undefined) : undefined;
@@ -142,7 +154,7 @@ export async function listOpenAsks(input: {
   const pSurface = input.surfaceSessionId
     ? or(eq(sessionPendingPermissions.surfaceSessionId, input.surfaceSessionId), and(isNull(sessionPendingPermissions.surfaceSessionId), eq(sessionPendingPermissions.sessionId, input.surfaceSessionId)))
     : undefined;
-  const [questions, permissions, approvals] = await Promise.all([
+  const [questions, permissions, approvals, colleagueAccess] = await Promise.all([
     db
       .select({
         id: sessionPendingQuestions.id,
@@ -158,7 +170,7 @@ export async function listOpenAsks(input: {
         and(
           eq(sessionPendingQuestions.projectId, input.projectId),
           isNull(sessionPendingQuestions.answeredAt),
-          notExpired(sessionPendingQuestions.expiresAt),
+          pendingAskNotExpired(sessionPendingQuestions.expiresAt),
           qSurface,
           input.sessionIds ? inArray(sessionPendingQuestions.sessionId, [...input.sessionIds]) : undefined,
         ),
@@ -183,7 +195,7 @@ export async function listOpenAsks(input: {
         and(
           eq(sessionPendingPermissions.projectId, input.projectId),
           isNull(sessionPendingPermissions.decidedAt),
-          notExpired(sessionPendingPermissions.expiresAt),
+          pendingAskNotExpired(sessionPendingPermissions.expiresAt),
           pSurface,
           input.sessionIds ? inArray(sessionPendingPermissions.sessionId, [...input.sessionIds]) : undefined,
         ),
@@ -203,12 +215,13 @@ export async function listOpenAsks(input: {
         and(
           eq(connectorCalls.projectId, input.projectId),
           eq(connectorCalls.status, 'pending_approval'),
-          or(isNull(connectorCalls.expiresAt), gt(connectorCalls.expiresAt, sql`NOW()`)),
+          pendingAskNotExpired(connectorCalls.expiresAt),
           input.sessionIds ? inArray(connectorCalls.sessionId, [...input.sessionIds]) : undefined,
         ),
       )
       .orderBy(desc(connectorCalls.createdAt))
       .limit(limit),
+    listOpenColleagueAccessAsks({ projectId: input.projectId, sessionIds: input.sessionIds, limit }),
   ]);
 
   // A connector call records only its own session: resolve the surface here.
@@ -223,6 +236,7 @@ export async function listOpenAsks(input: {
       kind: 'question',
       session_id: q.sessionId,
       surface_session_id: q.surfaceSessionId ?? q.sessionId,
+      agent_name: null,
       request_id: q.requestId,
       title: questionTitle(q.questions),
       asked_at: q.askedAt,
@@ -234,6 +248,7 @@ export async function listOpenAsks(input: {
       kind: 'permission',
       session_id: p.sessionId,
       surface_session_id: p.surfaceSessionId ?? p.sessionId,
+      agent_name: null,
       request_id: p.requestId,
       title: permissionTitle(p.tool, p.patterns),
       asked_at: p.askedAt,
@@ -247,15 +262,39 @@ export async function listOpenAsks(input: {
         kind: 'approval',
         session_id: a.sessionId!,
         surface_session_id: approvalSurfaces.get(a.sessionId!) ?? a.sessionId!,
+        agent_name: null,
         request_id: a.callId,
         title: a.action.slice(0, 200),
         asked_at: toIso(a.createdAt),
         expires_at: a.expiresAt ? toIso(a.expiresAt) : null,
         approval: { action: a.action },
       })),
+    ...colleagueAccess.map((a): SessionAsk => ({
+      id: `access:${a.id}`,
+      kind: 'access',
+      session_id: a.sessionId,
+      surface_session_id: a.surfaceSessionId ?? a.sessionId,
+      agent_name: null,
+      request_id: a.id,
+      title: `A colleague for "${a.title}" needs ${describeColleagueAccess(a)}`.slice(0, 200),
+      asked_at: toIso(a.askedAt),
+      expires_at: toIso(a.expiresAt),
+      access: { colleague: a.title, connectors: a.connectors, secrets: a.secrets },
+    })),
   ].filter((ask) => !input.surfaceSessionId || ask.surface_session_id === input.surfaceSessionId);
   asks.sort((a, b) => (a.asked_at < b.asked_at ? 1 : a.asked_at > b.asked_at ? -1 : 0));
-  return asks.slice(0, limit);
+  const shown = asks.slice(0, limit);
+  // The agent that asks: the agent of the session a person opens. One read for the page.
+  const surfaces = [...new Set(shown.map((ask) => ask.surface_session_id))];
+  if (surfaces.length > 0) {
+    const rows = await db
+      .select({ sessionId: projectSessions.sessionId, agentName: projectSessions.agentName })
+      .from(projectSessions)
+      .where(and(eq(projectSessions.projectId, input.projectId), inArray(projectSessions.sessionId, surfaces)));
+    const agents = new Map(rows.map((row) => [row.sessionId, row.agentName ?? null]));
+    for (const ask of shown) ask.agent_name = agents.get(ask.surface_session_id) ?? null;
+  }
+  return shown;
 }
 
 function toIso(value: unknown): string {
@@ -264,7 +303,7 @@ function toIso(value: unknown): string {
 
 /** Parse `<kind>:<id>`. Null: not an ask id. */
 export function parseAskId(askId: string): { kind: AskKind; id: string } | null {
-  const match = /^(question|permission|approval):([A-Za-z0-9_-]{1,128})$/.exec(askId);
+  const match = /^(question|permission|approval|access):([A-Za-z0-9_-]{1,128})$/.exec(askId);
   return match ? { kind: match[1] as AskKind, id: match[2]! } : null;
 }
 

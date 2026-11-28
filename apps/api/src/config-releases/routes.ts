@@ -16,7 +16,7 @@
  */
 
 import { createRoute, z } from '@hono/zod-openapi';
-import { projects, projectSessions, sessionSandboxes } from '@kortix/db';
+import { projectSessions, sessionSandboxes } from '@kortix/db';
 import { and, eq, inArray } from 'drizzle-orm';
 import type { Context } from 'hono';
 import { PROJECT_ACTIONS } from '../iam';
@@ -36,12 +36,14 @@ import { sandboxTokenMayActOnSession } from '../projects/lib/sandbox-token-sessi
 import { repositoryAccessFromSessionMetadata } from '../projects/lib/session-sandbox-metadata';
 import { isUuid } from '../shared/validate';
 import { db } from '../shared/db';
-import { buildConfigRelease, CONFIG_RELEASE_FORMAT_V2, CONFIG_RELEASE_FORMAT_V3, type ConfigReleaseFormat } from './builder';
+import { archiveQueryVariant, buildConfigRelease, CONFIG_RELEASE_FORMAT_V2, CONFIG_RELEASE_FORMAT_V3, type ConfigReleaseFormat } from './builder';
 import { BaseRefUnresolvedError, governanceForDaemon, resolveDesiredRelease } from './desired';
 import { notePublishedTip } from './publish';
 import { ownerMayUseAgent, repointSessionAgentToDeclaredDefault } from './repoint';
 import { serveConfigArchive } from './serve-archive';
 import { configReleaseSnapshot } from './snapshot';
+import { workspaceIdParam } from '../shared/route-params';
+import { projectsView } from '../workspaces/rows';
 
 const HEX40 = /^[0-9a-f]{40}$/;
 
@@ -123,12 +125,12 @@ async function sandboxSession(
       agentName: projectSessions.agentName,
       metadata: projectSessions.metadata,
       createdBy: projectSessions.createdBy,
-      projectId: projects.projectId,
-      accountId: projects.accountId,
-      repoUrl: projects.repoUrl,
-      defaultBranch: projects.defaultBranch,
-      manifestPath: projects.manifestPath,
-      projectStatus: projects.status,
+      projectId: projectsView.projectId,
+      accountId: projectsView.accountId,
+      repoUrl: projectsView.repoUrl,
+      defaultBranch: projectsView.defaultBranch,
+      manifestPath: projectsView.manifestPath,
+      projectStatus: projectsView.status,
     })
     .from(sessionSandboxes)
     .innerJoin(
@@ -139,7 +141,7 @@ async function sandboxSession(
         eq(projectSessions.sessionId, sessionSandboxes.sessionId),
       ),
     )
-    .innerJoin(projects, eq(projects.projectId, sessionSandboxes.projectId))
+    .innerJoin(projectsView, eq(projectsView.projectId, sessionSandboxes.projectId))
     .where(
       and(
         eq(sessionSandboxes.sandboxId, sandboxId),
@@ -150,7 +152,7 @@ async function sandboxSession(
     )
     .limit(1);
   if (!row || (row.sessionId ?? sandboxId) !== (sessionId ?? sandboxId)) {
-    return { ok: false, status: 403, error: 'sandbox token is not scoped to this project and session' };
+    return { ok: false, status: 403, error: 'sandbox token is not scoped to this workspace and session' };
   }
   if (row.projectStatus === 'archived') return { ok: false, status: 404, error: 'Not found' };
   return {
@@ -173,15 +175,15 @@ export function registerConfigReleaseRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post',
-      path: '/{projectId}/sessions/{sessionId}/config-release',
+      path: '/{workspaceId}/sessions/{sessionId}/config-release',
       tags: ['sessions'],
       summary: "A session's desired config release descriptor",
       ...auth,
-      request: { params: z.object({ projectId: z.string(), sessionId: z.string() }) },
+      request: { params: z.object({ workspaceId: z.string(), sessionId: z.string() }) },
       responses: { 200: json(z.any(), 'Release descriptor'), ...errors(400, 403, 404, 409) },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const sessionId = c.req.param('sessionId');
       if (!isUuid(projectId) || !isUuid(sessionId)) {
         return c.json({ error: 'Invalid project or session id' }, 400);
@@ -291,15 +293,16 @@ export function registerConfigReleaseRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/config-archives/{configTreeId}',
+      path: '/{workspaceId}/config-archives/{configTreeId}',
       tags: ['sessions'],
       summary: 'Download a config archive',
       ...auth,
       request: {
-        params: z.object({ projectId: z.string(), configTreeId: z.string() }),
-        // Set on a composed release tree (an agent variant's plugin selection):
-        // the commit it is rebuilt from when the store cannot serve it.
-        query: z.object({ commit: z.string().optional() }),
+        params: z.object({ workspaceId: z.string(), configTreeId: z.string() }),
+        // Set on a composed release tree: the commit it is rebuilt from when
+        // the store cannot serve it, and for a one-agent release the agent
+        // (`agent`) and, for a `repo-agent` release, `scope=repo`.
+        query: z.object({ commit: z.string().optional(), agent: z.string().optional(), scope: z.enum(['repo']).optional() }),
       },
       responses: {
         200: { description: 'The config archive', content: { 'application/gzip': { schema: z.any() } } },
@@ -308,7 +311,7 @@ export function registerConfigReleaseRoutes(): void {
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const configTreeId = c.req.param('configTreeId');
       if (!isUuid(projectId)) return c.json({ error: 'Not found' }, 404);
       if (!HEX40.test(configTreeId)) return c.json({ error: 'Not found' }, 404);
@@ -318,11 +321,13 @@ export function registerConfigReleaseRoutes(): void {
         const resolved = await sandboxSession(c, projectId, null);
         if (!resolved.ok) return c.json({ error: resolved.error }, resolved.status);
         // A session without repository access receives only its agent's
-        // tools-only release (`toolsRelease`), and no other tree.
+        // `agent:<name>` release (`agentRelease`), and no other tree.
         // A previous-repository session receives every archive: it is the
         // project's config, which is what every session of the project runs.
         project = resolved.value.project;
         if (!repositoryAccessFromSessionMetadata(resolved.value.session.metadata)) {
+          // A repo-scoped tree (`repo-agent:<name>`) takes whole folders: never for this session.
+          if (c.req.query('scope') !== undefined) return c.json({ error: 'repository access withheld' }, 403);
           const agent = resolved.value.session.agentName;
           const commit = c.req.query('commit') ?? '';
           const release = agent && c.req.query('agent') === agent && HEX40.test(commit)
@@ -353,7 +358,7 @@ export function registerConfigReleaseRoutes(): void {
         () => refreshMirror(repo, true),
         {},
         c.req.query('commit') ?? null,
-        c.req.query('agent') ?? null,
+        archiveQueryVariant(c.req.query('agent'), c.req.query('scope')),
       );
     },
   );

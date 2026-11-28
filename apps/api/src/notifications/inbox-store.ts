@@ -15,8 +15,8 @@ export interface InboxRowInput {
   projectId?: string | null;
   sessionId?: string | null;
   triggerSlug?: string | null;
-  artifactId?: string | null;
-  artifactThreadId?: string | null;
+  /** A `mention` row's calendar item (flag `calendar`). */
+  calendarItemId?: string | null;
   kind: NotificationKindName;
   title: string;
   body?: string;
@@ -54,8 +54,7 @@ export function createInboxStore(database: Database = defaultDb): InboxStore {
           projectId: row.projectId ?? null,
           sessionId: row.sessionId ?? null,
           triggerSlug: row.triggerSlug ?? null,
-          artifactId: row.artifactId ?? null,
-          artifactThreadId: row.artifactThreadId ?? null,
+          calendarItemId: row.calendarItemId ?? null,
           kind: row.kind,
           title: clip(row.title, INBOX_TITLE_MAX_CHARS) || 'Kortix',
           body: clip(row.body ?? '', INBOX_BODY_MAX_CHARS),

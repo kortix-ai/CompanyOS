@@ -10,7 +10,7 @@ import { INTERFACE_THEME_OPTIONS } from './interface-theme';
  * What is NOT covered here, and why.
  *
  * The user menu's row order, the Theme submenu's radio semantics and the
- * selected-state check all live inside a Radix `DropdownMenuContent`, which
+ * selected-state check all live inside a `DropdownMenuContent`, which
  * renders nothing until the menu is open and then renders through a portal.
  * `apps/web` has no DOM harness — no jsdom, no testing-library — and
  * `renderToStaticMarkup` returns an empty string for portalled content, so none
@@ -54,9 +54,9 @@ describe('INTERFACE_THEME_OPTIONS', () => {
     const labelled = INTERFACE_THEME_OPTIONS.filter((option) => option.kind === 'labelled');
     expect(labelled.map((option) => themes[option.labelKey])).toEqual([
       'System',
-      'Light',
+      'Kortix light',
       'Pure light',
-      'Dark',
+      'Kortix dark',
       'Pure dark',
     ]);
   });

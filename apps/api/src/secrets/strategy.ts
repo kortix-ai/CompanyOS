@@ -421,6 +421,22 @@ export type SecretWithheldReason =
   | 'no_session';
 
 /**
+ * Whether a row's `strategy_locked` still binds. A lock exists for two rows
+ * that must never move into a sandbox env: a model subscription credential
+ * (consumer `llm_gateway`, written by the provider OAuth flow) and a website
+ * login (consumer `browser`, `projects/lib/browser-logins.ts`). A connector binding is
+ * guarded on its own (`secret_connector_binding_exists`) for as long as it
+ * exists, and a value a person typed into a setup link is theirs to deliver as
+ * they choose, so a stale lock on such a row does not bind. Pure.
+ */
+export function secretStrategyLockHolds(row: {
+  strategyLocked: boolean | null | undefined;
+  consumer: string | null | undefined;
+}): boolean {
+  return row.strategyLocked === true && (row.consumer === 'llm_gateway' || row.consumer === 'browser');
+}
+
+/**
  * What a single secret row contributes to the sandbox.
  *
  * A discriminated union rather than a nullable value because the three outcomes
@@ -466,10 +482,12 @@ export interface SecretDeliveryInput {
 
 /** Grant/allowlist membership. Case-insensitive, matching `agentMayUseEnv` and
  *  `intersectSecretGrants` — a hand-written `secrets:` list in kortix.yaml may
- *  use any case. */
-function listAdmits(list: string[], identifier: string): boolean {
+ *  use any case. `grantAdmits` (../projects/lib/serializers.ts) still mirrors
+ *  it: the answers must agree or the UI and the delivery gate disagree about
+ *  whether a secret is granted. A non-string entry admits nothing. */
+export function listAdmits(list: readonly unknown[], identifier: string): boolean {
   const target = identifier.toUpperCase();
-  return list.some((entry) => entry.toUpperCase() === target);
+  return list.some((entry) => typeof entry === 'string' && entry.toUpperCase() === target);
 }
 
 /**

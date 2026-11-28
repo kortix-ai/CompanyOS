@@ -103,8 +103,8 @@ let reconciledRemoved: string[] = [];
 let reconciledStopped: string[] = [];
 let removedReconcileErrorByExternal: Record<string, Error> = {};
 let creditAccount: Record<string, unknown> | null = null;
-let activeRequest: { id: string; userId: string } | null = null;
-let scheduledRequests: Array<{ id: string; accountId: string; userId: string }> = [];
+let activeRequest: { id: string; userId: string; reason?: string | null } | null = null;
+let scheduledRequests: Array<{ id: string; accountId: string; userId: string; reason?: string | null }> = [];
 let completedRequests: string[] = [];
 let deletedUsers: string[] = [];
 let deleteUserError: Error | null = null;
@@ -123,6 +123,7 @@ mock.module('../../notifications/cleanup', () => ({
   deleteMemberNotificationData: async () => undefined,
 }));
 mock.module('../../shared/supabase', () => ({
+  toPublicStorageUrl: (url: string) => url,
   getSupabase: () => ({
     auth: { admin: { deleteUser: async (id: string) => {
       if (deleteUserError) return { error: deleteUserError };
@@ -268,9 +269,14 @@ mock.module('../../projects/sandbox-reaper', () => ({
 
 mock.module('../../shared/stripe', () => ({
   getStripe: () => ({
-    subscriptions: { cancel: async () => undefined },
+    subscriptions: { cancel: async () => undefined, list: async () => ({ data: [], has_more: false }) },
   }),
 }));
+
+// Account closure ends the account's Enterprise contract and lists its Stripe
+// customers: neither is what this file pins.
+mock.module('./enterprise-contracts', () => ({ endContractForClosedAccount: async () => undefined }));
+mock.module('../repositories/customers', () => ({ listStripeCustomerIdsByAccountId: async () => [] }));
 
 mock.module('../repositories/credit-accounts', () => ({
   getCreditAccount: async () => creditAccount,
@@ -283,16 +289,19 @@ mock.module('../wallet', () => ({
 
 mock.module('../repositories/account-deletion', () => ({
   getActiveDeletionRequest: async () => activeRequest,
+  hasRunningDeletionRequest: async () => false,
   createDeletionRequest: async () => ({ id: 'req-1' }),
   cancelDeletionRequest: async () => undefined,
   markDeletionCompleted: async (id: string) => { completedRequests.push(id); },
   countOverdueBacklog: async () => 0,
   getScheduledDeletions: async () => scheduledRequests,
   claimDeletionRequest: async (id: string) => scheduledRequests.find((r: { id: string }) => r.id === id) ?? null,
+  claimDeletionRequestNow: async (id: string) => (activeRequest && activeRequest.id === id ? activeRequest : null),
   releaseDeletionRequest: async () => undefined,
 }));
 
-const { deleteAccountImmediately, reclaimableAccountIds, processScheduledDeletions } = await import('./account-deletion');
+const { deleteAccountImmediately, getAccountDeletionStatus, reclaimableAccountIds, processScheduledDeletions, runAccountDeletion } =
+  await import('./account-deletion');
 
 /**
  * The bound parameters of a drizzle WHERE condition, in order, rendered by the
@@ -653,4 +662,42 @@ describe("deleting an account that is not the requester's personal account", () 
     expect(whereParams(sessionUpdateWhereArg)).not.toContain('operator-1');
     expect(completedRequests).toEqual(['req-1']);
   });
+});
+
+
+describe('closing a legacy personal workspace keeps the person', () => {
+  for (const reason of ['workspace_deleted', 'workspace_deleted:subscription_cancelled']) {
+    test(`${reason}: status does not report personal deletion`, async () => {
+      activeRequest = { id: 'req-workspace', userId: ME, reason };
+      expect(await getAccountDeletionStatus(ME)).toEqual({
+        has_pending_deletion: false, deletion_scheduled_for: null, requested_at: null, can_cancel: false,
+      });
+    });
+
+    test(`${reason}: the scheduled sweep erases only the workspace`, async () => {
+      ownedAccountRows = [{ accountId: ME }, { accountId: 'acct-other' }];
+      scheduledRequests = [{ id: 'req-workspace', accountId: ME, userId: ME, reason }];
+      expect(await processScheduledDeletions()).toEqual({ processed: 1, errors: [] });
+      expect(whereParams(swept(accounts))).toContain(ME);
+      expect(deletedUsers).toEqual([]);
+      expect(notificationDataDeleted).toEqual([]);
+      expect(whereParams(sandboxWhereArg)).not.toContain('acct-other');
+      expect(completedRequests).toEqual(['req-workspace']);
+    });
+
+    test(`${reason}: immediate execution of the pending close keeps the login`, async () => {
+      activeRequest = { id: 'req-workspace', userId: ME, reason };
+      await deleteAccountImmediately(ME);
+      expect(deletedUsers).toEqual([]);
+      expect(completedRequests).toEqual(['req-workspace']);
+    });
+
+    // The retention backstop (retention-erasure.ts) calls the routine directly.
+    test(`${reason}: the shared routine keeps the login for every caller`, async () => {
+      ownedAccountRows = [{ accountId: ME }, { accountId: 'acct-other' }];
+      await runAccountDeletion(ME, ME, { id: 'req-workspace', reason });
+      expect(deletedUsers).toEqual([]);
+      expect(whereParams(sandboxWhereArg)).not.toContain('acct-other');
+    });
+  }
 });

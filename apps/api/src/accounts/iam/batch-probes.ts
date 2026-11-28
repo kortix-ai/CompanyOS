@@ -21,7 +21,7 @@
 // #4531). A persistent `authorize` bug still surfaces (every probe returns
 // probe_error), just as a structured log rather than a Sentry error.
 
-import { resourceTypeForAction } from '../../iam/actions';
+import { resourceTypeForAction, toWorkspaceAction } from '../../iam/actions';
 import type { Actor } from '../../iam/actor';
 import type { Obj, Verdict } from '../../iam/authorize';
 
@@ -38,8 +38,10 @@ export type BatchProbe = {
   target: Obj | undefined;
 };
 
-export type BatchProbeResult = {
+type BatchProbeResult = {
   action: string;
+  /** The same action's workspace name (`@kortix/shared/workspace-actions`). */
+  workspace_action: string;
   resource_type: string | null;
   resource_id: string | null;
   allowed: boolean;
@@ -51,7 +53,7 @@ export type BatchProbeResult = {
  *  on the logger (which would pull the @logtail transport into the unit test).
  *  Declared as a `type` (not `interface`) so it's assignable to the logger's
  *  `Record<string, unknown>` context param. */
-export type BatchProbeErrorContext = {
+type BatchProbeErrorContext = {
   accountId: string;
   action: string;
   resourceType: string | undefined;
@@ -95,6 +97,7 @@ export async function resolveBatchProbes(
       const r = await inflight;
       return {
         action: p.action,
+        workspace_action: toWorkspaceAction(p.action),
         resource_type: resourceTypeForAction(p.action),
         resource_id: (p.target && 'id' in p.target ? p.target.id : null) ?? null,
         allowed: r.allowed,
@@ -117,6 +120,7 @@ export async function resolveBatchProbes(
     });
     return {
       action: p.action,
+      workspace_action: toWorkspaceAction(p.action),
       resource_type: resourceTypeForAction(p.action),
       resource_id: (p.target && 'id' in p.target ? p.target.id : null) ?? null,
       allowed: false,

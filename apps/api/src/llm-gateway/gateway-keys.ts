@@ -1,8 +1,9 @@
 import { and, desc, eq } from 'drizzle-orm';
-import { gatewayApiKeys, projects } from '@kortix/db';
+import { gatewayApiKeys } from '@kortix/db';
 import { db } from '../shared/db';
 import { generateGatewayKeyPair, hashSecretKey } from '../shared/crypto';
 import { hashSecretKeyAsync, markTokenValidated } from '../shared/token-hash';
+import { projectsView } from '../workspaces/rows';
 
 /**
  * Name of the short-lived key session-title generation mints for each internal
@@ -14,6 +15,9 @@ import { hashSecretKeyAsync, markTokenValidated } from '../shared/token-hash';
  * key that happens to share it is an ordinary, listed, revocable key.
  */
 export const INTERNAL_SESSION_TITLE_KEY_NAME = 'internal-session-title';
+
+/** The same kind of one-call key, for one automatic Space memory update (`projects/lib/space-memory-update`). Deleted after the call. */
+export const INTERNAL_SPACE_MEMORY_KEY_NAME = 'internal-space-memory';
 
 export interface CreatedGatewayKey {
   key_id: string;
@@ -122,7 +126,7 @@ export async function validateGatewayKey(
     .from(gatewayApiKeys)
     // A key of a deleted workspace authorizes nothing (KRTX-1714): the
     // delete archives the project, and its revoke route answers 404 after.
-    .innerJoin(projects, and(eq(projects.projectId, gatewayApiKeys.projectId), eq(projects.status, 'active')))
+    .innerJoin(projectsView, and(eq(projectsView.projectId, gatewayApiKeys.projectId), eq(projectsView.status, 'active')))
     .where(eq(gatewayApiKeys.secretKeyHash, hash))
     .limit(1);
 
@@ -146,10 +150,10 @@ export async function validateGatewayKey(
           createdBy: gatewayApiKeys.createdBy,
           status: gatewayApiKeys.status,
           expiresAt: gatewayApiKeys.expiresAt,
-          projectStatus: projects.status,
+          projectStatus: projectsView.status,
         })
         .from(gatewayApiKeys)
-        .leftJoin(projects, eq(projects.projectId, gatewayApiKeys.projectId))
+        .leftJoin(projectsView, eq(projectsView.projectId, gatewayApiKeys.projectId))
         .where(eq(gatewayApiKeys.secretKeyHash, hash))
         .limit(1);
       if (!dead) return null;

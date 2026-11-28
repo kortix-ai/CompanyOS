@@ -14,11 +14,12 @@ import {
   partStatus,
   ToolOutcomeContext,
   ToolRunningContext,
+  ToolSurfaceContext,
   useToolIndent,
   useToolOpen,
 } from '../shared/infrastructure';
-import { FoldedSection, OutputBlock } from '../shared/output-block';
 import { ToolRegistry } from '../shared/registry';
+import { SolidCheckIcon } from '../../../internal/icons/solid-check-icon';
 import { ToolResultCard } from '../shared/result-card';
 import type { ToolProps } from '../shared/types';
 import { useTranslations } from '../../../i18n';
@@ -31,7 +32,6 @@ import {
   CaretRightIcon,
   ChartBarIcon,
   ChatsCircleIcon,
-  CheckIcon,
   GitPullRequestIcon,
   SunDimIcon,
   HandPointingIcon,
@@ -43,8 +43,11 @@ import {
   type Icon,
 } from '@phosphor-icons/react';
 import { useContext, useMemo } from 'react';
-import { MULTI_AGENT_ICON, multiAgentBody, PeerSendRow, runningKey } from './multi-agent-tool-bodies';
-import { parsePeerSend } from '@kortix/sdk';
+import { AgentChip } from '../../agents/agent-surface';
+import { peerHandleLabel } from '@kortix/shared';
+import { MULTI_AGENT_ICON, multiAgentBody, PeerSendRow, peerReceiverId, runningKey } from './multi-agent-tool-bodies';
+import { parsePeerSend, toolCallConnectorSignIns } from '@kortix/sdk';
+import { useSessionConnectRequests } from '../../prompts/session-connect-card';
 import {
   KORTIX_PLATFORM_TOOLS,
   isReadAction,
@@ -65,9 +68,9 @@ import {
  *
  * The tool returns one `KortixToolResult` (`packages/api-contract/src/kortix-tool-card.ts`),
  * and the person reads its `card`: a headline, a status mark, the rows it found,
- * the settings it changed, and the links to open. The model reads `data`; this
- * card never shows it, except folded under "Show details" when no rich body
- * draws it.
+ * the settings it changed, and the links to open. The model reads `data` and
+ * `error.message`; this card never shows either, not even folded: they are
+ * instructions and JSON written for the model.
  *
  * A refused action is not a failure: Kortix's permission check worked, and a
  * person can grant the permission. It reads as "Needs a permission" with the
@@ -106,24 +109,13 @@ function badgeVariant(badge: string): 'success' | 'warning' | 'muted' {
   return 'muted';
 }
 
-/** Raw output for "Show details": the result pretty-printed, capped. */
-const DETAILS_LIMIT = 8_000;
-function detailsText(raw: string): string {
-  let text = raw;
-  try {
-    text = JSON.stringify(JSON.parse(raw), null, 2);
-  } catch {
-    // keep the raw text
-  }
-  return text.length > DETAILS_LIMIT ? `${text.slice(0, DETAILS_LIMIT)}\n…` : text;
-}
-
 /** The card's state at the row's right edge. The glyph carries the hue; the word is for a screen reader. */
 function StatusMark({ status }: { status: KortixCardStatus }) {
   const t = useTranslations('tools.kortixAction.status');
   const glyph =
     status === 'done' ? (
-      <CheckIcon aria-hidden className="text-kortix-green size-3.5 shrink-0" />
+      // Done is a resting state: meta ink, never green (green means running).
+      <SolidCheckIcon aria-hidden className="text-muted-foreground size-3.5 shrink-0" />
     ) : status === 'running' ? (
       // The thing the tool started runs on (a session). No spinner: the call itself is over.
       <StatusDot tone="success" />
@@ -162,9 +154,7 @@ function CardTrigger({
           {title}
         </TextShimmer>
       ) : (
-        <span className="text-foreground min-w-0 truncate" title={title}>
-          {title}
-        </span>
+        <span className="text-foreground min-w-0 truncate">{title}</span>
       )}
       {subtitle && (
         <span className="text-muted-foreground min-w-0 flex-1 truncate" title={subtitle}>
@@ -179,11 +169,17 @@ function CardTrigger({
 const ROW_CLASS = 'flex min-w-0 items-center gap-2 rounded-sm px-2 py-1.5 text-xs';
 
 function CardRowLine({ row }: { row: KortixCardRow }) {
+  // A row titled with an agent handle (`@pricing-scout`) is an agent: its chip, as everywhere else.
+  const handle = row.title.startsWith('@') ? row.title.slice(1) : null;
   const body = (
     <>
-      <span className="text-foreground min-w-0 truncate font-medium" title={row.title}>
-        {row.title}
-      </span>
+      {handle ? (
+        <AgentChip handle={handle} name={peerHandleLabel(handle).replace(/^@/, '')} className="shrink" />
+      ) : (
+        <span className="text-foreground min-w-0 truncate font-medium" title={row.title}>
+          {row.title}
+        </span>
+      )}
       {row.detail ? (
         <span className="text-muted-foreground min-w-0 flex-1 truncate" title={row.detail}>
           {row.detail}
@@ -191,11 +187,15 @@ function CardRowLine({ row }: { row: KortixCardRow }) {
       ) : (
         <span className="flex-1" />
       )}
-      {row.badge && (
-        <Badge variant={badgeVariant(row.badge)} size="sm" className="shrink-0">
-          {row.badge}
-        </Badge>
-      )}
+      {/* A state word keeps its hue as a badge; any other word (a role, a kind) is plain text. */}
+      {row.badge &&
+        (badgeVariant(row.badge) === 'muted' ? (
+          <span className="text-muted-foreground shrink-0">{row.badge}</span>
+        ) : (
+          <Badge variant={badgeVariant(row.badge)} size="sm" className="shrink-0">
+            {row.badge}
+          </Badge>
+        ))}
       {row.href && <CaretRightIcon aria-hidden className="text-muted-foreground size-3 shrink-0" />}
     </>
   );
@@ -289,6 +289,8 @@ function DeniedNotice({ error }: { error?: KortixToolError }) {
 function CardLinks({ links }: { links: KortixCardLink[] }) {
   const t = useTranslations('tools.kortixAction');
   const indent = useToolIndent();
+  // In the side panel the links sit under the rows: start them on the rows' text edge.
+  const panel = useContext(ToolSurfaceContext) === 'panel';
   const external = links.filter((link) => link.external);
   const internal = links.filter((link) => !link.external);
   const internalButtons = internal.map((link) => (
@@ -297,7 +299,7 @@ function CardLinks({ links }: { links: KortixCardLink[] }) {
     </Button>
   ));
   return (
-    <div className={cn('flex flex-wrap items-center gap-1.5', indent && 'mt-1.5', indent)}>
+    <div className={cn('flex flex-wrap items-center gap-1.5', indent && 'mt-1.5', indent, panel && 'px-2')}>
       {external.map((link) => (
         <Button key={`${link.label}-${link.href}`} asChild size="xs">
           <a href={link.href} target="_blank" rel="noopener noreferrer" title={t('opensInNewTab')}>
@@ -307,19 +309,6 @@ function CardLinks({ links }: { links: KortixCardLink[] }) {
         </Button>
       ))}
       {internalButtons.length > 1 ? <ButtonGroup>{internalButtons}</ButtonGroup> : internalButtons}
-    </div>
-  );
-}
-
-function CardDetails({ raw }: { raw: string }) {
-  const t = useTranslations('tools.kortixAction');
-  const indent = useToolIndent();
-  const text = useMemo(() => detailsText(raw), [raw]);
-  return (
-    <div className={cn(indent && 'mt-1.5', indent)}>
-      <FoldedSection label={t('showDetails')}>
-        <OutputBlock text={text} />
-      </FoldedSection>
     </div>
   );
 }
@@ -342,6 +331,7 @@ function SettledTrigger({
   );
 }
 
+/** Kortix platform calls (agents, sessions, access, connectors). In the side panel they are the same flat rows as every other call. */
 export function KortixActionTool(props: ToolProps) {
   const { call, defaultOpen, forceOpen, locked } = props;
   const t = useTranslations('tools.kortixAction');
@@ -354,6 +344,11 @@ export function KortixActionTool(props: ToolProps) {
   const settled = status === 'completed' || status === 'error';
   const raw = status === 'error' ? (partError(call) ?? '') : partRawOutput(call);
   const result = useMemo(() => (settled ? parseKortixToolResult(raw, call.name) : null), [settled, raw, call.name]);
+  // A `connect` in a session that finishes sign-ins: the Connect card under this
+  // row (`SessionConnectCard`) is the way in, so the raw provider link is not
+  // a second one.
+  const connectCardShown =
+    useSessionConnectRequests() !== null && toolCallConnectorSignIns(call).length > 0;
 
   if (!tool || (settled && !result)) {
     return <GenericTool call={call} defaultOpen={defaultOpen} forceOpen={forceOpen} locked={locked} />;
@@ -377,20 +372,21 @@ export function KortixActionTool(props: ToolProps) {
     );
   }
 
-  const { card, error } = result;
+  const { error } = result;
+  const card = connectCardShown
+    ? { ...result.card, links: result.card.links.filter((link) => !link.external) }
+    : result.card;
   // A message to another agent is one plain row with the receiver's face, sent or not.
   if (multi === 'send_message') {
     const send = parsePeerSend(result.data);
-    if (send) return <PeerSendRow send={send} defaultOpen={defaultOpen} forceOpen={forceOpen} locked={locked} />;
+    if (send) return <PeerSendRow send={send} receiverId={peerReceiverId(result.data)} defaultOpen={defaultOpen} forceOpen={forceOpen} locked={locked} />;
   }
   const denied = card.status === 'denied';
-  const failure = card.status === 'error' && error && error.message && error.message !== card.title ? error.message : undefined;
   // A multi-agent result draws its own body from `data`; the card's rows would say it twice.
   const rich = multi && !denied ? multiAgentBody(multi, result) : null;
-  // `fail()` puts the error message in the subtitle, and a rich body says what
-  // the subtitle sums up: the open card shows it in full instead.
-  const subtitleInBody = denied || Boolean(rich) || (failure !== undefined && failure === card.subtitle);
-  const hasBody = denied || Boolean(failure) || Boolean(rich) || card.rows.length > 0 || card.changes.length > 0 || card.links.length > 0 || Boolean(raw);
+  // A rich body says what the subtitle sums up: the open card shows it in full instead.
+  const subtitleInBody = denied || Boolean(rich);
+  const hasBody = denied || Boolean(rich) || card.rows.length > 0 || card.changes.length > 0 || card.links.length > 0;
   // What the person must see or act on opens itself: a refusal, a change, a sign-in link.
   const attention = denied || card.status === 'needs_you' || card.changes.length > 0 || card.links.some((link) => link.external);
 
@@ -407,11 +403,6 @@ export function KortixActionTool(props: ToolProps) {
         {hasBody ? (
           <>
             {denied && <DeniedNotice error={error} />}
-            {failure && (
-              <ToolResultCard bodyClassName="px-2 py-1.5">
-                <p className="text-muted-foreground text-xs wrap-break-word">{failure}</p>
-              </ToolResultCard>
-            )}
             {rich}
             {!rich && card.rows.length > 0 && (
               <ToolResultCard bodyClassName="py-0.5">
@@ -434,8 +425,6 @@ export function KortixActionTool(props: ToolProps) {
               </ToolResultCard>
             )}
             {card.links.length > 0 && <CardLinks links={card.links} />}
-            {/* The raw result is for the model. A rich body already shows every field a person reads. */}
-            {raw && !rich && <CardDetails raw={raw} />}
           </>
         ) : undefined}
       </BasicTool>

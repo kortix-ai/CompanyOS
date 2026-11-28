@@ -5,10 +5,10 @@ import type { SessionOverrideRow } from './session-overrides-control';
 
 let rows: SessionOverrideRow[] = [];
 let sessionId: string | undefined;
-let poolEnabled = false;
 let poolLoading = false;
 let poolError = false;
 let secretAllowed = true;
+let secretLoading = false;
 let managesSession = true;
 let selection: Record<string, string[]> = {};
 // The scope catalog (and, for a session, its scope) has answered.
@@ -37,7 +37,7 @@ mock.module('../../i18n', () => ({
     values ? `${key}:${values.count}` : key, { raw: (key: string) => key }),
 }));
 mock.module('../../internal/lib/use-project-can', () => ({
-  useProjectCan: () => ({ allowed: secretAllowed, isLoading: false }),
+  useProjectCan: () => ({ allowed: secretAllowed, isLoading: secretLoading }),
 }));
 mock.module('../scope/use-session-scope', () => ({
   useSessionScope: () => ({
@@ -51,9 +51,7 @@ mock.module('../scope/use-session-scope', () => ({
   }),
 }));
 mock.module('@kortix/sdk/react', () => ({
-  useFeatureFlag: (_project: string, flag: string) => ({
-    enabled: flag === 'pooled_provider_secrets' && poolEnabled,
-  }),
+  useFeatureFlag: () => ({ enabled: false }),
   useProjectSession: () => ({ data: { can_manage_lifecycle: managesSession } }),
   useSessionDrives: () => ({ data: undefined }),
   useSessionProviderSecretPools: () => ({
@@ -85,7 +83,6 @@ function render(existing = false) {
 }
 
 test('new session retains ordered row summaries and override flags', () => {
-  poolEnabled = true;
   secretAllowed = true;
   selection = { alpha: ['key-a'], beta: ['key-b'] };
   expect(render()).toEqual([
@@ -100,7 +97,6 @@ test('new session retains ordered row summaries and override flags', () => {
 // The pools route refuses a viewer who cannot manage the session, so the row
 // is not offered to one. A new session is always the caller's own.
 test('a viewer who cannot manage the session gets no Provider keys row', () => {
-  poolEnabled = true;
   secretAllowed = true;
   selection = {};
   managesSession = false;
@@ -110,7 +106,6 @@ test('a viewer who cannot manage the session gets no Provider keys row', () => {
 });
 
 test('existing session retains provider loading and failure summaries', () => {
-  poolEnabled = true;
   secretAllowed = true;
   selection = { alpha: ['key-a'] };
   expect(render(true).map((row) => row.id)).toEqual(['secrets', 'provider-keys', 'sandbox']);
@@ -121,16 +116,44 @@ test('existing session retains provider loading and failure summaries', () => {
   expect(render(true)[1]?.summary).toBe('keysLoadError');
   poolLoading = false;
   poolError = false;
+});
+
+// Without `project.secret.read` the pools route refuses the save, so the row
+// goes with the secrets row instead of showing keys the viewer cannot keep.
+test('a viewer without project.secret.read gets no Provider keys row', () => {
+  secretAllowed = true;
+  secretLoading = false;
+  expect(render().map((row) => row.id)).toEqual(['secrets', 'provider-keys', 'sandbox']);
+  // Both editable rows are gone; the sandbox row is read-only on a new session,
+  // so the toolbar renders nothing at all rather than a gear onto a dead Save.
   secretAllowed = false;
+  expect(render()).toEqual([]);
+});
+
+// The session's own person picks their own accounts without the leaf: the pools
+// route answers can_edit for them, and the row follows it on an existing session.
+test('an existing session whose pool list says can_edit keeps the Provider keys row without the leaf', () => {
+  secretAllowed = false;
+  secretLoading = false;
+  selection = {};
   expect(render(true).map((row) => row.id)).toEqual(['provider-keys', 'sandbox']);
+  secretAllowed = true;
+});
+
+// An unresolved probe is not a denial: the row stays while it loads, so it does
+// not blink out and back on every session open.
+test('an unresolved project.secret.read probe keeps the Provider keys row', () => {
+  secretAllowed = false;
+  secretLoading = true;
+  expect(render().map((row) => row.id)).toEqual(['secrets', 'provider-keys', 'sandbox']);
 });
 
 // The scope catalog (secrets, connectors, connections) can take seconds. It
 // used to lock the gear, and Save waited on it too, so provider keys could not
 // be changed before a first prompt, or saved in a session, until it answered.
 test('a new session saves at once while its secrets catalog loads', async () => {
-  poolEnabled = true;
   secretAllowed = true;
+  secretLoading = false;
   catalogLoaded = false;
   selection = { alpha: ['key-a'] };
   providerDrafts = {};
@@ -145,7 +168,6 @@ test('a new session saves at once while its secrets catalog loads', async () => 
 });
 
 test('an existing session saves its provider keys without waiting for the scope', async () => {
-  poolEnabled = true;
   secretAllowed = true;
   catalogLoaded = false;
   providerDrafts = { anthropic: ['key-a'] };

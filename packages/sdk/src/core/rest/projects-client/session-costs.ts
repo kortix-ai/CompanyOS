@@ -1,6 +1,7 @@
 import { backendApi } from '../../http/api-client';
 import { sendChecked } from '../../http/transport';
 import { platformConfig } from '../../http/config';
+import { querySuffix } from '../../http/url';
 import type { ProjectSessionStatus } from './sessions';
 import { unwrap } from './shared';
 
@@ -69,6 +70,9 @@ export interface SessionCostLlmLedgerEntry {
   output_tokens: number;
   cached_tokens: number;
   cache_write_tokens: number;
+  /** True when another workspace paid for this row: the request ran before the
+   *  session's project moved to this workspace. Absent from an older API. */
+  billed_elsewhere?: boolean;
 }
 
 export interface SessionCostComputeLedgerEntry {
@@ -85,6 +89,8 @@ export interface SessionCostComputeLedgerEntry {
   memory_gb: number;
   disk_gb: number;
   gpu_count: number;
+  /** True when another workspace paid for this row (see the LLM entry). */
+  billed_elsewhere?: boolean;
 }
 
 export type SessionCostLedgerEntry =
@@ -94,6 +100,10 @@ export type SessionCostLedgerEntry =
 export interface SessionCostDetail extends SessionCostSummary {
   model_usage: SessionCostModelUsage[];
   ledger_entries: SessionCostLedgerEntry[];
+  /** The part of `total_cost` another workspace paid for: the session ran
+   *  before its project moved here. 0 when it all billed here. Absent from an
+   *  older API. */
+  billed_elsewhere_cost?: number;
 }
 
 export interface SessionCostReconciliation {
@@ -136,8 +146,13 @@ export type SessionCostSort = 'total_desc' | 'total_asc' | 'recent';
  * The four sorts `GET /usage/cost-by-project` accepts (`PROJECT_COST_SORTS`
  * in the same route file) — every `SessionCostSort` plus `name_asc`, since a
  * project rollup row has a name to sort on.
+ *
+ * @deprecated Use `WorkspaceCostSort`. Kept permanently.
  */
 export type ProjectCostSort = SessionCostSort | 'name_asc';
+
+/** The workspace name of {@link ProjectCostSort}: the same type. */
+export type WorkspaceCostSort = ProjectCostSort;
 
 export interface ListSessionCostsOptions extends CostWindowOptions {
   accountId?: string;
@@ -167,12 +182,6 @@ function appendWindow(query: URLSearchParams, options: CostWindowOptions): void 
   if (options.to) query.set('to', options.to);
 }
 
-/** `?<query>` when non-empty, else `''` — shared by every list/get below so
- *  the empty-query case (no trailing `?`) is expressed exactly once. */
-function suffix(query: URLSearchParams): string {
-  return query.size > 0 ? `?${query}` : '';
-}
-
 export async function listSessionCosts(
   options: ListSessionCostsOptions = {},
 ): Promise<SessionCostsPage> {
@@ -183,7 +192,7 @@ export async function listSessionCosts(
   if (options.sort) query.set('sort', options.sort);
   if (options.limit != null) query.set('limit', String(options.limit));
   if (options.offset != null) query.set('offset', String(options.offset));
-  return unwrap(await backendApi.get<SessionCostsPage>(`/usage/session-costs${suffix(query)}`));
+  return unwrap(await backendApi.get<SessionCostsPage>(`/usage/session-costs${querySuffix(query)}`));
 }
 
 export async function getSessionCostRecord(
@@ -194,7 +203,7 @@ export async function getSessionCostRecord(
   appendScopeOptions(query, options);
   return unwrap(
     await backendApi.get<SessionCostDetail>(
-      `/usage/session-costs/${encodeURIComponent(sessionId)}${suffix(query)}`,
+      `/usage/session-costs/${encodeURIComponent(sessionId)}${querySuffix(query)}`,
     ),
   );
 }
@@ -206,6 +215,7 @@ export async function getSessionCostRecord(
 // attribute to any project is folded into the account-wide totals returned
 // by `getCostSummary` below, never surfaced as a synthetic row here.
 
+/** @deprecated Use `WorkspaceCostRow`. Kept permanently. */
 export interface ProjectCostRow {
   project_id: string;
   project_name: string;
@@ -232,8 +242,15 @@ export interface ProjectCostRow {
   storage_gib_hours?: number;
   total_cost: number;
   last_activity_at: string | null;
+  /** True when the project now lives in another workspace; `project_name` is
+   *  then "Moved to another workspace". Absent from an older API. */
+  moved?: boolean;
 }
 
+/** The workspace name of {@link ProjectCostRow}: the same type. */
+export type WorkspaceCostRow = ProjectCostRow;
+
+/** @deprecated Use `WorkspaceCostPage`. Kept permanently. */
 export interface ProjectCostPage {
   projects: ProjectCostRow[];
   total: number;
@@ -242,6 +259,10 @@ export interface ProjectCostPage {
   next_offset: number | null;
 }
 
+/** The workspace name of {@link ProjectCostPage}: the same type. */
+export type WorkspaceCostPage = ProjectCostPage;
+
+/** @deprecated Use `ListCostByWorkspaceOptions`. Kept permanently. */
 export interface ListCostByProjectOptions extends CostWindowOptions {
   accountId?: string;
   sort?: ProjectCostSort;
@@ -249,7 +270,10 @@ export interface ListCostByProjectOptions extends CostWindowOptions {
   offset?: number;
 }
 
-export async function listCostByProject(
+/** The workspace name of {@link ListCostByProjectOptions}: the same type. */
+export type ListCostByWorkspaceOptions = ListCostByProjectOptions;
+
+export async function listCostByWorkspace(
   options: ListCostByProjectOptions = {},
 ): Promise<ProjectCostPage> {
   const query = new URLSearchParams();
@@ -258,8 +282,11 @@ export async function listCostByProject(
   if (options.sort) query.set('sort', options.sort);
   if (options.limit != null) query.set('limit', String(options.limit));
   if (options.offset != null) query.set('offset', String(options.offset));
-  return unwrap(await backendApi.get<ProjectCostPage>(`/usage/cost-by-project${suffix(query)}`));
+  return unwrap(await backendApi.get<ProjectCostPage>(`/usage/cost-by-project${querySuffix(query)}`));
 }
+
+/** @deprecated Use `listCostByWorkspace`. Kept permanently. */
+export const listCostByProject = listCostByWorkspace;
 
 // ── Spend summary — GET /usage/cost-summary ─────────────────────────────────
 // Mirrors `CostSummaryTotals` / `CostSeriesPoint` / `CostModelRow` /
@@ -329,7 +356,7 @@ export async function getCostSummary(
   appendScopeOptions(query, options);
   if (options.sessionId) query.set('session_id', options.sessionId);
   appendWindow(query, options);
-  return unwrap(await backendApi.get<CostSummary>(`/usage/cost-summary${suffix(query)}`));
+  return unwrap(await backendApi.get<CostSummary>(`/usage/cost-summary${querySuffix(query)}`));
 }
 
 // ── CSV export ────────────────────────────────────────────────────────────
@@ -351,12 +378,18 @@ export async function getCostSummary(
 // published.
 
 /** Options accepted by `costExportUrl('projects', …)` / `fetchCostExportCsv('projects', …)`.
- *  `projectId` narrows a project-scoped export; `ownerId` belongs to sessions. */
+ *  `projectId` narrows a project-scoped export; `ownerId` belongs to sessions.
+ *
+ * @deprecated Use `WorkspaceCostExportOptions`. Kept permanently.
+ */
 export interface ProjectCostExportOptions extends CostWindowOptions {
   accountId?: string;
   projectId?: string;
   sort?: ProjectCostSort;
 }
+
+/** The workspace name of {@link ProjectCostExportOptions}: the same type. */
+export type WorkspaceCostExportOptions = ProjectCostExportOptions;
 
 /** Options accepted by `costExportUrl('sessions', …)` / `fetchCostExportCsv('sessions', …)`.
  *  `sort` is `SessionCostSort`, not `ProjectCostSort` — `name_asc` is only
@@ -446,4 +479,92 @@ export async function fetchCostExportCsv(
   const parsedRowCap = rowCapHeader != null ? Number(rowCapHeader) : NaN;
   const blob = await res.blob();
   return { blob, rowCap: Number.isFinite(parsedRowCap) ? parsedRowCap : null };
+}
+
+/**
+ * How many data rows a CSV body holds — records, not physical lines, and not
+ * counting the header.
+ *
+ * `encodeField` (`apps/api/src/shared/cost-csv.ts`) quotes any value holding
+ * CR, LF, a comma or a quote, and both `project_name` and `owner` are free
+ * text the account's own users control. So a project named with an embedded
+ * newline puts a real line break inside a quoted field, and splitting the
+ * body on newlines counts that one row twice.
+ *
+ * Blank records are skipped, so a trailing newline never becomes a row.
+ *
+ * One shape is NOT handled: a body with an unterminated quote. Everything
+ * after the opening quote is read as one field, so
+ * `header\r\ns0,"never closed\r\ns1,…\r\ns2,…` counts 1 record, not 3.
+ * `toCsv` always balances its quotes, so this is unreachable from either
+ * export route; and the error direction is an undercount, which can only
+ * suppress the row-cap warning, never raise a false one.
+ */
+export function countCsvDataRows(body: string): number {
+  let records = 0;
+  let inQuotes = false;
+  let recordHasContent = false;
+
+  for (let index = 0; index < body.length; index += 1) {
+    const char = body[index];
+
+    if (inQuotes) {
+      // `""` is the escape for a literal quote — consume both and stay inside
+      // the field, otherwise the rest of the record is read as unquoted.
+      if (char === '"' && body[index + 1] === '"') index += 1;
+      else if (char === '"') inQuotes = false;
+      recordHasContent = true;
+      continue;
+    }
+
+    if (char === '"') {
+      inQuotes = true;
+      recordHasContent = true;
+      continue;
+    }
+
+    if (char === '\r' || char === '\n') {
+      if (char === '\r' && body[index + 1] === '\n') index += 1;
+      if (recordHasContent) records += 1;
+      recordHasContent = false;
+      continue;
+    }
+
+    recordHasContent = true;
+  }
+
+  if (recordHasContent) records += 1;
+  return Math.max(0, records - 1);
+}
+
+/**
+ * Whether an export reached its row cap, so it may be missing rows.
+ *
+ * `rowCap` is the CAP VALUE the route reports on every response
+ * (`x-kortix-row-cap` = `CSV_ROW_CAP`), not a truncation flag: a 3-row export
+ * and a capped one carry the identical header. Truncation is only knowable by
+ * comparing the rows actually present against that cap, which is why this
+ * takes both.
+ *
+ * `>=` rather than `===` because the route queries at `limit: CSV_ROW_CAP` and
+ * so cannot return more — but if that ever changes, over-reporting must warn
+ * rather than fall silent.
+ */
+export function isCostExportCapped(rowCount: number, rowCap: number | null): boolean {
+  if (rowCap === null || rowCap <= 0) return false;
+  return rowCount >= rowCap;
+}
+
+export interface CostExportAnalysis extends CostExportResult {
+  /** Data records in the CSV, header excluded (`countCsvDataRows`). */
+  rowCount: number;
+  /** `isCostExportCapped(rowCount, rowCap)`: the export may be truncated. */
+  capped: boolean;
+}
+
+/** Reads the fetched CSV once to decide whether it was truncated, and hands
+ *  back the same `Blob` for the download. */
+export async function analyzeCostExport(result: CostExportResult): Promise<CostExportAnalysis> {
+  const rowCount = countCsvDataRows(await result.blob.text());
+  return { ...result, rowCount, capped: isCostExportCapped(rowCount, result.rowCap) };
 }

@@ -15,7 +15,7 @@ import {
 
 const ACCOUNT = 'account_1';
 const SA = '55555555-5555-4555-8555-555555555555';
-const IAM = `/v1/accounts/${ACCOUNT}/iam`;
+const IAM = `/v1/workspaces/${ACCOUNT}/iam`;
 
 const laptop = {
   token_id: 'tok_a',
@@ -58,6 +58,8 @@ const ghost = {
 let mineFixture: unknown[] | null = null;
 /** The token the CLI itself authenticates with, as `/accounts/me` reports it. */
 let meTokenId: string | null = 'tok_self';
+let workspaceClosed = false;
+let workspaceDenial = 'workspace_closed';
 
 let tmp: string;
 let runner: string;
@@ -65,7 +67,12 @@ let api: FakeApi | null = null;
 
 const routes: Parameters<typeof startFakeApi>[0] = (req, url, body) => {
   const p = url.pathname;
-  if (p === '/v1/accounts/me' && req.method === 'GET') {
+  if (workspaceClosed && p.startsWith('/v1/accounts/tokens')) {
+    return Response.json({ error: 'Workspace closed', code: workspaceDenial }, { status: 403 });
+  }
+  if (p === '/v1/me/tokens' && req.method === 'GET') return Response.json([laptop, ci, ghost]);
+  if (p === '/v1/me/tokens/tok_a' && req.method === 'DELETE') return Response.json({ ok: true });
+  if (p === '/v1/me' && req.method === 'GET') {
     return Response.json({ user_id: 'user_1', email: 'user@example.test', token_context: { auth_type: 'pat', token_id: meTokenId } });
   }
   if (p === '/v1/accounts/tokens' && req.method === 'GET') {
@@ -86,6 +93,24 @@ const routes: Parameters<typeof startFakeApi>[0] = (req, url, body) => {
         status: 'active',
         expires_at: (body as { expires_at?: string }).expires_at ?? null,
         created_at: '2026-08-01T00:00:00.000Z',
+      },
+      { status: 201 },
+    );
+  }
+  if (p === '/v1/workspaces/p1/tokens' && req.method === 'POST') {
+    const b = body as { name: string; scopes?: unknown; expires_at?: string | null };
+    return Response.json(
+      {
+        token_id: 'tok_scoped',
+        name: b.name,
+        project_id: 'p1',
+        public_key: 'kx_pub_scoped',
+        secret_key: 'kx_sec_SCOPED_ONCE',
+        status: 'active',
+        expires_at: b.expires_at === undefined ? '2027-02-01T00:00:00.000Z' : b.expires_at,
+        created_at: '2026-08-01T00:00:00.000Z',
+        scope: b.scopes === 'read' ? 'read' : Array.isArray(b.scopes) ? 'custom' : 'full',
+        workspace_permissions: Array.isArray(b.scopes) ? b.scopes : null,
       },
       { status: 201 },
     );
@@ -203,6 +228,8 @@ describe('kortix tokens', () => {
     api = null;
     mineFixture = null;
     meTokenId = 'tok_self';
+    workspaceClosed = false;
+    workspaceDenial = 'workspace_closed';
     rmSync(tmp, { recursive: true, force: true });
   });
 
@@ -234,8 +261,8 @@ describe('kortix tokens', () => {
     const config = boot();
     const all = await runCommand(runner, ['ls'], { cwd: tmp, configFile: config });
     expect(all.code).toBe(0);
-    expect(all.stdout).toMatch(/laptop\s+kx_pub_a\s+active\s+never/);
-    expect(all.stdout).toMatch(/ci\s+kx_pub_b\s+revoked\s+2026-12-01/);
+    expect(all.stdout).toMatch(/laptop\s+kx_pub_a\s+active\s+full\s+never/);
+    expect(all.stdout).toMatch(/ci\s+kx_pub_b\s+revoked\s+full\s+2026-12-01/);
     expect(api!.requests[0]!.query).toContain(`account_id=${ACCOUNT}`);
     expect(api!.requests[0]!.query).not.toContain('mine=');
 
@@ -328,13 +355,43 @@ describe('kortix tokens', () => {
       project_id: string;
     };
     // account_id must ride in the body: this route resolves the account from
-    // the body, not the query string.
-    expect(body.account_id).toBe(ACCOUNT);
+    // the body, not the query string. --workspace/--project names the
+    // workspace, and its id is the account the API resolves.
+    expect(body.account_id).toBe('p1');
     expect(body.name).toBe('ci-deploy');
     expect(body.project_id).toBe('p1');
     expect(new Date(body.expires_at).getTime()).toBeGreaterThan(Date.now());
     expect(r.stdout).toContain('kx_sec_PLAINTEXT_ONCE');
     expect(r.stdout).toContain('only time the secret is shown');
+  });
+
+  test('new --scope mints a workspace key under the workspace; --expires never sends null', async () => {
+    const config = boot();
+    const read = await runCommand(runner, ['new', 'dash', '--scope', 'read', '--workspace', 'p1'], { cwd: tmp, configFile: config });
+    expect(read.code).toBe(0);
+    expect(api!.requests.at(-1)).toMatchObject({ method: 'POST', path: '/v1/workspaces/p1/tokens', body: { name: 'dash', scopes: 'read' } });
+    expect(read.stdout).toMatch(/scope\s+read/);
+
+    const custom = await runCommand(
+      runner,
+      ['new', 'runner', '--scope', 'workspace.session.read,workspace.session.start', '--expires', 'never', '--workspace', 'p1'],
+      { cwd: tmp, configFile: config },
+    );
+    expect(custom.code).toBe(0);
+    expect(api!.requests.at(-1)!.body).toEqual({
+      name: 'runner',
+      scopes: ['workspace.session.read', 'workspace.session.start'],
+      expires_at: null,
+    });
+    expect(custom.stdout).toMatch(/expires\s+never/);
+    expect(custom.stdout).toMatch(/scope\s+custom \(2\)/);
+  });
+
+  test('an empty --scope exits 2 before any HTTP call', async () => {
+    const config = boot();
+    const r = await runCommand(runner, ['new', 'x', '--scope', ' , ', '--workspace', 'p1'], { cwd: tmp, configFile: config });
+    expect(r.code).toBe(2);
+    expect(api!.requests).toHaveLength(0);
   });
 
   test('an unparseable --expires exits 2 before any HTTP call', async () => {
@@ -395,6 +452,42 @@ describe('kortix tokens', () => {
         ),
       );
     }
+  });
+
+  test('a closed workspace does not block listing or revoking the caller personal keys', async () => {
+    const config = boot();
+    workspaceClosed = true;
+    const listed = await runCommand(runner, ['ls', '--mine', '--json'], { cwd: tmp, configFile: config });
+    expect(listed.code).toBe(0);
+    expect(JSON.parse(listed.stdout).map((row: { id: string }) => row.id)).toEqual(['tok_a']);
+    const revoked = await runCommand(runner, ['rm', 'tok_a', '-y', '--force'], { cwd: tmp, configFile: config });
+    expect(revoked.code).toBe(0);
+    expect(revoked.stdout).toContain('Revoked');
+    expect(api?.requests.find((r) => r.method === 'DELETE')?.path).toBe('/v1/me/tokens/tok_a');
+  });
+
+  test('a closed workspace lists only live personal keys unless --mine --all', async () => {
+    const config = boot();
+    workspaceClosed = true;
+    const ids = async (args: string[]) => {
+      const r = await runCommand(runner, ['ls', ...args, '--json'], { cwd: tmp, configFile: config });
+      expect(r.code).toBe(0);
+      return JSON.parse(r.stdout).map((row: { id: string }) => row.id);
+    };
+    expect(await ids([])).toEqual(['tok_a']);
+    expect(await ids(['--all'])).toEqual(['tok_a']);
+    expect(await ids(['--mine'])).toEqual(['tok_a']);
+    expect(await ids(['--mine', '--all'])).toEqual(['tok_a', 'tok_b', 'tok_c']);
+  });
+
+  test('an ordinary permission denial never falls back to the personal surface', async () => {
+    const config = boot();
+    workspaceClosed = true;
+    workspaceDenial = 'account_role_insufficient';
+    const result = await runCommand(runner, ['rm', 'tok_a', '-y', '--force'], { cwd: tmp, configFile: config });
+    expect(result.code).toBe(1);
+    expect(api?.requests.some((r) => r.path.startsWith('/v1/me/tokens'))).toBe(false);
+    expect(api?.requests.some((r) => r.method === 'DELETE')).toBe(false);
   });
 
   test('rm -y DELETEs with account_id; a 404 surfaces and exits 1', async () => {

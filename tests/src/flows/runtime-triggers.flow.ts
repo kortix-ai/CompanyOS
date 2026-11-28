@@ -10,7 +10,7 @@
  * flow pins the HTTP and CLI contract.
  */
 import { flow } from '../core/flow';
-import { AgentPrincipalsWorld } from '../fixtures/agent-principals';
+import { AgentPrincipalsWorld, manifest } from '../fixtures/agent-principals';
 import { CliSandbox } from '../fixtures/cli';
 
 const ROUTES = {
@@ -20,11 +20,9 @@ const ROUTES = {
   remove: 'DELETE /v1/projects/:projectId/triggers/runtime/:id',
   run: 'POST /v1/projects/:projectId/triggers/runtime/:id/run',
 };
-const ALL = '/v1/projects/:projectId/triggers/all';
-const RUNTIME = '/v1/projects/:projectId/triggers/runtime';
-const ONE = '/v1/projects/:projectId/triggers/runtime/:id';
-const MANIFEST =
-  'project:\n  name: ke2e-runtime-triggers\ndefault_agent: kortix\nagents:\n  kortix:\n    kortix_permissions: all\n';
+const ALL = '/v1/workspaces/:projectId/triggers/all';
+const RUNTIME = '/v1/workspaces/:projectId/triggers/runtime';
+const ONE = '/v1/workspaces/:projectId/triggers/runtime/:id';
 
 type TriggerRow = {
   id: string;
@@ -47,9 +45,9 @@ flow(
       ROUTES.update,
       ROUTES.remove,
       ROUTES.run,
-      'POST /v1/projects/:projectId/triggers',
-      'POST /v1/projects/:projectId/sessions/:sessionId/reminders',
-      'POST /v1/projects/:projectId/secrets',
+      'POST /v1/workspaces/:projectId/triggers',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/reminders',
+      'POST /v1/workspaces/:projectId/secrets',
     ],
   },
   async (ctx) => {
@@ -61,15 +59,15 @@ flow(
     const params = { projectId: project.id };
     try {
       await world.setFeature('reminders', true);
-      await world.writeManifest(MANIFEST, 'ke2e: runtime triggers agent');
+      await world.writeManifest(manifest('runtime-triggers'), 'ke2e: runtime triggers agent');
       const session = await world.mintAgentSession({ agent: 'kortix', launcher: ctx.P.OWNER });
       let loopId = '';
 
       await ctx.step('a kortix.yaml trigger and a reminder list together, each with its origin, source and target', async () => {
-        (await owner.post('/v1/projects/:projectId/triggers', {
+        (await owner.post('/v1/workspaces/:projectId/triggers', {
           name: 'Nightly', slug: 'nightly', type: 'cron', cron: '0 0 3 * * *', timezone: 'UTC', prompt_template: 'nightly',
         }, { params, timeoutMs: 60_000 })).status(201);
-        const loop = await owner.post('/v1/projects/:projectId/sessions/:sessionId/reminders', { prompt: 'Check', every: '1h' }, {
+        const loop = await owner.post('/v1/workspaces/:projectId/sessions/:sessionId/reminders', { prompt: 'Check', every: '1h' }, {
           params: { ...params, sessionId: session.sessionId },
         });
         loop.status(201);
@@ -82,6 +80,22 @@ flow(
         }
         if (runtime?.origin !== 'runtime' || runtime.target.kind !== 'session' || runtime.target.session_id !== session.sessionId) {
           throw new Error(`runtime row wrong: ${JSON.stringify(runtime)}`);
+        }
+      });
+
+      await ctx.step('runtime rows without a spec do not break the combined list', async () => {
+        const slugs = ['trigger.missing-spec', 'automation.null-spec'];
+        try {
+          await world.db.query(
+            `INSERT INTO kortix.project_trigger_runtime (project_id, slug, trigger_type, enabled, schedule_spec)
+             VALUES ($1, $2, 'webhook', true, NULL), ($1, $3, 'webhook', true, 'null'::jsonb)`,
+            [project.id, ...slugs],
+          );
+          const rows = (await owner.get(ALL, { params })).status(200).json<{ triggers: TriggerRow[] }>().triggers;
+          if (rows.some((row) => slugs.includes(row.id))) throw new Error('a spec-less row appeared in the list');
+          if (!rows.some((row) => row.id === loopId)) throw new Error('the valid loop disappeared');
+        } finally {
+          await world.db.query('DELETE FROM kortix.project_trigger_runtime WHERE project_id = $1 AND slug = ANY($2::text[])', [project.id, slugs]);
         }
       });
 
@@ -98,7 +112,7 @@ flow(
       });
 
       await ctx.step('a runtime webhook trigger that starts an agent → 201 with its webhook URL', async () => {
-        (await owner.post('/v1/projects/:projectId/secrets', { name: 'TRG41_HOOK_SECRET', value: 'auto-hook-secret-value-0123456789', strategy: 'broker', consumer: 'connector' }, { params })).status(200);
+        (await owner.post('/v1/workspaces/:projectId/secrets', { name: 'TRG41_HOOK_SECRET', value: 'auto-hook-secret-value-0123456789', strategy: 'broker', consumer: 'connector' }, { params })).status(200);
         const r = await owner.post(RUNTIME, {
           prompt: 'Triage {{ body.title }}',
           source: { type: 'webhook', secret_env: 'TRG41_HOOK_SECRET' },
@@ -106,7 +120,7 @@ flow(
         }, { params });
         r.status(201).body().has('$.target.kind', 'agent').has('$.source.type', 'webhook');
         const created = r.json<TriggerRow>();
-        if (!created.source.webhook_url?.endsWith(`/v1/webhooks/projects/${project.id}/${created.id}`)) {
+        if (!created.source.webhook_url?.endsWith(`/v1/webhooks/workspaces/${project.id}/${created.id}`)) {
           throw new Error(`webhook_url wrong: ${created.source.webhook_url}`);
         }
       });

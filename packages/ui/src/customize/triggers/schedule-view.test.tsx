@@ -42,7 +42,7 @@ describe('TriggerToolbarMenu — manager-only access gate', () => {
 
 /** The open trigger lives in the URL: open, switch, tab, close and a deep link. */
 describe('trigger sheet URL', () => {
-  const path = '/projects/p1/admin/triggers';
+  const path = '/workspaces/p1/admin/triggers';
 
   test('opening from a closed sheet pushes ?id on Runs, so Back closes it', () => {
     expect(triggerSheetHref(path, 'type=cron', { slug: 'nightly' }, false)).toEqual({
@@ -82,6 +82,26 @@ describe('trigger sheet URL', () => {
       href: path,
       mode: 'push',
     });
+  });
+
+  test("on an agent's page the sheet tab is ?sheet, and the agent's ?tab=triggers stays", () => {
+    const agentPath = '/workspaces/p1/admin/agents/triage';
+    expect(triggerSheetHref(agentPath, 'tab=triggers', { slug: 'nightly' }, false, 'sheet')).toEqual({
+      href: `${agentPath}?tab=triggers&id=nightly`,
+      mode: 'push',
+    });
+    expect(
+      triggerSheetHref(agentPath, 'tab=triggers&id=nightly', { slug: 'nightly', tab: 'settings' }, true, 'sheet'),
+    ).toEqual({ href: `${agentPath}?tab=triggers&id=nightly&sheet=settings`, mode: 'replace' });
+    expect(
+      triggerSheetHref(agentPath, 'tab=triggers&id=nightly&sheet=settings', { slug: null }, true, 'sheet'),
+    ).toEqual({ href: `${agentPath}?tab=triggers`, mode: 'push' });
+    expect(readTriggerSheet(new URLSearchParams('tab=triggers&id=nightly&sheet=settings'), 'sheet')).toEqual({
+      slug: 'nightly',
+      tab: 'settings',
+    });
+    // The agent's own ?tab=triggers is never read as the sheet tab.
+    expect(readTriggerSheet(new URLSearchParams('tab=settings&id=nightly'), 'sheet').tab).toBe('runs');
   });
 
   test('a deep link reads the id and the tab; Runs is the default', () => {

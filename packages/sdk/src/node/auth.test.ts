@@ -67,13 +67,13 @@ const fakeFetch: KortixFetch = async (input, init) => {
     delete identityFor[form!.token.replace('kortix_ort_', 'kortix_oat_')];
     return Response.json({ revoked: true });
   }
-  if (url.pathname === '/v1/accounts/me') {
+  if (url.pathname === '/v1/me') {
     const token = req.headers.get('authorization')?.slice(7) ?? '';
     const id = identityFor[token];
     if (!id) return Response.json({ error: 'Invalid OAuth access token' }, { status: 401 });
     return Response.json({ ...id, token_context: { auth_type: 'oauth' }, accounts: [{ account_id: 'acct-1', slug: 'acct1', name: 'Acme', role: 'member' }] });
   }
-  if (url.pathname === '/v1/projects') {
+  if (url.pathname === '/v1/projects' || url.pathname === '/v1/workspaces') {
     const token = req.headers.get('authorization')?.slice(7) ?? '';
     if (!identityFor[token]) return Response.json({ error: 'unauthenticated' }, { status: 401 });
     return Response.json([{ project_id: 'p-1', name: 'Dashboards' }]);
@@ -213,11 +213,11 @@ describe('createKortixAuth — the sign-in flow', () => {
     expect(projects as unknown).toEqual([{ project_id: 'p-1', name: 'Dashboards' }]);
     expect(calls.at(-1)!.auth).toBe('Bearer kortix_oat_1');
 
-    const proxied = await auth.handler(req('/api/kortix/auth/proxy/projects?limit=5', { headers: { authorization: 'Bearer kortix-session' } }));
+    const proxied = await auth.handler(req('/api/kortix/auth/proxy/workspaces?limit=5', { headers: { authorization: 'Bearer kortix-session' } }));
     expect(proxied.status).toBe(200);
     expect(await proxied.json()).toEqual([{ project_id: 'p-1', name: 'Dashboards' }]);
     const forwarded = calls.at(-1)!;
-    expect(forwarded.url).toBe(`${BACKEND}/projects?limit=5`);
+    expect(forwarded.url).toBe(`${BACKEND}/workspaces?limit=5`);
     expect(forwarded.auth).toBe('Bearer kortix_oat_1');
   });
 
@@ -226,7 +226,7 @@ describe('createKortixAuth — the sign-in flow', () => {
     const req = new Request(`${APP}/reports/weekly?x=1`);
     expect(await auth.viewer(req)).toBeNull();
     expect((await auth.handler(new Request(`${APP}/api/kortix/auth/me`))).status).toBe(401);
-    expect((await auth.handler(new Request(`${APP}/api/kortix/auth/proxy/projects`))).status).toBe(401);
+    expect((await auth.handler(new Request(`${APP}/api/kortix/auth/proxy/workspaces`))).status).toBe(401);
     await expect(auth.kortix(req)).rejects.toBeInstanceOf(KortixAuthError);
     const gate = await auth.requireViewer(req);
     expect(gate.viewer).toBeUndefined();
@@ -236,6 +236,50 @@ describe('createKortixAuth — the sign-in flow', () => {
 });
 
 describe('createKortixAuth — expiry, refresh, sign-out, abuse', () => {
+  for (const scenario of ['missing', 'live', 'expired', 'invalid', 'network'] as const) {
+    test(`/refresh preserves redirects, cookie policy and token calls: ${scenario}`, async () => {
+      let now = Date.parse('2026-08-26T10:00:00Z');
+      const auth = makeAuth({
+        now: () => now,
+        fetch: (input, init) => {
+          if (scenario === 'network' && now > Date.parse('2026-08-26T10:00:00Z')) {
+            calls.push({ url: String(input), method: init?.method ?? 'GET', body: null, auth: null });
+            return Promise.reject(new Error('synthetic upstream unavailable'));
+          }
+          return fakeFetch(input, init);
+        },
+      });
+      const { jar } = await signIn(auth);
+      if (scenario !== 'live') now += 90 * 60 * 1000;
+      if (scenario === 'invalid') revokedTokens.push('kortix_ort_1');
+      calls = [];
+      const returnTo = '/reports/weekly?view=compact&sort=desc';
+      const response = await auth.handler(new Request(
+        `${APP}/api/kortix/auth/refresh?return_to=${encodeURIComponent(returnTo)}`,
+        { headers: { cookie: scenario === 'missing' ? '' : cookieHeader(jar) } },
+      ));
+      const succeeds = scenario === 'live' || scenario === 'expired';
+      expect(response.status).toBe(302);
+      expect(response.headers.get('location')).toBe(succeeds ? returnTo : auth.signInUrl(returnTo));
+      expect(calls.map((call) => call.url)).toEqual(
+        scenario === 'missing' || scenario === 'live' ? [] : [`${BACKEND}/oauth/token`],
+      );
+      const cookies = response.headers.getSetCookie();
+      if (scenario === 'live') {
+        expect(cookies).toEqual([]);
+      } else if (scenario === 'expired') {
+        expect(cookies).toHaveLength(1);
+        expect(cookies[0]).toMatch(/^__Host-kortix_session=[^;]+; /);
+        expect(cookies[0]).not.toContain('Max-Age=0');
+        Object.assign(jar, cookiesFrom(response));
+        const viewer = await auth.viewer(new Request(`${APP}/reports`, { headers: { cookie: cookieHeader(jar) } }));
+        expect(viewer?.token).toBe('kortix_oat_2');
+      } else {
+        expect(cookies).toEqual(['__Host-kortix_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax; Secure']);
+      }
+    });
+  }
+
   test('an expired access token: viewer() is null, requireViewer redirects to /refresh, /refresh rotates and sets a new cookie', async () => {
     const auth = makeAuth({ now: () => Date.parse('2026-08-26T10:00:00Z') });
     const { jar } = await signIn(auth);

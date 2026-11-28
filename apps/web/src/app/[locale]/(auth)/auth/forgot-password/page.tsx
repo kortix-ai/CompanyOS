@@ -2,18 +2,19 @@
 
 import { useTranslations } from '@/i18n/use-translations';
 
-import { EnvelopeOpenIcon as MailCheck } from '@phosphor-icons/react';
 import { FormEvent, Suspense, useRef, useState } from 'react';
 
 import { ConnectingScreen } from '@/components/dashboard/connecting-screen';
 import { Button } from '@kortix/ui/button';
 import { Input } from '@kortix/ui/input';
-import { FieldError } from '@kortix/ui/internal/auth/auth-primitives';
+import { FieldError, FieldLabel } from '@kortix/ui/internal/auth/auth-primitives';
+import { useKortixAuthFrame } from '@/features/auth/kortix-auth-frame';
 import { AuthCardShell, BackToSignIn } from '@kortix/ui/internal/auth/auth-card-shell';
 import { submitAuthForm } from '@/lib/auth/submit-auth';
 
 function ForgotPasswordContent() {
   const t = useTranslations('auth.passwordReset');
+  const frame = useKortixAuthFrame();
   const [pending, setPending] = useState(false);
   const inFlight = useRef(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -51,34 +52,27 @@ function ForgotPasswordContent() {
   if (sentTo) {
     return (
       <AuthCardShell
+        frame={frame}
         title={t('sent.title')}
-        description={t('sent.description')}
+        description={t.rich('sent.address', {
+          email: sentTo,
+          address: (chunks) => <span className="text-foreground wrap-break-word">{chunks}</span>,
+        })}
         footer={<BackToSignIn />}
-      >
-        <div className="border-border bg-muted/60 text-muted-foreground flex items-center gap-2 rounded-md border px-3 py-2.5">
-          <MailCheck className="size-4 shrink-0" />
-          <span className="truncate text-sm">
-            {t.rich('sent.address', {
-              email: sentTo,
-              address: (chunks) => <span className="text-foreground">{chunks}</span>,
-            })}
-          </span>
-        </div>
-      </AuthCardShell>
+      />
     );
   }
 
   return (
     <AuthCardShell
+        frame={frame}
       title={t('request.title')}
       description={t('request.description')}
       footer={<BackToSignIn />}
     >
       <form onSubmit={handleSubmit} className="space-y-5">
         <div className="space-y-3">
-          <label htmlFor="email" className="text-muted-foreground text-sm font-medium">
-            {t('request.email')}
-          </label>
+          <FieldLabel htmlFor="email">{t('request.email')}</FieldLabel>
           <Input
             id="email"
             aria-invalid={!!errorMessage || undefined}

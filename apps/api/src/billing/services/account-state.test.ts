@@ -168,11 +168,13 @@ describe('buildMinimalAccountState — credit row dedupe + concurrency (measured
       expires_at: '2026-11-24T12:00:00.000Z',
       extra: 4,
       can_run: true,
+      free_grant: { eligible: true, claimed_workspace_id: null },
       lifetime_granted: 0,
       lifetime_purchased: 0,
       lifetime_used: 0,
       daily_refresh: null,
     });
+    expect(state.plan_comp).toBeNull();
     expect(state.subscription.tier_key).toBe('free');
     expect(state.tier.name).toBe('free');
     expect(state.plan).toMatchObject({
@@ -205,6 +207,44 @@ describe('buildMinimalAccountState — credit row dedupe + concurrency (measured
     expect(state.has_active_subscription).toBe(false);
   });
 
+  test('a further workspace on Free gets no free credits: monthly_credits 0, no reset date, free_grant not eligible', async () => {
+    account = creditAccount({ tier: 'free', balance: '0', freeCreditsEligible: false, nextCreditGrant: '2026-12-01T00:00:00Z' });
+    const state = await buildMinimalAccountState('acct-1');
+    expect(state.tier.monthly_credits).toBe(0);
+    expect(state.credits.expires_at).toBeNull();
+    expect(state.credits.free_grant).toEqual({ eligible: false, claimed_workspace_id: null });
+    expect(state.billing_state).toBe('no_subscription');
+  });
+
+  test('a further workspace that subscribed reports its plan grant, not 0', async () => {
+    account = creditAccount({
+      tier: 'credits',
+      planMonthlyUsd: '50',
+      freeCreditsEligible: false,
+      stripeSubscriptionId: 'sub_live',
+      stripeSubscriptionStatus: 'active',
+    });
+    const state = await buildMinimalAccountState('acct-1');
+    expect(state.tier.monthly_credits).toBe(50);
+    expect(state.credits.expires_at).toBe('2026-11-24T12:00:00.000Z');
+  });
+
+  test('a comped split-off reports plan_comp and its comp end as the reset date', async () => {
+    const until = new Date(Date.now() + 10 * 86_400_000).toISOString();
+    account = creditAccount({ tier: 'credits', planMonthlyUsd: '300', freeCreditsEligible: false, nextCreditGrant: null, compPlanUntil: until });
+    const state = await buildMinimalAccountState('acct-1');
+    expect(state.plan_comp).toEqual({ until, source: 'workspace_split' });
+    expect(state.credits.expires_at).toBe(until);
+    expect(state.tier.monthly_credits).toBe(330); // $300 + its 10% volume bonus
+    expect(state.plan?.family).toBe('credits');
+  });
+
+  test('an ended comp is not reported', async () => {
+    account = creditAccount({ tier: 'credits', planMonthlyUsd: '300', compPlanUntil: new Date(Date.now() - 1000).toISOString() });
+    const state = await buildMinimalAccountState('acct-1');
+    expect(state.plan_comp).toBeNull();
+  });
+
   test('a credits account on an ACTIVE subscription with a drained wallet CANNOT run, and reports why', async () => {
     // Was `can_run: true` while the wallet sat at $0.0099, because a paying
     // subscription bypassed the floor. The bypass is gone. What this
@@ -226,7 +266,7 @@ describe('buildMinimalAccountState — credit row dedupe + concurrency (measured
     expect(state.credits.can_run).toBe(false);
     expect(state.has_active_subscription).toBe(true);
     expect(state.plan?.monthly_usd).toBe(100);
-    expect(state.tier.monthly_credits).toBe(100);
+    expect(state.tier.monthly_credits).toBe(105); // the billed $100 + its 5% volume bonus
   });
 
   test('a credits account whose subscription lapsed and whose wallet is drained is out_of_credits, not no_subscription', async () => {
@@ -411,8 +451,9 @@ describe('buildMinimalAccountState — plan changes', () => {
     expect(state.subscription.has_scheduled_change).toBe(true);
     expect(state.subscription.scheduled_change).toEqual({
       type: 'downgrade',
-      current_tier: { name: 'credits', display_name: 'Credits', monthly_credits: 500_000, monthly_usd: 5000 },
-      target_tier: { name: 'credits', display_name: 'Credits', monthly_credits: 300_000, monthly_usd: 3000 },
+      // Credits include each amount's volume bonus: +25% at both $5,000 and $3,000.
+      current_tier: { name: 'credits', display_name: 'Credits', monthly_credits: 625_000, monthly_usd: 5000 },
+      target_tier: { name: 'credits', display_name: 'Credits', monthly_credits: 375_000, monthly_usd: 3000 },
       effective_date: '2026-11-14T00:00:00.000Z',
     });
   });

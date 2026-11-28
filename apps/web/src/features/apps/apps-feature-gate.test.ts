@@ -29,18 +29,22 @@ const appsSource = () =>
 // probes are substituted; inventory and flag reads use real SDK hooks/cache data.
 const win = new Window();
 Object.assign(globalThis, { window: win, document: win.document, navigator: win.navigator });
+// Base UI's floating layers read DOM classes from globals.
+for (const name of ['Element', 'HTMLElement', 'Node', 'ShadowRoot', 'DocumentFragment', 'customElements']) {
+  Object.assign(globalThis, { [name]: Reflect.get(win, name) });
+}
 Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', { value: true, configurable: true });
 const projectId = 'project-apps-ga';
 mock.module('next/navigation', () => ({
   useParams: () => ({ id: projectId }),
-  usePathname: () => `/projects/${projectId}/apps`,
+  usePathname: () => `/workspaces/${projectId}/apps`,
   useSearchParams: () => new URLSearchParams(),
 }));
 const realUiProvider = { ...(await import('@kortix/ui/providers/ui-provider')) };
 mock.module('@kortix/ui/providers/ui-provider', () => ({
   ...realUiProvider,
   useUiParams: () => ({ id: projectId }),
-  useUiPathname: () => `/projects/${projectId}/apps`,
+  useUiPathname: () => `/workspaces/${projectId}/apps`,
   useUiSearchParams: () => new URLSearchParams(),
 }));
 mock.module('next/link', () => ({
@@ -89,6 +93,8 @@ for (const [name, experimental] of [
     // Flags come from the bare project row (`useFeatureFlag`).
     queryClient.setQueryData(qk.project.summary(projectId), { project_id: projectId, experimental });
     queryClient.setQueryData(qk.project.apps(projectId), []);
+    // The page also lists artifacts: none here.
+    queryClient.setQueryData(qk.project.artifactList(projectId, JSON.stringify({ scope: 'all', limit: 200 })), []);
     const host = win.document.createElement('div');
     win.document.body.append(host);
     const root = createRoot(host as unknown as Element);
@@ -102,7 +108,7 @@ for (const [name, experimental] of [
       ));
     });
     const link = host.querySelector('[data-testid="sidebar"] a');
-    expect(link?.getAttribute('href')).toBe(`/projects/${projectId}/apps`);
+    expect(link?.getAttribute('href')).toBe(`/workspaces/${projectId}/apps`);
     expect(link?.textContent).toBe('Apps');
     expect(host.querySelector('h1')?.textContent).toBe('Apps');
     expect(host.textContent).toContain('Apps you publish will show up here');
@@ -160,8 +166,7 @@ test('the Apps header is the capability tab bar, not a settings masthead', () =>
     uiSourcePath('internal/layout/project-page-header.tsx'),
     'utf8',
   );
-  const BAR = 'relative flex shrink-0 items-center gap-1 border-b px-2';
-  expect(header).toContain(`kx-titlebar-row kx-capability-titlebar ${BAR}`);
+  expect(header).toContain('export const PROJECT_PAGE_HEADER_CLASS');
   expect(view).toContain('<ProjectPageHeader');
 
   // `CustomizeSectionWrapper` is the settings-section shell: an 80px centred

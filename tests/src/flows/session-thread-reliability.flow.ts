@@ -16,8 +16,8 @@
  * (planLocalFlows), and it runs for real against a deployed target.
  *
  * RUN-9, SESS-23 and SESS-24 run on pi (`harnessFlow`) and read the
- * conversation through `GET .../transcript`: live while the session runs, the
- * durable mirror once it is stopped (`source` says which). The client Stop is
+ * conversation from the stored session log (`GET …/log`, `readTranscript`),
+ * which the box journals at most 5 s behind a running turn. The client Stop is
  * the runtime abort the web sends (`abortTurn`, fixtures/session-run.ts); no
  * Kortix abort route exists yet. The abort `POST /stop` performs first
  * (`abortLiveTurnBeforeStop`, apps/api/src/projects/reaping/stop-box.ts) is a
@@ -36,6 +36,7 @@ import {
   erroredMessageIds,
   isAbortStamp,
   readTranscript,
+  readTurn,
   sandboxIdOf,
   sendPrompt,
   stopSessionAndWait,
@@ -69,12 +70,12 @@ harnessFlow(
     requires: ['funded', 'sandbox'],
     timeoutMs: 900_000,
     routes: [
-      'POST /v1/projects/:projectId/sessions',
-      'POST /v1/projects/:projectId/sessions/:sessionId/start',
-      'GET /v1/projects/:projectId/sessions/:sessionId',
-      'POST /v1/projects/:projectId/sessions/:sessionId/prompts',
-      'GET /v1/projects/:projectId/sessions/:sessionId/turn',
-      'GET /v1/projects/:projectId/sessions/:sessionId/transcript',
+      'POST /v1/workspaces/:projectId/sessions',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/prompts',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/turn',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/log',
     ],
   },
   async (ctx, harness) => {
@@ -188,12 +189,12 @@ harnessFlow(
     // bound; 1_200_000 matches SESS-24.
     timeoutMs: 1_200_000,
     routes: [
-      'POST /v1/projects/:projectId/sessions',
-      'POST /v1/projects/:projectId/sessions/:sessionId/start',
-      'POST /v1/projects/:projectId/sessions/:sessionId/prompts',
-      'GET /v1/projects/:projectId/sessions/:sessionId/turn',
-      'GET /v1/projects/:projectId/sessions/:sessionId/transcript',
-      'POST /v1/projects/:projectId/sessions/:sessionId/stop',
+      'POST /v1/workspaces/:projectId/sessions',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/prompts',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/turn',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/log',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/stop',
     ],
   },
   async (ctx, harness) => {
@@ -330,8 +331,8 @@ harnessFlow(
 // read (the exact snapshot the web's "persisted-pin paint" instant-switch
 // fix reads) keeps serving that session's own mirrored data after its
 // runtime is stopped — proving the cached-paint read path works without a
-// live runtime. The transcript route then serves the durable mirror rather
-// than attempting a live read from the stopped sandbox.
+// live runtime. The stored session log then serves the conversation, with
+// no read from the stopped sandbox.
 harnessFlow(
   'SESS-24',
   {
@@ -339,11 +340,11 @@ harnessFlow(
     requires: ['funded', 'sandbox'],
     timeoutMs: 1_200_000,
     routes: [
-      'POST /v1/projects/:projectId/sessions',
-      'POST /v1/projects/:projectId/sessions/:sessionId/start',
-      'GET /v1/projects/:projectId/sessions/:sessionId',
-      'GET /v1/projects/:projectId/sessions/:sessionId/transcript',
-      'POST /v1/projects/:projectId/sessions/:sessionId/stop',
+      'POST /v1/workspaces/:projectId/sessions',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/log',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/stop',
     ],
   },
   async (ctx, harness) => {
@@ -378,7 +379,7 @@ harnessFlow(
       "a ready session's second /start within 30s is served consistent data (same sandbox identity, still ready)",
       async () => {
         const r = await owner.post(
-          '/v1/projects/:projectId/sessions/:sessionId/start',
+          '/v1/workspaces/:projectId/sessions/:sessionId/start',
           {},
           { params: { projectId: project.id, sessionId: sessionA.id }, query: { wait_ms: '3000' } },
         );
@@ -397,7 +398,7 @@ harnessFlow(
       'alternating /start reads across the two sessions never cross-bleed sandbox identity',
       async () => {
         const rB = await owner.post(
-          '/v1/projects/:projectId/sessions/:sessionId/start',
+          '/v1/workspaces/:projectId/sessions/:sessionId/start',
           {},
           { params: { projectId: project.id, sessionId: sessionB.id }, query: { wait_ms: '3000' } },
         );
@@ -410,7 +411,7 @@ harnessFlow(
           );
         }
         const rA = await owner.post(
-          '/v1/projects/:projectId/sessions/:sessionId/start',
+          '/v1/workspaces/:projectId/sessions/:sessionId/start',
           {},
           { params: { projectId: project.id, sessionId: sessionA.id }, query: { wait_ms: '3000' } },
         );
@@ -430,13 +431,7 @@ harnessFlow(
       "each session's live transcript contains only its OWN reply marker, never the other session's",
       async () => {
         transcriptSnapshotA = await waitFor(
-          async () => {
-            const r = await owner.get('/v1/projects/:projectId/sessions/:sessionId/transcript', {
-              params: { projectId: project.id, sessionId: sessionA.id },
-            });
-            r.status(200);
-            return r.json<any>();
-          },
+          async () => readTranscript(ctx, project.id, sessionA.id),
           {
             until: (t) =>
               Boolean(t?.available) &&
@@ -453,13 +448,7 @@ harnessFlow(
         }
 
         const transcriptB = await waitFor(
-          async () => {
-            const r = await owner.get('/v1/projects/:projectId/sessions/:sessionId/transcript', {
-              params: { projectId: project.id, sessionId: sessionB.id },
-            });
-            r.status(200);
-            return r.json<any>();
-          },
+          async () => readTranscript(ctx, project.id, sessionB.id),
           {
             until: (t) =>
               Boolean(t?.available) &&
@@ -479,18 +468,11 @@ harnessFlow(
 
     await ctx.step("session A's completed turn has a durable transcript before stopping", async () => {
       await waitFor(
-        async () => {
-          const r = await owner.get('/v1/projects/:projectId/sessions/:sessionId/transcript', {
-            params: { projectId: project.id, sessionId: sessionA.id },
-            query: { shape: 'sync' },
-          });
-          r.status(200);
-          return r.json<any>();
-        },
+        async () => readTranscript(ctx, project.id, sessionA.id),
         {
           until: (t) =>
             t?.available === true &&
-            t?.source === 'mirror' &&
+            t?.source === 'log' &&
             t?.complete === true &&
             JSON.stringify(t?.messages ?? []).includes(markerA),
           timeoutMs: 180_000,
@@ -510,7 +492,7 @@ harnessFlow(
         let previousTitle = '';
         detailSnapshotBeforeStop = await waitFor(
           async () => {
-            const r = await owner.get('/v1/projects/:projectId/sessions/:sessionId', {
+            const r = await owner.get('/v1/workspaces/:projectId/sessions/:sessionId', {
               params: { projectId: project.id, sessionId: sessionA.id },
             });
             r.status(200);
@@ -547,7 +529,7 @@ harnessFlow(
       "the DB-backed session detail read (the web's persisted-pin cached-paint source) still returns the mirrored title/tree for the now-stopped session, stable across reads — the read path works without a live runtime",
       async () => {
         const read = async () => {
-          const r = await owner.get('/v1/projects/:projectId/sessions/:sessionId', {
+          const r = await owner.get('/v1/workspaces/:projectId/sessions/:sessionId', {
             params: { projectId: project.id, sessionId: sessionA.id },
           });
           r.status(200).body().has('$.session_id', sessionA.id);
@@ -589,13 +571,10 @@ harnessFlow(
     );
 
     await ctx.step(
-      "the stopped session's transcript read serves its durable mirror, not the stopped sandbox",
+      "the stopped session's stored log serves its conversation, not the stopped sandbox",
       async () => {
-        const r = await owner.get('/v1/projects/:projectId/sessions/:sessionId/transcript', {
-          params: { projectId: project.id, sessionId: sessionA.id },
-        });
-        r.status(200).body().has('$.available', true).has('$.source', 'mirror');
-        const body = r.json<any>();
+        const body = await readTranscript(ctx, project.id, sessionA.id);
+        if (!body.available || body.source !== 'log') throw new Error(`stored log read: available ${body.available}, source ${body.source}`);
         const text = (body.messages ?? []).map((m: any) => m.text).join('\n');
         if (!text.includes(markerA)) {
           throw new Error(`session A's durable mirror lost its own marker: ${text}`);
@@ -609,11 +588,8 @@ harnessFlow(
     await ctx.step(
       "session B, still running, is unaffected by session A's stop — its transcript is still live and still contains only its own marker",
       async () => {
-        const r = await owner.get('/v1/projects/:projectId/sessions/:sessionId/transcript', {
-          params: { projectId: project.id, sessionId: sessionB.id },
-        });
-        r.status(200).body().has('$.available', true);
-        const body = r.json<any>();
+        const body = await readTranscript(ctx, project.id, sessionB.id);
+        if (!body.available) throw new Error('session B has no stored log');
         const text = (body.messages ?? []).map((m: any) => m.text).join('\n');
         if (!text.includes(markerB)) {
           throw new Error(`session B's transcript no longer contains its own marker: ${text}`);
@@ -647,13 +623,13 @@ flow(
     // 439s. Readiness now permits that cold path before the inbox assertions.
     timeoutMs: 1_200_000,
     routes: [
-      'POST /v1/projects/:projectId/sessions/:sessionId/start',
-      'POST /v1/projects/:projectId/sessions/:sessionId/prompts',
-      'GET /v1/projects/:projectId/sessions/:sessionId/prompts',
-      'DELETE /v1/projects/:projectId/sessions/:sessionId/prompts/:promptId',
-      'PATCH /v1/projects/:projectId/sessions/:sessionId/prompts/:promptId',
-      'POST /v1/projects/:projectId/sessions/:sessionId/prompts/:promptId/retry',
-      'POST /v1/projects/:projectId/sessions/:sessionId/prompts/hold',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/prompts',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/prompts',
+      'DELETE /v1/workspaces/:projectId/sessions/:sessionId/prompts/:promptId',
+      'PATCH /v1/workspaces/:projectId/sessions/:sessionId/prompts/:promptId',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/prompts/:promptId/retry',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/prompts/hold',
     ],
   },
   async (ctx) => {
@@ -675,7 +651,7 @@ flow(
 
     await ctx.step('POST a prompt → 202 with the durable row it created', async () => {
       const r = await owner.post(
-        '/v1/projects/:projectId/sessions/:sessionId/prompts',
+        '/v1/workspaces/:projectId/sessions/:sessionId/prompts',
         {
           client_message_id: clientMessageId,
           message_id: wireMessageId,
@@ -710,7 +686,7 @@ flow(
       'a malformed wire id is REFUSED — a mis-ordered id silently drops the turn',
       async () => {
         const r = await owner.post(
-          '/v1/projects/:projectId/sessions/:sessionId/prompts',
+          '/v1/workspaces/:projectId/sessions/:sessionId/prompts',
           {
             client_message_id: `${clientMessageId}_bad`,
             message_id: 'cm_12',
@@ -728,7 +704,7 @@ flow(
         // Enforced by the unique index on `idempotency_key`, not by a cache a
         // second pod would not share.
         const r = await owner.post(
-          '/v1/projects/:projectId/sessions/:sessionId/prompts',
+          '/v1/workspaces/:projectId/sessions/:sessionId/prompts',
           {
             client_message_id: clientMessageId,
             message_id: wireMessageId,
@@ -741,7 +717,7 @@ flow(
     );
 
     await ctx.step('GET the inbox → the prompt, with its own client id and text', async () => {
-      const r = await owner.get('/v1/projects/:projectId/sessions/:sessionId/prompts', { params });
+      const r = await owner.get('/v1/workspaces/:projectId/sessions/:sessionId/prompts', { params });
       r.status(200);
       const prompts = r.json<any>().prompts ?? [];
       const mine = prompts.find((p: any) => p.prompt_id === promptId);
@@ -763,14 +739,14 @@ flow(
 
     await ctx.step('holding the queue is a SERVER fact, not a browser one', async () => {
       const held = await owner.post(
-        '/v1/projects/:projectId/sessions/:sessionId/prompts/hold',
+        '/v1/workspaces/:projectId/sessions/:sessionId/prompts/hold',
         { held: true },
         { params },
       );
       held.status(200);
       for (const response of [
         held,
-        await owner.get('/v1/projects/:projectId/sessions/:sessionId/prompts', { params }),
+        await owner.get('/v1/workspaces/:projectId/sessions/:sessionId/prompts', { params }),
       ]) {
         response.status(200);
         const mine = (response.json<any>().prompts ?? []).find(
@@ -783,14 +759,14 @@ flow(
       }
 
       const bad = await owner.post(
-        '/v1/projects/:projectId/sessions/:sessionId/prompts/hold',
+        '/v1/workspaces/:projectId/sessions/:sessionId/prompts/hold',
         { held: 'yes' },
         { params },
       );
       bad.status(400);
 
       const released = await owner.post(
-        '/v1/projects/:projectId/sessions/:sessionId/prompts/hold',
+        '/v1/workspaces/:projectId/sessions/:sessionId/prompts/hold',
         { held: false },
         { params },
       );
@@ -807,7 +783,7 @@ flow(
       // row and asking for that message. A `running` row is already on the wire
       // and answers 404 — re-queueing it would double-deliver.
       const r = await owner.post(
-        '/v1/projects/:projectId/sessions/:sessionId/prompts/:promptId/retry',
+        '/v1/workspaces/:projectId/sessions/:sessionId/prompts/:promptId/retry',
         {},
         { params: { ...params, promptId } },
       );
@@ -818,13 +794,13 @@ flow(
       // The queue list's edit: new text, same row, nothing sent. 409 means the
       // agent already has the old text; 404 means it is answered and gone.
       const empty = await owner.patch(
-        '/v1/projects/:projectId/sessions/:sessionId/prompts/:promptId',
+        '/v1/workspaces/:projectId/sessions/:sessionId/prompts/:promptId',
         { text: '  ' },
         { params: { ...params, promptId } },
       );
       empty.status(400);
       const r = await owner.patch(
-        '/v1/projects/:projectId/sessions/:sessionId/prompts/:promptId',
+        '/v1/workspaces/:projectId/sessions/:sessionId/prompts/:promptId',
         { text: 'SESS-25 edited prompt' },
         { params: { ...params, promptId } },
       );
@@ -834,7 +810,7 @@ flow(
         if (edited.prompt_id !== promptId || edited.full_text !== 'SESS-25 edited prompt') {
           throw new Error(`PATCH did not return the edited row: ${JSON.stringify(edited)}`);
         }
-        const listed = await owner.get('/v1/projects/:projectId/sessions/:sessionId/prompts', { params });
+        const listed = await owner.get('/v1/workspaces/:projectId/sessions/:sessionId/prompts', { params });
         listed.status(200);
         const mine = (listed.json<any>().prompts ?? []).find((p: any) => p.prompt_id === promptId);
         if (mine && mine.full_text !== 'SESS-25 edited prompt') {
@@ -844,7 +820,7 @@ flow(
     });
 
     await ctx.step('DELETE removes the prompt, or refuses it honestly if it is on the wire', async () => {
-      const r = await owner.del('/v1/projects/:projectId/sessions/:sessionId/prompts/:promptId', {
+      const r = await owner.del('/v1/workspaces/:projectId/sessions/:sessionId/prompts/:promptId', {
         params: { ...params, promptId },
       });
       // 200 removed — and the response CARRIES the prompt it removed, because
@@ -862,7 +838,7 @@ flow(
 
     await ctx.step('a prompt id from another session is never addressable here', async () => {
       const other = await ctx.fixtures.session(project);
-      const r = await owner.del('/v1/projects/:projectId/sessions/:sessionId/prompts/:promptId', {
+      const r = await owner.del('/v1/workspaces/:projectId/sessions/:sessionId/prompts/:promptId', {
         params: { projectId: project.id, sessionId: other.id, promptId },
       });
       r.status(404);
@@ -880,13 +856,13 @@ harnessFlow(
     // Boot (≤540s) + the boot turn + a held turn + the batch turn.
     timeoutMs: 1_200_000,
     routes: [
-      'POST /v1/projects/:projectId/sessions',
-      'POST /v1/projects/:projectId/sessions/:sessionId/start',
-      'POST /v1/projects/:projectId/sessions/:sessionId/prompts',
-      'GET /v1/projects/:projectId/sessions/:sessionId/prompts',
-      'POST /v1/projects/:projectId/sessions/:sessionId/prompts/hold',
-      'GET /v1/projects/:projectId/sessions/:sessionId/turn',
-      'GET /v1/projects/:projectId/sessions/:sessionId/transcript',
+      'POST /v1/workspaces/:projectId/sessions',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/prompts',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/prompts',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/prompts/hold',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/turn',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/log',
     ],
   },
   async (ctx, harness) => {
@@ -898,7 +874,7 @@ harnessFlow(
     const alpha = `ALPHA${stamp}`;
     const batch = `BATCH${stamp}`;
     const waiting = async () => {
-      const r = await owner.get('/v1/projects/:projectId/sessions/:sessionId/prompts', { params });
+      const r = await owner.get('/v1/workspaces/:projectId/sessions/:sessionId/prompts', { params });
       r.status(200);
       return (r.json<{ prompts?: Array<{ prompt_id: string; state: string; reason?: string | null }> }>().prompts ?? []);
     };
@@ -940,7 +916,7 @@ harnessFlow(
     });
 
     await ctx.step('Stop holds both prompts and ends the turn', async () => {
-      (await owner.post('/v1/projects/:projectId/sessions/:sessionId/prompts/hold', { held: true }, { params })).status(200);
+      (await owner.post('/v1/workspaces/:projectId/sessions/:sessionId/prompts/hold', { held: true }, { params })).status(200);
       await abortTurn(ctx, session);
       await waitForTurn(ctx, projectId, sessionId, (turn) => turn.turns.length === 0, `the stopped turn to end in ${sessionId}`);
       const rows = await waiting();
@@ -958,7 +934,7 @@ harnessFlow(
       (await readTranscript(ctx, projectId, sessionId)).messages.filter((m) => m.role === 'assistant').map((m) => m.id),
     );
     await ctx.step('Resume releases both as one batch: one turn answers both, parented on the second', async () => {
-      (await owner.post('/v1/projects/:projectId/sessions/:sessionId/prompts/hold', { held: false }, { params })).status(200);
+      (await owner.post('/v1/workspaces/:projectId/sessions/:sessionId/prompts/hold', { held: false }, { params })).status(200);
       const messages = await waitForAssistantText(ctx, projectId, sessionId, batch);
       const first = messages.find((m) => m.role === 'user' && m.text.includes(alpha));
       const second = messages.find((m) => m.role === 'user' && m.text.includes(batch));
@@ -970,6 +946,118 @@ harnessFlow(
       if (!messages.some((m) => m.role === 'assistant' && m.parent_id === second.id && m.text.includes(batch))) {
         throw new Error(`no reply parented on the second batch row carries ${batch}`);
       }
+    });
+  },
+);
+
+// A Stop never loses a prompt to the turn it is ending. Stop's hold settle
+// released what waited before the client's abort landed, the drain steered a
+// prompt into the turn being stopped, pi accepted it and the abort dropped it
+// unread: "Read at next step" until a sweep closed it, never answered.
+harnessFlow(
+  'SESS-65',
+  {
+    domain: 'sessions',
+    requires: ['funded', 'sandbox'],
+    // Boot (≤540s) + two long turns, each stopped, each followed by its answer.
+    timeoutMs: 1_200_000,
+    routes: [
+      'POST /v1/workspaces/:projectId/sessions',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/prompts',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/prompts',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/prompts/hold',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/turn',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/log',
+    ],
+  },
+  async (ctx, harness) => {
+    const owner = ctx.client.as(ctx.P.OWNER);
+    const stamp = Date.now();
+    const longPrompt = (word: string) => `Run the shell command "sleep 90" with your bash tool, then reply with the word ${word}.`;
+    // The session's FIRST turn runs the long command. No inbox row carries a
+    // first turn, so Stop's settle finds nothing on the wire and releases the
+    // queue at once, before the abort: the same as for a turn whose prompt
+    // went out more than the settle's 10 minutes ago.
+    const session = await ctx.step(`a fresh ${harness} session starts a long first turn`, async () => {
+      const project = await ctx.fixtures.sharedSeededProject();
+      const created = await ctx.fixtures.session(project, { prompt: longPrompt(`FIRST${stamp}`) });
+      const started = await waitForSessionReady(ctx, project.id, created.id);
+      const sandboxId = sandboxIdOf(started);
+      await assertRuntimeHarness(ctx, sandboxId, harness);
+      return { projectId: project.id, sessionId: created.id, sandboxId };
+    });
+    const { projectId, sessionId } = session;
+    const params = { projectId, sessionId };
+    const inbox = async () => {
+      const r = await owner.get('/v1/workspaces/:projectId/sessions/:sessionId/prompts', { params });
+      r.status(200);
+      return r.json<{ prompts?: Array<{ prompt_id: string; state: string; reason?: string | null }> }>().prompts ?? [];
+    };
+    const assistantIds = async () =>
+      new Set((await readTranscript(ctx, projectId, sessionId)).messages.filter((m) => m.role === 'assistant').map((m) => m.id));
+    /** A bash call of a reply not in `before` is running: the turn is mid-tool, so a steer waits for the next step. */
+    const bashRunning = (before: Set<string | null | undefined>) =>
+      waitFor(
+        async () => (await readTranscript(ctx, projectId, sessionId)).messages,
+        {
+          until: (messages) =>
+            messages.some(
+              (m) =>
+                m.role === 'assistant' &&
+                !before.has(m.id) &&
+                (m.tools ?? []).some((t) => t.tool === 'bash' && (t.status === 'running' || t.status === 'pending')),
+            ),
+          timeoutMs: 180_000,
+          intervalMs: 1_000,
+          description: `the sleep command to be running in ${sessionId}`,
+          retryOnError: isKe2eRetryableError,
+        },
+      );
+    const answered = async (marker: string) => {
+      const messages = await waitForAssistantText(ctx, projectId, sessionId, marker, { timeoutMs: 240_000 });
+      const prompt = messages.find((m) => m.role === 'user' && m.text.includes(marker));
+      if (!prompt?.id) throw new Error(`the prompt carrying ${marker} is not in the transcript`);
+      if (!messages.some((m) => m.role === 'assistant' && m.parent_id === prompt.id && m.text.includes(marker))) {
+        throw new Error(`no reply parented on the prompt carries ${marker}`);
+      }
+    };
+
+    const released = `RELEASED${stamp}`;
+    await ctx.step('a prompt sent after Stop released the queue, before the abort lands, waits and is answered as the next turn', async () => {
+      await bashRunning(new Set());
+      (await owner.post('/v1/workspaces/:projectId/sessions/:sessionId/prompts/hold', { held: true }, { params })).status(200);
+      const id = await sendPrompt(ctx, projectId, sessionId, `Reply with the word ${released}.`);
+      // The stopped turn still runs (no abort yet) for 3 s: the prompt never goes into it.
+      for (const until = Date.now() + 3_000; Date.now() < until; await Bun.sleep(250)) {
+        const row = (await inbox()).find((p) => p.prompt_id === id);
+        if (row?.state === 'delivering') throw new Error(`a prompt was handed to the turn being stopped: ${JSON.stringify(row)}`);
+      }
+      if ((await readTurn(ctx, projectId, sessionId)).turns.length === 0) {
+        throw new Error('the stopped turn ended before the abort: the window this step needs did not open');
+      }
+      await abortTurn(ctx, session);
+      await answered(released);
+    });
+
+    const dropped = `DROPPED${stamp}`;
+    await ctx.step('a steer the running turn accepted and an abort dropped unread is answered as the next turn', async () => {
+      await waitForTurn(ctx, projectId, sessionId, (turn) => turn.turns.length === 0, `the turn of ${released} to end`);
+      const before = await assistantIds();
+      await sendPrompt(ctx, projectId, sessionId, longPrompt(`SECOND${stamp}`));
+      await bashRunning(before);
+      const id = await sendPrompt(ctx, projectId, sessionId, `Reply with the word ${dropped}.`);
+      // On the runtime and unread: the bash call holds the step boundary.
+      await waitFor(inbox, {
+        until: (rows) => rows.find((p) => p.prompt_id === id)?.reason === 'forwarded',
+        timeoutMs: 30_000,
+        intervalMs: 250,
+        description: `the prompt ${id} to be steered into the running turn`,
+        retryOnError: isKe2eRetryableError,
+      });
+      // The runtime abort alone, as a client without the hold sends it.
+      await abortTurn(ctx, session);
+      await answered(dropped);
     });
   },
 );

@@ -6,6 +6,7 @@ import {
   composerFileSearchKey,
   isMenuOpenTransition,
   menuRevalidationKeys,
+  mergeFileResults,
 } from './use-file-search';
 
 /**
@@ -27,6 +28,7 @@ describe('composerFileSearchKey', () => {
       'file-search',
       'https://a',
       'auth',
+      null,
     ]);
   });
 
@@ -113,19 +115,19 @@ describe('isMenuOpenTransition', () => {
  * Binds `useMenuRevalidation`'s invalidation keys to the SDK's REAL,
  * PUBLIC `runtimeKeys.agents()`/`.commands()` rather than a hand-typed
  * literal — so a rename of the underlying segments in
- * `packages/sdk/src/react/use-opencode-sessions/keys.ts` fails THIS test
+ * `packages/sdk/src/react/use-runtime-sessions/keys.ts` fails THIS test
  * instead of silently leaving `useMenuRevalidation`'s `invalidateQueries`
  * calls matching nothing (an `invalidateQueries` miss throws no error and
  * emits no warning; the menus would just stay stale forever with no signal
  * anything is wrong).
  */
 describe('the agents/commands cache-key prefixes useMenuRevalidation invalidates', () => {
-  test('runtimeKeys.agents() drops to the 2-segment ["opencode", "agents"] prefix', () => {
-    expect(runtimeKeys.agents().slice(0, -1)).toEqual(['opencode', 'agents']);
+  test('runtimeKeys.agents() drops to the 2-segment ["runtime", "agents"] prefix', () => {
+    expect(runtimeKeys.agents().slice(0, -1)).toEqual(['runtime', 'agents']);
   });
 
-  test('runtimeKeys.commands() drops to the 2-segment ["opencode", "commands"] prefix', () => {
-    expect(runtimeKeys.commands().slice(0, -1)).toEqual(['opencode', 'commands']);
+  test('runtimeKeys.commands() drops to the 2-segment ["runtime", "commands"] prefix', () => {
+    expect(runtimeKeys.commands().slice(0, -1)).toEqual(['runtime', 'commands']);
   });
 });
 
@@ -135,18 +137,17 @@ describe('the agents/commands cache-key prefixes useMenuRevalidation invalidates
  * whether `useMenuRevalidation` actually reaches the cache the live
  * composer subscribes through. It passed while the bug below was present.
  *
- * `useOpenCodeAgents` (`packages/sdk/src/react/use-opencode-sessions/
- * agents.ts:42-46`) does not have one query-key shape — it branches on
+ * `useRuntimeAgents` (`packages/sdk/src/react/use-runtime-sessions/
+ * agents.ts`) does not have one query-key shape — it branches on
  * `projectId`:
  *
  *   projectId  -> [...qk.project.detail(projectId), 'agents']   ('kx' root)
- *   directory  -> [...opencodeKeys.agents(), 'dir', directory]  ('opencode' root)
- *   neither    -> opencodeKeys.agents()                          ('opencode' root)
+ *   directory  -> [...runtimeKeys.agents(), 'dir', directory]   ('runtime' root)
+ *   neither    -> runtimeKeys.agents()                          ('runtime' root)
  *
- * Every real composer call site passes `projectId`
- * (`instant-session-shell.tsx:88`, `composer-chat-input.tsx:108`,
- * `session-chat.tsx:1641`), which routes through the FIRST branch — a
- * completely different root segment ('kx', not 'opencode') than the bare
+ * Every real composer call site passes `projectId`, which routes through
+ * the FIRST branch — a
+ * completely different root segment ('kx', not 'runtime') than the bare
  * `runtimeKeys.agents()` prefix `menuRevalidationKeys` used to invalidate
  * alone. `realAgentsQueryKeyFor` below reproduces all three shapes (using
  * the SDK's own public `qk`/`runtimeKeys`, not hand-typed arrays) so these
@@ -163,7 +164,7 @@ describe('menuRevalidationKeys', () => {
     return prefix.every((segment, i) => segment === key[i]);
   }
 
-  /** The exact query-key SHAPES `useOpenCodeAgents` can produce, reproduced
+  /** The exact query-key SHAPES `useRuntimeAgents` can produce, reproduced
    *  via the same public building blocks (`qk`, `runtimeKeys`) the real hook
    *  uses — this is what "the key the composer's real
    *  `useRuntimeAgents({ projectId })` call resolves to" means concretely. */
@@ -178,17 +179,17 @@ describe('menuRevalidationKeys', () => {
 
   test('with no projectId, invalidates exactly the bare agents/commands prefixes', () => {
     expect(menuRevalidationKeys()).toEqual([
-      ['opencode', 'agents'],
-      ['opencode', 'commands'],
+      ['runtime', 'agents'],
+      ['runtime', 'commands'],
     ]);
   });
 
-  test('reaches the no-argument branch of the real useOpenCodeAgents key', () => {
+  test('reaches the no-argument branch of the real useRuntimeAgents key', () => {
     const realKey = realAgentsQueryKeyFor({});
     expect(menuRevalidationKeys().some((prefix) => prefixMatches(prefix, realKey))).toBe(true);
   });
 
-  test('reaches the directory-scoped branch of the real useOpenCodeAgents key', () => {
+  test('reaches the directory-scoped branch of the real useRuntimeAgents key', () => {
     const realKey = realAgentsQueryKeyFor({ directory: '/workspace' });
     expect(menuRevalidationKeys().some((prefix) => prefixMatches(prefix, realKey))).toBe(true);
   });
@@ -197,7 +198,7 @@ describe('menuRevalidationKeys', () => {
   // `menuRevalidationKeys` (then hard-coded to just the two bare prefixes)
   // passed every other test in this file while silently failing to reach
   // this branch — the ONE every real composer instance actually uses.
-  test('reaches the projectId-scoped branch of the real useOpenCodeAgents key — the CRITICAL fix', () => {
+  test('reaches the projectId-scoped branch of the real useRuntimeAgents key — the CRITICAL fix', () => {
     const realKey = realAgentsQueryKeyFor({ projectId: 'proj-123' });
     const keys = menuRevalidationKeys('proj-123');
     expect(keys.some((prefix) => prefixMatches(prefix, realKey))).toBe(true);
@@ -217,5 +218,39 @@ describe('menuRevalidationKeys', () => {
 
   test('an empty-string projectId is treated as "no project", same as undefined', () => {
     expect(menuRevalidationKeys('')).toHaveLength(2);
+  });
+});
+
+describe('mergeFileResults', () => {
+  test('no computer files: the repo files are the rows', () => {
+    expect(mergeFileResults([], ['README.md'])).toEqual(['README.md']);
+  });
+
+  test('computer files come first, then repo files, each path once', () => {
+    expect(mergeFileResults(['a.ts', 'README.md'], ['README.md', 'kortix.yaml'])).toEqual([
+      'a.ts',
+      'README.md',
+      'kortix.yaml',
+    ]);
+  });
+
+  test('a /workspace path and its repo-relative twin are one row', () => {
+    expect(mergeFileResults(['/workspace/README.md'], ['README.md'])).toEqual(['/workspace/README.md']);
+  });
+
+  test('the repo key keeps workspaces apart', () => {
+    expect(composerFileSearchKey('unbound', 'rea', 'ws-1')).not.toEqual([
+      ...composerFileSearchKey('unbound', 'rea', 'ws-2'),
+    ]);
+  });
+});
+
+describe('canKeepPlaceholderFiles workspace scope', () => {
+  test('the same server in another workspace drops the old rows', () => {
+    expect(canKeepPlaceholderFiles('unbound', composerFileSearchKey('unbound', 'rea', 'ws-1'), 'ws-2')).toBe(false);
+  });
+
+  test('the same server and workspace keeps them', () => {
+    expect(canKeepPlaceholderFiles('unbound', composerFileSearchKey('unbound', 're', 'ws-1'), 'ws-1')).toBe(true);
   });
 });

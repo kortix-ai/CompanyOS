@@ -16,7 +16,6 @@ async function run(args: string[], base: string) {
         PATH: process.env.PATH ?? '', HOME: home, CI: '1', KORTIX_DISABLE_SANDBOX_ENV_FILE: '1',
         KORTIX_CONFIG_FILE: join(home, 'config.json'), KORTIX_DEFAULT_API_BASE: base,
         KORTIX_API_URL: `${base}/v1`, KORTIX_TOKEN: 'kortix_pat_synthetic', KORTIX_PROJECT_ID: pid,
-        KORTIX_FEATURE_FLAGS: 'artifacts,artifact_comments',
       },
     });
     const [exitCode, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
@@ -42,21 +41,23 @@ async function withApi(answer: (path: string) => unknown, body: (base: string) =
   }
 }
 
-const answer = (path: string) => {
-  if (path === `/v1/projects/${pid}/artifacts`) return { artifacts: [artifact({}), artifact({ artifact_id: '33333333-3333-4333-8333-333333333333', type: 'html', visibility: 'private', pinned: false, title: 'Old deck', path: '/Artifacts/deck', updated_at: ago(3 * 3600_000) }), artifact({ artifact_id: '44444444-4444-4444-8444-444444444444', title: 'Ancient', pinned: false, updated_at: ago(45 * 86_400_000) })] };
+// The CLI calls the canonical /v1/workspaces names; /v1/projects is the permanent alias.
+const answer = (rawPath: string) => {
+  const path = rawPath.replace(/^\/v1\/workspaces\//, '/v1/projects/');
+  if (path === `/v1/projects/${pid}/artifacts`) return { artifacts: [artifact({}), artifact({ artifact_id: '33333333-3333-4333-8333-333333333333', type: 'html', kind: 'slides', visibility: 'private', pinned: false, title: 'Old deck', path: '/Artifacts/deck', updated_at: ago(3 * 3600_000) }), artifact({ artifact_id: '44444444-4444-4444-8444-444444444444', title: 'Ancient', pinned: false, updated_at: ago(45 * 86_400_000) })] };
   if (path === `/v1/projects/${pid}/artifacts/${aid}/versions`) return { versions: [{ id: 'ver-b', number: 2, created_at: ago(2 * 86_400_000) }, { id: 'ver-a', number: 1, created_at: ago(10 * MINUTE) }] };
   if (path === `/v1/projects/${pid}/artifacts/${aid}`) return artifact({});
   return { error: path };
 };
 
-test('artifacts ls prints one row per artifact: short id, type, visibility, age, pin, title, path', async () => {
+test('artifacts ls prints one row per artifact: short id, kind (type from an older server), visibility, age, pin, title, path', async () => {
   await withApi(answer, async (base) => {
     const result = await run(['ls'], base);
     expect(result.exitCode).toBe(0);
     expect(result.stdout.trimEnd().split('\n')).toEqual([
-      '22222222  doc   project  5m ago   ★ Q3 churn report  /Artifacts/q3.md',
-      '33333333  html  private  3h ago   Old deck  /Artifacts/deck',
-      '44444444  doc   project  45d ago  Ancient  /Artifacts/q3.md',
+      '22222222  doc    workspace  5m ago   ★ Q3 churn report  /Artifacts/q3.md',
+      '33333333  slides private    3h ago   Old deck  /Artifacts/deck',
+      '44444444  doc    workspace  45d ago  Ancient  /Artifacts/q3.md',
     ]);
   });
 });
@@ -67,7 +68,7 @@ test('artifacts info prints the title line, the facts line, entry_version, descr
     expect(result.exitCode).toBe(0);
     expect(result.stdout.trimEnd().split('\n')).toEqual([
       `Q3 churn report  ${aid}`,
-      '  doc · project + 2 people · by Ada · updated 5m ago',
+      '  doc · workspace + 2 people · by Ada · updated 5m ago',
       '  entry_version v-7',
       '  Churn by cohort',
       '  1234     index.md',
@@ -85,4 +86,30 @@ test('artifacts versions prints number, age and id per save', async () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout.trimEnd().split('\n')).toEqual(['#2    2d ago   ver-b', '#1    10m ago  ver-a']);
   });
+});
+
+test('artifacts publish --kind sends the kind and prints it; --json carries it; an unknown kind is a usage error', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'kortix-kind-'));
+  const bodies: unknown[] = [];
+  const server = Bun.serve({ port: 0, fetch: async (request) => {
+    if (request.method === 'POST') bodies.push(await request.json());
+    return Response.json(artifact({ type: 'html', kind: 'slides', title: 'Q3 deck', path: '/Artifacts/q3-deck' }));
+  } });
+  try {
+    await Bun.write(join(dir, 'deck.html'), '<title>Q3 deck</title>');
+    const base = `http://127.0.0.1:${server.port}`;
+    const result = await run(['publish', join(dir, 'deck.html'), '--kind', 'slides'], base);
+    expect(result.exitCode).toBe(0);
+    expect(bodies[0]).toMatchObject({ kind: 'slides', files: { 'index.html': { content: '<title>Q3 deck</title>' } } });
+    expect(result.stdout.split('\n')[0]).toContain('Published "Q3 deck" (slides, workspace)');
+    const json = await run(['publish', join(dir, 'deck.html'), '--kind', 'slides', '--json'], base);
+    expect(JSON.parse(json.stdout).kind).toBe('slides');
+    const bad = await run(['publish', join(dir, 'deck.html'), '--kind', 'deck'], base);
+    expect(bad.exitCode).toBe(2);
+    expect(bad.stderr).toContain('--kind must be slides, sheet, doc, pdf or page');
+    expect(bodies).toHaveLength(2);
+  } finally {
+    server.stop(true);
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

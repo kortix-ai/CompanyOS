@@ -18,29 +18,31 @@ import {
   DropdownMenuTrigger,
 } from '@kortix/ui/dropdown-menu';
 import Loading from '@kortix/ui/loading';
+import { UserAvatar } from '@kortix/ui/user-avatar';
 import { useTranslations } from '@/i18n/use-translations';
 
 // Client only: the inbox is per signed-in person and polls, so the server
-// renders no bell and these pages' static tests need no query client. The
-// bell itself renders only while a cached project has the
-// `notification_center` flag on (these pages have no project of their own).
-const NotificationBell = dynamic(
-  () => import('@kortix/ui/internal/notifications/notification-bell').then((mod) => mod.NotificationBell),
+// renders no button and these pages' static tests need no query client.
+const InboxButton = dynamic(
+  () => import('@/features/notifications/inbox-button').then((mod) => mod.InboxButton),
   { ssr: false },
 );
 
 /**
  * The top row of the account-level pages that sit outside a project —
- * `/projects` and `/new`.
+ * `/workspaces` and `/workspaces/new`.
  *
- * Left: an optional way back. Right: the notification bell (KRTX-1742, behind
- * the `notification_center` flag), then who you are, as a button. Log out lives
+ * Left: an optional way back. Right: the Inbox button (KRTX-1742: the unread
+ * count, opens `/inbox`), then who you are, as a button. Log out lives
  * in its menu rather than as a bare button in the corner — it is the rarest
  * action on these pages, and the identity above it is what a user checks
  * first ("am I in the right account?").
  *
  * Presentational on purpose: the page owns sign-out (`performSignOut` replaces
- * the document, so `signingOut` is never cleared) and passes the state in.
+ * the document, so `signingOut` is never cleared) and passes the state in —
+ * including the profile picture, which the page reads from the auth metadata
+ * (`user_metadata.avatar_url`) where Settings → Profile stores it. Without it
+ * this bar rendered text-only even after an upload (KRTX-4492).
  *
  * `kx-desktop-band-row` keeps the row under the desktop title-bar band, clear
  * of the macOS traffic lights and the Win/Linux window controls.
@@ -48,19 +50,25 @@ const NotificationBell = dynamic(
 export function AccountTopBar({
   email,
   name,
+  avatarUrl,
   signingOut,
   onLogOut,
   back,
   trailing,
+  inbox = true,
 }: {
   email: string | null;
   name?: string | null;
+  /** `/storage/v1/object/public/avatars/…` from `user_metadata.avatar_url`; null falls back to initials. */
+  avatarUrl?: string | null;
   signingOut: boolean;
   onLogOut: () => void;
   /** Rendered as a ghost link on the left. Omit on a page with nowhere to go back to. */
   back?: { href: string; label: string };
   /** Extra controls after the account button (the desktop close button). */
   trailing?: ReactNode;
+  /** The Inbox button. Off on `/inbox` itself, where it would open the page on screen. */
+  inbox?: boolean;
 }) {
   const t = useTranslations('newWorkspace');
   const identity = name?.trim() || email;
@@ -94,7 +102,7 @@ export function AccountTopBar({
       )}
 
       <div className="flex min-w-0 items-center gap-2">
-        <NotificationBell />
+        {inbox ? <InboxButton /> : null}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
@@ -103,6 +111,10 @@ export function AccountTopBar({
               aria-label={identity ? `${t('account.loggedInAs')} ${identity}` : t('account.label')}
               className="hover:bg-hover data-[state=open]:bg-hover focus-visible:ring-ring flex min-w-0 items-center gap-2 rounded-md px-2 py-1 text-left transition-colors duration-(--duration-normal) ease-out focus-visible:ring-2 focus-visible:outline-none"
             >
+              {/* The picture Settings → Profile stored, initials while it is
+                  empty — the same `UserAvatar` the session members and menus
+                  use, so identity renders identically everywhere. */}
+              <UserAvatar email={email ?? ''} name={name ?? null} avatarUrl={avatarUrl ?? null} size="sm" />
               <span className="flex min-w-0 flex-col">
                 <span className="text-muted-foreground text-xs">{t('account.loggedInAs')}</span>
                 <span className="text-foreground max-w-56 truncate text-sm">

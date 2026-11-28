@@ -4,6 +4,7 @@ import { runWithKortix } from '@kortix/sdk/server';
 import type { Auth } from './auth.ts';
 import { openKortixWebSocket } from './kortix-socket.ts';
 import { sdkBackendUrl } from '@kortix/shared/host-config';
+import { NO_WORKSPACE_CODE, NO_WORKSPACE_LINE } from './no-workspace.ts';
 
 export { sdkBackendUrl } from '@kortix/shared/host-config';
 
@@ -66,7 +67,7 @@ interface StartSandboxPortProxyOpts {
   runtimeUrl: string;
   token: string;
   /** Read for every request and WebSocket upgrade; falls back to `token`. A
-   *  proxy lives as long as `opencode attach`, longer than one credential. */
+   *  proxy lives as long as a `sessions forward`, longer than one credential. */
   getToken?: () => string | null | undefined | Promise<string | null | undefined>;
   port?: number;
 }
@@ -80,10 +81,9 @@ interface ProxyWsData {
 
 /**
  * Expose one SDK-resolved sandbox port (any `/p/{externalId}/{port}` proxy
- * route — OpenCode on 8000 for `opencode attach`, or an arbitrary dev-server
- * port for `sessions forward` / the TUI Ports panel) on localhost, injecting
- * the Kortix bearer token. This adapter owns the only raw HTTP/WebSocket
- * transport allowed in the CLI. `startSandboxPortProxy` below is this same
+ * route — a dev-server port for `sessions forward` / the TUI Ports panel) on
+ * localhost, injecting the Kortix bearer token. This adapter owns the only raw
+ * HTTP/WebSocket transport allowed in the CLI. `startSandboxPortProxy` below is this same
  * function under its established name at the one call site that predates the
  * generalization.
  */
@@ -256,6 +256,14 @@ export async function cliDeviceRequest<T>(apiBase: string, path: 'start' | 'poll
     method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Kortix-Client-Version': 'cli/dev' },
     body: JSON.stringify(body), signal,
   });
-  if (!response.ok) throw new DeviceRequestError(response.status);
+  if (!response.ok) {
+    // The approver belongs to no workspace yet (`409 no_workspace`): a key
+    // needs one, so name the two ways in instead of a bare status. Still a
+    // DeviceRequestError: the poll loop stops on a 4xx.
+    const refusal = await response.json().catch(() => null) as { code?: unknown; error?: unknown } | null;
+    const error = new DeviceRequestError(response.status);
+    if (refusal?.code === NO_WORKSPACE_CODE || refusal?.error === NO_WORKSPACE_CODE) error.message = NO_WORKSPACE_LINE;
+    throw error;
+  }
   return await response.json() as T;
 }

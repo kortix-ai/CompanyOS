@@ -1,14 +1,17 @@
+import { createHash } from 'node:crypto';
 import type { ParsedManifest } from '../triggers';
 import { logger } from '../../lib/logger';
-import { PROJECT_ACTIONS, VALID_ACTIONS } from '../../iam/actions';
+import { VALID_ACTIONS, toLegacyAction } from '../../iam/actions';
+import { isHumanOnlyAction } from '@kortix/shared/workspace-actions';
 import type { GitBackedProject, MirrorRefresh } from '../git';
 import {
+  GRANTABLE_KORTIX_PERMISSIONS as SCHEMA_GRANTABLE_KORTIX_PERMISSIONS,
   DEPRECATED_KORTIX_PERMISSION_ALIASES,
   RETIRED_KORTIX_PERMISSIONS,
   isManifestSyntaxError,
   resolveGrantSet,
+  isKortixPermissionGroup,
   SLUG_RE,
-  resolveProjectRepository,
   type GrantSetV2,
 } from '@kortix/manifest-schema';
 import { readAgentBlockV2 } from '../lib/agent-config-v2';
@@ -22,26 +25,13 @@ import {
 } from './types';
 
 /**
- * The actions an agent's `kortix_permissions` may grant — the project-scoped surface,
- * including the manager-tier project leaves (`project.delete`,
- * `project.members.manage`, `project.gateway.keys.manage`) — these are still
- * reachable via a project's `manager` role, so an agent can be granted them
- * too. CR actions live in PROJECT_ACTIONS. The channel.* resource actions
- * (channel.send, …) were removed from the catalog (IAM enforcement audit):
- * they were never wired to any route, so granting them did nothing — see
- * iam/actions.ts.
- *
- * Account-scoped admin actions (member.*, billing.*, token.*, project.create,
- * …) are excluded — but simply omitting them from this list is not what
- * stops an agent from calling them. Every agent-session token is
- * project-scoped (`account_tokens.project_id`); the IAM v2 engine
- * (`iam/engine-v2.ts` `computeTokenScope`) refuses ANY account-scope action
- * for a project-bound token BEFORE this grant is even loaded. This set is a
- * curation/UX surface (the CLI/editor's offered catalog, and what
- * `validateKortixAction` below flags as a bad `kortix_permissions` entry), not the
- * enforcement boundary itself.
+ * The actions an agent's `kortix_permissions` grant may name: every workspace
+ * action except HUMAN_ONLY (design.md §3.2 C8), the one set
+ * `@kortix/manifest-schema` publishes. The enforcement is `iam/authorize.ts`:
+ * grant ∩ ceiling − HUMAN_ONLY for a governed agent, the person's role minus
+ * HUMAN_ONLY for an inherited one.
  */
-export const GRANTABLE_KORTIX_PERMISSIONS: ReadonlySet<string> = new Set(Object.values(PROJECT_ACTIONS));
+export const GRANTABLE_KORTIX_PERMISSIONS: ReadonlySet<string> = new Set(SCHEMA_GRANTABLE_KORTIX_PERMISSIONS);
 
 /**
  * Pull the manifest's agent declarations (the `agents:` name → block map) out
@@ -172,7 +162,14 @@ export async function loadProjectAgents(
     issues: applied.issues,
     // The file's own switch: no manifest committed yet turns nothing on.
     builtinAgents: projectBuiltinAgents(manifest?.raw ?? null),
-    manifest: { revision: applied.revision ?? null, commit: applied.commit ?? null },
+    // An imported agent can change while the root blob stays identical. Grant
+    // provenance must identify the merged policy, not only kortix.yaml.
+    manifest: {
+      revision: applied.imports
+        ? createHash('sha256').update(JSON.stringify(applied.raw)).digest('hex')
+        : applied.revision ?? null,
+      commit: applied.commit ?? null,
+    },
   };
 }
 
@@ -202,9 +199,10 @@ function parseAgentEntry(name: string, block: unknown, filename: string): ParseO
   // Only a literal `false` disables (the validator rejects any other value).
   const enabled = row.enabled !== false;
   const model = typeof row.model === 'string' ? row.model : null;
-  const sandbox = typeof row.sandbox === 'string' && row.sandbox.trim() ? row.sandbox.trim() : null;
-  const repository = resolveProjectRepository(row);
-  if (!repository.ok) return err(`agents.${name}.${repository.path} ${repository.message}`);
+  // `workspace.sandbox` is the same choice as `sandbox` (the validator refuses two different ones).
+  const workspaceSandbox = (row.workspace as { sandbox?: unknown } | undefined)?.sandbox;
+  const sandboxValue = typeof row.sandbox === 'string' && row.sandbox.trim() ? row.sandbox : workspaceSandbox;
+  const sandbox = typeof sandboxValue === 'string' && sandboxValue.trim() ? sandboxValue.trim() : null;
 
   const connectorsResolved = resolveGrantSet(row.connectors, 'none');
   const connectorsRequired = Array.isArray(row.connectors_required)
@@ -249,8 +247,6 @@ function parseAgentEntry(name: string, block: unknown, filename: string): ParseO
       apps: toGrantSet(resolveGrantSet(row.apps, 'none')),
       model,
       sandbox,
-      repositoryAccess: repository.value,
-      legacyReadWorkspace: repository.legacyRead,
     },
   };
 }
@@ -290,8 +286,10 @@ function toGrantSet(value: GrantSetV2): GrantSet {
 }
 
 /** Returns an error message if the action is not grantable to an agent, else null. */
-function validateKortixAction(action: string): string | null {
-  if (GRANTABLE_KORTIX_PERMISSIONS.has(action)) return null;
+function validateKortixAction(raw: string): string | null {
+  // Either name: `workspace.session.start` is `project.session.start`.
+  const action = toLegacyAction(raw);
+  if (isKortixPermissionGroup(raw) || GRANTABLE_KORTIX_PERMISSIONS.has(action)) return null;
   // A RENAMED action still resolves — `canonicalizeGrantActions` rewrites it to
   // the live leaf. Accept it here: rejecting it would push the spec into
   // `loaded.errors`, and an agent whose manifest failed to parse is given an
@@ -300,10 +298,11 @@ function validateKortixAction(action: string): string | null {
   if (action in DEPRECATED_KORTIX_PERMISSION_ALIASES) return null;
   // A RETIRED action (its feature is gone) grants nothing; accepted for the same reason.
   if (RETIRED_KORTIX_PERMISSIONS.includes(action)) return null;
-  if (VALID_ACTIONS.has(action)) {
-    return `\`kortix_permissions\` action "${action}" is account-scoped and can never be granted to an agent — only project-scoped actions are allowed`;
-  }
-  return `\`kortix_permissions\` has unknown action "${action}" — see the grantable list (project.*)`;
+  // HUMAN_ONLY grants nothing (authorize refuses it for every agent session);
+  // accepted for the same reason, so one entry never empties the grant.
+  if (isHumanOnlyAction(action)) return null;
+  if (VALID_ACTIONS.has(action)) return null;
+  return `\`kortix_permissions\` has unknown action "${raw}" — see kortix validate --scopes (workspace.* or the legacy name)`;
 }
 
 function makeAgentError(name: string, message: string, filename: string = MANIFEST_FILENAME): ParseErr {

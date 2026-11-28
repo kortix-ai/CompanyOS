@@ -2,10 +2,27 @@
  * Integration test (real local DB, fake Drive volume, notice delivery
  * recorded): a space's event feed and its watcher's wakes
  * (`projects/lib/space-watch/`, flag `spaces_proactive`).
+ *
+ * `spaces_proactive` is withdrawn (registry.ts `withdrawn: 'off'`): in the
+ * product it always resolves off, and `unit-feature-flags.test.ts` pins that.
+ * Its watcher code stays dormant, so this suite still proves it: here, and only
+ * here, a project's stored `spaces_proactive: true` counts as on.
  */
 import { afterAll, beforeAll, describe, expect, mock, test } from 'bun:test';
+import type { FeatureFlagKey } from '@kortix/api-contract';
 import { accounts, projectSessions, projectSpaceEvents, projectSpaces, projectSpaceWatchers, projects } from '@kortix/db';
 import { eq, sql } from 'drizzle-orm';
+
+const registry = await import('../feature-flags/registry');
+const realExports = { ...registry };
+const realResolve = registry.resolveFeatureFlag;
+const storedOn = (metadata: unknown, key: string) =>
+  (metadata as { experimental?: Record<string, unknown> } | null)?.experimental?.[key] === true;
+mock.module('../feature-flags/registry', () => ({
+  ...realExports,
+  resolveFeatureFlag: (metadata: unknown, key: FeatureFlagKey) =>
+    key === 'spaces_proactive' ? storedOn(metadata, key) : realResolve(metadata, key),
+}));
 
 /** One record per wake: the fresh session each wake creates (wake.ts `setWakeSessionCreatorForTests`). */
 const notices: Array<{ sessionId: string; text: string; key: string; actorUserId: string | null; spaceId: unknown }> = [];
@@ -48,9 +65,11 @@ beforeAll(async () => {
     await db.execute(sql`INSERT INTO auth.users (id, email, instance_id, aud, role, raw_user_meta_data) VALUES (${id}::uuid, ${`space-watch-${name}-${id.slice(0, 8)}@example.test`}, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', ${JSON.stringify({ full_name: name === 'ana' ? 'Ana Lima' : 'Bo Chen' })}::jsonb)`);
   }
   await db.insert(accounts).values({ accountId: ACCOUNT, name: 'space-watch' });
+  // Two projects in one account: a legacy (split_pending) account, as
+  // uq_projects_workspace_account requires.
   await db.insert(projects).values([
-    { projectId: PROJECT, accountId: ACCOUNT, name: 'space-watch', repoUrl: 'https://example.test/w.git', metadata: { experimental: { chat: true, spaces_proactive: true } } },
-    { projectId: OFF_PROJECT, accountId: ACCOUNT, name: 'space-watch-off', repoUrl: 'https://example.test/o.git', metadata: { experimental: { chat: true } } },
+    { projectId: PROJECT, accountId: ACCOUNT, name: 'space-watch', repoUrl: 'https://example.test/w.git', metadata: { experimental: { channels: true, spaces_proactive: true } }, splitPending: true },
+    { projectId: OFF_PROJECT, accountId: ACCOUNT, name: 'space-watch-off', repoUrl: 'https://example.test/o.git', metadata: { experimental: { channels: true } }, splitPending: true },
   ]);
   await db.insert(projectSpaces).values([
     { spaceId: LAUNCH, accountId: ACCOUNT, projectId: PROJECT, kind: 'channel', slug: 'launch', name: 'launch', createdBy: ANA },

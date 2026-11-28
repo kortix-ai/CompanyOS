@@ -1,4 +1,6 @@
 import { describe, expect, test } from 'bun:test';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { SessionRetryDisplay, TurnErrorDisplay, actionableSuggestion, describeTurnErrorRow } from './session-error-banner';
 
@@ -166,6 +168,12 @@ describe('TurnErrorDisplay checkpoint row', () => {
     expect(html).not.toContain('chat.completion.chunk');
   });
 
+  test('the sentence renders below the Stopped heading, not beside it', () => {
+    const html = renderToStaticMarkup(<TurnErrorDisplay errorText={sentence} errorRaw={raw} />);
+    const headingRowEnd = html.indexOf('</div>', html.indexOf('>Stopped<'));
+    expect(html.indexOf(sentence)).toBeGreaterThan(headingRowEnd);
+  });
+
   test('open: the raw text renders inside the disclosure', () => {
     const html = renderToStaticMarkup(
       <TurnErrorDisplay errorText={sentence} errorRaw={raw} defaultDetailsOpen />,
@@ -251,6 +259,13 @@ describe('actionableSuggestion', () => {
 });
 
 describe('describeTurnErrorRow', () => {
+  test("a provider's own out-of-credits refusal is not the Kortix credits card", () => {
+    const gateway = { code: 'provider_payment_required', provider: 'openrouter' };
+    expect(describeTurnErrorRow({ text: 'Insufficient credits. Add more using https://openrouter.ai/credits', gateway }).kind)
+      .toBe('checkpoint');
+    expect(describeTurnErrorRow({ text: 'Insufficient credits. Balance: -6 credits' }).kind).toBe('billing-card');
+  });
+
   test('a Kortix entitlement sentence routes to the boxed card', () => {
     expect(describeTurnErrorRow({ text: 'Free usage exceeded, subscribe to Go' })).toEqual({
       kind: 'billing-card',
@@ -277,5 +292,55 @@ describe('describeTurnErrorRow', () => {
     expect(
       describeTurnErrorRow({ text: 'Upstream failed', gateway: { requestId: 'req_debug' } }),
     ).toEqual({ kind: 'checkpoint', expandable: true });
+  });
+});
+
+// KRTX-5026: OpenRouter answers a mistyped key with 401 "User not found.". The
+// row says the key was refused; the provider's words stay in the fold.
+describe('TurnErrorDisplay — a provider key the provider refused', () => {
+  const gateway = { code: 'provider_key_rejected', provider: 'openrouter', requestId: 'req_key_rejected' };
+  // The row's fix button (`ProviderKeySlot`) reads the project through react-query.
+  const render = (row: ReactElement) =>
+    renderToStaticMarkup(<QueryClientProvider client={new QueryClient()}>{row}</QueryClientProvider>);
+
+  test('closed: the row names the refused key, not the provider text', () => {
+    const html = render(<TurnErrorDisplay errorText="User not found." errorDetails={gateway} />);
+    expect(html).toContain('Your OpenRouter key was rejected. Update it in Models.');
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain('User not found.');
+  });
+
+  test('open: the provider text is in the detail', () => {
+    const html = render(
+      <TurnErrorDisplay errorText="User not found." errorDetails={gateway} defaultDetailsOpen />,
+    );
+    expect(html).toContain('Your OpenRouter key was rejected. Update it in Models.');
+    expect(html).toContain('User not found.');
+  });
+
+  test('a bare 401 with no code names the provider of the routed model', () => {
+    const html = render(
+      <TurnErrorDisplay errorText="invalid x-api-key" errorDetails={{ upstreamStatus: 401, resolvedModel: 'anthropic/claude-sonnet-4.6' }} />,
+    );
+    expect(html).toContain('Your Anthropic key was rejected. Update it in Models.');
+  });
+
+  test('another provider failure keeps its own sentence', () => {
+    const html = render(
+      <TurnErrorDisplay errorText="No openai API key is connected." errorDetails={{ code: 'provider_not_connected', provider: 'openai' }} />,
+    );
+    expect(html).toContain('No openai API key is connected.');
+    expect(html).not.toContain('key was rejected');
+  });
+});
+
+describe('TurnErrorDisplay placeholder diagnostics', () => {
+  test('does not offer an unknown-only disclosure', () => {
+    const html = renderToStaticMarkup(
+      <TurnErrorDisplay errorText="The provider usage limit was reached." errorRaw="unknown" defaultDetailsOpen />,
+    );
+    expect(html).toContain('The provider usage limit was reached.');
+    expect(html).not.toContain('aria-expanded');
+    expect(html).not.toContain('>unknown<');
   });
 });

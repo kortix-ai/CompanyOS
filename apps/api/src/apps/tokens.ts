@@ -28,16 +28,17 @@
  */
 
 import { createPrivateKey, createPublicKey, generateKeyPairSync, randomBytes, sign } from 'node:crypto';
-import { projectSigningKeys, projects } from '@kortix/db';
+import { projectSigningKeys } from '@kortix/db';
 import { eq } from 'drizzle-orm';
 import { oauthIssuer } from '../oauth/discovery';
 import { db } from '../shared/db';
 import { decryptProjectSecret, encryptProjectSecret } from '../projects/surface';
+import { projectsView } from '../workspaces/rows';
 
 export const TOKEN_TTL_SECONDS = 15 * 60;
 
 export const TOKEN_CLAIMS = [
-  'iss', 'aud', 'sub', 'iat', 'exp', 'email', 'name', 'picture', 'groups', 'group_ids', 'role', 'account_id', 'project_id', 'kind', 'via_app_id',
+  'iss', 'aud', 'sub', 'iat', 'exp', 'email', 'name', 'picture', 'groups', 'group_ids', 'role', 'account_id', 'project_id', 'kind', 'via_app_id', 'session_kind', 'auth_time',
 ] as const;
 
 const b64url = (input: Buffer | string) => Buffer.from(input).toString('base64url');
@@ -54,7 +55,7 @@ export function projectIssuer(projectId: string): string {
 
 /** Whether the project exists (the public issuer routes answer 404 otherwise). */
 export async function projectExists(projectId: string): Promise<boolean> {
-  const [row] = await db.select({ projectId: projects.projectId }).from(projects).where(eq(projects.projectId, projectId)).limit(1);
+  const [row] = await db.select({ projectId: projectsView.projectId }).from(projectsView).where(eq(projectsView.projectId, projectId)).limit(1);
   return Boolean(row);
 }
 
@@ -140,6 +141,8 @@ export interface TokenSubject {
   role?: string | null;
   /** `agent` when the subject is an agent's service account, not a person. */
   kind?: 'agent';
+  sessionKind?: 'browser' | 'access_link';
+  authTime?: number;
 }
 
 export interface TokenTarget {
@@ -176,6 +179,8 @@ export function signToken(
       ...(subject.role ? { role: subject.role } : {}),
       account_id: target.accountId,
       project_id: target.projectId,
+      session_kind: subject.sessionKind,
+      auth_time: subject.authTime,
       ...(subject.kind ? { kind: subject.kind } : {}),
       ...(target.viaAppId ? { via_app_id: target.viaAppId } : {}),
     }),

@@ -9,6 +9,8 @@ import { markComputeSessionAlive, reopenComputeForSandbox } from '../../billing/
 import { type SandboxProviderName, config } from '../../config';
 import { type SandboxStatus, getProvider } from '../../platform/providers';
 import { isProviderNotFound } from '../../platform/providers/status';
+import { recordProviderEvent } from '../../platform/services/provider-events';
+import { ProvisionTimeline } from '../../platform/services/provision-timeline';
 import { invalidateSandbox } from '../../sandbox-proxy/backend';
 import { db } from '../../shared/db';
 import { scheduleSandboxRuntimeRefresh } from '../lib/sandbox-runtime-refresh';
@@ -82,7 +84,7 @@ const RUNTIME_WAKE_FINALIZE_CLEARED_KEYS = [
  * Resume a hibernated (status='stopped') session sandbox IN PLACE instead of
  * destroying it and cold-reprovisioning a fresh one. A stopped row whose
  * `externalId` is still set is a powered-down VM whose disk — the repo clone,
- * installed deps, opencode — is intact, so resuming it skips the dominant boot
+ * installed deps, the runtime — is intact, so resuming it skips the dominant boot
  * costs (snapshot pull + clone + deps).
  *
  * Claims wake ownership while both durable rows remain stopped. Provider start
@@ -161,6 +163,15 @@ export async function resumeStoppedSandbox(
   if (!won) return false;
 
   const provider = getProvider(row.provider as SandboxProviderName);
+  // Where the wake's time goes (KRTX-1642): one provider_events row per wake,
+  // read by the admin provider analytics. A start that reported archive progress
+  // waited on a cold-storage restore (SandboxStartOptions.onProgress).
+  const tl = new ProvisionTimeline(row.sandboxId, 'wake');
+  let startPhase = 'provider-start';
+  let failReason: string | null = null;
+  // The boot this wake started (its provider-running confirmation): the runtime's
+  // first answer records it too (`wake-ready`), and the analytics pairs on it.
+  let bootEpochMs: number | null = null;
   void executeClaimedRuntimeWake({
     knownStatus: knownProviderStatus ?? null,
     getStatus: () => provider.getStatus(externalId),
@@ -197,9 +208,10 @@ export async function resumeStoppedSandbox(
     },
     start: () =>
       provider.start(externalId, {
-        // A restore from cold storage runs inside start() and can outlast the
-        // lease; keep it, fenced to this wake.
-        onProgress: async () => {
+        // A restore from cold storage, or a wait for host capacity, runs inside
+        // start() and can outlast the lease; keep it, fenced to this wake.
+        onProgress: async (kind) => {
+          if (kind === 'archive') startPhase = 'archive-restore';
           await db
             .update(sessionSandboxes)
             .set({
@@ -212,10 +224,11 @@ export async function resumeStoppedSandbox(
               ),
             );
         },
-      }),
+      }).finally(() => tl.mark(startPhase)),
     stop: () => provider.stop(externalId),
     isMissingError: isMissingRuntimeError,
     finalize: async () => {
+      tl.mark('provider-running');
       const confirmedAt = new Date();
       // Both rows move together, or neither does: the sandbox CAS on this
       // wake's own id, the session guarded against a delete.
@@ -236,6 +249,8 @@ export async function resumeStoppedSandbox(
         ),
       });
       if (!finalized) return false;
+      tl.mark('rows-active');
+      bootEpochMs = confirmedAt.getTime();
       invalidateSandbox(externalId);
       // The provider had this box STOPPED: whatever turn was still open on it
       // is over. Normally applyStoppedState settled those rows already and
@@ -269,13 +284,14 @@ export async function resumeStoppedSandbox(
       // The project's half of the same problem. The woken VM still holds the
       // config dir, skills and compiled agent config of its provision day;
       // nothing on a resume re-reads the base branch. Detached, idle-gated, and
-      // a no-op — no opencode restart — on a box that is already current.
+      // a no-op — no runtime restart — on a box that is already current.
       scheduleSessionConfigConvergence(row.sessionId, 'resume');
       // Drives attached, detached or granted while the box slept.
       void import('../../drives/service').then(({ reconcileSessionDrives }) => reconcileSessionDrives(row.sessionId));
       return true;
     },
     fail: async (reason) => {
+      failReason = reason;
       const failedAt = new Date();
       // Read the row back for the CONSECUTIVE-failure count: the cooldown this
       // stamp owes escalates with it, and the count is what eventually earns a
@@ -342,12 +358,29 @@ export async function resumeStoppedSandbox(
         ? 'owned'
         : 'cancelled';
     },
-  }).catch((err) =>
-    console.error(
-      `[projects] claimed wake crashed for ${externalId} (session ${row.sessionId}):`,
-      err,
-    ),
-  );
+  })
+    .then((result) => {
+      // A delegated wake is recorded by the wake that owns the box.
+      if (result === 'delegated') return;
+      const outcome = result === 'running' ? 'ok' : result === 'failed' ? 'error' : 'stopped';
+      const summary = tl.log({ provider: row.provider, outcome });
+      recordProviderEvent({
+        provider: row.provider,
+        kind: 'wake',
+        outcome,
+        totalMs: summary.totalMs,
+        marks: bootEpochMs === null ? summary.marks : [...summary.marks, { bootEpochMs }],
+        error: failReason,
+        sessionId: row.sessionId,
+        accountId: row.accountId,
+      });
+    })
+    .catch((err) =>
+      console.error(
+        `[projects] claimed wake crashed for ${externalId} (session ${row.sessionId}):`,
+        err,
+      ),
+    );
   return true;
 }
 
@@ -356,7 +389,7 @@ export async function resumeStoppedSandbox(
  * URLs, `/v1/p/<externalId>/<port>`). Fetches the full row — crucially including
  * `metadata`, which {@link resumeStoppedSandbox} rewrites — so the sandbox-proxy
  * data path can wake a hibernated box the SAME way `/start` does when a real user
- * actively hits the OpenCode runtime. Idempotent: the conditional stopped→active
+ * actively hits the runtime. Idempotent: the conditional stopped→active
  * lock inside `resumeStoppedSandbox` de-dupes the concurrent session.list retries,
  * so at most one provider start is kicked. Returns true when THIS call won the
  * resume (false if it wasn't stopped, isn't resumable, or a concurrent call won).

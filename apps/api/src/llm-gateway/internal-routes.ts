@@ -16,7 +16,9 @@ import {
   persistGatewayTrace,
   recordGatewayUsage,
 } from './hooks';
+import { ReplayAnswerSchema, ReplayKeySchema, getReplay, putReplay } from './idempotency-replays';
 import { matchesInternalToken, weakInternalTokenWarnings } from './internal-auth';
+import { createFirstInWindow } from '../shared/audit-dedupe';
 import { gatewayModelCatalog } from './models/catalog-models';
 import { unavailableCatalog } from './models/picker-catalog';
 import { servableProjectCatalog } from './models/servable-catalog';
@@ -24,7 +26,7 @@ import { codexConversationHeaders, resolveCandidates } from './resolution/resolv
 import { MAX_ACCOUNT_SECRET_REST_SECONDS, coolDownAccountSecret } from '../secrets/account-resource';
 import { refreshRefusedCodexAccountLogin } from './credentials/codex';
 import { SubscriptionUsageSchema, recordSubscriptionUsage } from './subscription-usage';
-import { claudeCredentialsForGateway, markClaudeAccountRefused } from '../claude-subscription/accounts';
+import { claudeCredentialsForGateway, markClaudeAccountForbidden, markClaudeAccountRefused } from '../claude-subscription/accounts';
 import { refreshRefusedOpencodeLogin } from './credentials/opencode-console';
 import { codexDescriptor } from './resolution/descriptors';
 import { resolveGatewayRoute } from './routing';
@@ -39,6 +41,18 @@ const INTERNAL_EDGE_HEADER = 'x-kortix-internal-edge-key';
 export function createInternalGatewayRoutes() {
   const app = new Hono();
   const { GATEWAY_INTERNAL_TOKEN: internalToken, KORTIX_INTERNAL_EDGE_KEY: edgeKey } = process.env;
+
+  // A resolution failure here is usually a PERSISTENT state (a model this
+  // deployment cannot serve), not a transient one — and a caller repeats it
+  // per request: a box's voice pipeline resolves its TTS model on every
+  // spoken line, so one session against a deployment whose managed lineup
+  // lists no audio models logged 41 warns in 2 h against a 0.13/h baseline
+  // (KRTX-4665). Log the first occurrence per (model, code) per day, at info:
+  // the refusal is an expected typed outcome (the gateway answers it cleanly
+  // and gateway_request_logs records every one), and even once per replica per
+  // day it kept breaching the warn baseline after every deploy. The typed
+  // error in the 200 body is unchanged, so the gateway still refuses every time.
+  const logFirstResolutionFailure = createFirstInWindow({ windowMs: 24 * 60 * 60 * 1000 });
 
   for (const warning of weakInternalTokenWarnings(internalToken)) {
     logger.error(`[gateway-internal-auth] ${warning}`);
@@ -102,7 +116,25 @@ export function createInternalGatewayRoutes() {
       // return the typed error in a 200 body so the api-client can re-throw it
       // as a GatewayResolutionError and the in-process hook contract holds.
       if (err instanceof GatewayResolutionError) {
-        logger.warn(`[gateway-internal] resolution failed for "${model}": ${err.code} — ${err.message}`);
+        // The model string is client-controlled (the box names its model) and
+        // neither validated nor bounded on this route; cap the retained key
+        // at the same 200 the sibling /claude-credentials route caps its
+        // model field at, so a huge id cannot pin its bytes in the process.
+        // A non-string body value joins the '' key instead of crashing the
+        // catch block: the typed refusal below stays a 200, never a 500
+        // (Strix review of this PR).
+        const keyModel = typeof model === 'string' ? model.slice(0, 200) : '';
+        if (logFirstResolutionFailure(`${keyModel}:${err.code}`)) {
+          // The model id (and the error text that embeds it) are
+          // caller-influenced and reach this line unescaped: a CR/LF in the id
+          // forges extra log lines (Strix review, CWE-117). JSON.stringify
+          // neutralizes the id while keeping the quoted form normal ids
+          // already render as; the message loses control characters and is
+          // bounded like the key.
+          const loggedModel = JSON.stringify(keyModel);
+          const loggedMessage = err.message.replace(/[\u0000-\u001f\u007f]+/g, ' ').slice(0, 500);
+          logger.info(`[gateway-internal] resolution failed for ${loggedModel}: ${err.code} — ${loggedMessage}`);
+        }
         return c.json({
           candidates: [],
           resolutionError: resolutionErrorBody(err),
@@ -125,14 +157,32 @@ export function createInternalGatewayRoutes() {
   });
 
   // A subscription login's plan usage from a model response's headers. Keyed
-  // by the account and the secret alone, like the rest above.
+  // by the account and the secret alone, like the rest above. The provider
+  // answered on this login, so the report also clears a Claude account's 403
+  // reason (the gateway sends no report for a 403).
   app.post('/pool-usage', async (c) => {
     const parsed = z.object({
       principal: z.object({ accountId: z.string().uuid() }),
       secretId: z.string().uuid(), usage: SubscriptionUsageSchema,
     }).safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Invalid pool usage' }, 400);
-    await recordSubscriptionUsage(parsed.data.secretId, parsed.data.principal.accountId, parsed.data.usage);
+    await recordSubscriptionUsage(parsed.data.secretId, parsed.data.principal.accountId, parsed.data.usage, { served: true });
+    return c.json({ ok: true });
+  });
+
+  // The Idempotency-Key replay every gateway replica shares (KRTX-4612): the
+  // first 2xx answer of a keyed inference request, read back by a retry that
+  // landed on another replica. The key is the gateway's credential-scoped hash.
+  app.post('/idempotency/get', async (c) => {
+    const parsed = z.object({ key: ReplayKeySchema }).safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid replay key' }, 400);
+    return c.json({ answer: await getReplay(parsed.data.key) });
+  });
+
+  app.post('/idempotency/put', async (c) => {
+    const parsed = z.object({ key: ReplayKeySchema, answer: ReplayAnswerSchema }).safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid replay answer' }, 400);
+    await putReplay(parsed.data.key, parsed.data.answer);
     return c.json({ ok: true });
   });
 
@@ -159,6 +209,20 @@ export function createInternalGatewayRoutes() {
     }).safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Invalid Claude refusal' }, 400);
     const marked = await markClaudeAccountRefused(parsed.data.principal.accountId, parsed.data.secretId, parsed.data.failedKeySha256);
+    return c.json({ ok: true, marked });
+  });
+
+  // Anthropic forbade a Claude account (403), for example when its organization
+  // turned Claude Code off. Only the digest and Anthropic's words cross.
+  app.post('/claude-forbidden', async (c) => {
+    const parsed = z.object({
+      principal: z.object({ accountId: z.string().uuid() }),
+      secretId: z.string().uuid(),
+      failedKeySha256: z.string().regex(/^[0-9a-f]{64}$/),
+      message: z.string().trim().min(1).max(500),
+    }).safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid Claude refusal' }, 400);
+    const marked = await markClaudeAccountForbidden(parsed.data.principal.accountId, parsed.data.secretId, parsed.data.failedKeySha256, parsed.data.message);
     return c.json({ ok: true, marked });
   });
 

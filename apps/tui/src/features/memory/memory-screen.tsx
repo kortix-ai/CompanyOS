@@ -30,25 +30,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { openUrl } from '../../lib/open-url.ts';
 import { theme } from '../../theme.ts';
 import { Spinner } from '../../ui/index.ts';
+import type { ScreenProps } from '../../screens.tsx';
 import { MIN_QUERY, type MemoryPageDetail, type MemoryRow, MemoryView } from './memory-view.tsx';
-
-export interface MemoryScreenProps {
-  projectId: string | null;
-  accountId: string | null;
-  sessionId: string | null;
-  focused: boolean;
-  /** Inner columns. */
-  width: number;
-  /** Inner rows. */
-  height: number;
-  /** Kortix web origin, for "open in browser". */
-  webBaseUrl: string;
-  onBack(): void;
-  onOpenSession(sessionId: string): void;
-  onToast(message: string, kind?: 'info' | 'error'): void;
-  /** Test seam for `o`. Defaults to `lib/open-url.ts`. */
-  openUrlImpl?: (url: string) => Promise<unknown>;
-}
 
 /** The layer this screen lists. Channel and DM layers stay in their Spaces. */
 export const COMPANY_LAYER = 'company';
@@ -129,19 +112,24 @@ export function pageDetail(page: ProjectMemoryPage): MemoryPageDetail {
 
 /** The web route for this screen. The page id is not a route: the list opens. */
 export function memoryWebUrl(webBaseUrl: string, projectId: string): string {
-  return `${webBaseUrl.replace(/\/+$/, '')}/projects/${projectId}/memory`;
+  return `${webBaseUrl.replace(/\/+$/, '')}/workspaces/${projectId}/memory`;
 }
+
+export type MemoryScreenProps = Pick<
+  ScreenProps,
+  'projectId' | 'focused' | 'width' | 'height' | 'webBaseUrl' | 'onBack' | 'onToast'
+> & {
+  /** Test seam for `o`. Defaults to `lib/open-url.ts`. */
+  openUrlImpl?: (url: string) => Promise<unknown>;
+};
 
 export function MemoryScreen({
   projectId,
-  accountId: _accountId,
-  sessionId: _sessionId,
   focused,
   width,
   height,
   webBaseUrl,
   onBack,
-  onOpenSession: _onOpenSession,
   onToast,
   openUrlImpl = openUrl,
 }: MemoryScreenProps) {
@@ -203,13 +191,13 @@ export function MemoryScreen({
   }, [searchActive, searchQuery.refetch, pagesQuery.refetch, onToast]);
 
   if (!projectId) {
-    return <text fg={theme.faint}>No project selected.</text>;
+    return <text fg={theme.faint}>No workspace open. Type /workspaces to pick one.</text>;
   }
   if (flag.isLoading) return <Spinner label="checking Memory" />;
   if (!enabled) {
     return (
       <text fg={theme.faint}>
-        Memory is off: the project's Chat feature (chat) is not enabled.
+        Memory is off: the workspace's Chat feature (chat) is not enabled.
       </text>
     );
   }

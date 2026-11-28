@@ -3,12 +3,12 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, w
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { REPO_ROOT } from '../src/fixtures/repo';
 
 // infra/scripts/carry-web-static.sh keeps earlier builds' `_next/static` files
 // in a new dev frontend image, so a tab on an earlier build can still load its
 // lazy chunks after a deploy (2026-10-30: "Failed to load chunk" crash on dev).
 
-const REPO_ROOT = join(import.meta.dirname, '..', '..');
 const SCRIPT = join(REPO_ROOT, 'infra/scripts/carry-web-static.sh');
 const HOUR = 3600;
 
@@ -51,6 +51,11 @@ describe('carry-web-static', () => {
     expect(readFileSync(join(next, 'chunks/shared.js'), 'utf8')).toBe('current');
     expect(out).toContain('cannot read missing');
     expect(out).toContain('2 builds');
+
+    // Repeated carries must not overwrite the current build or duplicate files.
+    const repeated = carry(next, 5, ['previous']);
+    expect(readFileSync(join(next, 'chunks/shared.js'), 'utf8')).toBe('current');
+    expect(repeated).toContain('0 carried');
   });
 
   it('drops the files of builds older than the newest <keep> builds', () => {

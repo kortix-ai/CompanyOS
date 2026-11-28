@@ -47,37 +47,6 @@ function loadContentTimestamps(): Record<string, string> {
   return contentTimestamps!;
 }
 
-export const STATIC_PUBLIC_ROUTES = [
-  '/',
-  '/a1o',
-  '/about',
-  '/careers',
-  '/changelog',
-  '/changelog/releases',
-  '/contact',
-  '/developers',
-  '/docs',
-  '/download',
-  '/enterprise',
-  '/legal',
-  '/marketplace',
-  '/pricing',
-  '/security',
-  '/self-hosted',
-  '/services',
-  '/case-studies',
-  '/framework',
-  '/multiplayer',
-  '/sovereign',
-  '/compliance',
-  '/use-cases',
-  '/white-label',
-  '/desktop',
-  '/mobile',
-  '/slack',
-  '/teams',
-] as const;
-
 const MARKETING_RECORDS: PublicContentRecord[] = [
   {
     kind: 'marketing',
@@ -112,18 +81,10 @@ const MARKETING_RECORDS: PublicContentRecord[] = [
   },
   {
     kind: 'marketing',
-    slug: 'marketplace',
-    title: 'Marketplace: agents, skills and project templates',
-    description:
-      'Browse skills, agents, and commands from every source. Add them to a Kortix project in one click.',
-    htmlPath: '/marketplace',
-  },
-  {
-    kind: 'marketing',
     slug: 'developers',
     title: 'Developers: CLI, SDK and API for AI agents',
     description:
-      'Build with Kortix from the terminal: drive projects, sessions, and agents through the CLI and SDK, wire triggers and connectors, and land every change through a reviewed change request.',
+      'Build with Kortix from the terminal: drive workspaces, sessions, and agents through the CLI and SDK, wire triggers and connectors, and land every change through a reviewed change request.',
     htmlPath: '/developers',
     markdownPath: '/markdown/developers.md',
   },
@@ -132,7 +93,7 @@ const MARKETING_RECORDS: PublicContentRecord[] = [
     slug: 'careers',
     title: 'Careers',
     description:
-      'Open positions at Kortix — FDE, GTM and MTS. Belgrade, Serbia and San Francisco. We hire for prolonged ownership.',
+      'Open positions at Kortix — FDE, GTM and MTS. Belgrade, Serbia and the US. We hire for prolonged ownership.',
     htmlPath: '/careers',
   },
   {
@@ -208,7 +169,7 @@ const MARKETING_RECORDS: PublicContentRecord[] = [
     slug: 'case-studies',
     title: 'Case studies',
     description:
-      'What runs on CompanyOS: a science agent at City University of Hong Kong, and agents that evaluate every deal, write software, analyze credit and match invoices.',
+      'What runs on CompanyOS: a science agent at City University of Hong Kong, and agents that write software, research candidates, match invoices and evaluate every deal.',
     htmlPath: '/case-studies',
   },
   {

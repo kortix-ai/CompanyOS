@@ -3,10 +3,12 @@
 import { uiRoutes } from '../../lib/routes';
 import { Button } from '../../primitives/button';
 import Hint from '../../primitives/hint';
+import { Tabs, TabsList, TabsTrigger } from '../../primitives/tabs';
 import { Kbd, KbdGroup } from '../../primitives/kbd';
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarHeader,
   SidebarMenu,
@@ -15,11 +17,9 @@ import {
   SidebarRail,
   useSidebar,
 } from '../../primitives/sidebar';
-import { NotificationBell } from '../../internal/notifications/notification-bell';
 import { ComputerConnectModal } from '../../internal/tunnel/computer-connect';
 import { ConnectMcpModal } from '../../internal/layout/connect-mcp-modal';
-import { ProjectMcpNavItem } from './footer/project-mcp-nav';
-import { ProjectComputerNavItem } from './footer/project-computer-nav';
+import { ProjectPromoCards } from './footer/project-promo-cards';
 import { ProjectManifestIssuesAlert } from './footer/project-manifest-issues-alert';
 import { ProjectSandboxAlert } from './footer/project-sandbox-alert';
 import { ProjectRepositoryDisconnectedAlert } from '../repository-disconnected';
@@ -27,6 +27,8 @@ import { NewAgentModalProvider } from './new-agent-modal-provider';
 import { ProjectNavItems } from './project-nav-items';
 import { ProjectSessionList } from './project-session-list';
 import { ProjectSpacesNav } from './project-spaces-nav';
+import { SIDEBAR_PEEK_CLOSE_DELAY_MS, SIDEBAR_PEEK_OPEN_DELAY_MS } from '../../primitives/sidebar-peek';
+import { isRailPanelPage, RailPageActions, RailPagePanel, railPanelPageOf, type RailPanelPage } from './rail-page-panel';
 import { SidebarMoreGroup } from './sidebar-more-group';
 import { useIsCreatingProjectSession } from '../../internal/hooks/projects/new-session-guard';
 import { useNewProjectSession } from '../../internal/hooks/projects/use-new-project-session';
@@ -37,13 +39,21 @@ import { useBillingAccountId } from '../../internal/stores/billing-account-conte
 import { useFeatureFlag } from '@kortix/sdk/react';
 import { AppsModal } from '../../internal/apps-and-extensions/apps-modal';
 import { useAppsModalStore } from '../../internal/stores/apps-modal-store';
-import { ProjectChromeNavItem } from './footer/project-chrome-nav';
-import { CHROME_UI_ENABLED } from '../../internal/chrome/use-chrome-offered';
 import {
+  ArrowUpRightIcon,
+  GitPullRequestIcon,
   MagnifyingGlassIcon,
   NavigationArrowIcon,
+  PlusIcon,
 } from '@phosphor-icons/react';
-import { UiLink as Link } from '../../providers/ui-provider';
+import { UiLink as Link, useUiPathname, useUiRouter } from '../../providers/ui-provider';
+import { useCapabilityAccess } from '../../internal/layout/project-settings-nav';
+import { reviewHref } from '../../internal/lib/capability-tab-routes';
+import { SettingsReturnTracker, SidebarDrill } from './sidebar-drill';
+import { WorkspaceSettingsRailPublisher, type WorkspaceSettingsRailHost } from '../admin/workspace-settings-rail';
+import { ProjectRail } from './project-rail';
+import { SpaceFormModal } from '../session-spaces/space-form-modal';
+import { isProjectAdminPath } from '../../internal/layout/project-capability-nav';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { SidebarBalanceWarning } from './footer/project-balance-warning';
 import { SidebarUpgradeButton } from './footer/project-upgrade-button';
@@ -53,12 +63,39 @@ import { Close } from '../../icons/close';
 const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
 const modSymbol = isMac ? '⌘' : 'Ctrl';
 
+
+/**
+ * Workspace pages with a centered bottom composer: home, one session (not the
+ * Sessions list), and `/setup`, whose modal opens over home with its banner.
+ */
+const CENTERED_COMPOSER_ROUTE = /\/workspaces\/[^/]+(?:\/setup|\/sessions\/[^/]+(?:\/.*)?)?\/?$/;
+/** Workspace pages whose composer runs to the right edge: chat, DMs, channels, Spaces. */
+const FULL_COMPOSER_ROUTE = /\/workspaces\/[^/]+\/(?:c|chat|dm|spaces)(?:\/.*)?$/;
 export function ProjectSidebar({
   projectId,
   menu,
+  help,
   onOpenSearch,
+  onOpenDownloadApp,
+  settingsHost,
 }: {
   projectId: string;
+  /**
+   * Which host pages Workspace settings lists (apps/web: the account panes).
+   * With the icon rail, the sidebar computes the Customize list itself from
+   * it, so hovering Customize on any page shows real rows.
+   */
+  settingsHost?: WorkspaceSettingsRailHost;
+  /**
+   * The footer's help control (apps/web passes `HelpMenu`: docs, support,
+   * shortcuts, status, what's new). Without it, the sidebar has no footer.
+   */
+  help?: ReactNode;
+  /**
+   * Opens the host's Download app dialog. Without it, the footer has no
+   * Download app row.
+   */
+  onOpenDownloadApp?: () => void;
   /**
    * Opens the host's search (apps/web: its command palette). Without it, the
    * header has no Search button.
@@ -77,17 +114,64 @@ export function ProjectSidebar({
   const { state, setOpenMobile, toggleSidebar, peek } = useSidebar();
   const isExpanded = state === 'expanded';
   const isMobile = useIsMobile();
+  const pathname = useUiPathname();
   const sessionsGroupRef = useRef<HTMLDivElement>(null);
+  // The icon rail (`sidebar_rail`), desktop only. Off, or on a phone, the
+  // sidebar is the one without a rail: every `railed` branch below falls through.
+  const railFlag = useFeatureFlag(projectId, 'sidebar_rail').enabled;
+  const railed = !isMobile && railFlag;
+  // With the rail, the panel shows the sessions, or workspace settings by the route.
+  const settingsOpen = isProjectAdminPath(pathname);
+  // Hovered on the rail: the hovered item picks the list, not the route. Collapsed, the
+  // hover peeks the panel; docked open, it swaps the panel's list until the pointer
+  // leaves the rail and the panel.
+  const [peekSection, setPeekSection] = useState<'home' | 'spaces' | 'customize' | RailPanelPage>('home');
+  const preview = useRailPreview(railed && isExpanded);
+  const peeking = railed && (isExpanded ? preview.on : peek);
+  const peekOverride = peeking ? peekSection === 'customize' : undefined;
+  const showingSettings = peekOverride ?? settingsOpen;
+  // The rail's Spaces (`session_groups`): the panel lists the spaces on a spaces page, or while Spaces is hovered.
+  const groupsOn = useFeatureFlag(projectId, 'session_groups').enabled;
+  const spacesHref = groupsOn ? (uiRoutes().sessionSpaces?.(projectId) ?? null) : null;
+  const spacesOpen = !!spacesHref && !!pathname && (pathname === spacesHref || pathname.startsWith(`${spacesHref}/`));
+  const showingSpaces = railed && !showingSettings && (peeking ? peekSection === 'spaces' : spacesOpen);
+  // Apps, Artifacts, Goals (rail only): the panel lists the page's items on that page, or while its rail icon is hovered.
+  const showingPage: RailPanelPage | null =
+    railed && !showingSettings && !showingSpaces
+      ? peeking
+        ? isRailPanelPage(peekSection) ? peekSection : null
+        : railPanelPageOf(projectId, pathname)
+      : null;
+  const pageLabel =
+    showingPage === 'apps' ? tI18nComplete.raw('text89dd748442c1') : showingPage === 'artifacts' ? t('artifacts') : showingPage === 'goals' ? t('goals') : '';
+  // New space, from the Spaces title row (rail only).
+  const [newSpaceOpen, setNewSpaceOpen] = useState(false);
+  // Chat on, rail: the panel shows the chats or the sessions.
+  const [chatTab, setChatTab] = useState<'chat' | 'sessions'>('chat');
+  // Review on the Chat tab's title row: for the people who may act on it (the Review row's own rule).
+  const reviewAccess = useCapabilityAccess(projectId);
+  const reviewPage = reviewHref(projectId);
+  const reviewLink =
+    reviewPage && reviewAccess.settled && reviewAccess.tabs.includes('review')
+      ? { href: reviewPage, active: !!pathname?.startsWith(reviewPage.split('?')[0]!) }
+      : null;
+  // The Sessions title row's right edge (rail only): the session list draws its view options button there.
+  const [sessionsFilterSlot, setSessionsFilterSlot] = useState<HTMLDivElement | null>(null);
+  const router = useUiRouter();
+  const tGroups = useTranslations('sidebar.sessionGroups');
   // Mounted outside <Sidebar>: the mobile sheet unmounts its content on close.
   const [computerConnectOpen, setComputerConnectOpen] = useState(false);
   const [connectMcpOpen, setConnectMcpOpen] = useState(false);
 
+  // Settings drill (`SidebarDrill`): a click there closes the mobile sheet.
+  const handleDrilledNavigate = useCallback(() => {
+    if (isMobile) setOpenMobile(false);
+  }, [isMobile, setOpenMobile]);
   const accountId = useBillingAccountId();
   // Chat (`chat`): the spaces list replaces New session, and the session list
   // moves below it, closed by default (fail-closed: off until the project answers).
   const chat = useFeatureFlag(projectId, 'chat').enabled;
-  // The project flag and the web app's master switch (`CHROME_UI_ENABLED`) must both be on.
-  const chrome = useFeatureFlag(projectId, 'chrome').enabled && CHROME_UI_ENABLED;
+  const chrome = useFeatureFlag(projectId, 'chrome').enabled;
 
   // Open the project composer without creating a durable session.
   const newSession = useNewProjectSession(projectId);
@@ -150,23 +234,22 @@ export function ProjectSidebar({
   // live inside "More": the bottom of the sidebar is More and the status alerts.
   const connectRows = (
     <>
-              {/* Connect MCP over Connect your computer: one block, 1px seam,
-                  inner corners rounded-sm. Either row can be absent (dismissed,
-                  or a paired computer), so the corners come from the siblings
-                  that render and an empty block collapses. A plain <li>, not
-                  SidebarMenuItem: its `group/menu-item` would make hovering one
-                  row light up the other row's badge and dismiss. */}
+              {/* One card for every promo: MCP, the computer, Chrome, the
+                  desktop app, the phone app. An empty list collapses. */}
               <li className="not-has-[li]:hidden">
-                <SidebarMenu className="gap-px [&>li:not(:first-child)>[data-sidebar=menu-button]]:rounded-t-sm [&>li:not(:last-child)>[data-sidebar=menu-button]]:rounded-b-sm">
-                  <ProjectMcpNavItem onOpenConnect={() => setConnectMcpOpen(true)} />
-                  <ProjectComputerNavItem
-                    projectId={projectId}
-                    onOpenConnect={() => setComputerConnectOpen(true)}
-                  />
-                  {chrome ? (
-                    <ProjectChromeNavItem onOpenConnect={() => useAppsModalStore.getState().setOpen(true)} />
+                <ul className="pb-1">
+                  {/* Phone only: on desktop the card floats in the window's
+                      corner (mounted below, outside the sidebar). */}
+                  {isMobile ? (
+                    <ProjectPromoCards
+                      projectId={projectId}
+                      onOpenMcp={() => setConnectMcpOpen(true)}
+                      onOpenComputer={() => setComputerConnectOpen(true)}
+                      onOpenChrome={chrome ? () => useAppsModalStore.getState().setOpen(true) : undefined}
+                      onOpenDownloadApp={onOpenDownloadApp}
+                    />
                   ) : null}
-                </SidebarMenu>
+                </ul>
               </li>
               {/* Last (Jay, 2026-09-03). It is the only paid call to action in
                   this group, and above the nav rows it put a sell between the
@@ -178,24 +261,41 @@ export function ProjectSidebar({
   return (
     // The New agent modal mounts beside <Sidebar>, outside the mobile sheet.
     <NewAgentModalProvider projectId={projectId}>
+    {/* With the icon rail, the Customize list is drawn on any page (its hover): the sidebar fills it itself. */}
+    {railed && settingsHost ? <WorkspaceSettingsRailPublisher projectId={projectId} host={settingsHost} /> : null}
     <Sidebar
       collapsible="offcanvas"
       variant="inset"
+      rail={
+        railed ? (
+          <ProjectRail
+            projectId={projectId}
+            onOpenSearch={onOpenSearch ? handleOpenSearch : undefined}
+            help={help}
+            settingsOpen={settingsOpen}
+            onPeek={setPeekSection}
+            onPreviewEnter={preview.enter}
+            onPreviewLeave={preview.leave}
+          />
+        ) : undefined
+      }
       // No background here. This className lands on the sidebar CONTAINER —
       // the square positioning box — while the visible card is the rounded
       // inner box, which already carries `bg-sidebar`. Painting it twice put a
       // square fill behind the flyout card and it showed at all four corners.
       className="[scrollbar-width:'none'] [-ms-overflow-style:'none'] [&::-webkit-scrollbar]:hidden"
+      // Docked open: the pointer on the panel keeps a rail preview up. Only then:
+      // these props replace the collapsed panel's own peek handlers.
+      {...(railed && isExpanded ? { onPointerEnter: preview.keep, onPointerLeave: preview.leave } : {})}
     >
       <SidebarHeader
         className="kx-project-sidebar-header space-y-2"
         data-peek={peek ? '' : undefined}
       >
         {/* Offcanvas everywhere: the whole panel slides, so the header keeps a
-            single layout. Up to four controls on one 240px row, all 32px
-            tall: the merged brand/switcher control, the notification bell
-            (only with the `notification_center` flag on), search, and the
-            panel's own collapse toggle — so the collapse control sits inside
+            single layout. Up to three controls on one 240px row, all 32px
+            tall: the merged brand/switcher control, search, and the panel's
+            own collapse toggle — so the collapse control sits inside
             the thing it collapses and the session header no longer has to
             carry a toggle while the panel is docked open.
 
@@ -208,6 +308,91 @@ export function ProjectSidebar({
             pointing at. The workspace directory is now a second VIEW of this
             menu, behind "Switch Workspace", which is why there is no footer
             control below any more. */}
+        {railed ? (
+          // The rail carries search, the toggle and help; the panel names what it shows.
+          <div
+            className={cn(
+              'flex w-full items-center gap-1 px-2',
+              !peek && 'kx-titlebar-row kx-titlebar-band-height kx-project-sidebar-titlebar',
+            )}
+          >
+            {chat && !showingSettings && !showingSpaces && !showingPage ? (
+              // Chat on: two views of the panel, the chats and the sessions.
+              <Tabs value={chatTab} onValueChange={(value) => setChatTab(value as 'chat' | 'sessions')} className="min-w-0 flex-1">
+                {/* `-ml-2.5` cancels the first trigger's `px-2.5`: its label starts on the list's label edge. */}
+                <TabsList variant="secondary" size="sm" className="-ml-2.5">
+                  <TabsTrigger value="chat" className="w-fit flex-none px-2.5">
+                    {t('spaces.chat')}
+                  </TabsTrigger>
+                  <TabsTrigger value="sessions" className="w-fit flex-none px-2.5">
+                    {t('sessions')}
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+            ) : (
+              <span className="text-foreground min-w-0 flex-1 truncate text-sm font-medium">
+                {showingSettings ? t('customize') : showingSpaces ? tGroups('heading') : showingPage ? pageLabel : t('sessions')}
+              </span>
+            )}
+            {showingSettings ? null : showingPage ? (
+              // The page itself, then create one, at the row's right edge.
+              <RailPageActions projectId={projectId} page={showingPage} label={pageLabel} />
+            ) : showingSpaces ? (
+              // Spaces: the Spaces page, then New space, at the row's right edge.
+              // `-mr-1.75` cancels the `icon-base` button's inset (29px box, 16px glyph):
+              // the last glyph ends on the row's edge, as the title starts on it.
+              <div className="-mr-1.75 flex shrink-0 items-center gap-0.5">
+                {spacesHref ? (
+                  <Hint label={tGroups('allSpaces')} side="bottom">
+                    <Button asChild variant="ghost" size="icon-base" className="text-muted-foreground hover:text-foreground">
+                      <Link href={spacesHref} prefetch aria-label={tGroups('allSpaces')}>
+                        <ArrowUpRightIcon className="cn-rtl-flip size-4" />
+                      </Link>
+                    </Button>
+                  </Hint>
+                ) : null}
+                <Hint label={tGroups('newGroup')} side="bottom">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-base"
+                    aria-label={tGroups('newGroup')}
+                    onClick={() => setNewSpaceOpen(true)}
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    <PlusIcon className="size-4" />
+                  </Button>
+                </Hint>
+              </div>
+            ) : chat && chatTab === 'chat' ? (
+              // Review, as an icon at the row's right edge (it is the list's first row without the rail).
+              reviewLink ? (
+                <Hint label={t('spaces.review')} side="bottom">
+                  <Button
+                    asChild
+                    variant="ghost"
+                    size="icon-base"
+                    className={cn(
+                      'text-muted-foreground hover:text-foreground -mr-1.75',
+                      reviewLink.active && 'bg-sidebar-accent text-foreground',
+                    )}
+                  >
+                    <Link
+                      href={reviewLink.href}
+                      prefetch
+                      aria-label={t('spaces.review')}
+                      aria-current={reviewLink.active ? 'page' : undefined}
+                    >
+                      <GitPullRequestIcon className="size-4" />
+                    </Link>
+                  </Button>
+                </Hint>
+              ) : null
+            ) : (
+              <div ref={setSessionsFilterSlot} className="-mr-1.75 flex shrink-0 items-center" />
+            )}
+          </div>
+        ) : (
         <div
           className={cn(
             'flex w-full items-center gap-1',
@@ -216,16 +401,9 @@ export function ProjectSidebar({
         >
           {menu ? <div className="min-w-0">{menu}</div> : null}
           <div className="ml-auto flex shrink-0 items-center gap-0.5">
-            {/* The inbox (KRTX-1742), first, while this project has the
-                `notification_center` flag on. The switcher shrinks before any
-                of the three icon buttons, so the row fits the 208px floor. */}
-            <NotificationBell
-              projectId={projectId}
-              surface="bg-sidebar"
-              onNavigate={() => {
-                if (isMobile) setOpenMobile(false);
-              }}
-            />
+            {/* The switcher shrinks before either icon button, so the row
+                fits the 208px floor. The inbox is a row in the switcher's
+                menu (KRTX-1742), not a header control or a nav row. */}
             {/* Search is the palette's only pointer-reachable entry point —
                 ⌘K is otherwise the whole discovery story. Renders on mobile
                 too: there is no keystroke to fall back on there. The ⌘K
@@ -303,6 +481,7 @@ export function ProjectSidebar({
             )}
           </div>
         </div>
+        )}
       </SidebarHeader>
       {/* One icon lane for every row (Jay, 2026-10-12). Session rows inset
           their status mark by `px-2`; the menu-button recipe insets by
@@ -312,11 +491,16 @@ export function ProjectSidebar({
           (header `p-2` + switcher `px-1` + half of the `size-6` tile). Left
           side only: right padding still clears trailing badges. */}
       <SidebarContent className="relative min-h-0 flex-1 [scrollbar-width:'none'] overflow-hidden [-ms-overflow-style:'none'] [&::-webkit-scrollbar]:hidden [&_[data-sidebar=menu-button]]:pl-2">
-        <div className="flex h-full min-h-0 flex-col space-y-2">
-          {chat ? null : (
+        <SidebarDrill
+          projectId={projectId}
+          onNavigate={handleDrilledNavigate}
+          hideBack={railed}
+          drilledOverride={peekOverride}
+          instant={railed}
+        >
           <SidebarGroup className="py-0">
             <SidebarMenu>
-              {chat ? null : (
+              {chat || showingSpaces || showingPage ? null : (
                 <SidebarMenuItem>
                   {creatingSession ? (
                     <SidebarMenuButton
@@ -342,13 +526,15 @@ export function ProjectSidebar({
               {/* Customize, Apps, Files: order and
                   visibility come from "Customize sidebar". They moved up here
                   from the footer (Jay, 2026-10-12) to keep the footer short. */}
-              <ProjectNavItems projectId={projectId} />
+              {/* With the rail, they live in the rail's More menu. */}
+              {chat || railed ? null : <ProjectNavItems projectId={projectId} />}
             </SidebarMenu>
           </SidebarGroup>
-          )}
 
           <SidebarGroup className="min-h-0 flex-1 flex-col py-0" ref={sessionsGroupRef}>
-            {chat ? (
+            {showingPage ? (
+              <RailPagePanel projectId={projectId} page={showingPage} />
+            ) : chat ? (
               <>
                 {/* Channels and Direct messages are the core surface. The
                     session list sits below them, closed by default: every
@@ -356,13 +542,24 @@ export function ProjectSidebar({
                 {/* Spaces on: Review and the Spaces are the only things up
                     top. Everything else (Customize, Drive, Apps, Artifacts,
                     the session list) waits in "More" at the bottom. */}
-                <div className="min-h-0 flex-1">
-                  <ProjectSpacesNav projectId={projectId} />
-                </div>
-                <SidebarMoreGroup projectId={projectId} footer={<SidebarMenu className="gap-1">{connectRows}</SidebarMenu>} />
+                {railed && chatTab === 'sessions' ? (
+                  <ProjectSessionList projectId={projectId} hideSpaces filterSlot={sessionsFilterSlot} />
+                ) : (
+                  <div className="min-h-0 flex-1">
+                    <ProjectSpacesNav projectId={projectId} review={!railed} />
+                  </div>
+                )}
+                {/* On the rail the panel's tabs pick Chat or Sessions, and the
+                    rail's More menu holds the pages: no More row here. */}
+                {railed ? null : <SidebarMoreGroup projectId={projectId} footer={<SidebarMenu className="gap-1">{connectRows}</SidebarMenu>} />}
               </>
             ) : (
-              <ProjectSessionList projectId={projectId} />
+              <ProjectSessionList
+                projectId={projectId}
+                hideSpaces={railed && !showingSpaces}
+                spacesOnly={showingSpaces}
+                filterSlot={railed ? sessionsFilterSlot : undefined}
+              />
             )}
           </SidebarGroup>
 
@@ -378,16 +575,58 @@ export function ProjectSidebar({
               {chat ? null : connectRows}
             </SidebarMenu>
           </SidebarGroup>
-        </div>
+        </SidebarDrill>
       </SidebarContent>
+
+      {/* Help sits alone at the foot: a person looks for it at the bottom of
+          the navigation. `pl-2.5` puts its glyph on the rows' icon lane above. */}
+      {railed ? (
+        // With the rail, Help is on the rail and the workspace switcher sits at the panel's foot.
+        menu ? <SidebarFooter className="pt-0">{menu}</SidebarFooter> : null
+      ) : help ? (
+        <SidebarFooter className="flex-row pt-0 pl-2.5">{help}</SidebarFooter>
+      ) : null}
 
       <SidebarRail aria-label={t('resize')} title={t('resizeHelp')} />
     </Sidebar>
+    <SettingsReturnTracker projectId={projectId} />
+    {/* Desktop: the promo card floats in the window's bottom-right corner,
+        outside the sidebar and its More disclosure, so it shows whether or
+        not the sidebar or More is open. */}
+    {isMobile ? null : (
+      <ProjectPromoCards
+        projectId={projectId}
+        onOpenMcp={() => setConnectMcpOpen(true)}
+        onOpenComputer={() => setComputerConnectOpen(true)}
+        onOpenChrome={chrome ? () => useAppsModalStore.getState().setOpen(true) : undefined}
+        onOpenDownloadApp={onOpenDownloadApp}
+        variant="floating"
+        composer={
+          FULL_COMPOSER_ROUTE.test(pathname)
+            ? 'full'
+            : CENTERED_COMPOSER_ROUTE.test(pathname)
+              ? 'centered'
+              : undefined
+        }
+      />
+    )}
     <ComputerConnectModal
       projectId={projectId}
       open={computerConnectOpen}
       onOpenChange={setComputerConnectOpen}
     />
+    {railed ? (
+      <SpaceFormModal
+        projectId={projectId}
+        space={null}
+        open={newSpaceOpen}
+        onOpenChange={setNewSpaceOpen}
+        onSaved={(space) => {
+          const href = uiRoutes().sessionSpace?.(projectId, space.group_id);
+          if (href) router.push(href);
+        }}
+      />
+    ) : null}
     <AppsModal
       chrome={chrome}
       onOpenComputer={() => setComputerConnectOpen(true)}
@@ -396,4 +635,51 @@ export function ProjectSidebar({
     <ConnectMcpModal open={connectMcpOpen} onOpenChange={setConnectMcpOpen} />
     </NewAgentModalProvider>
   );
+}
+
+/**
+ * Docked open, with the rail: a hover on a rail item shows that item's list in
+ * the panel. The same hover intent as the collapsed peek: 100 ms to show, so
+ * a pointer crossing the rail does not flash lists, and 250 ms to go back to
+ * the route's list after the pointer leaves the rail and the panel. While a
+ * menu opened from the list is up (it portals outside the panel), the list
+ * stays, so the menu's row does not unmount under the pointer.
+ */
+function useRailPreview(active: boolean) {
+  const [on, setOn] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clear = useCallback(() => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+  }, []);
+  useEffect(() => clear, [clear]);
+  useEffect(() => {
+    if (active) return;
+    clear();
+    setOn(false);
+  }, [active, clear]);
+
+  const enter = useCallback(() => {
+    clear();
+    if (on) return;
+    timer.current = setTimeout(() => setOn(true), SIDEBAR_PEEK_OPEN_DELAY_MS);
+  }, [clear, on]);
+  const leave = useCallback(() => {
+    clear();
+    const end = () => {
+      timer.current = null;
+      if (document.querySelector('[role="menu"]')) {
+        timer.current = setTimeout(end, SIDEBAR_PEEK_CLOSE_DELAY_MS);
+        return;
+      }
+      setOn(false);
+    };
+    timer.current = setTimeout(end, SIDEBAR_PEEK_CLOSE_DELAY_MS);
+  }, [clear]);
+  // Entering the panel keeps a preview that is up; it never starts one.
+  const keep = useCallback(() => {
+    if (on) clear();
+  }, [clear, on]);
+
+  return { on: active && on, enter, leave, keep };
 }

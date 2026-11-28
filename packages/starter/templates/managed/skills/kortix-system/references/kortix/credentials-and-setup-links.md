@@ -15,6 +15,7 @@ settings page.
 | You need | Mint | The user gets |
 | --- | --- | --- |
 | A key, token or other secret value | A secret link: `kortix secrets request` | A fill-in form |
+| A website's username and password, to sign in with the browser | A login link: `kortix secrets request NAME --login --site HOST` | A sign-in form |
 | An app account (Gmail, GitHub, …) | A connect link: `kortix connectors connect` | A sign-in |
 
 Slack is neither: `kortix channels connect` prints its install link. Never
@@ -39,33 +40,53 @@ printf '%s' "$VALUE" | kortix secrets set BILLING_API_TOKEN=- --scope connector
 ## Mint a secret link
 
 ```sh
-kortix secrets request APOLLO_API_KEY SMARTLEAD_API_KEY --scope runtime   # your code reads them
-kortix secrets request BILLING_API_TOKEN                                  # connector (the default)
+kortix secrets request APOLLO_API_KEY SMARTLEAD_API_KEY --scope runtime     # your code reads them (the default)
+kortix secrets request BILLING_API_TOKEN --scope connector                  # only a connector spends it
 ```
 
-- **`connector` is the default scope of `request`.** The value never reaches
-  the sandbox. Pass `--scope runtime` for a key your code or tools read.
 - One link asks for several keys. Ask for everything in one message.
-- A link lasts 7 days (`--expires <minutes>`, at most 30 days). It can only
-  set the names it lists, in this project.
-- Minting is not idempotent: every call makes a new link. A looping task
-  (trigger, retry) records the link and its `expires_at`, checks whether the
-  secret is set, and mints again only when the link expired.
-  `kortix secrets request <names> --show` prints the saved link.
-- `withheld` in the answer names keys your agent will not receive. Relay the
-  `withheld_fix` it returns.
+- A link lasts 7 days (`--expires <minutes>`, at most 30 days) and sets only its names.
+- Every call makes a new link. A looping task (trigger, retry) records the
+  link and its `expires_at` and mints again only when the secret is unset and
+  the link expired. `kortix secrets request <names> --show` prints it.
+- `withheld` names keys your agent will not receive: relay its `withheld_fix`.
+
+## Sign in to a website
+
+A website login is a username and password the browser types into a sign-in
+page. You see only its name. Use it for a site with no connector.
+
+```sh
+kortix secrets logins                                            # your logins, their sites, ready or not
+kortix secrets request CRM_LOGIN --login --site app.example.com  # ask the person for one
+agent-browser auth login crm --credential-provider kortix --item CRM_LOGIN --url https://app.example.com/login
+```
+
+- `--site` names every host of the sign-in flow exactly (`app.example.com`,
+  not `example.com`). On any other host the sign-in is refused.
+- Unusual fields: `--username-selector`, `--password-selector`,
+  `--submit-selector`. A form reached by clicking: `--no-navigate`, same `--url`.
+- The login stays saved: in a later session, run `auth login` again.
+- "could not resolve credentials": `kortix secrets logins` prints the fix.
+- Never ask for a password in chat, type one with `fill` or `type`, read a
+  password field back, screenshot it or print it.
+- Two-page sign-in, one-time code, passkey or CAPTCHA: ask the person to take
+  over the Desktop.
 
 ## Mint a connect link
 
-1. The connector is not on the project? Add it now, no CR needed:
+1. The connector is not on the workspace? Add it now, no CR needed:
    `kortix connectors add <slug> --provider composio --app <app> --apply`.
    Never pick a legacy provider by yourself; ask the user first.
 2. Pick the owner before you mint. It is set at sign-in:
-   - `--owner project`: a shared account. Every session of the project acts
-     as it. Tell the user to sign in as the project's shared identity (a team
+   - `--owner project`: a shared account. Every session of the workspace acts
+     as it. Tell the user to sign in as the workspace's shared identity (a team
      or service account), never their own login.
    - `--owner me` (default): private to this user, used only in their own
      sessions. Use it for a person's own account.
+   - A trigger or automation (a wake-up on a new email, a scheduled run) uses
+     only shared accounts: mint the `--owner project` link for it, once. A
+     private link cannot serve it, so never mint one first.
    - Unclear? Ask. Never put a personal login in the shared slot.
 3. `kortix connectors connect <slug> [--owner project] --label "<name>"`.
    The label names the account ("Support inbox"), never `me` or an id.
@@ -84,17 +105,8 @@ identity, then `kortix connectors accounts <slug> --default <label>`, then
 
 ## Write links in the reply
 
-The web app turns each link into a card with the app's logo and a button.
-
-```
-I need two apps connected for the report:
-
-https://<app>/connect/ksl_…
-https://<app>/connect/ksl_…
-```
-
-- One link per line. Never put links in a table.
-- One line above them says what they are for.
+Put each link on its own line, never in a table, under one line that says
+what they are for. The web app turns each link into a card with a button.
 
 ## After the user fills it in
 
@@ -117,20 +129,9 @@ https://<app>/connect/ksl_…
 
 ## A person's own credential
 
-A secret value is usable by everyone in the project by default. You cannot
+A secret value is usable by everyone in the workspace by default. You cannot
 change who can use it; the person can. After you store a credential that
 acts as the person or holds sensitive data (payroll, a bank, a personal
-login), tell them once: "Everyone in the project can use it now. To keep it
+login), tell them once: "Everyone in the workspace can use it now. To keep it
 to you, run `kortix secrets share <NAME> --user me`." For a value only one
 agent's trigger needs, suggest `kortix secrets share <NAME> --agent <agent>`.
-
-## Quick reference
-
-| Goal | Command |
-| --- | --- |
-| Store a value you have | `kortix secrets set <NAME>=- [--scope connector]` |
-| Ask for a value your code reads | `kortix secrets request <NAME…> --scope runtime` |
-| Ask for a connector's key | `kortix secrets request <NAME…>` |
-| Connect an app account | `kortix connectors connect <slug> [--owner project] --label "<name>"` |
-| Check a secret arrived | `kortix secrets ls` |
-| Check an app connected | `kortix connectors ls`, `kortix connectors accounts <slug>` |

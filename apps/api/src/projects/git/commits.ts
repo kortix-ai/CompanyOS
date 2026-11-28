@@ -1,6 +1,6 @@
-// Commit reads + shared git-log parsing primitives (FIELD/RECORD separators,
-// LOG_FORMAT, parseLogStdout, decodeStatusChar) used by branches.ts and
-// merge.ts as well.
+// Commit reads + in-file git-log parsing primitives (FIELD/RECORD
+// separators, LOG_FORMAT, parseLogStdout, decodeStatusChar). branches.ts
+// imports FIELD_SEP for its branch listing.
 
 import { existsSync } from 'node:fs';
 import { validateRef, validateSha } from '../git-ref';
@@ -25,8 +25,8 @@ import type {
 } from './types';
 
 export const FIELD_SEP = '';
-export const RECORD_SEP = '';
-export const LOG_FORMAT = [
+const RECORD_SEP = '';
+const LOG_FORMAT = [
   '%H',
   '%h',
   '%P',
@@ -40,7 +40,7 @@ export const LOG_FORMAT = [
   '%b',
 ].join(FIELD_SEP) + RECORD_SEP;
 
-export function parseLogStdout(stdout: string): GitLogEntry[] {
+function parseLogStdout(stdout: string): GitLogEntry[] {
   return stdout
     .split(RECORD_SEP)
     .map((chunk) => chunk.replace(/^\n+/, ''))
@@ -78,7 +78,7 @@ export function parseLogStdout(stdout: string): GitLogEntry[] {
     .filter((entry): entry is GitLogEntry => entry !== null);
 }
 
-export function decodeStatusChar(code: string): GitCommitFile['status'] {
+function decodeStatusChar(code: string): GitCommitFile['status'] {
   const head = code[0] || 'M';
   switch (head) {
     case 'A':
@@ -100,11 +100,13 @@ export function decodeStatusChar(code: string): GitCommitFile['status'] {
  * Resolve a ref (branch name, tag, "HEAD") to a full 40-char commit SHA.
  * Used by the snapshot builder to pin a build to a specific commit even
  * when the default branch moves underneath it.
+ * `freshness: true` asks the remote for this ref now: a session branch pushed
+ * straight to the upstream is not in the mirror until the next refresh.
  */
 export async function resolveCommitSha(
   project: GitBackedProject,
   ref?: string,
-  freshness: Extract<MirrorRefresh, false | 'tip-proof'> = false,
+  freshness: MirrorRefresh = false,
 ): Promise<string> {
   const treeRef = validateRef(ref || project.defaultBranch);
   const repoPath = await (freshness
@@ -122,8 +124,7 @@ export async function readMirrorCommitSha(project: GitBackedProject, ref?: strin
 
 /**
  * `git rev-parse --verify <ref>^{commit}` against an already-resolved repo —
- * no mirror refresh. The one rev-parse site for commits.ts and
- * fast-boot-bundle.ts. Git command failures propagate untouched; only a
+ * no mirror refresh. The one rev-parse site for commits.ts. Git command failures propagate untouched; only a
  * non-hex answer becomes the typed error below, so each caller keeps its own
  * mapping (the boundary returns null, the project wrappers rethrow).
  */

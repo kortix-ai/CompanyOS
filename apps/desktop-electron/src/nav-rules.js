@@ -11,14 +11,30 @@ function isPreviewHost(host) {
   );
 }
 
+// Stripe-hosted Checkout and the billing portal. They load in the window, so
+// Stripe's success, cancel and return URLs come back to it. In the system
+// browser the payment finished there and the window never saw the return.
+// `pay.kortix.com` is Kortix's custom Stripe domain (a CNAME to
+// hosted-checkout.stripecdn.com), which serves both pages in production.
+const STRIPE_HOSTED_HOSTS = new Set(['checkout.stripe.com', 'billing.stripe.com', 'pay.kortix.com']);
+
+/** Exact host match on `u.host`, which keeps a non-default port: `checkout.stripe.com:8443` does not match. */
+function isStripeHostedPage(u) {
+  return u.protocol === 'https:' && STRIPE_HOSTED_HOSTS.has(u.host);
+}
+
 // Product route prefixes allowed to render in the desktop window. MUST equal
 // DESKTOP_ALLOWED_ROUTES in apps/web/src/middleware.ts; nav-rules.test.js
 // fails when they differ. A route the middleware allows but this list does not
 // opens in the system browser on a full-page load, and the app window stays
 // where it was — a soft lock, because the shell has no Back.
 const APP_PATH_PREFIXES = [
+  '/workspaces',
+  // The pre-2026-11-06 workspace URLs. Old links and deep links still open
+  // them; next.config.ts redirects both to /workspaces, inside the window.
   '/projects',
   '/new',
+  '/inbox',
   '/settings',
   '/invites',
   '/admin',
@@ -30,7 +46,6 @@ const APP_PATH_PREFIXES = [
   '/capture',
   '/github',
   '/cli',
-  '/marketplace',
   '/maintenance',
   '/countryerror',
   '/debug',
@@ -56,4 +71,4 @@ function isApprovalDialogPath(pathname) {
   return pathname.startsWith('/tunnel/') || pathname === '/auth' || pathname.startsWith('/auth/');
 }
 
-module.exports = { APP_PATH_PREFIXES, isAppPath, isApprovalDialogPath, isPreviewHost };
+module.exports = { APP_PATH_PREFIXES, isAppPath, isApprovalDialogPath, isPreviewHost, isStripeHostedPage };

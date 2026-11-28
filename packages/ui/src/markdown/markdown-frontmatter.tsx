@@ -8,10 +8,10 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import { UnifiedMarkdown } from './unified-markdown';
 
 /**
- * Minimal YAML frontmatter rendering for markdown files (opencode-style agent
- * and skill definitions, but generic). The parser handles flat key/value pairs
- * plus a single level of nested objects — enough for the patterns documented
- * at https://opencode.ai/docs/agents/ and similar conventions.
+ * Minimal YAML frontmatter rendering for markdown files (agent and skill
+ * definitions, but generic). The parser handles flat key/value pairs plus a
+ * single level of nested objects — enough for agent and skill frontmatter
+ * (`description`, `mode`, `permission`, ...) and similar conventions.
  */
 
 export type FrontmatterValue = string | Record<string, string>;
@@ -77,7 +77,7 @@ export function parseFrontmatter(content: string): ParsedMarkdown {
     const line = rawLine.trimEnd();
     if (!line.trim() || line.trim().startsWith('#')) continue;
 
-    // A nested key may be QUOTED, and in the opencode permission idiom it
+    // A nested key may be QUOTED, and in the agent permission idiom it
     // usually is — `"*": allow`. Matching only [\w.-] dropped that line, left
     // the parent an empty object, and printed a bare em-dash where the
     // permissions belong. Wildcards and path-ish keys are accepted bare too.
@@ -122,13 +122,13 @@ function ScalarValue({ value }: { value: string }) {
 function NestedTable({ data }: { data: Record<string, string> }) {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const entries = Object.entries(data);
-  if (entries.length === 0) return <span className="text-muted-foreground/60">—</span>;
+  if (entries.length === 0) return <span className="text-muted-foreground">—</span>;
   return (
     <div className="inline-flex flex-wrap gap-x-3 gap-y-1">
       {entries.map(([k, v]) => (
         <Badge key={k} size="sm" variant="secondary" className="gap-1">
-          <span className="text-muted-foreground/70">{k}</span>
-          <span className="text-muted-foreground/30">{tI18nComplete.raw('text3b9453dad42b')}</span>
+          <span className="text-muted-foreground">{k}</span>
+          <span className="text-muted-foreground">{tI18nComplete.raw('text3b9453dad42b')}</span>
           <ScalarValue value={v} />
         </Badge>
       ))}
@@ -205,8 +205,8 @@ function FrontmatterValueBody({ value }: { value: FrontmatterValue }) {
 
 /**
  * Render markdown content; if a leading YAML frontmatter block is present, it
- * renders as a small metadata card above the prose. Used for opencode-style
- * agent / skill markdown files (and any other frontmatter-prefixed `.md`).
+ * renders as a small metadata card above the prose. Used for agent / skill
+ * markdown files (and any other frontmatter-prefixed `.md`).
  */
 export function MarkdownWithFrontmatter({
   content,
@@ -247,7 +247,7 @@ export function MarkdownFrontmatterCard({
       <div className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1.5 text-xs leading-relaxed">
         {entries.map(([key, value]) => (
           <React.Fragment key={key}>
-            <span className="text-muted-foreground/70 select-none">{key}</span>
+            <span className="text-muted-foreground select-none">{key}</span>
             <FrontmatterValueBody value={value} />
           </React.Fragment>
         ))}

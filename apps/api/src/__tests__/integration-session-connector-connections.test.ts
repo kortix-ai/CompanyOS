@@ -43,6 +43,7 @@ import {
 import { makeDbGatewayDeps } from '../connectors/db-deps';
 import { finalizePipedreamConnectionAuthorization } from '../connectors/pipedream';
 import {
+  isSessionChannelConnector,
   listEntitledConnectorConnections,
   resolveEffectiveSessionConnectorBindings,
   resolveSessionConnectorConnection,
@@ -1203,7 +1204,7 @@ describe('session connector isolation', () => {
     await revokeEmailInboxAccount(again);
     await revokeEmailInboxAccount(b);
     const claims = await db
-      .select({ workspaceId: chatInstalls.workspaceId })
+      .select({ workspaceId: chatInstalls.platformTeamId })
       .from(chatInstalls)
       .where(and(eq(chatInstalls.platform, 'email'), eq(chatInstalls.projectId, PROJECT_A)));
     expect(claims.map((r) => r.workspaceId)).toEqual(['connection-test-default-inbox']);
@@ -1314,7 +1315,7 @@ describe('session connector isolation', () => {
         agentName: chatChannelBindings.agentName,
       })
       .from(chatChannelBindings)
-      .where(and(eq(chatChannelBindings.platform, 'email'), eq(chatChannelBindings.workspaceId, inboxId)));
+      .where(and(eq(chatChannelBindings.platform, 'email'), eq(chatChannelBindings.platformTeamId, inboxId)));
     expect(binding).toEqual({
       projectId: PROJECT_A,
       channelName: 'veyris-bound@example.test',
@@ -1327,7 +1328,7 @@ describe('session connector isolation', () => {
     const rows = await db
       .select({ bindingId: chatChannelBindings.bindingId })
       .from(chatChannelBindings)
-      .where(and(eq(chatChannelBindings.platform, 'email'), eq(chatChannelBindings.workspaceId, inboxId)));
+      .where(and(eq(chatChannelBindings.platform, 'email'), eq(chatChannelBindings.platformTeamId, inboxId)));
     expect(rows).toEqual([]);
   });
 
@@ -1342,10 +1343,26 @@ describe('session connector isolation', () => {
     const owners = await db
       .select({ projectId: chatInstalls.projectId })
       .from(chatInstalls)
-      .where(and(eq(chatInstalls.platform, 'email'), eq(chatInstalls.workspaceId, sharedInbox)));
+      .where(and(eq(chatInstalls.platform, 'email'), eq(chatInstalls.platformTeamId, sharedInbox)));
     expect(owners.map((r) => r.projectId).sort()).toEqual([PROJECT_A, PROJECT_B].sort());
     await releaseEmailInbox(PROJECT_A, sharedInbox);
     await releaseEmailInbox(PROJECT_B, sharedInbox);
+  });
+
+  test("an email session binds its inbox without the agent's connectors grant; nothing else does", async () => {
+    // An inbox bound to an agent with `connectors: none` dead-lettered every
+    // create with "is not granted connector email", and the mail was dropped
+    // with no session and no notice.
+    expect(await isSessionChannelConnector(PROJECT_A, 'email', 'email')).toBe(true);
+    expect(await isSessionChannelConnector(PROJECT_A, 'kortix_email', 'email')).toBe(true);
+    // A session another source starts binds the inbox only under a grant.
+    expect(await isSessionChannelConnector(PROJECT_A, 'email', 'slack')).toBe(false);
+    expect(await isSessionChannelConnector(PROJECT_A, 'email', 'api')).toBe(false);
+    expect(await isSessionChannelConnector(PROJECT_A, 'email', undefined)).toBe(false);
+    // An email session's other connectors stay under the grant.
+    expect(await isSessionChannelConnector(PROJECT_A, 'veyris', 'email')).toBe(false);
+    // Another project's inbox connector is not this project's channel.
+    expect(await isSessionChannelConnector(PROJECT_B, 'email', 'email')).toBe(false);
   });
 });
 

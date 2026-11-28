@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 
 import { searchWorkspaceFiles } from '../../../files/runtime';
-import { qk, runtimeKeys, useActiveSandboxProxyContext } from '@kortix/sdk/react';
+import { searchWorkspaceFiles as searchWorkspaceRepoFiles } from '@kortix/sdk';
+import { qk, runtimeKeys, useActiveSandboxProxyContext, useKortixRouteWorkspaceId } from '@kortix/sdk/react';
 import type { QueryKey } from '@tanstack/react-query';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -30,13 +31,60 @@ const UNBOUND_SERVER = 'unbound';
  * across a session switch must stop reusing its pre-switch entry the moment
  * the active sandbox changes — `server` is what makes both true.
  */
-export const composerFileSearchKey = (server: string, query: string) =>
-  ['web', 'composer', 'file-search', server, query] as const;
+export const composerFileSearchKey = (server: string, query: string, workspaceId: string | null = null) =>
+  ['web', 'composer', 'file-search', server, query, workspaceId] as const;
+
+/** The `server` slot of the repo query's key: the repo is not on a computer. */
+const REPO_SOURCE = 'workspace-repo';
+
+/** Repo rows the `@` menu asks for. The menu shows 20 file rows at most. */
+const REPO_SEARCH_LIMIT = 20;
+
+/**
+ * The `@` menu's file rows: the session computer's files first, then the
+ * workspace repo's files that the computer does not hold, each path once.
+ *
+ * The computer's `/workspace` holds no repo unless an agent declares
+ * `workspace.repos`, and workspace home has no computer at all. Without the
+ * repo rows the menu offered no file there although the placeholder says
+ * "Type @ to mention files and agents".
+ */
+export function mergeFileResults(runtime: readonly string[], repo: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const merged: string[] = [];
+  for (const path of [...runtime, ...repo]) {
+    const key = path.replace(/^\/workspace\//, '').replace(/^\.\//, '');
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    merged.push(path);
+  }
+  return merged;
+}
+
+// replica-local: workspaces whose repo search answered 403 in this tab. A
+// member without file read stops asking on every keystroke.
+const repoSearchDenied = new Set<string>();
+
+async function searchRepoFiles(workspaceId: string | null, query: string): Promise<string[]> {
+  const q = query.trim();
+  if (!workspaceId || !q || repoSearchDenied.has(workspaceId)) return [];
+  // Silent: a member without file read gets a 403 here, and the runtime rows still list.
+  try {
+    const { results } = await searchWorkspaceRepoFiles(workspaceId, q, { limit: REPO_SEARCH_LIMIT, showErrors: false });
+    return results.map((match) => match.path);
+  } catch (error) {
+    if ((error as { status?: number } | null)?.status === 403) repoSearchDenied.add(workspaceId);
+    throw error;
+  }
+}
+
 
 /** Index of `server` inside `composerFileSearchKey`'s tuple. Named rather than
  *  inlined so the coupling between the key shape and the placeholder guard
  *  below is a single, testable fact instead of a magic `3`. */
 const SERVER_KEY_INDEX = 3;
+/** Index of the workspace id inside `composerFileSearchKey`'s tuple. */
+const WORKSPACE_KEY_INDEX = 5;
 
 /**
  * Whether a previous query's results may still be shown as placeholder data.
@@ -55,8 +103,11 @@ const SERVER_KEY_INDEX = 3;
 export function canKeepPlaceholderFiles(
   server: string,
   previousQueryKey: readonly unknown[] | undefined,
+  workspaceId: string | null = null,
 ): boolean {
-  return previousQueryKey?.[SERVER_KEY_INDEX] === server;
+  // The repo rows belong to one workspace: a switch to another workspace on
+  // the same server (or on no server, `unbound`) drops them too.
+  return previousQueryKey?.[SERVER_KEY_INDEX] === server && (previousQueryKey?.[WORKSPACE_KEY_INDEX] ?? null) === workspaceId;
 }
 
 /**
@@ -78,15 +129,19 @@ export function useFileSearch(query: string, enabled: boolean) {
   // hidden tab (see use-composer-focus.ts) would only re-read it when
   // something else happens to re-render the component. `getActiveServerUrl()`
   // has the identical gap — it wraps the same read with no subscription of
-  // its own (see use-opencode-events/index.ts, which pairs it with
+  // its own (see use-runtime-events/index.ts, which pairs it with
   // `useCurrentRuntime` for exactly this reason). `useActiveSandboxProxyContext`
   // is the SDK's reactive form: it re-renders on every `setCurrentRuntime`
   // (session switch), so `server` and the sandbox `searchWorkspaceFiles`
   // actually calls never drift apart.
   const { serverUrl } = useActiveSandboxProxyContext();
   const server = serverUrl || UNBOUND_SERVER;
+  // The workspace on screen: its repo is the second source of file rows.
+  const workspaceId = useKortixRouteWorkspaceId();
 
-  const { data, isFetching } = useQuery({
+  // Two queries, merged at render: the computer's rows show as soon as they
+  // arrive and never wait on the git-backed repo search.
+  const runtime = useQuery({
     queryKey: composerFileSearchKey(server, debounced),
     queryFn: () => searchWorkspaceFiles(debounced),
     enabled,
@@ -107,8 +162,21 @@ export function useFileSearch(query: string, enabled: boolean) {
       canKeepPlaceholderFiles(server, previousQuery?.queryKey) ? previous : undefined,
     retry: false,
   });
+  const repo = useQuery({
+    queryKey: composerFileSearchKey(REPO_SOURCE, debounced, workspaceId),
+    queryFn: () => searchRepoFiles(workspaceId, debounced),
+    enabled: enabled && Boolean(workspaceId) && debounced.trim().length > 0,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    // The same guard, scoped to the workspace: its repo rows never outlive a switch.
+    placeholderData: (previous: string[] | undefined, previousQuery) =>
+      canKeepPlaceholderFiles(REPO_SOURCE, previousQuery?.queryKey, workspaceId) ? previous : undefined,
+    retry: false,
+  });
 
-  return { files: data ?? [], isLoading: isFetching && !data };
+  const files = useMemo(() => mergeFileResults(runtime.data ?? [], repo.data ?? []), [runtime.data, repo.data]);
+  const isLoading = (runtime.isFetching && !runtime.data) || (repo.isFetching && !repo.data);
+  return { files, isLoading };
 }
 
 /**
@@ -138,29 +206,29 @@ export function isMenuOpenTransition(wasOpen: boolean, isOpen: boolean): boolean
  * pure function — same reasoning as `isMenuOpenTransition` above — so the
  * key SELECTION is directly testable, not just asserted by code review.
  *
- * Commands has exactly ONE query-key shape: `useOpenCodeCommands`
- * (`use-opencode-sessions/commands.ts`) never branches, so the bare
- * `['opencode', 'commands']` prefix always reaches it.
+ * Commands has exactly ONE query-key shape: `useRuntimeCommands`
+ * (`packages/sdk/src/react/use-runtime-sessions/commands.ts`) never branches,
+ * so the bare `[...runtimeKeys.all, 'commands']` prefix always reaches it.
  *
- * Agents does NOT have one shape. `useOpenCodeAgents`
- * (`use-opencode-sessions/agents.ts:42-46`) branches on `projectId`:
+ * Agents does NOT have one shape. `useRuntimeAgents`
+ * (`packages/sdk/src/react/use-runtime-sessions/agents.ts`) branches on
+ * `projectId`:
  *
  * ```ts
  * queryKey: projectId
  *   ? [...qk.project.detail(projectId), 'agents']   // ['kx','project',<id>,'detail','agents']
  *   : directory
- *     ? [...opencodeKeys.agents(), 'dir', directory] // ['opencode','agents',<server>,'dir',<dir>]
- *     : opencodeKeys.agents()                        // ['opencode','agents',<server>]
+ *     ? [...runtimeKeys.agents(), 'dir', directory] // ['runtime','agents',<server>,'dir',<dir>]
+ *     : runtimeKeys.agents()                        // ['runtime','agents',<server>]
  * ```
  *
- * The bare `['opencode', 'agents']` prefix (`runtimeKeys.agents()` minus its
+ * The bare `['runtime', 'agents']` prefix (`runtimeKeys.agents()` minus its
  * trailing server segment) DOES reach the `directory` and no-argument
- * branches — both start with `opencodeKeys.agents()`, so it's a genuine
+ * branches — both start with `runtimeKeys.agents()`, so it's a genuine
  * prefix of both. It is DISJOINT AT SEGMENT 0 from the `projectId` branch's
  * `['kx', 'project', ...]` shape — no amount of prefix-matching bridges
- * `'opencode'` and `'kx'`. Every real composer call site passes `projectId`
- * (`instant-session-shell.tsx:88`, `composer-chat-input.tsx:108`,
- * `session-chat.tsx:1641`), so invalidating only the bare prefix was a
+ * `'runtime'` and `'kx'`. Every real composer call site passes `projectId`,
+ * so invalidating only the bare prefix was a
  * SILENT no-op for agents in every actual composer — commands and skills
  * refreshed, agents did not, and nothing about `invalidateQueries` failing
  * to match anything ever surfaces an error.
@@ -174,7 +242,7 @@ export function isMenuOpenTransition(wasOpen: boolean, isOpen: boolean): boolean
  * the exact same way `agents.ts` itself builds it, not a hand-typed
  * `['kx', 'project', ...]` literal — see `use-file-search.test.ts` for the
  * test that binds this to `qk.project.detail` directly, so a future
- * reshuffle of `useOpenCodeAgents`'s branching can't repeat this silently.
+ * reshuffle of `useRuntimeAgents`'s branching can't repeat this silently.
  */
 export function menuRevalidationKeys(projectId?: string | null): QueryKey[] {
   const keys: QueryKey[] = [runtimeKeys.agents().slice(0, -1), runtimeKeys.commands().slice(0, -1)];
@@ -190,7 +258,7 @@ export function menuRevalidationKeys(projectId?: string | null): QueryKey[] {
  * caching and revalidation, like query revalidate."
  *
  * `useRuntimeAgents`/`useRuntimeCommands` (`@kortix/sdk/react`, backed by
- * `packages/sdk/src/react/use-opencode-sessions/{agents,commands}.ts`) both
+ * `packages/sdk/src/react/use-runtime-sessions/{agents,commands}.ts`) both
  * set `staleTime: Infinity` — correct for the SDK's other consumers, which
  * have no equivalent of "the user is about to pick from this list right
  * now" to hang a refetch off of, so `packages/sdk` is deliberately left
@@ -209,7 +277,7 @@ export function menuRevalidationKeys(projectId?: string | null): QueryKey[] {
  * commands) and 3 with one (agents, commands, project-scoped agents) — MORE
  * calls than a naive read of "invalidate the agents cache" suggests, and
  * that is correct: `menuRevalidationKeys`'s own doc comment is the reason
- * why one key alone cannot reach every branch `useOpenCodeAgents` can take.
+ * why one key alone cannot reach every branch `useRuntimeAgents` can take.
  */
 export function useMenuRevalidation(isOpen: boolean, projectId?: string | null): void {
   const queryClient = useQueryClient();

@@ -21,8 +21,6 @@ import { autoTopupFailure, failureDisablesAutoTopup, HARD_DECLINE_CODES } from '
 import { resolveAccountBilling } from './billing-cache';
 import { isDeadSubscriptionStatus } from './billing-state';
 import { wallet } from '../wallet';
-import { grantTopUpBonus } from './top-up-bonus';
-import { isPaidTier } from './tiers';
 import { BillingError } from '../../errors';
 import {
   AUTO_TOPUP_DEFAULT_AMOUNT,
@@ -81,9 +79,11 @@ export async function configureAutoTopup(accountId: string, cfg: AutoTopupConfig
   // Resolved plan, not the stored `credit_accounts.tier`. The row is already in
   // hand, so this costs no extra read. An account on an active trial of a paid
   // plan is paid for the trial window.
-  const { plan } = await resolveAccountBilling(accountId, { row: account });
-  if (!isPaidTier(plan.key)) {
-    throw new BillingError('Auto-topup is only available for paid plans');
+  // Auto top-up is a one-off purchase on a timer, so it follows the same
+  // entitlement as the purchase route. Turning it off is always allowed.
+  const { entitlements } = await resolveAccountBilling(accountId, { row: account });
+  if (cfg.enabled && !entitlements.canPurchaseCredits) {
+    throw new BillingError('Auto top-up is not available on this plan');
   }
 
   const error = validateAutoTopupConfig(cfg);
@@ -197,8 +197,9 @@ async function tryAutoTopup(accountId: string): Promise<void> {
   if (!account.autoTopupEnabled) return;
 
   // Same resolved-plan gate as configureAutoTopup, off the row already fetched.
-  const { plan } = await resolveAccountBilling(accountId, { row: account });
-  if (!isPaidTier(plan.key)) return;
+  // A stored setting from before the plan lost top-ups never charges.
+  const { entitlements } = await resolveAccountBilling(accountId, { row: account });
+  if (!entitlements.canPurchaseCredits) return;
 
   const threshold = Number(account.autoTopupThreshold) || AUTO_TOPUP_DEFAULT_THRESHOLD;
   const amount = Number(account.autoTopupAmount) || AUTO_TOPUP_DEFAULT_AMOUNT;
@@ -350,7 +351,6 @@ async function grantAutoTopup(accountId: string, paymentIntentId: string, amount
     expiring: false,
     key: { event: paymentIntentId },
   });
-  await grantTopUpBonus(accountId, amount, `${paymentIntentId}:bonus`);
   await updateCreditAccount(accountId, {
     autoTopupLastCharged: new Date().toISOString(),
     autoTopupConsecutiveFailures: 0,

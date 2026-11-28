@@ -1,5 +1,5 @@
 /**
- * A corrupt or legacy `opencode-model-store-v1` localStorage entry must never
+ * A corrupt or legacy `kortix-model-store-v1` localStorage entry must never
  * brick the app. Proven live on SampleCo 2026-08-26: a malformed store value
  * crashed every route with the full-screen "Something went wrong — a.user is
  * not iterable" card, because loadStore() returned JSON.parse(raw) unvalidated
@@ -62,5 +62,14 @@ describe('sanitizeModelStore', () => {
   test('the switch each session pick was made against survives a reload; a wrong-typed map is dropped', () => {
     expect(sanitizeModelStore({ sessionModelFallbackAt: { 'gateway:s1': 1_000 } }).sessionModelFallbackAt).toEqual({ 'gateway:s1': 1_000 });
     expect(sanitizeModelStore({ sessionModelFallbackAt: [1] }).sessionModelFallbackAt).toBeUndefined();
+  });
+});
+
+describe('sanitizeModelStore: projectAgentName', () => {
+  test('a per-workspace agent map survives; a wrong-typed one is dropped', () => {
+    expect(sanitizeModelStore({ projectAgentName: { 'workspace-a': 'mykortix' } }).projectAgentName).toEqual({
+      'workspace-a': 'mykortix',
+    });
+    expect(sanitizeModelStore({ projectAgentName: 'mykortix' }).projectAgentName).toBeUndefined();
   });
 });

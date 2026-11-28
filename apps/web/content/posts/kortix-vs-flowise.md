@@ -35,7 +35,7 @@ A team can keep a fork alive, and the license allows it. That fork then carries 
 
 ## A repo your team can read and review
 
-Kortix takes the route a canvas cannot: the system is a repository. `kortix.yaml` sits at the project root. It declares the agents, what each one may reach and the triggers, and the reference calls it the file people write and review by hand ([kortix.yaml reference](https://kortix.com/docs/project/manifest)).
+Kortix takes the route a canvas cannot: the system is a repository. `kortix.yaml` sits at the workspace root. It declares the agents, what each one may reach and the triggers, and the reference calls it the file people write and review by hand ([kortix.yaml reference](https://kortix.com/docs/project/manifest)).
 
 ```yaml
 kortix_version: 2
@@ -56,9 +56,9 @@ The difference shows up on the day an agent gets a change wrong. One isolated sa
 
 ## What the machine costs
 
-Kortix bills compute and model calls by usage. Nothing is charged per seat. On the Free plan an account pays $0: 500 credits a month, every feature and one project, on your own provider keys or a ChatGPT subscription ([Plans and credits](https://kortix.com/docs/credits)).
+Kortix bills compute and model calls by usage. Nothing is charged per seat. On the Free plan an account pays $0: 500 credits a month on your first workspace and every feature, on your own provider keys or a ChatGPT subscription ([Plans and credits](https://kortix.com/docs/credits)).
 
-The paid plan is credits. You choose a monthly amount, 5,000 credits a month costs $50, and every tier buys credits at 100 credits per dollar ([Kortix pricing](https://kortix.com/pricing)). Members are unlimited and free, the account shares one wallet, and unused monthly credits roll over one month.
+The paid plan is credits. You choose a monthly amount, 5,000 credits a month costs $50, and larger tiers buy up to 30% more credits per dollar ([Kortix pricing](https://kortix.com/pricing)). Members are unlimited and free, the account shares one wallet, and unused monthly credits roll over one month.
 
 Compute is the meter that matters. The default sandbox runs 2 vCPU with 4 GB of memory and 20 GB of disk, and costs about 11 credits an hour, roughly 11 cents for each hour it runs ([Plans and credits](https://kortix.com/docs/credits)). A stopped sandbox accrues nothing. Model calls on your own key cost nothing for the first $1,000 of usage a month, then a 5% fee. Managed models bill at the provider's base price plus a 5.5% platform fee. Run it on Kortix Cloud, in your VPC, or on your own on-prem network. Self-host is free, and a self-hosted instance has no managed models and no credits.
 

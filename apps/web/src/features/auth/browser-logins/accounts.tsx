@@ -283,7 +283,7 @@ export function BrowserAccountsPage({ callback = false }: { callback?: boolean }
     );
   };
   return (
-    <AuthFrame footerVariant={add || candidate ? 'continue' : 'none'}>
+    <AuthFrame footerVariant={add || candidate ? 'default' : 'none'}>
       <section className="space-y-6" aria-busy={pending}>
         <ConfirmDialog
           open={removing !== null}

@@ -17,7 +17,7 @@ show its size; the project's sandbox template sets it.
 ## General Env
 
 The runtime user is `kortix`. It has passwordless `sudo` access.
-The project repository and its configuration are in `/workspace`.
+`/workspace` is this session's own folder; it starts empty. The project repository is not checked out at boot: run `kortix workspaces clone` to work on it (the clone is on your session branch, the one branch you can push).
 
 Use `pnpm` for JavaScript and TypeScript dependencies. Use `pnpm dlx` for temporary package commands.
 Python 3 is available as `python` and `python3`. For a Python package that is not pre-installed, use `uv run --with "pkg1,pkg2" script.py` — declare dependencies inline, comma-separated, version pins allowed. Do not create venvs or use `pip install` for one-off scripts.
@@ -55,8 +55,12 @@ port 6901.
   every page you open.
 - The desktop has one browser, yours. The dock's browser icon and every
   `xdg-open <url>` open your default `agent-browser` session, so the user
-  shares your window, tabs and logins. To have the user sign in to a site,
-  open the page and ask them to take over. A tab they open becomes your
+  shares your window, tabs and logins. To sign in to a site with a username
+  and password, use a website login (`kortix secrets request NAME --login
+  --site <host>`, then `agent-browser auth login … --credential-provider
+  kortix --item NAME`): the browser types it and you never see it. For a
+  code, a passkey or a CAPTCHA, open the page and ask the user to take over.
+  A tab they open becomes your
   active tab. Leave the browser open when you finish: `agent-browser close`
   closes the user's window and drops its logins.
 - Browse only in the default session, with its flags as set. A named

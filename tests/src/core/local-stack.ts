@@ -1,7 +1,7 @@
+import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { Client } from "pg";
 import {
   LOCAL_AUTH_EMAIL_HOOK_SECRET,
   LOCAL_GATEWAY_INTERNAL_TOKEN,
@@ -319,13 +319,15 @@ export async function ensureLocalSupabase(
   // `studio` (the dashboard) and `imgproxy` (storage image transforms): no
   // test uses either, and they were the largest pulls of a CI lane's
   // 108 s `supabase start` (browser-1, run 38777589705). scripts/dev-local.sh
-  // excludes the same two.
+  // excludes the same two. `postgrest`: nothing calls the Data API (flow
+  // SEC-K), and on a fresh database it made the start wait its 30 s health
+  // timeout for the `kortix` schema, which exists only after migrations.
   const command = [
     ...localSupabaseCommand(topology),
     "start",
     "--ignore-health-check",
     "-x",
-    "studio,imgproxy",
+    "studio,imgproxy,postgrest",
   ];
   const started = Bun.spawn(command, {
     cwd: topology.root,
@@ -372,11 +374,80 @@ export function localMigrationPlan(
   };
 }
 
+/**
+ * The migration files this tree adds or changes against `origin/dev`
+ * (committed, staged, modified or untracked), relative to the repo root.
+ * `null` when git cannot answer (no `origin/dev`, not a checkout): the guard
+ * then has nothing to compare and does not refuse.
+ */
+export function branchOnlyMigrations(root: string): string[] | null {
+  const git = (args: string[]) => {
+    const out = spawnSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    return out.status === 0 ? out.stdout : null;
+  };
+  const changed = git(["diff", "--name-only", "--diff-filter=AMR", "origin/dev", "--", "packages/db/migrations"]);
+  const untracked = git(["ls-files", "--others", "--exclude-standard", "--", "packages/db/migrations"]);
+  if (changed === null || untracked === null) return null;
+  return [...new Set(`${changed}\n${untracked}`.split("\n").map((line) => line.trim()).filter(Boolean))].sort();
+}
+
+/** Set to `1` to migrate the shared database anyway (a person who means it). */
+export const SHARED_DB_MIGRATE_OVERRIDE = "KORTIX_SHARED_DB_MIGRATE";
+
+/**
+ * Why `ensureLocalMigrations` must not migrate this database, or null.
+ *
+ * A shared-mode worktree (and the primary checkout) migrates the primary
+ * database `127.0.0.1:54322/postgres`, which every other stack on the machine
+ * reads. A branch migration applied there changes the schema under every
+ * other session (learning 2026-11-06T040313Z: a unique index broke project
+ * creation for every stack on the machine). A worktree with its own database
+ * (`--db`: `kortix_wt_<slug>`, or `--full-supabase`) and CI (a fresh
+ * database per job) are never refused.
+ */
+export function sharedDatabaseMigrationRefusal(input: {
+  topology: Pick<LocalTopology, "marker" | "worktreeName">;
+  dbUrl: string;
+  branchOnly: string[] | null;
+  env: Record<string, string | undefined>;
+}): string | null {
+  const { topology, dbUrl, branchOnly, env } = input;
+  if (env.CI && env.CI !== "false" && env.CI !== "0") return null;
+  if (env[SHARED_DB_MIGRATE_OVERRIDE] === "1") return null;
+  const mode = topology.marker?.dbMode;
+  if (mode === "branch" || mode === "isolated") return null;
+  let database: string;
+  try {
+    database = decodeURIComponent(new URL(dbUrl).pathname.replace(/^\//, ""));
+  } catch {
+    return null;
+  }
+  if (database !== "postgres") return null;
+  if (!branchOnly || branchOnly.length === 0) return null;
+  const shown = branchOnly.slice(0, 5).map((file) => `  ${file}`).join("\n");
+  const more = branchOnly.length > 5 ? `\n  … and ${branchOnly.length - 5} more` : "";
+  const slug = topology.worktreeName ?? "<slug>";
+  return [
+    `refused: this tree has ${branchOnly.length} migration file(s) that origin/dev does not have, and the test database is the SHARED primary database (${dbUrl.replace(/\/\/[^@]*@/, "//")}).`,
+    shown + more,
+    "Applying them there changes the schema under every other stack on this machine.",
+    `Give the work its own database: create the worktree with --db (pnpm worktree create --name ${slug} --db --yes --no-start; the worktree skill), then run pnpm test there.`,
+    `(${SHARED_DB_MIGRATE_OVERRIDE}=1 migrates the shared database anyway.)`,
+  ].join("\n");
+}
+
 export async function ensureLocalMigrations(
   topology: LocalTopology,
   supabase: LocalSupabaseEnvironment,
 ): Promise<void> {
   const plan = localMigrationPlan(topology, supabase);
+  const refusal = sharedDatabaseMigrationRefusal({
+    topology,
+    dbUrl: plan.env.DATABASE_URL!,
+    branchOnly: branchOnlyMigrations(topology.root),
+    env: process.env,
+  });
+  if (refusal) throw new Error(refusal);
   const migrated = Bun.spawn(plan.command, {
     cwd: plan.cwd,
     env: plan.env,
@@ -395,74 +466,6 @@ export async function ensureLocalMigrations(
     if (!db) throw new Error("no primary Supabase container for the branch database");
     const error = syncBranchUsers(db, branch.worktreeName);
     if (error) throw new Error(`branch database auth sync: ${error}`);
-  }
-  await waitForLocalPostgrest(supabase);
-}
-
-export interface PostgrestReadinessDeps {
-  reload?: (dbUrl: string) => Promise<void>;
-  fetch?: (url: string, init?: RequestInit) => Promise<Response>;
-  sleep?: (ms: number) => Promise<void>;
-  now?: () => number;
-  timeoutMs?: number;
-}
-
-/**
- * Waits until PostgREST serves the migrated schema.
- *
- * `supabase start` on an empty database boots PostgREST before the `kortix`
- * schema exists. Its first schema-cache load fails (`3F000`) and it retries
- * with exponential backoff, answering `503 PGRST002` meanwhile. Without this
- * wait, a flow that calls `/rest/v1` (SEC-K) ran inside that backoff window.
- * A `reload schema` notification loads the cache at once.
- *
- * Returns when the REST gateway is unreachable: the runner itself needs only
- * Auth and Postgres, and a flow that needs PostgREST reports its own error.
- */
-export async function waitForLocalPostgrest(
-  supabase: LocalSupabaseEnvironment,
-  deps: PostgrestReadinessDeps = {},
-): Promise<void> {
-  const { API_URL, DB_URL, ANON_KEY } = supabase;
-  if (!API_URL || !DB_URL || !ANON_KEY) return;
-  const reload = deps.reload ?? notifyPostgrestReload;
-  const request = deps.fetch ?? ((url, init) => fetch(url, init));
-  const sleep = deps.sleep ?? ((ms) => Bun.sleep(ms));
-  const now = deps.now ?? Date.now;
-  const timeoutMs = deps.timeoutMs ?? 60_000;
-  const deadline = now() + timeoutMs;
-  let lastBody = "";
-  for (let attempt = 0; ; attempt += 1) {
-    // Re-send every 2 s: a notification that lands while PostgREST
-    // reconnects is lost.
-    if (attempt % 4 === 0) await reload(DB_URL).catch(() => {});
-    let response: Response;
-    try {
-      response = await request(`${API_URL}/rest/v1/`, {
-        headers: { apikey: ANON_KEY },
-        signal: AbortSignal.timeout(5_000),
-      });
-    } catch {
-      return;
-    }
-    if (response.status !== 503) return;
-    lastBody = (await response.text()).slice(0, 200);
-    if (now() >= deadline) {
-      throw new Error(
-        `local PostgREST still answers 503 after ${Math.round(timeoutMs / 1000)}s: ${lastBody}`,
-      );
-    }
-    await sleep(500);
-  }
-}
-
-async function notifyPostgrestReload(dbUrl: string): Promise<void> {
-  const client = new Client({ connectionString: dbUrl });
-  await client.connect();
-  try {
-    await client.query("NOTIFY pgrst, 'reload schema'");
-  } finally {
-    await client.end();
   }
 }
 
@@ -716,7 +719,7 @@ export function localApiEnvironment(options: {
     LLM_GATEWAY_PROXY_PORT: String(gatewayPort),
     GATEWAY_INTERNAL_TOKEN: LOCAL_GATEWAY_INTERNAL_TOKEN,
     TUNNEL_ENABLED: "true",
-    // Kortix in Chrome is on locally and on dev until launch (the CHR flows).
+    // Kortix in Chrome: the API serves /v1/chrome/* (the CHR flows).
     KORTIX_CHROME_ENABLED: "true",
     TUNNEL_SIGNING_SECRET: "local-flow-runner-tunnel-signing-secret",
     // One connection string configures delivery, exactly as an operator
@@ -728,7 +731,6 @@ export function localApiEnvironment(options: {
       : {}),
     EMAIL_FROM: "Kortix Local <noreply@kortix.local>",
     AUTH_EMAIL_HOOK_SECRET: LOCAL_AUTH_EMAIL_HOOK_SECRET,
-    KORTIX_MARKETPLACE_EXTERNAL_ENABLED: "0",
     // Private channels are per deployment; SPACE-24..29 run them, a skip fails the local run.
     KORTIX_PRIVATE_CHANNELS_ENABLED: "true",
     KORTIX_MODEL_CATALOG_LIVE_ENABLED: "0",

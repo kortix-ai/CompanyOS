@@ -156,7 +156,7 @@ export const pillars = {
      pending_approval, 403 denied); developers.mdx rule order.
    secrets: projects/secrets/envelope.ts (AES-256-GCM, HKDF per project);
      guide.mdx "Security" (audience, delivery); feature-flags/registry.ts
-     (secrets_egress experimental); secrets/http-broker.test.ts ([REDACTED]).
+     (secrets_egress graduated 2026-11-23); secrets/http-broker.test.ts ([REDACTED]).
    models: guide.mdx "Models".
    changes: developers.mdx "Git" (own branch; project.gitops.merge;
      CR_SELF_MERGE_REFUSED); guide.mdx "Agents" warning callout. */
@@ -167,7 +167,7 @@ export const layers = {
     {
       id: 'identity',
       title: 'Identity and roles',
-      description: 'Who may open a project, and which agents they may run.',
+      description: 'Who may open a workspace, and which agents they may run.',
       body: [
         'People sign in with SAML single sign-on, or a password with two-factor.',
         'Each person holds an account role and a role in each project. Groups grant a project to many people at once.',
@@ -203,7 +203,7 @@ export const layers = {
     {
       id: 'secrets',
       title: 'Secrets',
-      description: 'Encrypted per project, delivered only where allowed.',
+      description: 'Encrypted per workspace, delivered only where allowed.',
       body: [
         'Values are encrypted with AES-256-GCM under a key per project. No page or API shows a stored value again.',
         'A session gets a secret only when its audience and the agent’s grant both allow it.',
@@ -279,7 +279,7 @@ export const secretModes = [
     v: 'The real value. Code in the session can read it.',
     tag: 'default',
   },
-  { k: 'Enforced', v: 'A stand-in. Swapped outside, for listed hosts only.', tag: 'experimental' },
+  { k: 'Enforced', v: 'A stand-in. Swapped outside, for listed hosts only.', tag: '' },
   { k: 'Disabled', v: 'Kept on file. Reaches no session.', tag: '' },
 ] as const;
 
@@ -385,7 +385,7 @@ export const faqItems = [
     id: 'faq-audit',
     question: 'What does the audit log record, and can we export it?',
     answer:
-      'Who did what, when, how they signed in, and whether it was allowed, refusals included. When an agent acts, the row names the person it acted for. Events stay readable for 90 days and sit in a locked archive to day 365. Reading, exporting and streaming the log is an Enterprise feature.',
+      'Who did what, when, how they signed in, and whether it was allowed, refusals included. When an agent acts, the row names the person it acted for. The log shows the last 14 days; older events sit in a locked archive to day 365, and the export reads them. Reading, exporting and streaming the log is an Enterprise feature.',
   },
   {
     id: 'faq-retention',

@@ -1,16 +1,16 @@
 import { spawnSync } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join } from 'node:path';
 import { expect, test } from 'vitest';
+import { REPO_ROOT as root, readRepoFile } from '../src/fixtures/repo';
 
 // Exercise pnpm against the actual dependency-stage COPY inputs, not the full
 // checkout: a workspace override must resolve even when no app imports it.
 test('API Docker dependency context resolves workspace overrides', () => {
-  const root = resolve(import.meta.dirname, '../..');
   const context = mkdtempSync(join(tmpdir(), 'api-docker-workspace-'));
   try {
-    const dockerfile = readFileSync(join(root, 'apps/api/Dockerfile'), 'utf8');
+    const dockerfile = readRepoFile('apps/api/Dockerfile');
     const stage = dockerfile.split('FROM node:22-slim AS deps')[1].split('RUN corepack')[0];
     for (const line of stage.split('\n')) {
       if (!line.startsWith('COPY ')) continue;
@@ -44,6 +44,31 @@ test('API Docker dependency context resolves workspace overrides', () => {
         encoding: 'utf8',
       },
     );
+    expect(result.status, result.stdout + result.stderr).toBe(0);
+  } finally {
+    rmSync(context, { recursive: true, force: true });
+  }
+}, 60_000);
+
+// Resolve from only the gateway image inputs: the full checkout can hide a
+// missing transitive workspace source behind a sibling package directory.
+test('gateway Docker context loads shared IAM aliases', () => {
+  const context = mkdtempSync(join(tmpdir(), 'gateway-docker-workspace-'));
+  try {
+    const stage = readRepoFile('apps/llm-gateway/Dockerfile').split('AS deps')[1].split('RUN printf')[0];
+    for (const line of stage.split('\n')) {
+      if (!line.startsWith('COPY ')) continue;
+      const [, source, destination] = line.split(/\s+/);
+      mkdirSync(dirname(join(context, destination)), { recursive: true });
+      cpSync(join(root, source), join(context, destination), { recursive: true });
+    }
+    const result = spawnSync('bun', ['-e', `
+      import { toWorkspaceAction, toLegacyAction } from './packages/shared/src/index.ts';
+      import { strict as assert } from 'node:assert';
+      assert.equal(toWorkspaceAction('project.session.start'), 'workspace.session.start');
+      assert.equal(toLegacyAction('workspace.session.start'), 'project.session.start');
+      assert.equal(toWorkspaceAction('unknown.action'), 'unknown.action');
+    `], { cwd: context, encoding: 'utf8' });
     expect(result.status, result.stdout + result.stderr).toBe(0);
   } finally {
     rmSync(context, { recursive: true, force: true });

@@ -1,11 +1,17 @@
 'use client';
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { hubTarget } from '../../internal/stores/account-panel-store';
+import { ACCOUNT_PANEL_PARAM, hubTarget } from '../../internal/stores/account-panel-store';
+import { SplitNoticeBanner } from '../settings/split-notice-banner';
+import { SetupBanner } from '../setup/setup-banner';
 import { useTranslations } from '../../i18n';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { ComposerChatInput, type ComposerOptions } from '../../session/composer/composer-chat-input';
+import {
+  ComposerChatInput,
+  type ComposerChatCall,
+  type ComposerOptions,
+} from '../../session/composer/composer-chat-input';
 import { ComposerDropZone } from '../../session/composer/composer-drop-zone';
 import type { DraftScope } from '../../session/composer/draft/composer-draft';
 import type { AttachedFile } from '../../session/composer/session-chat-input';
@@ -31,14 +37,17 @@ import {
   type SessionPromptOverrides,
 } from '@kortix/sdk';
 import type { AttachmentSubmission } from '../../session/composer/attachment-submission';
-import { contract, invalidateProject, qk, type Command } from '@kortix/sdk/react';
+import { contract, invalidateProject, qk, useProjectConfig, useRuntimeAgents, type Command } from '@kortix/sdk/react';
 import { MY_KORTIX_SANDBOX_SLUG, isMyKortixAgentName } from '@kortix/shared';
 import { AccessRequestsBell } from '../home/access-requests-bell';
-import { notificationCenterOn } from '../../internal/hooks/use-notification-center';
+import { NoAgentHome, type NoAgentReason } from '../home/no-agent-home';
+import { composerSelectableAgents } from '../../session/composer/composer-agent-access';
 import { FirstChat } from '../home/first-chat';
 import { SandboxPicker } from '../home/sandbox-picker';
 import { ProjectHomeWallpaper, ProjectHomeWelcomeBody } from '../home/welcome-body';
+import { useProjectHomeCall } from './use-project-home-call';
 import { useProjectHomeSend } from './use-project-home-send';
+import { SpacePicker } from '../session-spaces/space-picker';
 
 // This path is this view's public surface — the instant session shell and the
 // IAM tests already import from here, so the moved pieces keep their address.
@@ -49,6 +58,9 @@ const ONBOARDING_ACTIONS = [
   PROJECT_ACTIONS.PROJECT_SETTINGS_WRITE,
   PROJECT_ACTIONS.PROJECT_SESSION_START,
 ] as const;
+
+/** How often a home with no runnable agent re-reads the project, waiting for one. */
+const NO_AGENT_POLL_MS = 15_000;
 
 export interface ProjectHomeSendOptions extends ComposerOptions {
   sandbox_slug?: string;
@@ -118,7 +130,11 @@ function ProjectHomeView({
   beforeSend,
   onboarding: onboardingEnabled = false,
 }: ProjectHomeProps) {
-  const defaultSend = useProjectHomeSend(projectId, { beforeSend });
+  const searchParams = useUiSearchParams();
+  // The space a new session is filed in (flag `session_groups`). A space's
+  // page links here with `?space=<group_id>` to start with it picked.
+  const [selectedSpace, setSelectedSpace] = useState<string | null>(() => searchParams?.get('space') || null);
+  const defaultSend = useProjectHomeSend(projectId, { beforeSend, groupId: selectedSpace });
   const { HomeAnnouncement } = useUiComponents();
   const send = onSend ?? defaultSend.send;
   const creating = onSend ? !!busy : defaultSend.sending;
@@ -127,7 +143,6 @@ function ProjectHomeView({
   // The first chat never ends, but it opens only when asked for
   // (`firstChatHref`: the sidebar row or the onboarding exit). Plain project
   // home, which "New session" opens, stays the normal home.
-  const searchParams = useUiSearchParams();
   const firstChatPending = useFirstChatPending(projectId);
   const firstChatRequested = isFirstChatRequested(searchParams);
   const router = useUiRouter();
@@ -141,6 +156,7 @@ function ProjectHomeView({
     submit?: boolean | 'when-ready';
     files?: AttachedFile[];
     options?: SessionPromptOverrides;
+    restoreDraft?: boolean;
   } | null>(null);
 
   // The sandbox TEMPLATE catalog, not live sandbox health (that is
@@ -207,25 +223,74 @@ function ProjectHomeView({
   const canSetUpProject = ONBOARDING_ACTIONS.every(
     (action) => onboardingCans[action]?.allowed === true,
   );
+  // No agent the viewer may run: every send would be refused ("No agents
+  // available to you"), so the chat area is a blocked state instead
+  // (`home/no-agent-home.tsx`). The roster is the composer's own
+  // (`useRuntimeAgents`), so the two never disagree. `undefined` while it
+  // loads: a pending roster blocks nothing.
+  const projectConfig = useProjectConfig(projectId);
+  const { data: roster } = useRuntimeAgents({ projectId });
+  const writeProbe = useProjectCan(projectId, PROJECT_ACTIONS.PROJECT_WRITE);
+  const canWriteProject = writeProbe.allowed;
+  // Waits for the permission probe too, so an owner never sees the member
+  // variant flash before the setup one.
+  const noAgent =
+    roster !== undefined && !writeProbe.isLoading && composerSelectableAgents(roster).length === 0;
+  // A member is told `restricted`, never `missing`: only someone who can read
+  // the manifest learns the repository has none, and only someone who can
+  // push gets the setup prompt.
+  const noAgentReason: NoAgentReason | null = !noAgent
+    ? null
+    : projectConfig?.manifest_health?.state === 'missing' && canWriteProject
+      ? 'setup'
+      : canWriteProject
+        ? 'empty'
+        : 'noAccess';
+  // The detail key is the prefix of the roster's key, so both re-read.
+  const recheckAgents = useCallback(
+    () => void queryClient.invalidateQueries({ queryKey: qk.project.detail(projectId) }),
+    [queryClient, projectId],
+  );
+  // A push on the upstream is seen within one mirror refresh (60 s): re-read
+  // while blocked, and when the tab regains focus (the person comes back from
+  // their editor), so the home turns into the chat by itself.
+  useEffect(() => {
+    if (!noAgent) return;
+    const timer = setInterval(recheckAgents, NO_AGENT_POLL_MS);
+    window.addEventListener('focus', recheckAgents);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('focus', recheckAgents);
+    };
+  }, [noAgent, recheckAgents]);
   const onboarding =
-    onboardingEnabled && projectRowQuery.isSuccess && !onboarded && canSetUpProject;
+    onboardingEnabled && projectRowQuery.isSuccess && !onboarded && canSetUpProject && !noAgent;
   // The onboarding lands on the first chat: it starts the chat (the sidebar
   // row) and moves the address to it. Rendered as the first chat from this
   // render on, so the usual home never paints in between.
+  // An old account-settings link (`?accountId=`, or a bare `?accountTab=`) is
+  // the hub router's to resolve (`account-hub-router.tsx`): replacing the
+  // address here first would drop it, and the link would land on the first
+  // chat instead of its section.
+  const hubLinkPending = Boolean(searchParams?.get(ACCOUNT_PANEL_PARAM) || searchParams?.get('accountTab'));
   useEffect(() => {
-    if (!onboarding) return;
+    if (!onboarding || hubLinkPending) return;
     useFirstChatStore.getState().start(projectId);
     if (!firstChatRequested) router.replace(firstChatHref(projectId));
-  }, [onboarding, firstChatRequested, projectId, router]);
+  }, [onboarding, hubLinkPending, firstChatRequested, projectId, router]);
   const firstChat = (firstChatPending && firstChatRequested) || onboarding;
 
-  // Once per mount: a second prefill id would send a second kickoff.
+  // Once per mount: a second prefill id would send a second kickoff. Not
+  // before the config is read: a repository that runs no agent turns the
+  // home into the setup page, and a kickoff queued before that is known
+  // would be refused.
+  const configRead = roster !== undefined;
   const kickoffQueuedRef = useRef(false);
   useEffect(() => {
-    if (!onboarding || kickoffQueuedRef.current) return;
+    if (!onboarding || !configRead || kickoffQueuedRef.current) return;
     kickoffQueuedRef.current = true;
     setPrefill({ text: tFirstChat('kickoff'), id: Date.now(), submit: 'when-ready' });
-  }, [onboarding, tFirstChat]);
+  }, [onboarding, configRead, tFirstChat]);
   // Resolved during render so the bell is an anchor and Next holds its payload
   // in the segment cache. `account_id` arrives on a different query than the
   // count, so the bell can paint before the destination exists.
@@ -271,6 +336,28 @@ function ProjectHomeView({
     [metaSelected, selectedSlug, send, onboarding, projectId, queryClient],
   );
 
+  // Nothing typed: the Send button calls a new session instead (flag
+  // `voice_call`, `use-project-home-call.ts`), with the sandbox chosen here as
+  // a send gets it. Only with the default send: a host's own `onSend` decides
+  // what a new session is, and a call would bypass it. Not in the first chat:
+  // it is the onboarding, and its kickoff is a typed message.
+  const homeCall = useProjectHomeCall(projectId, { beforeSend });
+  const call = useMemo<ComposerChatCall | undefined>(() => {
+    if (!homeCall || onSend || firstChat) return undefined;
+    return {
+      inCall: homeCall.inCall,
+      onCall: (options) =>
+        homeCall.onCall({
+          ...options,
+          ...(metaSelected
+            ? { sandbox_slug: MY_KORTIX_SANDBOX_SLUG }
+            : selectedSlug
+              ? { sandbox_slug: selectedSlug }
+              : {}),
+        }),
+    };
+  }, [homeCall, onSend, firstChat, metaSelected, selectedSlug]);
+
   const isMobile = useIsMobile();
   const pendingPrefill = useComposerPrefillStore((s) => s.prefillByProject[projectId]);
   const consumePrefill = useComposerPrefillStore((s) => s.consume);
@@ -286,13 +373,18 @@ function ProjectHomeView({
 
   useEffect(() => {
     if (!pendingPrefill) return;
-    consumePrefill(projectId);
+    // Apply what `consume` returns, never the render-time snapshot: the
+    // typing buffer may have dropped the entry since this render (another
+    // account signed in on the tab), and a dropped entry must not land.
+    const taken = consumePrefill(projectId);
+    if (!taken) return;
     setPrefill({
-      text: pendingPrefill.text,
+      text: taken.text,
       id: Date.now(),
-      submit: pendingPrefill.submit,
-      files: pendingPrefill.files,
-      options: pendingPrefill.options,
+      submit: taken.submit,
+      files: taken.files,
+      options: taken.options,
+      restoreDraft: taken.restoreDraft,
     });
   }, [pendingPrefill, projectId, consumePrefill]);
 
@@ -340,15 +432,12 @@ function ProjectHomeView({
       onCommand={handleCommand}
       projectId={projectId}
       draftScope={draftScope}
-      // `busy` here means "create in flight" — spinner in the send slot,
-      // input locked. NOT isBusy (that renders agent-running stop-button
-      // semantics, which leave the composer with no button at all here).
+      draftHandoffScope={onSend ? undefined : defaultSend.draftHandoffScope}
+      // While the create runs, the sent message stays in the composer, locked,
+      // with the spinner in the send slot. The session page then draws it as
+      // the first turn. A refused send unlocks the same text for a retry.
       isSending={creating}
       disabled={creating}
-      // The home composer navigates to the new session on send — don't
-      // clear it first (that would drop the text on a gated send). The
-      // message rides across via `create.pending_prompt` and reappears
-      // as the instant shell's optimistic turn.
       clearOnSend={false}
       autoFocus
       // Desktop: a hero composer floating mid-page has no column for a second
@@ -372,6 +461,13 @@ function ProjectHomeView({
       prefill={prefill}
       onAgentSelectionChange={setSelectedAgent}
       sandboxSlot={sandboxSlot}
+      call={call}
+      // A host's own `onSend` decides where a session goes; the first chat is the onboarding.
+      toolbarSlot={
+        onSend || firstChat ? undefined : (
+          <SpacePicker projectId={projectId} value={selectedSpace} onChange={setSelectedSpace} />
+        )
+      }
     />
   );
 
@@ -384,7 +480,6 @@ function ProjectHomeView({
       <AccessRequestsBell
         requests={accessRequests.data?.requests ?? []}
         to={accessRequestsTo}
-        notificationCenter={notificationCenterOn(projectRowQuery.data)}
       />
       {/* Not while the project is in its first-chat era, and not over the
           onboarding wizard: onboarding owns those screens. The era starts when
@@ -394,16 +489,36 @@ function ProjectHomeView({
           stamps the project) can never be followed by the promo popping over
           the project page the user just asked for (KRTX-2635). On later
           projects, which the create flow stamps without a wizard, the era
-          never starts and the promo shows as before. */}
-      {firstChatPending || !onboarded || !HomeAnnouncement ? null : <HomeAnnouncement />}
+          never starts and the promo shows as before. Not over the no-agent
+          state either: that page has one job. */}
+      {firstChatPending || !onboarded || noAgent || !HomeAnnouncement ? null : <HomeAnnouncement />}
+
+      {/* What changed when a legacy account's workspaces became their own (C9). */}
+      <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-col gap-2 px-4 pt-14 empty:hidden">
+        <SplitNoticeBanner workspaceId={projectId} />
+      </div>
+
+      {/* The way back to the setup page while a step is open: it floats at the
+          bottom of the page, out of the composer's flow. Keyed: switching
+          workspaces reuses this view, and each workspace counts its own steps. */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-6 z-20 flex justify-center px-4 empty:hidden">
+        <SetupBanner key={projectId} projectId={projectId} className="pointer-events-auto w-full max-w-xl" />
+      </div>
 
       {/* No bubble or "Thinking" row is painted here on send. The page stays
           the welcome screen with the sentence held in the composer until the
           create resolves and the session route opens; the instant shell draws
           the first turn there (`useFirstPromptPreviewStore`). Painting the turn
           here left a slow or stuck create looking like a live session. */}
-      {firstChat ? (
-        <FirstChat composer={composer} />
+      {noAgentReason ? (
+        <NoAgentHome
+          reason={noAgentReason}
+          repoUrl={projectRowQuery.data?.repo_url}
+          branch={projectRowQuery.data?.default_branch}
+          dashboardUrl={projectRowQuery.data?.dashboard_url}
+        />
+      ) : firstChat ? (
+        <FirstChat projectId={projectId} composer={composer} />
       ) : (
         <ProjectHomeWelcomeBody
           projectId={projectId}

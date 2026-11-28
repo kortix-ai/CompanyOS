@@ -10,7 +10,7 @@ import { describe, expect, test, beforeAll, afterAll } from 'bun:test';
 import { eq } from 'drizzle-orm';
 import { accountMembers, accountTokens, accounts, projectMembers, projects } from '@kortix/db';
 import { db } from '../shared/db';
-import { authorize } from '../iam/authorize';
+import { authorize, listAccessible } from '../iam/authorize';
 import { actorForToken, actorForUser } from '../iam/actor';
 import { ACCOUNT_ACTIONS, PROJECT_ACTIONS } from '../iam';
 import { insertIntoView } from './helpers/compat-views';
@@ -20,6 +20,10 @@ const P1 = crypto.randomUUID();
 const P2 = crypto.randomUUID();
 const OWNER = crypto.randomUUID();
 const SCOPED_TOKEN = crypto.randomUUID();
+// A 1:1 account (one workspace, not split_pending) and its workspace key.
+const SOLO_ACCOUNT = crypto.randomUUID();
+const SOLO_PROJECT = crypto.randomUUID();
+const SOLO_TOKEN = crypto.randomUUID();
 const UNSCOPED_TOKEN = crypto.randomUUID();
 const uid = () => crypto.randomUUID();
 const proj = (id: string) => ({ type: 'project' as const, id });
@@ -27,8 +31,8 @@ const proj = (id: string) => ({ type: 'project' as const, id });
 beforeAll(async () => {
   await db.insert(accounts).values({ accountId: ACCOUNT, name: 'token-scope-test' });
   await db.insert(projects).values([
-    { projectId: P1, accountId: ACCOUNT, name: 'p1', repoUrl: 'https://example.com/p1.git' },
-    { projectId: P2, accountId: ACCOUNT, name: 'p2', repoUrl: 'https://example.com/p2.git' },
+    { splitPending: true, projectId: P1, accountId: ACCOUNT, name: 'p1', repoUrl: 'https://example.com/p1.git' },
+    { splitPending: true, projectId: P2, accountId: ACCOUNT, name: 'p2', repoUrl: 'https://example.com/p2.git' },
   ]);
   await insertIntoView(db, accountMembers, { userId: OWNER, accountId: ACCOUNT, accountRole: 'owner' });
   await db.insert(accountTokens).values([
@@ -37,10 +41,19 @@ beforeAll(async () => {
     // An account-wide PAT (no project binding).
     { tokenId: UNSCOPED_TOKEN, accountId: ACCOUNT, userId: OWNER, name: 'unscoped', publicKey: `pk_u_${UNSCOPED_TOKEN.slice(0, 8)}`, secretKeyHash: `h_u_${UNSCOPED_TOKEN.slice(0, 8)}`, projectId: null },
   ]);
+  await db.insert(accounts).values({ accountId: SOLO_ACCOUNT, name: 'token-scope-solo' });
+  await db.insert(projects).values({ projectId: SOLO_PROJECT, accountId: SOLO_ACCOUNT, name: 'solo', repoUrl: 'https://example.com/solo.git' });
+  await insertIntoView(db, accountMembers, { userId: OWNER, accountId: SOLO_ACCOUNT, accountRole: 'owner' });
+  await db.insert(accountTokens).values({
+    tokenId: SOLO_TOKEN, accountId: SOLO_ACCOUNT, userId: OWNER, name: 'solo-scoped',
+    publicKey: `pk_o_${SOLO_TOKEN.slice(0, 8)}`, secretKeyHash: `h_o_${SOLO_TOKEN.slice(0, 8)}`, projectId: SOLO_PROJECT,
+  });
 });
 afterAll(async () => {
   await db.delete(projects).where(eq(projects.accountId, ACCOUNT));
   await db.delete(accounts).where(eq(accounts.accountId, ACCOUNT)); // cascades tokens/members
+  await db.delete(projects).where(eq(projects.accountId, SOLO_ACCOUNT));
+  await db.delete(accounts).where(eq(accounts.accountId, SOLO_ACCOUNT));
 });
 
 describe('token project-scope', () => {
@@ -51,15 +64,63 @@ describe('token project-scope', () => {
     const otherProj = await authorize(await actorForToken(OWNER, ACCOUNT, SCOPED_TOKEN), PROJECT_ACTIONS.PROJECT_READ, proj(P2));
     expect(otherProj.allowed).toBe(false);
     expect(otherProj.reason).toBe('token_out_of_scope');
-    // Account-level action → out of scope.
-    const acct = await authorize(await actorForToken(OWNER, ACCOUNT, SCOPED_TOKEN), ACCOUNT_ACTIONS.MEMBER_READ);
-    expect(acct.allowed).toBe(false);
-    expect(acct.reason).toBe('token_out_of_scope');
+    // Account-level action of its own split_pending account → refused, and
+    // the reason says the account is shared (the remedy is a personal key).
+    for (const action of [ACCOUNT_ACTIONS.MEMBER_READ, ACCOUNT_ACTIONS.AUDIT_READ, ACCOUNT_ACTIONS.BILLING_READ]) {
+      const acct = await authorize(await actorForToken(OWNER, ACCOUNT, SCOPED_TOKEN), action);
+      expect(acct.allowed).toBe(false);
+      expect(acct.reason).toBe('token_account_shared');
+    }
+  });
+
+  test('a 1:1 workspace key reads its own account rows; another account stays token_out_of_scope', async () => {
+    const own = await actorForToken(OWNER, SOLO_ACCOUNT, SOLO_TOKEN);
+    for (const action of [ACCOUNT_ACTIONS.MEMBER_READ, ACCOUNT_ACTIONS.AUDIT_READ, ACCOUNT_ACTIONS.BILLING_READ]) {
+      expect((await authorize(own, action)).allowed).toBe(true);
+    }
+    expect((await authorize(own, PROJECT_ACTIONS.PROJECT_READ, proj(SOLO_PROJECT))).allowed).toBe(true);
+    // The split_pending account's own key on the solo account: neither its
+    // workspace nor its account, so the shared-account reason never fires.
+    const foreign = await authorize(await actorForToken(OWNER, SOLO_ACCOUNT, SCOPED_TOKEN), ACCOUNT_ACTIONS.MEMBER_READ);
+    expect(foreign.allowed).toBe(false);
+    expect(foreign.reason).toBe('token_out_of_scope');
+    // The solo key on the split_pending account: not shared with it either.
+    const foreignShared = await authorize(await actorForToken(OWNER, ACCOUNT, SOLO_TOKEN), ACCOUNT_ACTIONS.MEMBER_READ);
+    expect(foreignShared.allowed).toBe(false);
+    expect(foreignShared.reason).toBe('token_out_of_scope');
   });
 
   test('an unscoped account PAT is not project-restricted', async () => {
     expect((await authorize(await actorForToken(OWNER, ACCOUNT, UNSCOPED_TOKEN), PROJECT_ACTIONS.PROJECT_READ, proj(P2))).allowed).toBe(true);
     expect((await authorize(await actorForToken(OWNER, ACCOUNT, UNSCOPED_TOKEN), ACCOUNT_ACTIONS.MEMBER_READ)).allowed).toBe(true);
+  });
+});
+
+describe('OAuth access token bound to one workspace (consent picked it)', () => {
+  // An OAuth token authenticates as its person (credential `jwt`) and carries
+  // `bound_workspace_id`. The engine must confine it like a workspace key, so
+  // a handler that skips the route fence still cannot reach another workspace.
+  const oauthActor = (boundWorkspaceId: string) => ({
+    userId: OWNER,
+    accountId: ACCOUNT,
+    credential: { kind: 'jwt' as const, boundWorkspaceId },
+    ctx: {},
+  });
+
+  test('acts on its own workspace; another workspace and account actions answer token_out_of_scope', async () => {
+    expect((await authorize(oauthActor(P1), PROJECT_ACTIONS.PROJECT_READ, proj(P1))).allowed).toBe(true);
+    const other = await authorize(oauthActor(P1), PROJECT_ACTIONS.PROJECT_READ, proj(P2));
+    expect(other.allowed).toBe(false);
+    expect(other.reason).toBe('token_out_of_scope');
+  });
+
+  test('the project listing narrows to the bound workspace', async () => {
+    expect(await listAccessible(oauthActor(P1), PROJECT_ACTIONS.PROJECT_READ, 'project')).toEqual({ mode: 'allow_only', allowed: new Set([P1]) });
+  });
+
+  test('the same person through an unbound OAuth token still reaches both', async () => {
+    const unbound = { userId: OWNER, accountId: ACCOUNT, credential: { kind: 'jwt' as const }, ctx: {} };
+    expect((await authorize(unbound, PROJECT_ACTIONS.PROJECT_READ, proj(P2))).allowed).toBe(true);
   });
 });
 

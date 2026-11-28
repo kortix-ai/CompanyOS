@@ -21,8 +21,10 @@ import { db } from '../../shared/db';
 import { qualifiedColumn } from '../../shared/sql-qualified-column';
 import { generateSessionTitleFromFirstPrompt } from '../session-title-generate';
 import { resolveProjectAutomationActor } from './actor';
+import { sessionIsTombstoned } from '../lib/session-visibility';
+import { promptAuthorName } from '../lib/prompt-author';
 import { awakeDeliveryTarget, deliverAfterWake, undoDeliveryWake, type SendOutcome } from './deliver';
-import { sandboxOpencodeEndpoint } from '../opencode-mapping';
+import { sandboxRuntimeEndpoint } from '../runtime-session-mapping';
 import { sessionTransitionLeaves, transitionSession } from './status-transitions';
 import { promptAgent } from './agent-availability';
 import { effortVariantForPrompt } from '../lib/effort-default';
@@ -45,18 +47,9 @@ export async function continueSession(
   // rely on for dedupe.
   commandId?: string,
   tl?: ProvisionTimeline,
-  beforeSend?: () => Promise<void | Pick<ContinueSessionCommand, 'text' | 'parts'>>,
+  beforeSend?: () => Promise<void>,
 ): Promise<SessionDeliveryOutcome> {
-  const { sessionId } = command;
-  let text = command.text;
-  const revalidateBeforeSend = beforeSend ? async () => {
-    const refreshed = await beforeSend();
-    if (refreshed) {
-      text = refreshed.text;
-      command.text = refreshed.text;
-      command.parts = refreshed.parts;
-    }
-  } : undefined;
+  const { sessionId, text } = command;
   const idempotencyKey = commandId ?? randomUUID();
   // The fast-path target is one JOINED read of the session and its sandbox, and
   // it does not depend on the session read below — so it goes out with it
@@ -95,7 +88,7 @@ export async function continueSession(
   // follow-up (Slack reply, scheduled trigger, etc.) would revive a session
   // the user explicitly deleted.
   const sessionMeta = (session.metadata ?? {}) as Record<string, unknown>;
-  if (typeof sessionMeta.deletedAt === 'string') return 'no-session';
+  if (sessionIsTombstoned(session)) return 'no-session';
   if (command.projectId && command.projectId !== session.projectId) {
     console.warn('[session-lifecycle] command project does not own the session; refusing delivery', {
       sessionId,
@@ -110,7 +103,9 @@ export async function continueSession(
   const stale = await staleDevTunnelBox(sessionId);
   if (stale) {
     logger.warn('[session-lifecycle] refusing delivery to a box of an earlier dev tunnel', { sessionId, reason: stale });
-    return 'no-session';
+    // A web send still belongs to this session. Name its failed callback path;
+    // channels use no-session to start a fresh conversation on a reachable box.
+    return command.source === 'ui' ? 'stale-runtime' : 'no-session';
   }
   const userId = command.userId ?? (await resolveProjectAutomationActor(session.accountId));
   if (!userId) {
@@ -146,6 +141,9 @@ export async function continueSession(
   // Observed here so a delivery that never reaches `sendPrompt` leaves no
   // unhandled rejection; `sendPrompt` awaits the original and throws.
   turnIdentity.catch(() => undefined);
+  // The name the model reads above a person's prompt (KRTX-5121), read
+  // alongside the wake. Never throws: no name sends the prompt without one.
+  const author = promptAuthorName(command.authorUserId ?? null);
   // The project's default reasoning effort, clamped to the model this prompt
   // runs on. Injected only when the prompt carries no variant of its own (the
   // composer's "Auto", a Slack message, a trigger fire): an explicit session
@@ -162,15 +160,15 @@ export async function continueSession(
   const turnAgent = promptAgent(command.overrides?.agent, session.agentName);
   const sendPrompt = async (
     externalId: string,
-    opencodeSessionId: string,
+    runtimeSessionId: string,
     sandboxRecord?: SandboxRecord,
   ): Promise<SendOutcome> => {
-    await revalidateBeforeSend?.();
+    await beforeSend?.();
     await turnIdentity;
     let bodyBytes = 0;
     const delivery = await postPrompt(
       externalId,
-      opencodeSessionId,
+      runtimeSessionId,
       text,
       userId,
       sessionId,
@@ -187,6 +185,7 @@ export async function continueSession(
         wireMessageId: command.wireMessageId,
         materializationKey: command.materializationKey,
         noReply: command.noReply,
+        author: await author,
         source: command.source,
         accountId: session.accountId,
         projectId: session.projectId,
@@ -214,9 +213,9 @@ export async function continueSession(
       const landing = await confirmPromptLanded({
         messageId: command.wireMessageId,
         readMessage: async (messageId) => {
-          const endpoint = await sandboxOpencodeEndpoint(externalId, userId);
+          const endpoint = await sandboxRuntimeEndpoint(externalId, userId);
           if (!endpoint) throw new Error('no runtime endpoint');
-          return readRuntimeMessage({ endpoint, opencodeSessionId, externalId }, messageId);
+          return readRuntimeMessage({ endpoint, runtimeSessionId, externalId }, messageId);
         },
       });
       if (landing === 'unknown') {
@@ -274,7 +273,7 @@ export async function continueSession(
         error: err instanceof Error ? err.message : String(err),
       }),
     );
-  const outcome = await deliverAfterWake({ command, session, sessionId, userId, turnAgent, awakeEarly, sendPrompt, beforeSend: revalidateBeforeSend, identityBound: turnIdentity, tl })
+  const outcome = await deliverAfterWake({ command, session, sessionId, userId, turnAgent, awakeEarly, sendPrompt, beforeSend, tl })
     .catch(async (err) => {
       if (wokeFrom) await undoWake();
       throw err;

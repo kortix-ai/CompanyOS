@@ -49,6 +49,8 @@ let emailFailureStatus: number | null = null;
 // The mode the send action answers with (the server-side existence check that
 // decides which email GoTrue mints). Null = an older action answer without it.
 let emailCodeMode: string | null = null;
+type Submitted = { path: string; email: FormDataEntryValue | null };
+let lastSubmit: Submitted | null = null;
 mock.module('./actions', () => ({
   resolveAuthMode: async () => ({ mode: resolvedMode }),
 }));
@@ -57,7 +59,9 @@ mock.module('@/lib/auth/submit-auth', () => ({
   AUTH_TIMEOUT_MESSAGE: 'This is taking longer than expected. Please try again.',
   AUTH_NETWORK_MESSAGE: 'The request could not be sent. Please try again.',
   AUTH_UNEXPECTED_MESSAGE: 'Something went wrong. Please try again.',
-  submitAuthForm: async (_path: string, _body: FormData) => {
+  submitAuthForm: async (path: string, body: FormData) => {
+    lastSubmit = { path, email: body.get('email') };
+    if (path.startsWith('/api/auth/password')) return { ok: false, reason: 'server' as const, message: 'stop', status: 400 };
     emailCodeSends += 1;
     if (emailFailure) {
       return {
@@ -141,7 +145,7 @@ function buttonByLabel(
 
 // The password form is one explicit hop from the link step.
 async function goToPasswordForm(root: NonNullable<ReturnType<typeof create>>) {
-  const passwordButton = buttonByLabel(root, 'Use a password instead');
+  const passwordButton = buttonByLabel(root, 'Use a password');
   if (!passwordButton) throw new Error('Use-a-password button did not render');
   await act(async () => passwordButton.props.onClick());
 }
@@ -182,10 +186,35 @@ test('every resolution hands off to the link action — the server gates closed 
     const root = await continueWithEmail(`${mode}@example.test`);
     try {
       expect(emailCodeSends).toBe(1);
-      expect(JSON.stringify(root.toJSON())).toContain('We sent a link to');
+      // The send result carries no mode, so the step renders the eligible
+      // send's copy (KRTX-3504): the mail is a sign-in link or a confirmation
+      // link, and only the mailbox knows which.
+      expect(JSON.stringify(root.toJSON())).toContain('Enter the code sent to');
     } finally {
       await act(async () => root.unmount());
     }
+  }
+});
+
+// KRTX-3504: a closed-signup send goes out with shouldCreateUser:false — the
+// mailbox receives a sign-in link ONLY when the account exists — so the step
+// must claim nothing more than that conditional.
+test('a closed-signup send renders the conditional copy, never a delivery promise', async () => {
+  resolvedMode = 'closed';
+  emailCodeMode = 'closed';
+  emailCodeSends = 0;
+  const root = await continueWithEmail('gated@example.test');
+  try {
+    expect(emailCodeSends).toBe(1);
+    const json = JSON.stringify(root.toJSON());
+    expect(json).toContain('If');
+    expect(json).toContain('has an account, a code is on its way');
+    // The unconditional delivery promise would claim a mail an unknown
+    // address never receives.
+    expect(json).not.toContain('We emailed');
+  } finally {
+    emailCodeMode = null;
+    await act(async () => root.unmount());
   }
 });
 
@@ -199,9 +228,9 @@ test('a new address is told a confirmation email is on its way, not a link', asy
   const root = await continueWithEmail('new-account@example.test');
   try {
     expect(emailCodeSends).toBe(1);
-    expect(JSON.stringify(root.toJSON())).toContain('We sent a confirmation email to');
-    expect(JSON.stringify(root.toJSON())).toContain('Confirm your email to continue');
-    expect(JSON.stringify(root.toJSON())).not.toContain('We sent a link');
+    expect(JSON.stringify(root.toJSON())).toContain('Confirm the email we sent to');
+    expect(JSON.stringify(root.toJSON())).toContain('to continue.');
+    expect(JSON.stringify(root.toJSON())).not.toContain('Enter the code sent');
   } finally {
     emailCodeMode = null;
     await act(async () => root.unmount());
@@ -214,8 +243,8 @@ test('a returning account keeps the sign-in link copy the mailbox matches', asyn
   emailCodeSends = 0;
   const root = await continueWithEmail('returning@example.test');
   try {
-    expect(JSON.stringify(root.toJSON())).toContain('We sent a link to');
-    expect(JSON.stringify(root.toJSON())).not.toContain('confirmation email');
+    expect(JSON.stringify(root.toJSON())).toContain('Enter the code sent to');
+    expect(JSON.stringify(root.toJSON())).not.toContain('Confirm the email');
   } finally {
     emailCodeMode = null;
     await act(async () => root.unmount());
@@ -232,13 +261,13 @@ test('the password form still offers the email link as an explicit choice', asyn
     // The entry send armed the per-address cooldown that the password form's
     // link button now honors; let it lapse before the explicit choice.
     await cooldownElapsed(root, 60);
-    const linkButton = buttonByLabel(root, 'Email me a link instead');
+    const linkButton = buttonByLabel(root, 'Email me a code');
     expect(linkButton).toBeDefined();
     if (!linkButton) throw new Error('Email-link button did not render');
     expect(linkButton.props.disabled).toBe(false);
     await act(async () => linkButton.props.onClick());
     expect(emailCodeSends).toBe(2);
-    expect(JSON.stringify(root.toJSON())).toContain('Open it to continue');
+    expect(JSON.stringify(root.toJSON())).toContain('Enter the code sent to');
   } finally {
     jest.useRealTimers();
     await act(async () => root.unmount());
@@ -251,7 +280,7 @@ test('a non-rate-limit send failure stays visible and the retry stays available'
   emailCodeSends = 0;
   const root = await continueWithEmail('returning@example.test');
   const linkButton = () => {
-    const button = buttonByLabel(root, 'Email me a link instead');
+    const button = buttonByLabel(root, 'Email me a code');
     if (!button) throw new Error('Email-link button did not render');
     return button;
   };
@@ -273,7 +302,7 @@ test('a non-rate-limit send failure stays visible and the retry stays available'
     emailFailure = null;
     await act(async () => linkButton().props.onClick());
     expect(root.root.findAllByProps({ role: 'alert' })).toHaveLength(0);
-    expect(JSON.stringify(root.toJSON())).toContain('Open it to continue');
+    expect(JSON.stringify(root.toJSON())).toContain('Enter the code sent to');
   } finally {
     emailFailure = null;
     emailFailureStatus = null;
@@ -292,7 +321,7 @@ test('a rate-limited send cools the password form link button down', async () =>
   emailCodeSends = 0;
   const root = await continueWithEmail('returning@example.test');
   const linkButton = () => {
-    const button = buttonByLabel(root, 'Email me a link instead');
+    const button = buttonByLabel(root, 'Email me a code');
     if (!button) throw new Error('Email-link button did not render');
     return button;
   };
@@ -327,7 +356,7 @@ test('a rate-limited send cools the password form link button down', async () =>
     emailFailureStatus = null;
     await act(async () => linkButton().props.onClick());
     expect(emailCodeSends).toBe(3);
-    expect(JSON.stringify(root.toJSON())).toContain('Open it to continue');
+    expect(JSON.stringify(root.toJSON())).toContain('Enter the code sent to');
   } finally {
     emailFailure = null;
     emailFailureStatus = null;
@@ -409,7 +438,7 @@ test('an explicit password choice survives remount without another auth email', 
   try {
     expect(emailCodeSends).toBe(1);
     expect(returning.root.findByProps({ autoComplete: 'current-password' })).toBeDefined();
-    const link = buttonByLabel(returning, 'Email me a link instead');
+    const link = buttonByLabel(returning, 'Email me a code');
     if (!link) throw new Error('Email-link button did not render');
     await act(async () => link.props.onClick());
     expect(emailCodeSends).toBe(2);
@@ -426,11 +455,13 @@ test('an explicit password choice survives remount without another auth email', 
 });
 
 
-test('remembered password still obeys closed-signup and enforced-SSO gates', async () => {
+test('remembered password keeps enforced-SSO shut and renders closed signups as a sign-in step', async () => {
   preferences.set('kortix:auth-method', 'password');
-  for (const mode of ['closed', 'sso']) {
-    resolvedMode = mode;
-    emailCodeSends = 0;
+  // SSO enforcement: the password door stays shut for any address on an
+  // enforced domain — no credentials form, one inline alert.
+  resolvedMode = 'sso';
+  emailCodeSends = 0;
+  {
     const tree = await continueWithEmail('gated@example.test');
     try {
       expect(emailCodeSends).toBe(0);
@@ -439,5 +470,119 @@ test('remembered password still obeys closed-signup and enforced-SSO gates', asy
     } finally {
       await act(async () => tree.unmount());
     }
+  }
+  // Closed signups (KRTX-3504): check-email can no longer tell an existing
+  // account from a new visitor, so the neutral sign-in credentials step
+  // renders for the address — an existing account signs in from here, and the
+  // sign-up door stays shut server-side (the web signup action and the
+  // headless route both refuse closed signups). No auth email goes out.
+  resolvedMode = 'closed';
+  emailCodeSends = 0;
+  {
+    const tree = await continueWithEmail('gated@example.test');
+    try {
+      expect(emailCodeSends).toBe(0);
+      expect(tree.root.findByProps({ autoComplete: 'current-password' })).toBeDefined();
+      expect(tree.root.findAllByProps({ role: 'alert' })).toHaveLength(0);
+      // The step explains the closed door with the localized catalog copy
+      // (t('errors.signupsClosed')), not a hardcoded literal.
+      expect(JSON.stringify(tree.toJSON())).toContain(
+        messages.auth.unified.errors.signupsClosed,
+      );
+    } finally {
+      await act(async () => tree.unmount());
+    }
+  }
+});
+
+// "Use a password" with an empty entry field opens the password step with its
+// own address field, instead of refusing until the visitor types an address.
+async function passwordFirst(address: string) {
+  let root: ReturnType<typeof create> | undefined;
+  await act(async () => {
+    root = create(<NextIntlClientProvider locale="en" messages={messages}><AuthPage /></NextIntlClientProvider>);
+  });
+  if (!root) throw new Error('Auth page did not render');
+  const tree = root;
+  await goToPasswordForm(tree);
+  const emailField = tree.root.findByProps({ id: 'credentials-email' });
+  expect(emailField.props.readOnly).toBeUndefined();
+  expect(emailField.props.autoFocus).toBe(true);
+  await act(async () => emailField.props.onChange({ target: { value: address } }));
+  await act(async () =>
+    tree.root.findByType('form').props.onSubmit({
+      preventDefault() {},
+      currentTarget: {},
+    }),
+  );
+  return tree;
+}
+
+const RealFormData = globalThis.FormData;
+function withFormData<T>(run: () => Promise<T>) {
+  // The page builds FormData from the submitted form; the test renderer has no
+  // DOM form, so hand it an empty one the page fills itself.
+  globalThis.FormData = class extends RealFormData {
+    constructor() {
+      super();
+      this.set('password', 'synthetic-password');
+    }
+  } as typeof FormData;
+  return run().finally(() => {
+    globalThis.FormData = RealFormData;
+  });
+}
+
+test('password sign-in opens without an address and resolves the mode on submit', () =>
+  withFormData(async () => {
+    resolvedMode = 'signin';
+    emailCodeSends = 0;
+    lastSubmit = null;
+    const tree = await passwordFirst('returning@example.test');
+    try {
+      expect((lastSubmit as Submitted | null)?.path).toBe('/api/auth/password?intent=signin');
+      expect((lastSubmit as Submitted | null)?.email).toBe('returning@example.test');
+      expect(JSON.stringify(tree.toJSON())).toContain('Welcome back');
+      expect(emailCodeSends).toBe(0);
+    } finally {
+      await act(async () => tree.unmount());
+    }
+  }));
+
+test('password sign-in without an address still refuses an SSO-enforced domain', () =>
+  withFormData(async () => {
+    resolvedMode = 'sso';
+    lastSubmit = null;
+    const tree = await passwordFirst('person@sso.example.test');
+    try {
+      expect(lastSubmit).toBeNull();
+      // Back on the entry step, where the SSO action lives, with the address kept.
+      expect(tree.root.findByProps({ id: 'email' }).props.value).toBe('person@sso.example.test');
+      expect(JSON.stringify(tree.toJSON())).toContain('requires single sign-on');
+    } finally {
+      await act(async () => tree.unmount());
+    }
+  }));
+
+test('"Email me a code" with no address typed returns to the email-first entry step', async () => {
+  emailCodeSends = 0;
+  let root: ReturnType<typeof create> | undefined;
+  await act(async () => {
+    root = create(<NextIntlClientProvider locale="en" messages={messages}><AuthPage /></NextIntlClientProvider>);
+  });
+  if (!root) throw new Error('Auth page did not render');
+  const tree = root;
+  try {
+    await goToPasswordForm(tree);
+    const back = buttonByLabel(tree, 'Email me a code');
+    if (!back) throw new Error('Email-me-a-code button did not render');
+    await act(async () => back.props.onClick());
+    expect(tree.root.findAllByProps({ id: 'credentials-email' })).toHaveLength(0);
+    expect(tree.root.findByProps({ autoComplete: 'email' }).props.id).toBe('email');
+    expect(emailCodeSends).toBe(0);
+    // Continue on the entry step stays email-first: no remembered password choice.
+    expect(preferences.get('kortix:auth-method') ?? null).not.toBe('password');
+  } finally {
+    await act(async () => tree.unmount());
   }
 });

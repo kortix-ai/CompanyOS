@@ -14,16 +14,14 @@ import { FPS } from '@/app/[locale]/presentations/film/engine/time';
 import { launchFilm } from '@/app/[locale]/presentations/film/films/launch';
 import { useTranslations } from '@/i18n/use-translations';
 import { trackCtaSignup } from '@/lib/analytics/gtm';
+import { formatClock } from '@/lib/format-clock';
 import { cn } from '@kortix/ui';
 import { ArrowRightIcon, ArrowUpRightIcon, GithubLogoIcon } from '@phosphor-icons/react';
 import { useCallback, useRef, useState } from 'react';
 import { hero, kit, pillars, start } from './content';
 
 const chapters = launchFilm.chapters ?? [];
-const stamp = (frame: number) => {
-  const s = Math.round(frame / FPS);
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-};
+const stamp = (frame: number) => formatClock(Math.round(frame / FPS));
 
 /** The film, with a chapter strip that follows playback and seeks on click. */
 function FilmHero() {
@@ -34,7 +32,7 @@ function FilmHero() {
 
   return (
     <div className="mx-auto mt-12 w-full max-w-6xl px-6">
-      <div className="border-border bg-background aspect-video overflow-hidden rounded-2xl border shadow-2xl">
+      <div className="border-border bg-background aspect-video overflow-hidden rounded-2xl border shadow-md">
         <FilmPlayer ref={player} film={launchFilm} autoPlay loop onFrame={onFrame} />
       </div>
       <ol className="mt-4 flex gap-1 overflow-x-auto pb-2">

@@ -29,7 +29,6 @@ import { withTimeout } from "../../shared/with-timeout";
 import {
   isModelServableForAccount,
 } from "../../llm-gateway/resolution/default-model";
-import { resolveFeatureFlag } from "../../feature-flags/registry";
 import { usableProviderKeys } from "../../secrets/provider-key-selection";
 import {
   type ModelSource,
@@ -42,6 +41,7 @@ import { PROJECT_ACTIONS } from "../../iam";
 import { auth, errors, json } from "../../openapi";
 import { loadProjectForUser, assertProjectCapability } from "../lib/access";
 import { projectsApp } from "../lib/app";
+import { workspaceIdParam } from '../../shared/route-params';
 
 /** The three Slack conversation-join policies (channels/slack/participants.ts). */
 const CONVERSATION_POLICIES = ["owner_approval", "owner_only", "project_open"] as const;
@@ -61,8 +61,6 @@ interface ModelResolutionCtx {
   projectId: string;
   modelDefaults: AccountModelDefaults;
   freeModelsOnly: boolean;
-  /** The project's `pooled_provider_secrets` flag. */
-  pooledEnabled: boolean;
 }
 
 /**
@@ -79,7 +77,6 @@ async function conversationCanRunUncached(input: {
   accountId: string;
   projectId: string;
   freeModelsOnly: boolean;
-  pooledEnabled: boolean;
   model: string;
 }): Promise<boolean> {
   const base = {
@@ -91,7 +88,6 @@ async function conversationCanRunUncached(input: {
     personalUserId: null,
   };
   if (await isModelServableForAccount(base)) return true;
-  if (!input.pooledEnabled) return false;
   const keys = await usableProviderKeys({
     accountId: input.accountId,
     projectId: input.projectId,
@@ -119,10 +115,9 @@ async function conversationCanRun(input: {
   accountId: string;
   projectId: string;
   freeModelsOnly: boolean;
-  pooledEnabled: boolean;
   model: string;
 }): Promise<boolean> {
-  const key = `channel-bindings:conversationCanRun:${input.accountId}:${input.projectId}:${input.userId}:${input.freeModelsOnly}:${input.pooledEnabled}:${input.model}`;
+  const key = `channel-bindings:conversationCanRun:${input.accountId}:${input.projectId}:${input.userId}:${input.freeModelsOnly}:${input.model}`;
   return requestMemo(key, () => conversationCanRunUncached(input));
 }
 
@@ -144,7 +139,6 @@ async function resolveBindingEffectiveModel(
       accountId: ctx.accountId,
       projectId: ctx.projectId,
       freeModelsOnly: ctx.freeModelsOnly,
-      pooledEnabled: ctx.pooledEnabled,
       model: explicitModel,
     });
     if (servable) return { model: toWireModel(explicitModel), source: "explicit" };
@@ -235,15 +229,15 @@ export function registerChannelBindingsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: "get",
-      path: "/{projectId}/channels/bindings",
+      path: "/{workspaceId}/channels/bindings",
       tags: ["channels"],
       summary: "List channel bindings of a project",
       ...auth,
-      request: { params: z.object({ projectId: z.string() }) },
+      request: { params: z.object({ workspaceId: z.string() }) },
       responses: { 200: json(z.any(), "OK"), ...errors(404) },
     }),
     async (c: any) => {
-      const projectId = c.req.param("projectId");
+      const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, "read");
       if (!loaded) return c.json({ error: "Not found" }, 404);
       // Listing channel↔agent bindings exposes which connectors the project's
@@ -313,7 +307,6 @@ export function registerChannelBindingsRoutes(): void {
         projectId,
         modelDefaults,
         freeModelsOnly: !mayUseManagedModels,
-        pooledEnabled: resolveFeatureFlag(loaded.row.metadata, "pooled_provider_secrets"),
       };
       return c.json({
         projectDefaultAgent,
@@ -336,18 +329,18 @@ export function registerChannelBindingsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: "patch",
-      path: "/{projectId}/channels/bindings/{bindingId}",
+      path: "/{workspaceId}/channels/bindings/{bindingId}",
       tags: ["channels"],
       summary: "Update a channel binding",
       ...auth,
       request: {
-        params: z.object({ projectId: z.string(), bindingId: z.string() }),
+        params: z.object({ workspaceId: z.string(), bindingId: z.string() }),
         body: { content: { "application/json": { schema: ChannelBindingPatchBody } } },
       },
       responses: { 200: json(z.any(), "OK"), ...errors(400, 403, 404, 409) },
     }),
     async (c: any) => {
-      const projectId = c.req.param("projectId");
+      const projectId = workspaceIdParam(c);
       const bindingId = c.req.param("bindingId");
       // Floor 'read'; project.connector.write below is the real gate (was 'manage'
       // → project.write, which over-gated a custom connector.write-only role).
@@ -442,7 +435,6 @@ export function registerChannelBindingsRoutes(): void {
             accountId: loaded.row.accountId as string,
             projectId,
             freeModelsOnly,
-            pooledEnabled: resolveFeatureFlag(loaded.row.metadata, "pooled_provider_secrets"),
             model: trimmed,
           });
           if (!servable) {
@@ -474,7 +466,6 @@ export function registerChannelBindingsRoutes(): void {
         projectId,
         modelDefaults: await getAccountModelDefaults(accountId, projectId),
         freeModelsOnly: !(await accountMayUseManagedModels(accountId)),
-        pooledEnabled: resolveFeatureFlag(loaded.row.metadata, "pooled_provider_secrets"),
       };
       return c.json(await serializeBinding(updated, projectDefaultAgentOf(loaded.row.metadata), modelCtx));
     },

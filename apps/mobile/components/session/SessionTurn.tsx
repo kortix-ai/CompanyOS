@@ -45,8 +45,11 @@ import {
   getRetryMessage,
   sessionLogImageGenRuns,
   shouldShowToolPart,
+  deriveTurnSources,
   showDrawnByImageGen,
   type SessionLogTurn,
+  type ToolCallBlock,
+  type TurnSource,
 } from '@kortix/sdk';
 import type { PermissionRequest, QuestionRequest, SessionStatus } from '@/lib/session/types';
 import type { Command } from '@/lib/session/runtime-data';
@@ -74,6 +77,7 @@ import {
   textBlockRevealKey,
   turnSegments,
   turnWorkSplit,
+  withoutRelayCalls,
   type TurnSegment,
 } from '@/lib/session/turn-body';
 import { turnDurationMs } from '@/lib/session/turn-meta';
@@ -163,6 +167,22 @@ interface SessionTurnProps {
   changeRequests?: readonly ChangeItem[];
   /** Opens the review sheet for one change request. Must be stable. */
   onOpenChangeRequest?: (id: string) => void;
+  /** A run member's own change requests, by turn id: `changeRequests` above is this turn's. */
+  changeRequestsOf?: (turnId: string) => readonly ChangeItem[] | undefined;
+  /**
+   * This turn answers an agent run (KRTX-4732): its row reads the run's label and folds the
+   * reports and work of the run's turns (`runTurns`, then its own). Every answer of the run stays
+   * in view under the row, in order. See `lib/session/agent-runs.ts`.
+   */
+  runLabel?: string;
+  runTurns?: readonly SessionLogTurn[];
+  /** Every agent this turn started has reported: its agent rows fold too. */
+  foldStartedWork?: boolean;
+  /**
+   * A run's other turn, drawn by its anchor, with no row, busy slot or actions: `work` is its
+   * report and work, inside the run fold; `answer` is its answer and error, under the run row.
+   */
+  runMember?: 'work' | 'answer';
 }
 
 const EMPTY_QUESTIONS: QuestionRequest[] = Object.freeze([]) as unknown as QuestionRequest[];
@@ -194,6 +214,11 @@ function SessionTurnImpl({
   onScreen = true,
   changeRequests,
   onOpenChangeRequest,
+  changeRequestsOf,
+  runLabel,
+  runTurns,
+  foldStartedWork = false,
+  runMember,
 }: SessionTurnProps) {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
@@ -202,6 +227,17 @@ function SessionTurnImpl({
 
   // Web: `working = isWorkingTurn && sessionWorking`: the SDK's `live`. Any other turn is never working.
   const working = turn.live;
+  // The pages this response read, for its sources button. A run's report turns
+  // draw no bar of their own: their pages count on the host's (web: the same).
+  const sources = useMemo(
+    () =>
+      working
+        ? NO_SOURCES
+        : deriveTurnSources(
+            [blocks, ...(runTurns ?? []).map(turnBlocks)].flat().filter((block): block is ToolCallBlock => block.type === 'tool_call'),
+          ),
+    [working, blocks, runTurns],
+  );
 
   const hasSteps = useMemo(() => turnHasSteps(blocks), [blocks]);
   const hasAssistantContent = turn.assistant.length > 0;
@@ -235,10 +271,12 @@ function SessionTurnImpl({
     () => standaloneCallIdsFor(permissions, sessionId, blocks),
     [permissions, sessionId, blocks],
   );
-  const segments = useMemo(
-    () => turnSegments(segmentInputBlocks(blocks, answeredById, showInlineContent), standaloneCallIds),
-    [blocks, answeredById, showInlineContent, standaloneCallIds],
-  );
+  // Inside an agent run the agent's relays between colleagues (`send_message`) are noise.
+  const inRun = !!runLabel || !!runMember;
+  const segments = useMemo(() => {
+    const all = turnSegments(segmentInputBlocks(blocks, answeredById, showInlineContent), standaloneCallIds);
+    return inRun ? withoutRelayCalls(all) : all;
+  }, [blocks, answeredById, showInlineContent, standaloneCallIds, inRun]);
   // KRTX-2933: only the part that can still grow streams. A reply that ended
   // while the session still reads busy renders at once.
   const streamingTextId = useMemo(
@@ -264,7 +302,11 @@ function SessionTurnImpl({
     [segments, imageGenPaths, imageGenDigests],
   );
   // KRTX-2113: settled, the work folds behind one "Worked for" row; `null` while working.
-  const workSplit = useMemo(() => turnWorkSplit(segments, working), [segments, working]);
+  // A run member draws no row of its own: the split only says which half it draws.
+  const workSplit = useMemo(
+    () => turnWorkSplit(segments, working, foldStartedWork),
+    [segments, working, foldStartedWork],
+  );
   const durationMs = useMemo(() => (workSplit ? turnDurationMs(turn) : null), [workSplit, turn]);
   // The opened "Worked for" row, kept outside the turn so a FlatList remount does not close it.
   const [workOpen, toggleWork] = useWorkFoldOpen(turn.id);
@@ -460,15 +502,17 @@ function SessionTurnImpl({
        <ImageGenDigestsContext.Provider value={imageGenDigests}>
        <ImageGenRunsContext.Provider value={imageGenRuns}>
         <View style={{ gap: SEGMENT_STACK_GAP }}>
-          {split && <WorkRow key="work" durationMs={durationMs} open={workOpen} onToggle={toggleWork} />}
+          {split && !runLabel && !runMember && <WorkRow key="work" durationMs={durationMs} open={workOpen} onToggle={toggleWork} />}
           {segments.map((segment) => {
             const isWork = split !== null && workSegments.has(segment);
-            if (isWork && !workMounted) return null;
+            if (runMember === 'answer' && isWork) return null;
+            if (runMember === 'work' && split && !isWork) return null;
+            if (isWork && !workMounted && !runMember) return null;
             const node = renderSegment(segment, isWork);
             if (!React.isValidElement(node)) return null;
             // `display: none` takes no `gap`, so a folded turn has no blank rows.
             return (
-              <View key={node.key} style={isWork && !workOpen ? HIDDEN : undefined}>
+              <View key={node.key} style={isWork && !workOpen && !runMember ? HIDDEN : undefined}>
                 {node}
               </View>
             );
@@ -541,6 +585,7 @@ function SessionTurnImpl({
 
   // 4. Busy slot — retry display, then the working indicator
   if (
+    !runMember &&
     showTurnBusyIndicator({
       working: working && !suppressBusyIndicator,
       hasError: !!turnError,
@@ -582,18 +627,77 @@ function SessionTurnImpl({
 
   // 6. Change requests — what this turn left behind (web `TurnOutcomes`).
   // Gated on `!working` as on web: an outcome is a settled fact.
-  if (!working && changeRequests && changeRequests.length > 0 && onOpenChangeRequest) {
+  if (runMember !== 'work' && !working && changeRequests && changeRequests.length > 0 && onOpenChangeRequest) {
     body.push(<SessionChangeRequests key="change-requests" items={changeRequests} onOpen={onOpenChangeRequest} />);
   }
 
   // 7. Action bar
-  if (showTurnActions({ working })) {
-    body.push(<TurnActions key="actions" turn={turn} response={copyText} costInfo={costInfo} />);
+  if (!runMember && showTurnActions({ working })) {
+    body.push(<TurnActions key="actions" turn={turn} response={copyText} costInfo={costInfo} sources={sources} />);
   }
+
+  // A run member (KRTX-4732): its report and work in the anchor's fold, or its answer under the row.
+  if (runMember === 'work') {
+    const work = body.filter((node) => React.isValidElement(node) && node.key === 'segments');
+    return (
+      <View style={{ gap: TURN_STACK_GAP }}>
+        {userMessage}
+        {work.length > 0 ? <View className="px-4">{work}</View> : null}
+      </View>
+    );
+  }
+  if (runMember === 'answer') {
+    return body.length > 0 ? (
+      <View className="px-4" style={{ gap: TURN_STACK_GAP }}>
+        {body}
+      </View>
+    ) : null;
+  }
+
+  // An agent run's anchor (KRTX-4732): one row, then every answer of the run. Opened, the row
+  // shows each other turn's report and work, then this turn's own report, then its work. While
+  // the turn works, its own report stays in view under the row.
+  const runFold = !!runLabel;
+  const noticeInFold = runFold && !working;
+  const runMembers = (part: 'work' | 'answer') =>
+    runFold && runTurns?.length
+      ? runTurns.map((member) => (
+          <SessionTurn
+            key={member.id}
+            turn={member}
+            runMember={part}
+            changeRequests={part === 'answer' ? changeRequestsOf?.(member.id) : undefined}
+            onOpenChangeRequest={onOpenChangeRequest}
+            sessionId={sessionId}
+            permissions={permissions}
+            pendingQuestions={pendingQuestions}
+            agentNames={agentNames}
+            onFileMention={onFileMention}
+            onSessionMention={onSessionMention}
+            onPermissionReply={onPermissionReply}
+            commands={commands}
+          />
+        ))
+      : null;
+  const members = runMembers('work');
+  const answers = runMembers('answer');
 
   return (
     <View style={{ gap: TURN_STACK_GAP }}>
-      {userMessage}
+      {runFold ? (
+        <View className="px-4">
+          <WorkRow label={runLabel} durationMs={null} open={workOpen} onToggle={toggleWork} />
+        </View>
+      ) : null}
+      {/* `display: none` takes no gap: a closed run row has no blank rows under it. */}
+      {runFold && workMounted ? (
+        <View style={workOpen ? RUN_STACK : RUN_STACK_HIDDEN}>
+          {members}
+          {noticeInFold ? userMessage : null}
+        </View>
+      ) : null}
+      {noticeInFold ? null : userMessage}
+      {answers}
       {body.length > 0 ? (
         <View className="px-4" style={{ gap: TURN_STACK_GAP }}>
           {body}
@@ -602,5 +706,11 @@ function SessionTurnImpl({
     </View>
   );
 }
+
+const RUN_STACK = { gap: TURN_STACK_GAP };
+const RUN_STACK_HIDDEN = { ...RUN_STACK, ...HIDDEN };
+
+/** A working turn shows no sources yet. */
+const NO_SOURCES: readonly TurnSource[] = [];
 
 export const SessionTurn = React.memo(SessionTurnImpl);

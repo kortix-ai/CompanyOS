@@ -4,11 +4,11 @@
  * Mirrors apps/web `tool/shared/show-helpers.tsx`:
  * - `useShowOpenInTab` — an HTML file → its static-server preview, a localhost
  *   URL → the sandbox preview, both in-session (`SandboxPreviewSheet`, KRTX-602);
- *   a safe http(s) URL → external; a path → the file viewer (`showOpenTarget`;
+ *   an app link to an artifact of this project → the artifact viewer sheet
+ *   (`openArtifactLink`); any other safe http(s) URL → external; a path → the file viewer (`showOpenTarget`;
  *   see `navigation.tsx` for each mobile target);
  * - `ShowFileActions` — web: Refresh · Full screen · "Preview". Mobile: Refresh
- *   · "Preview" inline, Refresh · Full screen in the panel (`showFileActions`):
- *   both open the same full-screen viewer, so only one is shown.
+ *   · "Preview" (the full-screen file viewer).
  *
  * The show type/file glyphs (`showTypeIcon` / `showFileTypeIcon`) live in
  * `./tool-icons`, with the other tool icon maps. Not ported here:
@@ -22,9 +22,10 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
-import { ArrowClockwiseIcon, ArrowsOutSimpleIcon, type AppIcon } from '@/lib/icons';
+import { ArrowClockwiseIcon, type AppIcon } from '@/lib/icons';
+import { openArtifactLink } from '@/lib/artifacts/open-artifact-link';
 import { fileKeys } from '@/lib/files/hooks';
-import { showFileActions, showOpenTarget, type ShowRowModel } from '@/lib/session/tools/web-show';
+import { showOpenTarget, type ShowRowModel } from '@/lib/session/tools/web-show';
 import { useSandboxImage } from '@/components/session/turn/use-sandbox-image';
 import { SettingsRow } from '@/components/kortix/settings-list';
 import { webSpace } from '@/lib/session/user-message';
@@ -53,6 +54,9 @@ export function useShowOpenInTab(props: { type: string; url: string; path: strin
       return;
     }
     if (target.kind === 'external') {
+      // An artifact of this project opens in the artifact viewer, over the
+      // session; any other link (a public share link included) in the browser.
+      if (enabled && openArtifactLink(target.url, title)) return;
       openExternal(target.url);
       return;
     }
@@ -61,14 +65,6 @@ export function useShowOpenInTab(props: { type: string; url: string; path: strin
   }, [enabled, htmlStaticProxy, openExternal, openFile, openPreview, path, proxy, target, title]);
 }
 
-/**
- * Web `ShowFileActions` (Refresh · Full screen · "Preview"). Mobile has no side
- * panel, so "Full screen" and "Preview" would both open the full-screen
- * file sheet (`FilePreviewSheet`): the inline card shows Refresh · "Preview", the panel Refresh ·
- * Full screen (`showFileActions`). Refresh invalidates the file queries and
- * calls `onRefresh`, which the card uses to remount its body so a sandbox
- * image requests its bytes again.
- */
 /**
  * One `show` output in the transcript, as a `SettingsRow` inside the card's
  * `SettingsGroup` (COR-107; Jay, 2026-09-22): the app's own list row, so the
@@ -121,6 +117,7 @@ export function ShowResultRow({
 /** The leading still in a show row: the settings list's own icon slot, squared. */
 const SHOW_ROW_THUMB = 22;
 
+/** Refresh invalidates file queries; onRefresh remounts the card body to reload image bytes. */
 export function ShowFileActions({ path, onRefresh }: { path: string; onRefresh?: () => void }) {
   const palette = useTurnPalette();
   const queryClient = useQueryClient();
@@ -141,27 +138,12 @@ export function ShowFileActions({ path, onRefresh }: { path: string; onRefresh?:
 
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: webSpace(1), flexShrink: 0 }}>
-      {showFileActions({ inPanel: false }).map((action) => {
-        if (action === 'refresh') {
-          return (
-            <Button key={action} variant="ghost" size="icon" onPress={handleRefresh} disabled={refreshing} accessibilityLabel="Refresh">
-              <Icon as={ArrowClockwiseIcon} size={TURN_SPACE.icon} color={palette.mutedForeground} />
-            </Button>
-          );
-        }
-        if (action === 'full-screen') {
-          return (
-            <Button key={action} variant="ghost" size="icon" onPress={open} accessibilityLabel="Full screen">
-              <Icon as={ArrowsOutSimpleIcon} size={TURN_SPACE.icon} color={palette.mutedForeground} />
-            </Button>
-          );
-        }
-        return (
-          <Button key={action} variant="secondary" size="sm" onPress={open} accessibilityHint="Opens the file full screen">
-            <Text>Preview</Text>
-          </Button>
-        );
-      })}
+      <Button variant="ghost" size="icon" onPress={handleRefresh} disabled={refreshing} accessibilityLabel="Refresh">
+        <Icon as={ArrowClockwiseIcon} size={TURN_SPACE.icon} color={palette.mutedForeground} />
+      </Button>
+      <Button variant="secondary" size="sm" onPress={open} accessibilityHint="Opens the file full screen">
+        <Text>Preview</Text>
+      </Button>
     </View>
   );
 }

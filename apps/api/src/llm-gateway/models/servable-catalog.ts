@@ -1,19 +1,19 @@
 import { getProjectGatewayResolution } from '../../repositories/project-model-access';
 import { modelAccessAllows } from '../model-access';
 import { accountMayUseManagedModels } from '../../billing/services/entitlements';
-import { getProjectSecretValueForConsumer, listProjectSecretNamesForConsumer } from '../../projects/secrets';
+import { connectedGatewayKeyNames, defaultableGatewayKeyNames, firstGatewayKeyValue } from '../credentials/gateway-keys';
 import { getAccountModelDefaults } from '../../repositories/model-preferences';
 import { getProjectRoutingPolicy } from '../../repositories/project-routing-policies';
 import { resolveEnablement } from '../model-enablement';
 import { toWireModel } from '../resolution/effective';
-import { gatewayModelCatalog } from './catalog-models';
+import { gatewayModelCatalog, platinumGatewayModel } from './catalog-models';
 import { projectPickerCatalog, type UnavailableModelMark } from './picker-catalog';
 import { platformDefaultModelId } from './served-managed-models';
-import { projectFeatureFlagEnabled } from '../../feature-flags/for-project';
-import { listGrantedGatewaySecretNames } from '../../secrets/account-resource';
 import { customProviderCatalog } from '../custom-providers';
 import { PLATINUM_PROVIDER } from '@kortix/llm-catalog';
 import { platinumByokCatalog } from './platinum-byok-models';
+import { getRuntimeManagedModel } from './managed-models';
+import { managedTransportAvailable } from '../resolution/descriptors';
 
 type GatewayModel = ReturnType<typeof gatewayModelCatalog>[string];
 
@@ -35,7 +35,7 @@ export interface ServableProjectCatalog {
  * stamped with per-project enablement. Served to the web picker
  * (`GET /projects/:id/model-picker`, routes/models.ts) AND to the sandbox at boot
  * (`GET /v1/llm/models?scope=picker` → internal `/models` with
- * `scope:'picker'`), so the list OpenCode registers on the `kortix` provider
+ * `scope:'picker'`), so the list the runtime registers on the `kortix` provider
  * is exactly the list the composer offers. Before this the sandbox learned
  * only the managed subset and kept the image-baked org catalog for the rest:
  * a BYOK model added to models.dev after the image was built showed in the
@@ -60,24 +60,23 @@ export async function servableProjectCatalog(input: {
    * list its sandbox registers.
    */
   personalUserId?: string | null;
+  /**
+   * `true`: a provider whose every key the provider refused counts as not
+   * connected (`defaultableGatewayKeyNames`). For "can a session start with
+   * no model named", never for the list a box registers.
+   */
+  withoutRefusedKeys?: boolean;
 }): Promise<ServableProjectCatalog> {
   const { projectId, accountId, principalUserId } = input;
   const personalUserId = input.personalUserId === undefined ? (principalUserId ?? null) : input.personalUserId;
   const freeManagedOnly = !(await accountMayUseManagedModels(accountId));
-  const [secrets, defaults, routing, resolution, pooledEnabled] = await Promise.all([
-    listProjectSecretNamesForConsumer({
-      projectId,
-      principalUserId: personalUserId,
-      consumer: 'llm_gateway',
-    }).catch(() => [] as string[]),
+  const keyScope = { accountId, projectId, userId: principalUserId, grantUserId: personalUserId };
+  const [secretNames, defaults, routing, resolution] = await Promise.all([
+    input.withoutRefusedKeys ? defaultableGatewayKeyNames(keyScope) : connectedGatewayKeyNames(keyScope),
     getAccountModelDefaults(accountId, projectId),
     getProjectRoutingPolicy(projectId),
     getProjectGatewayResolution(projectId),
-    projectFeatureFlagEnabled(projectId, 'pooled_provider_secrets'),
   ]);
-  const pooledNames = pooledEnabled && principalUserId
-    ? await listGrantedGatewaySecretNames(accountId, projectId, principalUserId, personalUserId).catch(() => [] as string[])
-    : [];
   // An account without managed models has no platform default.
   const platformDefault = freeManagedOnly ? undefined : platformDefaultModelId();
   const effectiveDefault = toWireModel(
@@ -98,23 +97,30 @@ export async function servableProjectCatalog(input: {
   // Platinum (BYOK): its models are whatever Platinum lists for the project's
   // own key, on by default like a custom endpoint (no release date to rank).
   const platinumKeyName = PLATINUM_PROVIDER.env![0]!;
-  const platinum = secrets.includes(platinumKeyName)
-    ? await platinumByokCatalog(await getProjectSecretValueForConsumer({
-      projectId, accountId, principalUserId: personalUserId, actorUserId: principalUserId,
-      name: platinumKeyName, consumer: 'llm_gateway', probe: true,
-    }).catch(() => null))
+  const platinum = secretNames.has(platinumKeyName)
+    ? await platinumByokCatalog(await firstGatewayKeyValue({ ...keyScope, providerId: PLATINUM_PROVIDER.id, name: platinumKeyName }).catch(() => null))
     : {};
+  // Restricted managed models (restricted-models.ts): only those an operator
+  // turned on for this project, on by default once granted.
+  const restricted: Record<string, GatewayModel> = {};
+  if (!freeManagedOnly) {
+    for (const id of resolution.restrictedModels ?? []) {
+      const model = getRuntimeManagedModel(id);
+      if (model && managedTransportAvailable(model)) restricted[id] = platinumGatewayModel(model, 'kortix');
+    }
+  }
   const models = {
     ...projectPickerCatalog(
       gatewayModelCatalog(projectId, { freeManagedOnly }),
-      new Set([...secrets, ...pooledNames]),
+      secretNames,
       requiredModels,
     ),
+    ...restricted,
     ...platinum,
     ...custom,
   };
   const enabled = resolveEnablement(models, routing?.modelOverrides ?? {},
-    [...requiredModels, ...Object.keys(platinum), ...Object.keys(custom)]);
+    [...requiredModels, ...Object.keys(restricted), ...Object.keys(platinum), ...Object.keys(custom)]);
   return {
     models: Object.fromEntries(
       Object.entries(models).map(([id, model]) => [

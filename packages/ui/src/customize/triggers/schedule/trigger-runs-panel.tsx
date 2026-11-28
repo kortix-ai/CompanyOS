@@ -92,7 +92,7 @@ const SOURCE_LABEL_KEY = {
   manual: 'textb0b9fe24ffa9',
   monitor: 'text4c2e1df4570b',
   reminder: 'text31757bbfa17e',
-  event: 'text5441e7146193',
+  event: 'textca395c4d19b2',
   app: 'text0d04bfeb7d64',
   change_request: 'text5ffd973e20ed',
 } as const satisfies Record<ProjectTriggerRunSource, string>;
@@ -381,6 +381,9 @@ export function RunRow({
   const state = runState(run);
   const error = run.error ?? run.run_error;
   const failed = state === 'failed' || state === 'rejected';
+  // A skipped run carries its reason on the line too (a run cap, an overlap):
+  // without it the row read only "Skipped" until opened.
+  const showsReason = failed || state === 'skipped';
   const source = t.raw(SOURCE_LABEL_KEY[run.source]);
   // An App event run: its event, and the App's log of that event (one row per trigger it reached).
   const appEvent = appEventOf(run.payload);
@@ -440,7 +443,7 @@ export function RunRow({
             <span className="text-foreground max-w-full shrink-0 truncate font-medium">
               {t.raw(STATE_LABEL_KEY[state])}
             </span>
-            {failed && error ? (
+            {showsReason && error ? (
               <span className="text-muted-foreground min-w-0 truncate">{error}</span>
             ) : run.replay_of ? (
               <Badge variant="secondary" size="sm" className="font-sans normal-case">

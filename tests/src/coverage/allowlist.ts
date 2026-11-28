@@ -52,6 +52,15 @@ export const uncoveredAllow: AllowEntry[] = [
     path: "/v1/system/confirmed-signups",
     reason: "sales reconciliation export behind its own token; covered by sales-outbox.integration.test.ts",
   },
+  // QualiLoop's test endpoint: a machine route behind its own secret
+  // (QUALILOOP_AGENT_SECRET), off (404) unless that and QUALILOOP_KORTIX_PROJECT_ID
+  // are set. Every turn runs a real agent in a cloud sandbox, which the local
+  // profile excludes.
+  {
+    method: "POST",
+    path: "/v1/qualiloop/chat",
+    reason: "QualiLoop test endpoint behind its own secret, off unless configured; each turn needs a cloud sandbox. Verified against dev with `qualiloop connect check` (.agents/skills/qualiloop)",
+  },
   // Routes of this cycle proven over real HTTP + PostgreSQL in apps/api's
   // integration suites rather than a flow: the subscription ones read a
   // connected ChatGPT/Claude plan (an external login the local profile has
@@ -153,6 +162,12 @@ export const uncoveredAllow: AllowEntry[] = [
       "DEBT, not a considered exemption, and NOT introduced by this branch. The route exists on the app but was missing from tests/spec/routes.generated.json, so the gate never saw it; regenerating the manifest for the headless-auth routes surfaced it. Nothing covers it — it needs a flow. This entry keeps the gap visible instead of letting a stale manifest re-hide it.",
   },
   {
+    method: "PUT",
+    path: "/v1/admin/api/projects/:*/restricted-models",
+    reason:
+      "Kortix staff only (platform operator): turns restricted managed models on for one workspace. Covered against the real route and database in apps/api/src/__tests__/integration-restricted-models-http.test.ts: a workspace manager gets 403 and nothing is stored; an operator write is read back by the gateway; a non-restricted id is 400; an unknown or archived project is 404.",
+  },
+  {
     method: "POST",
     path: "/v1/admin/api/accounts/:*/members/:*/role",
     reason:
@@ -217,12 +232,6 @@ export const uncoveredAllow: AllowEntry[] = [
     path: "/v1/webhooks/teams/oauth/callback",
     reason: "Teams admin-consent OAuth callback — browser redirect from Microsoft (admin_consent+tenant), not an API client route; mirrors the slack oauth callback",
   },
-  {
-    method: "GET",
-    path: "/v1/git/:*/fast-boot-bundle",
-    reason:
-      "DEBT, not a considered exemption. Route shipped with the fast-git-boot work (#6976) but the manifest was not regenerated then; a canonical manifest regen surfaced it. Nothing covers it — this entry keeps the gap visible instead of re-hiding it behind a stale manifest.",
-  },
   // `ALL` passthroughs. dump-routes.ts lists real `.all()` handlers since the
   // one-contract wave; no flow can declare the method `ALL`, so each is listed
   // here with the reason its concrete traffic is not a local flow.
@@ -255,6 +264,11 @@ export const uncoveredAllow: AllowEntry[] = [
       reason: "retired provider passthrough: a 410 stub (apps/api/src/routes/retired.ts). No flow can declare ALL; RET-1 calls one and unit-retired-routes.test.ts covers every row",
     })),
   ),
+  ...["/v1/marketplace", "/v1/marketplace/*"].map((path) => ({
+    method: "ALL",
+    path,
+    reason: "the removed marketplace (2026-11-20): a 410 stub (apps/api/src/routes/retired.ts). No flow can declare ALL; RET-1 calls the catalog and sources paths and unit-retired-routes.test.ts covers every row",
+  })),
 { method: "POST", path: "/v1/projects/:*/transfer", reason: "project transfer between accounts (KRTX-1747): an end-user settings action, not a browser journey — covered against the real route table by apps/api/src/projects/routes/project-transfer.test.ts (gate order, error mapping), by the real-PostgreSQL movement suite apps/api/src/projects/lib/project-transfer.integration.test.ts (movement, role re-pointing, real-engine non-member deny, classification completeness), and exercised live in the PR sandbox" },
 ];
 

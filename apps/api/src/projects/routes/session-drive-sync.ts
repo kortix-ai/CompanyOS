@@ -1,5 +1,4 @@
 import type { Context } from 'hono';
-import { recordDriveCommitAuthor } from '../../artifacts/events-store';
 import { normalizeDrivePath } from '../../drives/access';
 import { assertDriveFilesFit, assertDriveWriteFits, forgetDriveUsage } from '../../drives/limits';
 import { noteDriveWrite } from '../../drives/conflicts';
@@ -25,7 +24,8 @@ import {
 import {
   DriveStorageError,
   commitVolumeUpload,
-  getDriveVolume,
+  driveVolumeHead,
+  isKortixInternalPath,
   listVolumeFilesPage,
   moveVolumeFile,
   planVolumeUpload,
@@ -35,7 +35,6 @@ import {
   statVolumeFile,
   writeVolumeFile,
 } from '../../drives/volumes';
-import { parseVolumeWriteCommit } from '../../drives/volume-commit';
 import { isSessionSandboxCredential } from '../../middleware/session-sandbox-credential';
 import { isUuid } from '../../shared/validate';
 import { logger } from '../../lib/logger';
@@ -75,7 +74,7 @@ function refuse(c: Ctx, status: 400 | 403 | 404 | 413, error: string): Response 
 
 /** The session box calling, or a refusal. */
 async function scopeOf(c: Ctx): Promise<SyncScope | Response> {
-  const projectId = param(c, 'projectId');
+  const projectId = param(c, 'workspaceId');
   const sessionId = param(c, 'sessionId');
   if (!isUuid(sessionId) || !isSessionSandboxCredential(c) || c.get('sessionId') !== sessionId) {
     return refuse(c, 403, 'Drive sync takes the session sandbox credential');
@@ -149,7 +148,7 @@ const notFound = (): never => {
   throw new DriveStorageError(404, 'File or folder not found', 'path_not_found');
 };
 
-const base = '/:projectId/sessions/:sessionId/drive-sync';
+const base = '/:workspaceId/sessions/:sessionId/drive-sync';
 
 const REMOTE_CHANGED = Symbol('remote_changed');
 
@@ -242,7 +241,7 @@ export function registerSessionDriveSyncRoutes(): void {
     const got = await driveFor(c, 'read', mount?.subdir ?? '/');
     if (got instanceof Response) return got;
     const head = await storage(c, () =>
-      readDriveVolume(got.drive, (volume) => getDriveVolume(volume).then((v) => v.head_commit_id ?? null), () => null),
+      readDriveVolume(got.drive, (volume) => driveVolumeHead(volume).then((h) => h.token), () => null),
     );
     if (head instanceof Response) return head;
     return c.json({ head });
@@ -263,7 +262,8 @@ export function registerSessionDriveSyncRoutes(): void {
       ),
     );
     if (page instanceof Response) return page;
-    return c.json(page);
+    // Kortix's own bookkeeping (staging of a shared upload, fold markers) never syncs into a box.
+    return c.json({ ...page, entries: page.entries.filter((e) => !isKortixInternalPath(e.path)) });
   });
 
   projectsApp.get(`${base}/:driveId/files/stat`, async (c: Ctx) => {
@@ -308,8 +308,7 @@ export function registerSessionDriveSyncRoutes(): void {
     );
     if (written instanceof Response) return written;
     if (written === REMOTE_CHANGED) return remoteChanged(c);
-    const { commit, ...file } = written;
-    await recordDriveCommitAuthor(got.drive.driveId, commit, { sessionId: param(c, 'sessionId') });
+    const { commit: _commit, ...file } = written;
     noteDriveWrite(got.drive.driveId);
     forgetDriveUsage(got.drive.platinumVolumeName);
     return c.json(file);
@@ -385,7 +384,6 @@ export function registerSessionDriveSyncRoutes(): void {
     );
     if (r instanceof Response) return r;
     if (r === REMOTE_CHANGED) return remoteChanged(c);
-    await recordDriveCommitAuthor(drive.driveId, parseVolumeWriteCommit(r), { sessionId: param(c, 'sessionId') });
     await forgetUploadPlan(scope.sandboxId, uploadId).catch((err) =>
       logger.warn(`[drive-sync] forgetting upload ${uploadId} failed:`, { error: err instanceof Error ? err.message : String(err) }),
     );

@@ -1,5 +1,5 @@
 /**
- * Goals: `/v1/projects/:projectId/goals/*` (project flag `goals`).
+ * Goals: `/v1/workspaces/:workspaceId/goals/*`, legacy `/v1/projects/:workspaceId/goals/*` (project flag `goals`).
  *
  * The routes derive the caller (`GoalActor`) from the credential and hand
  * plain values to `projects/goals/service.ts`, which owns every rule. A
@@ -10,6 +10,7 @@
  * `404 goal_not_found`, `409 goal_conflict` (with the current goal), `422
  * goal_invalid` (with `violations`). Flag off: `403 feature_disabled`.
  */
+import { workspaceIdParam } from '../../shared/route-params';
 import { createRoute, z } from '@hono/zod-openapi';
 import {
   ActivateGoalRequestSchema,
@@ -33,6 +34,7 @@ import { HTTPException } from 'hono/http-exception';
 import { accessAt, getDrive, groupIdsOf, listFolderGrants } from '../../drives/service';
 import { folderAccessAtLeast } from '../../drives/folders';
 import { requireFeatureFlag } from '../../feature-flags/gate';
+import { resolveFeatureFlag } from '../../feature-flags/registry';
 import { PROJECT_ACTIONS } from '../../iam';
 import { isProjectSessionPrincipal } from '../../iam/agent-scope';
 import { callerKortixSessionId } from '../../middleware/caller-session';
@@ -42,19 +44,21 @@ import type { AppEnv } from '../../types';
 import { assertProjectCapability, loadProjectForUser } from '../lib/access';
 import { resolveAndAuthorizeAgent } from '../lib/agent-access';
 import { projectsApp } from '../lib/app';
-import { NO_FILES_AGENTS, isGoalManager, goalAgentCandidates, type GoalActor } from '../goals/rules';
+import { NO_FILES_AGENTS, isBoundGoal, isGoalManager, goalAgentCandidates, type GoalActor } from '../goals/rules';
 import { serializeGoal, serializeGoalError, serializeGoalEvent } from '../goals/serialize';
 import * as goals from '../goals/service';
 import { GoalError, getGoal, listGoalEvents, listGoals, type GoalRow } from '../goals/store';
 
 type GoalContextC = Context<AppEnv>;
-const projectParams = z.object({ projectId: z.string() });
+const projectParams = z.object({ workspaceId: z.string() });
 const goalParams = projectParams.extend({ goalId: z.string() });
 const GOAL_ERRORS = { 403: json(GoalErrorSchema, 'goal_forbidden or feature_disabled'), 404: json(GoalErrorSchema, 'goal_not_found'), 409: json(GoalErrorSchema, 'goal_conflict: the goal as it is now'), 422: json(GoalErrorSchema, 'goal_invalid, with violations') };
 
 interface Scope {
   loaded: NonNullable<Awaited<ReturnType<typeof loadProjectForUser>>>;
   actor: GoalActor;
+  /** The project's `goals` flag. Off, only a chat session reaches the routes, for its own goal (goal mode). */
+  flagOn: boolean;
 }
 
 async function isProjectAdmin(c: GoalContextC, projectId: string): Promise<boolean> {
@@ -68,17 +72,18 @@ async function isProjectAdmin(c: GoalContextC, projectId: string): Promise<boole
 
 /** The project, the flag, and who calls. A Response when the request ends here. */
 async function scopeOf(c: GoalContextC): Promise<Scope | Response> {
-  const projectId = c.req.param('projectId') ?? '';
+  const projectId = workspaceIdParam(c) ?? '';
   const loaded = await loadProjectForUser(c, projectId, 'read');
   if (!loaded) return c.json({ error: 'goal_not_found', message: 'Not found.' }, 404);
-  const gate = requireFeatureFlag(c, loaded.row.metadata, 'goals');
-  if (gate) return gate;
   const bound = callerKortixSessionId(c);
-  const actor: GoalActor =
-    isProjectSessionPrincipal(c) && bound
-      ? { kind: 'session', sessionId: bound, userId: loaded.userId }
-      : { kind: 'user', userId: loaded.userId, isAdmin: await isProjectAdmin(c, projectId) };
-  return { loaded, actor };
+  const session = isProjectSessionPrincipal(c) && bound ? bound : null;
+  // Goal mode needs no flag: a chat session always reaches the routes for the goal it owns.
+  const gate = session ? null : requireFeatureFlag(c, loaded.row.metadata, 'goals');
+  if (gate) return gate;
+  const actor: GoalActor = session
+    ? { kind: 'session', sessionId: session, userId: loaded.userId }
+    : { kind: 'user', userId: loaded.userId, isAdmin: await isProjectAdmin(c, projectId) };
+  return { loaded, actor, flagOn: resolveFeatureFlag(loaded.row.metadata, 'goals') };
 }
 
 /** May this caller read the goal? A session: it is or was its owner or verifier. A person: a manager, or read access to its folder in Files. */
@@ -114,6 +119,8 @@ async function readableGoal(c: GoalContextC, scope: Scope): Promise<GoalRow | Re
   if (!goal || !(await mayRead(goal, scope.actor, folderReaderFor(scope.loaded.userId, scope.loaded.row.accountId)))) {
     return c.json({ error: 'goal_not_found' as const, message: 'Goal not found.' }, 404);
   }
+  // Flag off, a session reaches only the goal its chat owns (goal mode): a page goal's sessions stay gated.
+  if (!scope.flagOn && !isBoundGoal(goal)) return requireFeatureFlag(c, scope.loaded.row.metadata, 'goals')!;
   return goal;
 }
 
@@ -165,7 +172,7 @@ const ACTIONS: Array<{ verb: string; summary: string; who: string; schema: z.Zod
   { verb: 'handover', summary: 'Hand a goal to a fresh owner session', who: 'The owner session.', schema: HandoverGoalRequestSchema, run: goals.handoverGoal as Action },
   { verb: 'pause', summary: 'Pause a goal', who: 'Its creator, assigned person or a project admin.', schema: GoalControlRequestSchema, run: goals.pauseGoal as Action },
   { verb: 'resume', summary: 'Resume a goal', who: 'Its creator, assigned person or a project admin.', schema: GoalControlRequestSchema, run: goals.resumeGoal as Action },
-  { verb: 'stop', summary: 'Stop a goal', who: 'Its creator, assigned person or a project admin. A retry on a stopped goal finishes its cleanup.', schema: GoalControlRequestSchema, run: goals.stopGoal as Action },
+  { verb: 'stop', summary: 'Stop a goal', who: 'Its creator, assigned person or a project admin; or the chat that owns it (goal mode), with what its person said as `reason`. A retry on a stopped goal finishes its cleanup.', schema: GoalControlRequestSchema, run: goals.stopGoal as Action },
   { verb: 'restart', summary: 'Restart a stopped goal', who: 'Its creator, assigned person or a project admin.', schema: GoalControlRequestSchema, run: goals.restartGoal as Action },
 ];
 
@@ -182,7 +189,7 @@ export function registerGoalRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/goals',
+      path: '/{workspaceId}/goals',
       tags: ['goals'],
       summary: 'List the goals of a project',
       description: 'Goals the caller may read. A session sees only goals it owns or verifies (or did). Flag `goals`.',
@@ -201,6 +208,7 @@ export function registerGoalRoutes(): void {
       for (const row of rows) {
         if (ownerFilter && row.ownerSessionId !== ownerFilter) continue;
         if (verifierFilter && row.verifierSessionId !== verifierFilter) continue;
+        if (!scope.flagOn && !isBoundGoal(row)) continue;
         if (await mayRead(row, scope.actor, reader)) visible.push(row);
       }
       return c.json({ goals: visible.map((row) => serializeGoal(row, scope.actor)) }, 200);
@@ -210,7 +218,7 @@ export function registerGoalRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post',
-      path: '/{projectId}/goals',
+      path: '/{workspaceId}/goals',
       tags: ['goals'],
       summary: 'Create a goal',
       description:
@@ -226,6 +234,8 @@ export function registerGoalRoutes(): void {
       const body = await parseBody(c, CreateGoalRequestSchema);
       if (body instanceof Response) return body;
       const { loaded } = scope;
+      // A goal with its own owner session (the Goals page kind) needs the flag; one bound to its chat does not.
+      if (!scope.flagOn && !body.here) return requireFeatureFlag(c, loaded.row.metadata, 'goals')!;
       await assertProjectCapability(c, loaded.userId, loaded.row.accountId, loaded.row.projectId, PROJECT_ACTIONS.PROJECT_SESSION_START);
       let resolved = await resolveAndAuthorizeAgent(c, loaded, loaded.row.projectId, body.agent ?? null);
       // No agent named and the default has no Files (My Kortix): the first agent the caller may run that has them.
@@ -253,7 +263,7 @@ export function registerGoalRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/goals/{goalId}',
+      path: '/{workspaceId}/goals/{goalId}',
       tags: ['goals'],
       summary: 'Read a goal',
       description: 'The goal and what the caller may do on it (`capabilities`). Flag `goals`.',
@@ -273,7 +283,7 @@ export function registerGoalRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/goals/{goalId}/events',
+      path: '/{workspaceId}/goals/{goalId}/events',
       tags: ['goals'],
       summary: "Read a goal's events",
       description: 'Newest first, 50 per page. Pass `next_cursor` back as `cursor`. Flag `goals`.',
@@ -294,7 +304,7 @@ export function registerGoalRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'patch',
-      path: '/{projectId}/goals/{goalId}',
+      path: '/{workspaceId}/goals/{goalId}',
       tags: ['goals'],
       summary: 'Edit a goal',
       description: 'Title, assigned person, space, agent, caps and heartbeat. Its creator, assigned person or a project admin. Flag `goals`.',
@@ -318,7 +328,7 @@ export function registerGoalRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'put',
-      path: '/{projectId}/goals/{goalId}/criteria',
+      path: '/{workspaceId}/goals/{goalId}/criteria',
       tags: ['goals'],
       summary: "Set a goal's done criteria",
       description:
@@ -335,7 +345,7 @@ export function registerGoalRoutes(): void {
     projectsApp.openapi(
       createRoute({
         method: 'post',
-        path: `/{projectId}/goals/{goalId}/${action.verb}`,
+        path: `/{workspaceId}/goals/{goalId}/${action.verb}`,
         tags: ['goals'],
         summary: action.summary,
         description: `${action.who} Flag \`goals\`.`,

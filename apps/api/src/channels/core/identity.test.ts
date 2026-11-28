@@ -20,6 +20,7 @@ function makeChain(): any {
   return chain;
 }
 mock.module('../../shared/db', () => ({
+  withDbTransaction: <T,>(action: () => Promise<T>): Promise<T> => action(),
   db: { select: () => makeChain(), insert: () => makeChain(), update: () => makeChain() },
   hasDatabase: () => true,
 }));
@@ -33,7 +34,11 @@ mock.module('../../iam', () => ({
 
 const { chatUser, resolveChatActor, resolveProjectChatActor } = await import('./identity');
 
-const project = { projectId: 'proj1', accountId: 'acct1' };
+// The account id reaching the member probe comes from a project row: a uuid
+// in prod. The reader (membership-read.ts) carries the uuid guard, so a
+// non-uuid id answers no row without a DB read — well-formed synthetic one.
+const account = 'aaaaaaaa-1111-4111-8111-111111111111';
+const project = { projectId: 'proj1', accountId: account };
 
 beforeEach(() => {
   dbResults = [];
@@ -89,7 +94,7 @@ describe('resolveProjectChatActor', () => {
   });
 
   test('reads the account, then runs the same check', async () => {
-    dbResults = [[{ accountId: 'acct1' }], [{ userId: 'u1' }], [{ userId: 'u1' }]];
+    dbResults = [[{ accountId: account }], [{ userId: 'u1' }], [{ userId: 'u1' }]];
     expect(await resolveProjectChatActor(chatUser('slack', 'T1', 'U1'), 'proj1')).toEqual({ userId: 'u1' });
   });
 });

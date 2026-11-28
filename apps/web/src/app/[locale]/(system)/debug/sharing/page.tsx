@@ -22,7 +22,7 @@ const DEMO_ACCESS: ProjectAccessResponse = {
   members: [
     {
       user_id: 'u1',
-      email: 'marko@kortix.ai',
+      email: 'owner@example.test',
       account_role: 'owner',
       project_role: 'manager',
       effective_project_role: 'manager',
@@ -34,7 +34,7 @@ const DEMO_ACCESS: ProjectAccessResponse = {
     },
     {
       user_id: 'u2',
-      email: 'marko@softgen.ai',
+      email: 'manager@example.test',
       account_role: 'member',
       project_role: 'manager',
       effective_project_role: 'manager',
@@ -46,7 +46,7 @@ const DEMO_ACCESS: ProjectAccessResponse = {
     },
     {
       user_id: 'u3',
-      email: 'ana@kortix.ai',
+      email: 'member-1@example.test',
       account_role: 'member',
       project_role: 'member',
       effective_project_role: 'member',
@@ -58,7 +58,7 @@ const DEMO_ACCESS: ProjectAccessResponse = {
     },
     {
       user_id: 'u4',
-      email: 'ben.long.email@partner.example.com',
+      email: 'ben.long.email@partner.example.test',
       account_role: 'member',
       project_role: 'member',
       effective_project_role: 'member',
@@ -70,7 +70,7 @@ const DEMO_ACCESS: ProjectAccessResponse = {
     },
     {
       user_id: 'u5',
-      email: 'chen@kortix.ai',
+      email: 'member-2@example.test',
       account_role: 'member',
       project_role: 'member',
       effective_project_role: 'member',
@@ -93,7 +93,7 @@ function Panel({ title }: { title: string }) {
     groupIds: [],
   });
   return (
-    <div className="border-border/60 bg-card w-[420px] rounded-2xl border p-5">
+    <div className="border-border bg-card w-[420px] rounded-2xl border p-5">
       <h2 className="text-foreground mb-3 text-base font-semibold">{title}</h2>
       <SharingPicker projectId={DEMO_PROJECT} value={value} onChange={setValue} />
       <pre className="bg-muted text-muted-foreground mt-4 rounded-lg px-3 py-2 text-xs">

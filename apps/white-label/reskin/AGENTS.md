@@ -16,7 +16,6 @@ is the UI, and the brand is a set of CSS variable overrides.
 
 Do not add:
 
-- `@opencode-ai/sdk` imports.
 - Provider REST paths.
 - Runtime proxy URL construction.
 - Browser calls to `session.previewUrl()` or `session.proxyUrl()`.
@@ -96,7 +95,7 @@ or wrap a component to change a color, radius or font. Never import
 A missing primitive or chat slot is added to `packages/ui`, not to this app.
 
 `scripts/sdk-boundary.mjs` rejects: any file under `src/components/ui`,
-imports of a local UI primitive, `lucide-react`, `radix-ui`, `@radix-ui/*`,
+imports of a local UI primitive, `lucide-react`, `radix-ui`, `@radix-ui/*`, `@base-ui/*`,
 `class-variance-authority`, `next-themes` or `react-markdown`, a direct sonner
 `toast` import, native feature controls (`<button>`, `<input>`, …) and
 feature-level spinners.

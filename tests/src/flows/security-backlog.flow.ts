@@ -50,7 +50,7 @@ flow(
   'SEC-4',
   {
     domain: 'security',
-    routes: ['GET /v1/projects/:projectId/secrets', 'POST /v1/projects/:projectId/secrets'],
+    routes: ['GET /v1/workspaces/:projectId/secrets', 'POST /v1/workspaces/:projectId/secrets'],
   },
   async (ctx) => {
     const p = await ctx.fixtures.project();
@@ -58,7 +58,7 @@ flow(
       const r = await ctx.client
         .as(ctx.P.OWNER)
         .post(
-          '/v1/projects/:projectId/secrets',
+          '/v1/workspaces/:projectId/secrets',
           { name: 'ke2e_inject_probe', value: 'super-secret-value' },
           { params: { projectId: p.id } },
         );
@@ -67,7 +67,7 @@ flow(
     await ctx.step('list secrets returns NAMES only — no plaintext values leak', async () => {
       const r = await ctx.client
         .as(ctx.P.OWNER)
-        .get('/v1/projects/:projectId/secrets', { params: { projectId: p.id } });
+        .get('/v1/workspaces/:projectId/secrets', { params: { projectId: p.id } });
       r.status(200);
       // The stored value must never be reflected anywhere in the response.
       if (r.text().includes('super-secret-value')) {
@@ -80,7 +80,7 @@ flow(
         const r = await ctx.client
           .as(ctx.P.OWNER)
           .post(
-            '/v1/projects/:projectId/secrets',
+            '/v1/workspaces/:projectId/secrets',
             { name: 'KORTIX_TOKEN', value: 'attacker-controlled' },
             { params: { projectId: p.id } },
           );
@@ -90,7 +90,7 @@ flow(
     await ctx.step("NONMEMBER cannot read the project's secret env → 403/404", async () => {
       const r = await ctx.client
         .as(ctx.P.NONMEMBER)
-        .get('/v1/projects/:projectId/secrets', { params: { projectId: p.id } });
+        .get('/v1/workspaces/:projectId/secrets', { params: { projectId: p.id } });
       r.status([403, 404]);
     });
   },
@@ -103,19 +103,19 @@ flow(
     domain: 'security',
     tags: ['smoke'],
     routes: [
-      'GET /v1/accounts/me',
-      'GET /v1/projects',
+      'GET /v1/me',
+      'GET /v1/workspaces',
       'GET /v1/accounts/:accountId/audit',
       'GET /v1/user-roles',
     ],
   },
   async (ctx) => {
     await ctx.step('ANON GET /accounts/me → 401', async () => {
-      const r = await ctx.client.as(ctx.P.ANON).get('/v1/accounts/me');
+      const r = await ctx.client.as(ctx.P.ANON).get('/v1/me');
       r.status(401);
     });
     await ctx.step('ANON GET /projects → 401', async () => {
-      const r = await ctx.client.as(ctx.P.ANON).get('/v1/projects');
+      const r = await ctx.client.as(ctx.P.ANON).get('/v1/workspaces');
       r.status(401);
     });
     await ctx.step('ANON GET /accounts/:id/audit → 401 (before authz)', async () => {
@@ -138,7 +138,7 @@ flow(
     domain: 'security',
     serial: true,
     routes: [
-      'GET /v1/accounts/me',
+      'GET /v1/me',
       'POST /v1/accounts/tokens',
       'DELETE /v1/accounts/tokens/:tokenId',
     ],
@@ -147,21 +147,21 @@ flow(
     await ctx.step('garbage bearer (no recognized prefix) → 401', async () => {
       const r = await ctx.client
         .withBearer('totally-garbage-token', 'GARBAGE')
-        .get('/v1/accounts/me');
+        .get('/v1/me');
       r.status(401);
     });
     await ctx.step('forged kortix PAT prefix, bad secret → 401', async () => {
       const r = await ctx.client
         .withBearer('kortix_pat_deadbeefdeadbeefdeadbeef', 'FORGED_PAT')
-        .get('/v1/accounts/me');
+        .get('/v1/me');
       r.status(401);
     });
     await ctx.step('forged/expired Supabase JWT (bad signature) → 401', async () => {
-      const r = await ctx.client.withBearer(FORGED_JWT, 'FORGED_JWT').get('/v1/accounts/me');
+      const r = await ctx.client.withBearer(FORGED_JWT, 'FORGED_JWT').get('/v1/me');
       r.status(401);
     });
     await ctx.step('empty bearer token → 401', async () => {
-      const r = await ctx.client.withBearer('', 'EMPTY').get('/v1/accounts/me');
+      const r = await ctx.client.withBearer('', 'EMPTY').get('/v1/me');
       r.status(401);
     });
     // Revoked-PAT boundary: mint → confirm it works → revoke → confirm 401.
@@ -177,7 +177,7 @@ flow(
       tokenId = j.token_id;
     });
     await ctx.step('PAT authenticates before revoke → 200', async () => {
-      const r = await ctx.client.withBearer(secret, 'PAT').get('/v1/accounts/me');
+      const r = await ctx.client.withBearer(secret, 'PAT').get('/v1/me');
       r.status(200);
     });
     await ctx.step('revoke the PAT → 200', async () => {
@@ -187,7 +187,7 @@ flow(
       r.status(200);
     });
     await ctx.step('revoked PAT on a protected route → 401', async () => {
-      const r = await ctx.client.withBearer(secret, 'REVOKED_PAT').get('/v1/accounts/me');
+      const r = await ctx.client.withBearer(secret, 'REVOKED_PAT').get('/v1/me');
       r.status(401);
     });
   },
@@ -206,9 +206,9 @@ flow(
     routes: [
       'GET /v1/accounts/:accountId',
       'PATCH /v1/accounts/:accountId',
-      'GET /v1/projects/:projectId',
-      'PATCH /v1/projects/:projectId',
-      'DELETE /v1/projects/:projectId',
+      'GET /v1/workspaces/:projectId',
+      'PATCH /v1/workspaces/:projectId',
+      'DELETE /v1/workspaces/:projectId',
     ],
   },
   async (ctx) => {
@@ -233,25 +233,25 @@ flow(
     await ctx.step('NONMEMBER GET a foreign project → 403/404', async () => {
       const r = await ctx.client
         .as(ctx.P.NONMEMBER)
-        .get('/v1/projects/:projectId', { params: { projectId: p.id } });
+        .get('/v1/workspaces/:projectId', { params: { projectId: p.id } });
       r.status([403, 404]);
     });
     await ctx.step('NONMEMBER PATCH a foreign project → 403/404', async () => {
       const r = await ctx.client
         .as(ctx.P.NONMEMBER)
-        .patch('/v1/projects/:projectId', { name: 'ke2e-hijack' }, { params: { projectId: p.id } });
+        .patch('/v1/workspaces/:projectId', { name: 'ke2e-hijack' }, { params: { projectId: p.id } });
       r.status([403, 404]);
     });
     await ctx.step('NONMEMBER DELETE a foreign project → 403/404', async () => {
       const r = await ctx.client
         .as(ctx.P.NONMEMBER)
-        .del('/v1/projects/:projectId', { params: { projectId: p.id } });
+        .del('/v1/workspaces/:projectId', { params: { projectId: p.id } });
       r.status([403, 404]);
     });
     await ctx.step('IDOR: random project id → 403/404 (no enumeration)', async () => {
       const r = await ctx.client
         .as(ctx.P.NONMEMBER)
-        .get('/v1/projects/:projectId', { params: { projectId: NIL_UUID } });
+        .get('/v1/workspaces/:projectId', { params: { projectId: NIL_UUID } });
       r.status([403, 404]);
     });
   },
@@ -266,11 +266,11 @@ flow(
   {
     domain: 'security',
     routes: [
-      'POST /v1/projects/:projectId/cli-token',
-      'DELETE /v1/projects/:projectId/cli-token/:tokenId',
-      'GET /v1/projects/:projectId',
-      'GET /v1/accounts/me',
-      'GET /v1/projects',
+      'POST /v1/workspaces/:projectId/cli-token',
+      'DELETE /v1/workspaces/:projectId/cli-token/:tokenId',
+      'GET /v1/workspaces/:projectId',
+      'GET /v1/me',
+      'GET /v1/workspaces',
       'GET /v1/accounts/:accountId',
       'GET /v1/accounts/tokens',
     ],
@@ -284,7 +284,7 @@ flow(
       const r = await ctx.client
         .as(ctx.P.OWNER)
         .post(
-          '/v1/projects/:projectId/cli-token',
+          '/v1/workspaces/:projectId/cli-token',
           { name: ctx.fixtures.name('sec-d-pat') },
           { params: { projectId: projA.id } },
         );
@@ -295,24 +295,26 @@ flow(
     });
     const pat = () => ctx.client.withBearer(secret, 'PAT_PROJ');
     await ctx.step('allowed: GET its own project → 200', async () => {
-      const r = await pat().get('/v1/projects/:projectId', { params: { projectId: projA.id } });
+      const r = await pat().get('/v1/workspaces/:projectId', { params: { projectId: projA.id } });
       r.status(200);
     });
     await ctx.step('current alias returns the bound project → 200', async () => {
-      const r = await pat().get('/v1/projects/:projectId', { params: { projectId: 'current' } });
+      const r = await pat().get('/v1/workspaces/:projectId', { params: { projectId: 'current' } });
       r.status(200).body().has('$.project_id', projA.id);
     });
     await ctx.step('allowed: self-identity probe GET /accounts/me → 200', async () => {
-      const r = await pat().get('/v1/accounts/me');
+      const r = await pat().get('/v1/me');
       r.status(200);
     });
     await ctx.step('denied: a DIFFERENT project → 403', async () => {
-      const r = await pat().get('/v1/projects/:projectId', { params: { projectId: projB.id } });
+      const r = await pat().get('/v1/workspaces/:projectId', { params: { projectId: projB.id } });
       r.status(403);
     });
-    await ctx.step('denied: enumerate /projects → 403', async () => {
-      const r = await pat().get('/v1/projects');
-      r.status(403);
+    await ctx.step('the workspace list names only its bound project → 200 [A]', async () => {
+      const r = await pat().get('/v1/workspaces');
+      r.status(200);
+      const ids = r.json<Array<{ project_id: string }>>().map((row) => row.project_id);
+      if (ids.length !== 1 || ids[0] !== projA.id) throw new Error(`listed ${JSON.stringify(ids)}`);
     });
     await ctx.step('denied: account-level GET /accounts/:id → 403', async () => {
       const r = await pat().get('/v1/accounts/:accountId', {
@@ -325,7 +327,7 @@ flow(
       r.status(403);
     });
     await ctx.step('revoke the project token → 200', async () => {
-      const r = await ctx.client.as(ctx.P.OWNER).del('/v1/projects/:projectId/cli-token/:tokenId', {
+      const r = await ctx.client.as(ctx.P.OWNER).del('/v1/workspaces/:projectId/cli-token/:tokenId', {
         params: { projectId: projA.id, tokenId },
       });
       r.status(200);
@@ -339,7 +341,7 @@ flow(
 // unmatched path to assert the global 404 envelope.
 flow(
   'SEC-E',
-  { domain: 'security', tags: ['smoke'], routes: ['GET /v1/accounts/me'] },
+  { domain: 'security', tags: ['smoke'], routes: ['GET /v1/me'] },
   async (ctx) => {
     await ctx.step('unknown /v1 route → 404 with the standard envelope', async () => {
       const r = await ctx.client.as(ctx.P.ANON).get('/v1/ke2e-nonexistent-route');
@@ -350,7 +352,7 @@ flow(
       r.status(404).body().has('$.error', true).has('$.message', 'Not found').has('$.status', 404);
     });
     await ctx.step('authed control: GET /accounts/me → 200 (route exists + matches)', async () => {
-      const r = await ctx.client.as(ctx.P.OWNER).get('/v1/accounts/me');
+      const r = await ctx.client.as(ctx.P.OWNER).get('/v1/me');
       r.status(200);
     });
   },
@@ -553,7 +555,7 @@ flow(
   {
     domain: 'security',
     serial: true,
-    routes: ['POST /v1/account-invites/:inviteId/accept'],
+    routes: ['POST /v1/invites/:inviteId/accept'],
   },
   async (ctx) => {
     await ctx.step(
@@ -565,7 +567,7 @@ flow(
         for (let i = 0; i < 8; i++) {
           const r = await ctx.client
             .as(ctx.P.OWNER)
-            .post('/v1/account-invites/:inviteId/accept', {}, { params: { inviteId: NIL_UUID } });
+            .post('/v1/invites/:inviteId/accept', {}, { params: { inviteId: NIL_UUID } });
           // Unknown invite → 404; rate-limited → 429. Either proves the boundary:
           // the route never silently succeeds for a forged invite id.
           r.status([403, 404, 429]);
@@ -592,10 +594,10 @@ flow(
       'GET /v1/health',
       'POST /v1/access/check-email',
       'POST /v1/access/request-access',
-      'GET /v1/accounts/me',
-      'POST /v1/projects/:projectId/turn-permission',
-      'POST /v1/projects/:projectId/sessions',
-      'POST /v1/projects/:projectId/apps/:appId/events',
+      'GET /v1/me',
+      'POST /v1/workspaces/:projectId/turn-permission',
+      'POST /v1/workspaces/:projectId/sessions',
+      'POST /v1/workspaces/:projectId/apps/:appId/events',
     ],
   },
   async (ctx) => {
@@ -714,7 +716,7 @@ flow(
     await ctx.step('5,000 invalid array elements → 400 with the first 20 issues and issue_count, never one issue each (KRTX-3419)', async () => {
       const project = await ctx.fixtures.project();
       const response = await ctx.client.as(ctx.P.OWNER).post(
-        '/v1/projects/:projectId/turn-permission',
+        '/v1/workspaces/:projectId/turn-permission',
         { session_id: NIL_UUID, request_id: 'perm_bounded', permission: 'bash', patterns: Array(5000).fill(1) },
         { params: { projectId: project.id } },
       );
@@ -727,7 +729,7 @@ flow(
     await ctx.step('an anonymous App-events body with 20,000 bad elements under a union → 400 under 20 KB, not one error per element', async () => {
       // Zod nests a union branch's whole issue list in ONE issue (`errors`); a count cap alone kept it.
       const response = await ctx.client.post(
-        '/v1/projects/:projectId/apps/:appId/events',
+        '/v1/workspaces/:projectId/apps/:appId/events',
         { events: Array(20000).fill({}) },
         { params: { projectId: NIL_UUID, appId: NIL_UUID } },
       );
@@ -738,7 +740,7 @@ flow(
     await ctx.step("a session create with a wrong-typed field → the shared 400 envelope, not zod's raw result", async () => {
       const project = await ctx.fixtures.project();
       const response = await ctx.client.as(ctx.P.OWNER).post(
-        '/v1/projects/:projectId/sessions',
+        '/v1/workspaces/:projectId/sessions',
         { fork_from_session_id: 123 },
         { params: { projectId: project.id } },
       );
@@ -764,168 +766,117 @@ flow(
   },
 );
 
-// ─── SEC-K: client roles cannot reach privileged database surfaces ───────────
+// ─── SEC-K: the Supabase Data API (PostgREST) is off ────────────────────────
 //
-// Supabase PostgREST accepts the public anon key and every user's own JWT. The
-// 2026-09-24 incident: both could call SECURITY DEFINER functions and the
-// wallet RPCs (mint/drain credits on any account) and read `kortix` tables.
-// Migration 20260924194804787_client_role_lockdown revokes those grants, and
-// 20260925013304428_wallet_private_schema moves the wallet functions into the
-// private `kortix_wallet` schema. This
-// flow calls PostgREST directly, as the anon key and as a real user, and
-// requires a permission refusal. GET runs the RPC in a read-only transaction,
-// so a regression cannot write anything.
-const PRIVILEGED_RPCS: Array<[string, Record<string, string>]> = [
-  ['atomic_add_credits', { p_account_id: NIL_UUID, p_amount: '0' }],
-  [
-    'atomic_use_credits',
-    {
-      p_account_id: NIL_UUID,
-      p_amount: '0',
-      p_description: 'sec-k',
-      p_ledger_type: 'sec-k',
-    },
-  ],
-  ['atomic_settle_credits', { p_account_id: NIL_UUID }],
-  [
-    'atomic_reset_expiring_credits',
-    { p_account_id: NIL_UUID, p_new_credits: '0' },
-  ],
-  [
-    'atomic_daily_credit_refresh',
-    {
-      p_account_id: NIL_UUID,
-      p_credit_amount: '0',
-      p_tier: 'sec-k',
-      p_processed_by: 'sec-k',
-    },
-  ],
-];
+// Supabase PostgREST accepts the public anon key and every user's own JWT, so
+// while it runs, only Postgres grants stand between them and the database. The
+// 2026-09-24 incident: both could call the wallet RPCs (mint/drain credits on
+// any account) and read `kortix` tables. Kortix never calls the Data API (the
+// API reaches Postgres directly), so local Supabase starts without it (every
+// `supabase start` passes `-x postgrest`) and it is off on the hosted dev,
+// staging and prod projects (dashboard: Integrations → Data API, since
+// 2026-11-23). The grants stay locked down as a second layer; the DB suites
+// assert them (`apps/api/src/__tests__/integration-kortix-rls.test.ts`,
+// `tests/migration/credit-rpc-overloads.test.ts`).
+//
+// This flow sends the requests that used to reach data and requires that no
+// schema answers. The accepted answers, by where the flow runs:
+//   - local: Kong has no PostgREST container to route to → 503;
+//   - hosted, PostgREST 12: the only exposed schema is Supabase's empty
+//     placeholder `pg_pgrst_no_exposed_schemas`, named in the error body;
+//   - hosted, PostgREST 14: the placeholder schema fails to load → 503 PGRST002.
+// A 2xx, a 42501 permission refusal, or any error that names a real schema
+// means the Data API is on again.
+const DATA_API_PLACEHOLDER_SCHEMA = 'pg_pgrst_no_exposed_schemas';
 
-// The complete argument set of each private wallet function (none has
-// defaults). With a partial set PostgREST answers 404 PGRST202 before it checks
-// privileges, which would say nothing about reachability. The amounts are 0 and
-// the account is the nil uuid, so even a regression that let the call through
-// could move no credit.
-const WALLET_FUNCTIONS: Array<[string, Record<string, unknown>]> = [
-  [
-    'grant_credits',
-    {
-      p_account_id: NIL_UUID,
-      p_amount: 0,
-      p_is_expiring: false,
-      p_description: 'sec-k',
-      p_expires_at: null,
-      p_type: null,
-      p_stripe_event_id: null,
-      p_idempotency_key: null,
-    },
-  ],
-  [
-    'debit_credits',
-    {
-      p_account_id: NIL_UUID,
-      p_amount: 0,
-      p_enforce_floor: true,
-      p_description: 'sec-k',
-      p_ledger_type: 'sec-k',
-      p_idempotency_key: null,
-    },
-  ],
-  [
-    'reset_expiring_credits',
-    {
-      p_account_id: NIL_UUID,
-      p_new_credits: 0,
-      p_description: 'sec-k',
-      p_stripe_event_id: null,
-    },
-  ],
-];
+function dataApiAnswerIsOff(status: number, body: string): boolean {
+  return status === 503 || body.includes(DATA_API_PLACEHOLDER_SCHEMA);
+}
 
-flow('SEC-K', { domain: 'security', routes: [] }, async (ctx) => {
-  const base = ctx.env.supabaseUrl;
-  const anonKey = ctx.env.supabaseAnonKey;
-  if (!anonKey) throw new Error('SEC-K: KE2E_SUPABASE_ANON_KEY is required');
-  const owner = ctx.P.OWNER.auth;
-  if (owner.mode !== 'bearer')
-    throw new Error('SEC-K: OWNER must authenticate with a bearer JWT');
-  const callers: Array<[string, string]> = [
-    ['anon key', anonKey],
-    ['user JWT', owner.token],
-  ];
-
-  const refused = (status: number, body: string) =>
-    [401, 403].includes(status) && body.includes('42501');
-
-  for (const [who, bearer] of callers) {
-    await ctx.step(
-      `${who}: every wallet RPC is refused with 42501 permission denied`,
-      async () => {
-        for (const [fn, args] of PRIVILEGED_RPCS) {
-          const url = `${base}/rest/v1/rpc/${fn}?${new URLSearchParams(args)}`;
-          const res = await fetch(url, {
-            headers: { apikey: anonKey, authorization: `Bearer ${bearer}` },
-          });
-          const body = await res.text();
-          // 404 PGRST202 = the function does not exist in this database: nothing to reach.
-          if (res.status === 404 && body.includes('PGRST202')) continue;
-          if (!refused(res.status, body)) {
-            throw new Error(
-              `SEC-K: ${who} reached rpc/${fn}: ${res.status} ${body.slice(0, 200)}`,
-            );
-          }
-        }
-      },
-    );
-
-    await ctx.step(
-      `${who}: the private kortix_wallet functions are not reachable`,
-      async () => {
-        for (const [fn, args] of WALLET_FUNCTIONS) {
-          const res = await fetch(`${base}/rest/v1/rpc/${fn}`, {
-            method: 'POST',
-            headers: {
-              apikey: anonKey,
-              authorization: `Bearer ${bearer}`,
-              'content-profile': 'kortix_wallet',
-              'content-type': 'application/json',
-            },
-            body: JSON.stringify(args),
-          });
-          const body = await res.text();
-          // 406 PGRST106 = schema not exposed; 401/403 42501 = exposed but no grant.
-          const ok =
-            (res.status === 406 && body.includes('PGRST106')) ||
-            refused(res.status, body);
-          if (!ok)
-            throw new Error(
-              `SEC-K: ${who} reached kortix_wallet.${fn}: ${res.status} ${body.slice(0, 200)}`,
-            );
-        }
-      },
-    );
-
-    await ctx.step(`${who}: the kortix schema is not readable`, async () => {
-      const res = await fetch(
+flow(
+  'SEC-K',
+  { domain: 'security', tags: ['deployed'], routes: [] },
+  async (ctx) => {
+    const base = ctx.env.supabaseUrl;
+    const anonKey = ctx.env.supabaseAnonKey;
+    if (!anonKey) throw new Error('SEC-K: KE2E_SUPABASE_ANON_KEY is required');
+    const owner = ctx.P.OWNER.auth;
+    if (owner.mode !== 'bearer')
+      throw new Error('SEC-K: OWNER must authenticate with a bearer JWT');
+    const callers: Array<[string, string]> = [
+      ['anon key', anonKey],
+      ['user JWT', owner.token],
+    ];
+    // GET runs an RPC in a read-only transaction; the POST bodies move 0
+    // credits on the nil account. Even with the Data API on, nothing changes.
+    const requests: Array<[string, string, RequestInit]> = [
+      [
+        'kortix.accounts',
         `${base}/rest/v1/accounts?select=account_id&limit=1`,
+        { headers: { 'accept-profile': 'kortix' } },
+      ],
+      [
+        'public rpc atomic_add_credits',
+        `${base}/rest/v1/rpc/atomic_add_credits?${new URLSearchParams({ p_account_id: NIL_UUID, p_amount: '0' })}`,
+        {},
+      ],
+      [
+        'kortix_wallet rpc grant_credits',
+        `${base}/rest/v1/rpc/grant_credits`,
         {
-          headers: {
-            apikey: anonKey,
-            authorization: `Bearer ${bearer}`,
-            'accept-profile': 'kortix',
-          },
+          method: 'POST',
+          headers: { 'content-profile': 'kortix_wallet', 'content-type': 'application/json' },
+          body: JSON.stringify({
+            p_account_id: NIL_UUID,
+            p_amount: 0,
+            p_is_expiring: false,
+            p_description: 'sec-k',
+            p_expires_at: null,
+            p_type: null,
+            p_stripe_event_id: null,
+            p_idempotency_key: null,
+          }),
+        },
+      ],
+      [
+        'graphql',
+        `${base}/graphql/v1`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ query: '{ __typename }' }),
+        },
+      ],
+    ];
+
+    for (const [who, bearer] of callers) {
+      await ctx.step(
+        `${who}: no Data API request reaches a schema (kortix tables, public and kortix_wallet RPCs, GraphQL)`,
+        async () => {
+          for (const [what, url, init] of requests) {
+            const res = await fetch(url, {
+              ...init,
+              headers: {
+                ...(init.headers as Record<string, string> | undefined),
+                apikey: anonKey,
+                authorization: `Bearer ${bearer}`,
+              },
+            });
+            const body = await res.text();
+            if (!dataApiAnswerIsOff(res.status, body)) {
+              // A local Supabase started before config.toml turned PostgREST
+              // off keeps running it until the containers are recreated.
+              const fix =
+                ctx.env.target === 'local'
+                  ? ' Local Supabase still runs PostgREST from an older start: run `supabase stop` in supabase/, then start it again (`pnpm dev` passes `-x postgrest`).'
+                  : '';
+              throw new Error(
+                `SEC-K: the Data API answered ${who} for ${what}: ${res.status} ${body.slice(0, 200)}.${fix}`,
+              );
+            }
+          }
         },
       );
-      const body = await res.text();
-      // 406 PGRST106 = schema not exposed; 401/403 42501 = exposed but no grant.
-      const ok =
-        (res.status === 406 && body.includes('PGRST106')) ||
-        refused(res.status, body);
-      if (!ok)
-        throw new Error(
-          `SEC-K: ${who} read kortix.accounts: ${res.status} ${body.slice(0, 200)}`,
-        );
-    });
-  }
-});
+    }
+  },
+);

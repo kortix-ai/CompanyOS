@@ -9,7 +9,7 @@
  * stream serves `schema=v2` for every daemon (it converts the v1 frames of a daemon that
  * does not list `session.log.v2`).
  *
- * THE PAGE LOADER reads `GET /v1/projects/:p/sessions/:s/log?thread=&before_seq=&limit=`
+ * THE PAGE LOADER reads `GET /v1/projects/:p/sessions/:s/log?thread=&before_seq=&limit=&live=`
  * (`@kortix/api-contract/session-log` `SessionLogPageSchema`). `SessionLogPage` is that
  * schema's type, written out because this package has no zod; `contract-drift.test.ts` holds
  * the two equal at typecheck. `SessionLogPage` and `SessionLogPageQuery` are public (the types of
@@ -33,6 +33,12 @@ export interface SessionLogPage {
   messages: SessionLogMessage[];
   /** Older messages exist: ask again with `before_seq` = the first message's `seq`. */
   has_more: boolean;
+  /**
+   * Who answered a `live` read: `'box'`, the session's running box (every message up to now);
+   * `'store'`, the API's stored log, which lags a running box by its journal. Absent from an API
+   * that predates `live`: read it as `'store'`.
+   */
+  source?: 'box' | 'store';
 }
 
 export interface SessionLogPageQuery {
@@ -40,6 +46,12 @@ export interface SessionLogPageQuery {
   thread?: string;
   before_seq?: number;
   limit?: number;
+  /**
+   * Ask for the newest page as the session's running box holds it. The API reads the box and
+   * answers its stored log when the box is not running or does not answer in time; `source`
+   * says which. Ignored with `before_seq`.
+   */
+  live?: boolean;
 }
 
 /** Fetches one page. The answer is validated by the caller, so it is `unknown` here. */
@@ -50,20 +62,28 @@ export type LoadSessionLogPage = (
   signal?: AbortSignal,
 ) => Promise<unknown>;
 
-/** The route's answer as is; `fetchFirstSessionLogPage` validates it. Throws on a non-2xx. */
-export const loadSessionLogPage: LoadSessionLogPage | null = async (projectId, sessionId, query, signal) => {
+/** The route's answer as is; the `readSessionLog*` readers validate it. Throws on a non-2xx. */
+export const loadSessionLogPage: LoadSessionLogPage = async (projectId, sessionId, query, signal) => {
   const search = new URLSearchParams();
   if (query.thread !== undefined) search.set('thread', query.thread);
   if (query.before_seq !== undefined) search.set('before_seq', String(query.before_seq));
   if (query.limit !== undefined) search.set('limit', String(query.limit));
+  if (query.live) search.set('live', '1');
   const qs = search.toString();
   const response = await backendApi.get<unknown>(
-    `/projects/${encodeURIComponent(projectId)}/sessions/${encodeURIComponent(sessionId)}/log${qs ? `?${qs}` : ''}`,
+    `/workspaces/${encodeURIComponent(projectId)}/sessions/${encodeURIComponent(sessionId)}/log${qs ? `?${qs}` : ''}`,
     { showErrors: false, signal },
   );
   if (!response.success) throw response.error ?? new Error('Session log request failed');
   return response.data;
 };
+
+/**
+ * The longest one read of the log may take, body included. The HTTP client's own deadline ends
+ * at the headers, and a body that stalls after them (a laptop that slept, a proxy that hung)
+ * would leave the read pending for good, and every re-read waiting on it.
+ */
+export const SESSION_LOG_READ_DEADLINE_MS = 20_000;
 
 /** The first window, the same size as the v1 mirror's (`MIRROR_HYDRATE_LIMIT`). */
 export const SESSION_LOG_FIRST_PAGE_LIMIT = 40;
@@ -93,20 +113,50 @@ function retryAfterMs(error: unknown): number | null {
   return Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : null;
 }
 
-/** {@link readSessionLogAnswer}, with the failed read's `Retry-After`. Never throws. */
+/** Runs `run` after `ms`; returns its cancel. */
+export type ScheduleSessionLogRead = (run: () => void, ms: number) => () => void;
+
+const scheduleTimeout: ScheduleSessionLogRead = (run, ms) => {
+  const timer = setTimeout(run, ms);
+  return () => clearTimeout(timer);
+};
+
+const EXPIRED = Symbol('expired');
+
+/**
+ * {@link readSessionLogAnswer}, with the failed read's `Retry-After`. Never throws. A read that
+ * has not answered by {@link SESSION_LOG_READ_DEADLINE_MS} is aborted and answers as a failed
+ * read, even when its loader ignores the abort. `schedule` is the test seam for that deadline.
+ */
 export async function readSessionLog(
   load: LoadSessionLogPage,
   projectId: string,
   sessionId: string,
   query: SessionLogPageQuery,
   signal?: AbortSignal,
+  schedule: ScheduleSessionLogRead = scheduleTimeout,
 ): Promise<SessionLogRead> {
+  const request = new AbortController();
+  const abort = () => request.abort();
+  if (signal?.aborted) abort();
+  else signal?.addEventListener('abort', abort);
+  let cancel = () => {};
+  const expired = new Promise<typeof EXPIRED>((resolve) => {
+    cancel = schedule(() => {
+      abort();
+      resolve(EXPIRED);
+    }, SESSION_LOG_READ_DEADLINE_MS);
+  });
   try {
-    const page = await load(projectId, sessionId, query, signal);
+    const page = await Promise.race([load(projectId, sessionId, query, request.signal), expired]);
+    if (page === EXPIRED) return { answer: null, retryAfterMs: null };
     return { answer: isSessionLogPage(page) ? page : null, retryAfterMs: null };
   } catch (error) {
     if ((error as { code?: unknown } | null)?.code === SESSION_LOG_MISSING_CODE) return { answer: 'missing', retryAfterMs: null };
     return { answer: null, retryAfterMs: retryAfterMs(error) };
+  } finally {
+    cancel();
+    signal?.removeEventListener('abort', abort);
   }
 }
 
@@ -145,15 +195,4 @@ export function readFirstSessionLogAnswer(
   signal?: AbortSignal,
 ): Promise<SessionLogPage | 'missing' | null> {
   return readSessionLogAnswer(load, projectId, sessionId, { limit: SESSION_LOG_FIRST_PAGE_LIMIT }, signal);
-}
-
-/** The newest page of the root thread, validated. Null on any failure; never throws. */
-export async function fetchFirstSessionLogPage(
-  load: LoadSessionLogPage,
-  projectId: string,
-  sessionId: string,
-  signal?: AbortSignal,
-): Promise<SessionLogPage | null> {
-  const answer = await readFirstSessionLogAnswer(load, projectId, sessionId, signal);
-  return answer === 'missing' ? null : answer;
 }

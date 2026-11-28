@@ -2,11 +2,13 @@ import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import * as shared from '../../../../../shared/src/notification-kinds';
 import { ApiError } from '../../http/api/errors';
 import { configureKortix } from '../../http/config';
+import type { WorkspaceSummary } from './workspaces';
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
   INBOX_NOTIFICATION_KINDS,
   getNotificationPreferences,
   getWebPushPublicKey,
+  hiddenNotificationKinds,
   listNotifications,
   markNotificationsRead,
   registerDeviceToken,
@@ -41,14 +43,6 @@ beforeEach(() => {
 });
 
 configureKortix({ backendUrl: 'http://test.local/v1', getToken: async () => 'tok' });
-
-test('Artifact comment notifications support bell, push and digest preferences', async () => {
-  expect(INBOX_NOTIFICATION_KINDS).toContain('artifact_comment');
-  expect(DEFAULT_NOTIFICATION_PREFERENCES.artifact_comment).toEqual({ push: true, email: true });
-  nextResponse = { status: 200, body: { kinds: { artifact_comment: { push: false, email: true } } } };
-  await updateNotificationPreferences({ kinds: { artifact_comment: { push: false } } });
-  expect(calls[0]?.body).toEqual({ kinds: { artifact_comment: { push: false } } });
-});
 
 test('registerDeviceToken POSTs the token, platform and preferences', async () => {
   nextResponse = { status: 200, body: { success: true, message: 'Device token registered' } };
@@ -172,7 +166,7 @@ const ROW: InboxNotification = {
   session_id: 'S1',
   trigger_slug: null,
   actor_user_id: null,
-  url: '/projects/P1/sessions/S1?notification=0192a000-0000-7000-8000-000000000001',
+  url: '/workspaces/P1/sessions/S1?notification=0192a000-0000-7000-8000-000000000001',
   read: false,
   created_at: '2026-10-09T10:00:00.000Z',
 };
@@ -278,6 +272,36 @@ describe('notification preferences', () => {
   test('updateNotificationPreferences rejects on a 400', async () => {
     nextResponse = { status: 400, body: { error: 'Invalid body' } };
     await expect(updateNotificationPreferences({ kinds: {} })).rejects.toBeTruthy();
+  });
+});
+
+describe('hiddenNotificationKinds', () => {
+  const project = (calendar: boolean) => ({ experimental: { calendar } });
+
+  test('`mention` hides while the `calendar` flag is off in every project, and shows once one project has it on', () => {
+    expect(hiddenNotificationKinds({ hidden_kinds: [] }, [project(false), project(false)])).toEqual(['mention']);
+    expect(hiddenNotificationKinds({ hidden_kinds: [] }, [project(false), project(true)])).toEqual([]);
+  });
+
+  test('no projects, projects not loaded yet, or a project without a flag map: `mention` stays hidden', () => {
+    expect(hiddenNotificationKinds({ hidden_kinds: [] }, [])).toEqual(['mention']);
+    expect(hiddenNotificationKinds({ hidden_kinds: [] }, undefined)).toEqual(['mention']);
+    expect(hiddenNotificationKinds(undefined, [{}, { experimental: null }])).toEqual(['mention']);
+  });
+
+  test('the kinds the API hides always hide, each once, in the API\'s order first', () => {
+    expect(hiddenNotificationKinds({ hidden_kinds: ['shared', 'mention'] }, [project(true)])).toEqual(['shared', 'mention']);
+    expect(hiddenNotificationKinds({ hidden_kinds: ['mention'] }, [project(false)])).toEqual(['mention']);
+    expect(hiddenNotificationKinds({ hidden_kinds: ['shared'] }, undefined)).toEqual(['shared', 'mention']);
+  });
+
+  test('an older API without hidden_kinds hides only the flagged kinds', () => {
+    expect(hiddenNotificationKinds({}, [project(true)])).toEqual([]);
+  });
+
+  test('takes the workspace list as useWorkspaces returns it (typecheck)', () => {
+    const workspaces: WorkspaceSummary[] = [];
+    expect(hiddenNotificationKinds(undefined, workspaces)).toEqual(['mention']);
   });
 });
 

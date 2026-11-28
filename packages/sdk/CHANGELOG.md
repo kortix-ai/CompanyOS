@@ -5,6 +5,234 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Added (session statistics; additive)
+- `getSessionStats(messages)`: a transcript's message count, `getSessionCost`, the five
+  step-finish token counters (absent ones count as zero) and the latest message time
+  (`updated ?? completed ?? created`). `sumSessionStats(items)` sums many sessions;
+  `sumSessionTokens(tokens)` adds the five counters. Type `SessionStats`.
+- `useSessionStatsTotals(runtimeId, sessionIds, enabled?)` (`@kortix/sdk/react`): `{ totals,
+  loading }` of many sessions on one runtime. Each session's transcript comes from
+  `loadSessionExportMessages(sessionId)` (the runtime only); it polls every 60 s and is fresh for
+  30 s. Without a runtime id it reads nothing. Moved from the mobile project page.
+
+### Added (cost-export record analysis; additive)
+- `analyzeCostExport(result)`: reads a `fetchCostExportCsv` result once and returns it with
+  `rowCount` (data records, header excluded) and `capped` (the count reached `rowCap`, so the
+  export may be truncated). Same `Blob`; type `CostExportAnalysis`. `fetchCostExportCsv` and
+  `CostExportResult` are unchanged.
+- `countCsvDataRows(body)` and `isCostExportCapped(rowCount, rowCap)`, the two rules behind it,
+  moved from the web export button: quoted CR/LF and doubled quotes stay in one record, and a
+  missing or non-positive cap never counts as capped.
+
+### Changed (Network-Enforced Secrets need no flag)
+- The `secrets_egress` project flag ("Network-Enforced Secrets") graduated (2026-11-23): every
+  project can set a secret's exposure to enforced. The sandbox holds a handle, and Kortix
+  substitutes the real value only on the secret's approved hosts. `FeatureFlagKey` keeps
+  `secrets_egress`, marked `@deprecated`; `FEATURE_FLAG_KEYS` no longer lists it, and
+  `useFeatureFlag(projectId, 'secrets_egress')` reports `enabled: true`.
+  `KortixProject.experimental.secrets_egress` is optional now.
+
+### Changed (Kortix in Chrome needs no flag)
+- The `chrome` project flag ("Kortix in Chrome") graduated (2026-11-24): every project's sessions
+  can drive their owner's own Chrome wherever the platform serves Kortix in Chrome. No project
+  can turn it off; the deployment's `KORTIX_CHROME_ENABLED` is the only switch (off on a
+  self-hosted server). `FeatureFlagKey` keeps `chrome`, marked `@deprecated`;
+  `FEATURE_FLAG_KEYS` no longer lists it. The API still sends `experimental.chrome`: whether it
+  serves Kortix in Chrome. `useFeatureFlag(projectId, 'chrome')` and `useFeatureFlags` read that
+  value. `KortixProject.experimental.chrome` is optional now.
+
+### Changed (stateless sandboxes need no flag)
+- The `workspace_volume` project flag ("Stateless sandboxes") graduated (2026-11-23): every new
+  Platinum session keeps `/workspace` on its own volume, and a box stopped for an hour is
+  replaced on the next open. `FeatureFlagKey` keeps `workspace_volume`, marked `@deprecated`;
+  `FEATURE_FLAG_KEYS` no longer lists it. The API still sends
+  `experimental.workspace_volume`: whether new sessions get a volume (Platinum is configured and
+  the deployment did not set `KORTIX_WORKSPACE_VOLUMES=off`). `useFeatureFlag(projectId,
+  'workspace_volume')` and `useFeatureFlags` read that value. `KortixProject.experimental.workspace_volume`
+  is optional now.
+
+### Removed (breaking: the v1 transcript, session-log major P8.4)
+The API serves no `GET /v1/{workspaces|projects}/:id/sessions/:sid/transcript` and no
+`/v1/public/session-shares/**`. The session log (`kortix.session/2`, `GET …/log`) is every
+session's saved history. A release with this entry is a major. Each removed name and its
+replacement:
+
+| Removed | Replacement |
+|---|---|
+| `getSessionTranscript`, `getSessionTranscriptSync` | `getSessionLogPage(projectId, sessionId, query)` |
+| `session(p, s).transcript()`, `session(p, s).transcriptSync()` | `session(p, s).log(query)` |
+| types `SessionTranscript`, `SessionTranscriptMessage`, `SessionTranscriptToolCall`, `SessionTranscriptSource`, `SessionTranscriptSyncEnvelope`, `SessionTranscriptSyncMessage` | `SessionLogPage`, `SessionLogMessage`, `SessionLogBlock` |
+| `loadSessionTranscriptMessages` (`@kortix/sdk/react`) | `loadSessionExportMessages(sessionId, kortixSessionScope?)`: the session log first, else the runtime |
+| `isPaintableSavedCopy`, `savedCopyEmptyRoot` | None. The saved copy is a session-log page; `readSavedSessionCopy` returns `empty` |
+| `findActiveTranscriptShare`, `getPublicSessionShare`, `getPublicSessionShareMessages`, `PublicSessionShareError`, types `PublicSessionShareMeta`, `PublicSessionTranscript`, `PublicSessionTranscriptMessage`, `PublicSessionTranscriptToolCall` | None. The API removed public transcript sharing (KRTX-2358) |
+| `saveSessionToIDB`, `flushIDBWrites`, `loadSessionFromIDB`, `loadAllSessionIdsFromIDB`, `pruneIDBCache` (`@kortix/sdk/internal/idb-sync-cache`) | None. They stored nothing since the transcript mirror was retired |
+| `FeatureFlagKey` member `session_transcript_history` | None. The flag graduated; the session log replaced the mirror it gated |
+
+Changed shapes (same names):
+- `SessionOpenBundleTranscript` is `{ known: true; requested: false } | SessionOpenBundleUnknown`:
+  the pointer only. `getSessionOpenBundle` always sends `?transcript=0` and takes no `transcript`
+  option.
+- `SavedCopyStore.read` / `write` take and return a `SessionLogPage` (was a v1 envelope).
+  `keyFor` names `<namespace>.log:<user>:<project>/<session>`. `createSavedCopyStore` deletes the
+  v1 copy an older SDK kept under `<namespace>:` when that session is written or removed, and on
+  `clear()`; it never paints one.
+- `SavedSessionCopy` has no `envelope` field; `readSavedSessionCopy` takes no `sessionLog` input.
+- `useSessionSync`'s `mirror` option accepts only `null` (the host reads the saved history
+  itself). Omitting it reads the session log, as before. The hook paints no v1 copy from the
+  device.
+
+### Added (session work state; additive)
+- `ProjectSession.work_state` (`running | completed | failed | stopped | idle`) and the type
+  `SessionWorkState`: is the work done. `status` stays the row lifecycle and `runtime_status`
+  the computer; a finished child keeps `status: 'running'` until its computer stops.
+- `sessionWorkState(row)`: the server's `work_state`, else derived from `board_state`, else
+  from `working`.
+
+### Fixed (colleague state)
+- `useSessionChildren` puts each child's live fields (`working`, `board_state`, `work_state`,
+  `status`, …) on that child's cached `qk.project.session` row, so a colleague row reads the
+  same state as the agents line. Only rows already cached, only changed fields, never a newer row.
+- A `kortix.control.turn` frame now updates `board_state` (and `work_state`) with `working`
+  on the session's cached rows.
+
+### Changed (composer agent choice; additive)
+- `composerSelectableAgents` leaves out `memory-reflector` and `harness-reflector`, the
+  starter's cron-only agents, so the chat picker and the Tab cycle no longer offer them.
+  `isSelectableAgent` (trigger pickers, the Agents page) is unchanged, and a session bound to
+  one still resolves to it.
+- `useRuntimeLocal` / `useSessionModelSelection` take `rememberAgent?: boolean`. On, a new
+  composer (no `sessionId`) stores the agent picked for the route workspace and the next new
+  composer there starts on it, ahead of `defaultAgentName`. `resolveCurrentAgentName` takes
+  the matching optional `rememberedAgentName`. Off by default.
+- `InboxNotification.resolved?: boolean`: a `question` or `permission` row whose ask is
+  closed (answered, dismissed, decided or expired). Absent from an older API: read it as false.
+
+### Deprecated (the marketplace was removed)
+- The marketplace was removed (2026-11-20). Every `/v1/marketplace/*` route and
+  `POST /workspaces/:id/marketplace/install-session` answer `410 ENDPOINT_RETIRED`.
+  These names stay exported, marked `@deprecated`, and are removed in the next major:
+  `kortix.marketplace.*`, `listMarketplaceCatalogItems`, `getMarketplaceCatalogItem`,
+  `getMarketplaceCatalogItemFile`, `listMarketplaces`, `listFeaturedMarketplaces`,
+  `listMarketplaceSources`, `addMarketplaceSource`, `removeMarketplaceSource`,
+  `createMarketplaceInstallSession`, `listPublicMarketplaceItems`, `listPublicMarketplaces`,
+  `getPublicMarketplaceItem`, `getPublicMarketplaceItemFile`, and their types
+  (`MarketplaceCatalogItem`, `MarketplaceCatalogStatus`, `MarketplaceItemsResponse`,
+  `ListMarketplaceItemsOptions`, `MarketplaceEntry`, `MarketplacesResponse`,
+  `FeaturedMarketplacesResponse`, `MarketplaceItemFile`, `MarketplaceSource`,
+  `MarketplaceSourcesResponse`, `AddMarketplaceSourceInput`, `AddMarketplaceSourceResponse`,
+  `PublicMarketplaceQuery`).
+- The `marketplace` project flag is withdrawn. `FeatureFlagKey` keeps `'marketplace'`, marked
+  `@deprecated`; `FEATURE_FLAG_KEYS` no longer lists it and the API no longer sends it.
+- `source_item_id` (on `CreateProjectRepoInput` and `ProvisionProjectInput`) and
+  `marketplace_items` (on `ProvisionProjectInput`) are deprecated. The API answers `400` when
+  `source_item_id` is set and ignores `marketplace_items`.
+
+### Changed (provider keys need no flag)
+- The `pooled_provider_secrets` project flag graduated (2026-11-12): every project has named
+  provider keys with sharing, per-session key selection and named ChatGPT/Claude sign-ins.
+  `FeatureFlagKey` keeps `pooled_provider_secrets`, marked `@deprecated`; `FEATURE_FLAG_KEYS`
+  no longer lists it, and `useFeatureFlag(projectId, 'pooled_provider_secrets')` reports
+  `enabled: true`. `KortixProject.experimental.pooled_provider_secrets` is optional now.
+  Removed in the next major.
+
+### Added: the Workspace surface (additive; nothing removed)
+A workspace is one account and its one project, like a Slack workspace. `workspace_id` is the
+project id. New names:
+- Types `Workspace`, `WorkspaceSummary`, `WorkspaceRole` (`owner | admin | manager | member`),
+  `WorkspaceSettings`, `WorkspaceUpdateInput`, `WorkspaceMember`, `WorkspaceInvitation`,
+  `InviteWorkspaceMemberInput`, `CreateWorkspaceTokenInput`, `WorkspaceProjectList`,
+  `WorkspaceHandle`.
+- `listWorkspaces`, `getWorkspace`, `updateWorkspace`; members (`listWorkspaceMembers`,
+  `inviteWorkspaceMember`, `updateWorkspaceMemberRole`, `removeWorkspaceMember`,
+  `listWorkspaceInvites`, `cancelWorkspaceInvite`, `resendWorkspaceInvite`, `leaveWorkspace`);
+  tokens (`listWorkspaceTokens`, `createWorkspaceToken`, `revokeWorkspaceToken`); billing
+  (`getWorkspaceBillingState`); IAM (`listWorkspaceAssignments`, `createWorkspaceAssignment`,
+  `revokeWorkspaceAssignment`, `listWorkspaceRoles`, `listWorkspaceGroups`,
+  `probeWorkspacePermission`, `probeWorkspacePermissions`); `resolveWorkspaceAccountId`; pure
+  helpers `buildWorkspaceSummaries`, `compareWorkspacesByRecent`, `workspaceFromProject`,
+  `workspaceRole`.
+- Facade `kortix.workspaces.{list,get,update,create}` and `kortix.workspace(id)`.
+- `@kortix/sdk/react`: `useWorkspaces`, `useWorkspace`, `workspacesState`,
+  `workspaceQueryOptions`; key `qk.project.workspace(id)`.
+- Optional `workspace_id` on `KortixProject`, `ProjectSession`, `KortixAccount`,
+  `AccountDetail`, `MyAccountInvite`.
+- Every `Workspace*` function calls the canonical `/v1/workspaces/:workspaceId/*` route with
+  the workspace id: one request per call, no account lookup first. `getWorkspace` reads the
+  `workspace` settings block and the caller's `account_role` from `GET /v1/workspaces/:id`.
+  `getWorkspaceBillingState` passes the workspace id as `account_id`. These functions need an
+  API that serves `/v1/workspaces` (this release); the older `Project*`/`Account*` functions
+  keep calling `/v1/projects` and `/v1/accounts`, which stay permanently.
+
+### Deprecated (kept permanently)
+`updateProject`, `updateAccountName`, `listAccountMembers`, `inviteAccountMember`,
+`removeAccountMember`, `updateAccountMemberRole`, `listAccountInvites`, `cancelAccountInvite`,
+`resendAccountInvite`, `leaveAccount`, `listAccountTokens`, `createAccountToken` and
+`revokeAccountToken` name their workspace equivalent. They are never removed.
+
+### Changed (notifications are on for every project)
+- The `notification_center` project flag graduated (2026-11-06): every project has the
+  notification inbox, push, session watch and alerts. `FeatureFlagKey` keeps
+  `notification_center`, marked `@deprecated`; `FEATURE_FLAG_KEYS` no longer lists it, and
+  `useFeatureFlag(projectId, 'notification_center')` reports `enabled: true`.
+  `KortixProject.experimental.notification_center` is optional now, like `meta_agent`.
+  Removed in the next major.
+- `useSession({ presencePageExit })` defaults to `true`: a closing tab ends its presence lease
+  at once, so a notification that arrives a second later reaches the person. Pass `false` to
+  keep the lease until it expires.
+- `DEFAULT_NOTIFICATION_PREFERENCES`: email is off by default for `turn_done`, `turn_error`,
+  `question`, `permission`, `shared`, `automation_recovered` and `capture_device_recovered`;
+  a person turns it on per kind. `automation_failed`, `capture_device_down` and
+  `artifact_comment` keep email on.
+
+### Added (harness-neutral name)
+- `harnessVersion` on the runtime connection store (`useSandboxConnectionStore`,
+  `useRuntimeConnectionStore`): the session runtime's harness version from `/kortix/health`,
+  `null` until a probe answers. `openCodeVersion` holds the same value and is `@deprecated`.
+  Removed in the next major.
+
+### Changed (OpenCode leftovers)
+- The runtime query keys sit under `['runtime', …]`, not `['opencode', …]`. Build a key with
+  `runtimeKeys` and drop them all with `resetRuntimeQueries`: a hand-typed `['opencode', …]`
+  key no longer matches anything.
+- No daemon or API answers "opencode not ready" since OpenCode left the box (2026-10-30).
+  `RUNTIME_NOT_READY_MARKERS` lists `runtime_not_ready` and `sandbox runtime not ready` only,
+  and `isSandboxNotReadyError`, `isRuntimeNotReadyResponse` and `isRuntimeStartingError` no
+  longer match the OpenCode phrases. `useCreateRuntimeSession` retries the daemon's current
+  not-ready answer.
+- The model picks persist in `localStorage` under `kortix-model-store-v1`, not
+  `opencode-model-store-v1`. The store reads a value saved under the old key once, writes it
+  under the new key and removes the old key. `resetIdentityState` removes both keys.
+- The message-id clock exports (`WIRE_ID_TIME_SCALE`, `WIRE_ID_TIME_MASK`,
+  `WIRE_ID_CLOCK_TOLERANCE`, `WIRE_ID_BACKDATE_MS`, `wireIdClock`, `wireIdClockAt`,
+  `wireIdClockDelta`, `maxWireIdClock`, `isWireIdAheadOf`, `newestWireIdClock`,
+  `mintWireMessageIdAbove`, `MintWireMessageIdAboveInput`, `MintedWireMessageId`) are not
+  deprecated. Their `@deprecated` tag ("Removed with OpenCode support") was wrong: the pi
+  harness mints its reply ids with `mintWireMessageIdAbove` and apps/api places prompts with
+  the clock. They are the Kortix message id format and stay.
+- The API no longer sends `ProjectConfigSummary.open_code_raw` and
+  `ProjectConfigSummary.open_code_default_agent`. Both fields are optional now, so the type
+  says what arrives. `getProjectDetail`, `selectableProjectAgents`,
+  `projectConfigAgentsToRuntimeAgents` and `useSession().defaultAgent` read `default_agent`
+  only: they no longer fall back to `open_code_default_agent`.
+- The npm `description` no longer names OpenCode.
+
+### Deprecated (OpenCode-era fields and names)
+Each is removed in the next major.
+- `LEGACY_RUNTIME_AUTH_JSON_SECRET_NAME` (`OPENCODE_AUTH_JSON`): no sign-in writes the secret,
+  and the API no longer reads it, counts it as a ChatGPT login or deletes it on disconnect.
+  The SDK connection checks still count it.
+- `ProjectConfigSummary.open_code_raw` and `ProjectConfigSummary.open_code_default_agent`
+  (read `default_agent`): the API no longer sends them.
+- The `'opencode'` member of `ProjectConfigSummary.agent_discovery`: no API sends it. The API
+  sends `'declarative'` for every project, and `null` in a response filtered by the caller's
+  `project.agent.read` access.
+- `KortixMasterProject.opencode_id`: no daemon sends it.
+- `SessionHealthResponse.opencode` and `AgentConfigBlock.opencode` now name the major that
+  removes them.
+- `useRuntimeConfig`, `configKeys`, `useRuntimeSessionTodo`, `isShellMode` and
+  `getShellModePart` serve only a daemon built before 2026-10-30. Their tags said "Removed with
+  OpenCode support"; they now say "Removed in the next major."
+
 ### Removed (breaking: the OpenCode-era surface, 0.15.0)
 Every session runs pi; OpenCode is gone from the box. This release removes the names that
 only served OpenCode and the aliases kept "until the next major". No first-party host imports
@@ -462,9 +690,6 @@ members. 1 credit = $0.01.
   inline and which it downloads. The smallest fill the 1 MiB inline budget;
   only the rest download. Before, a host could only download every text of a
   turn over 1 MiB in all.
-- `hasRuntimeConfirmedMessage(sessionID, messageID)`
-  (`@kortix/sdk/internal/sync-store`): the store holds the message from a
-  runtime read or a live event, not only from a saved copy.
 
 ### Fixed (session-log follow-ups)
 - `useSessionSync` stops offering the saved copy's older pages once the

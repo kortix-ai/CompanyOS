@@ -4,6 +4,9 @@
  * creating an index.ts <-> classify.ts import cycle.
  */
 
+import { tryParseJson } from './text-scan';
+import { isTagNameBoundary, titleFromHtml } from './html-scan';
+
 const GENERIC_ERROR_MESSAGE = 'An error occurred';
 
 /**
@@ -44,15 +47,6 @@ function stripErrorPrefixes(str: string): string {
   return s;
 }
 
-function tryParseJson(value: unknown): unknown {
-  if (typeof value !== 'string' || !value) return undefined;
-  try {
-    return JSON.parse(value);
-  } catch {
-    return undefined;
-  }
-}
-
 /**
  * The first `"message": "…"` (or sibling key) inside a JSON-ish string that
  * does NOT parse — an upstream body truncated by a log limit, or a body with
@@ -82,16 +76,6 @@ function textFromHtml(str: string): string | undefined {
   return text ? text.slice(0, 200) : undefined;
 }
 
-/**
- * A tag name ends here — the next character is not another name character.
- * Without this, `<scriptish>` would be treated as a `<script>` open tag.
- */
-function isTagNameBoundary(code: number): boolean {
-  if (Number.isNaN(code)) return true; // end of string
-  const isAlnum =
-    (code >= 48 && code <= 57) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
-  return !isAlnum;
-}
 
 /** Index just past the `>` that closes the tag opening at `lt`, or end of string. */
 function endOfTag(str: string, lt: number): number {
@@ -99,41 +83,6 @@ function endOfTag(str: string, lt: number): number {
   return gt === -1 ? str.length : gt + 1;
 }
 
-/**
- * The `<title>` text, by forward scan.
- *
- * This was `/<title[^>]*>([^<]*)<\/title>/i`, which CodeQL flagged as
- * `js/polynomial-redos`: every `<title` in the body is a match start, and
- * `[^>]*` rescans the whole tail from each one before failing, so a page that
- * is a long run of unclosed tags costs O(n^2). The body is whatever an upstream
- * gateway returned, so it is attacker-influenced. Measured before this change:
- * 30,000 unclosed `<title` took 4.25 s. Every `indexOf` below starts at a
- * position that only moves forward, so the whole scan is linear.
- *
- * Semantics are unchanged: the title must be followed by a real `</title>`
- * close, and its text stops at the first `<`. The one thing that IS new is
- * tolerating whitespace before the bracket (`</title >`), which HTML permits.
- */
-function titleFromHtml(str: string, lower: string): string | undefined {
-  let from = 0;
-  for (;;) {
-    const open = lower.indexOf('<title', from);
-    if (open === -1) return undefined;
-    const afterName = open + '<title'.length;
-    if (!isTagNameBoundary(lower.charCodeAt(afterName))) {
-      from = afterName;
-      continue;
-    }
-    const gt = str.indexOf('>', afterName);
-    if (gt === -1) return undefined;
-    const nextTag = str.indexOf('<', gt + 1);
-    if (nextTag !== -1 && lower.startsWith('</title', nextTag)) {
-      const title = str.slice(gt + 1, nextTag).trim();
-      if (title) return title;
-    }
-    from = gt + 1;
-  }
-}
 
 /** Element content that is never visible text, so it must not reach a transcript row. */
 const NON_VISIBLE_ELEMENTS = ['script', 'style'] as const;
@@ -299,6 +248,23 @@ export function unwrapError(raw: unknown): string {
   if (typeof raw === 'string') return unwrapString(raw, 0) ?? GENERIC_ERROR_MESSAGE;
   if (typeof raw === 'object') return unwrapObject(raw, 0) ?? GENERIC_ERROR_MESSAGE;
   return String(raw);
+}
+
+/**
+ * The sentence a session-error notification shows — the rule every path that
+ * announces a failed turn composes from: the gateway's structured message
+ * when the error carries its envelope, else `unwrapError`'s plain sentence.
+ *
+ * Prefers `extractGatewayErrorDetails` because a gateway or provider failure
+ * often carries its human sentence only inside the envelope — a serialized
+ * body behind the HTTP status text (`429: {"message": …}`), or an
+ * `APIError` whose `data.message` is `Bad Request` while `data.responseBody`
+ * holds the real wording. `unwrapError` alone reads that outer status text,
+ * so the live-stream path (`use-runtime-events`), the turn-end hand-off and
+ * the /debug/toasts gallery must all compose the sentence here.
+ */
+export function sessionErrorSentence(error: unknown): string {
+  return extractGatewayErrorDetails(error)?.message || unwrapError(error);
 }
 
 /**

@@ -15,7 +15,7 @@
  * as not found. A taken slug's 409 never names a hidden channel.
  */
 import { SPACE_TAB_KINDS, type PrivateChannelSummary, type Space, type SpaceCreateInput, type SpaceTab, type SpaceUpdateInput } from '@kortix/api-contract';
-import { projectSessions, projectSpaceLinks, projectSpaceMembers, projectSpaces } from '@kortix/db';
+import { projectSessions, projectSpaceLinks, projectSpaceMembers, projectSpaces, type ProjectSpaceTabRecord } from '@kortix/db';
 import { spaceSlug } from '@kortix/shared';
 import { type SQL, and, asc, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { probeLinkEmbeddable } from '../../apps/external';
@@ -30,6 +30,7 @@ import { insertSpaceMembers, isSpaceMember, memberDisplayName, nonProjectMembers
 import { resolveUserIdentities } from './user-identity';
 import { bustSpaceAccess, canSeeSpace, type SpaceAccess } from '../../shared/space-access';
 import { normalizeString } from './serializers';
+import { errorMessage } from '../../shared/error-message';
 
 // Lazy: the drives service stays off the static import graph of every session
 // create, trigger and member offboard that reaches this module.
@@ -94,7 +95,7 @@ export function serializeSpace(row: SpaceRow, viewer: SpaceViewer, isMember: boo
  * here, on read: no migration rewrites the stored jsonb, and the next write
  * stores the list without it.
  */
-function serializeTabs(tabs: SpaceRow['tabs'] | null | undefined): SpaceTab[] {
+export function serializeTabs(tabs: SpaceRow['tabs'] | null | undefined): SpaceTab[] {
   return (tabs ?? []).flatMap((tab): SpaceTab[] => {
     if (!(SPACE_TAB_KINDS as readonly string[]).includes(tab.kind) || !tab.ref) return [];
     const kind = tab.kind as SpaceTab['kind'];
@@ -221,7 +222,7 @@ export async function createChannel(
     return {
       error: {
         status: 400,
-        body: { error: 'Only members of the project can be added to a channel.', code: 'not_project_member' },
+        body: { error: 'Only members of the workspace can be added to a channel.', code: 'not_project_member' },
       },
     };
   }
@@ -468,7 +469,7 @@ export async function updateChannel(
   }
   if (!canEditSpace(row, viewer)) {
     return {
-      error: { status: 403, body: { error: 'Only the channel’s creator or a project manager can edit it.', code: 'forbidden' } },
+      error: { status: 403, body: { error: 'Only the channel’s creator or a workspace manager can edit it.', code: 'forbidden' } },
     };
   }
   if (input.archived === true && row.isDefault) {
@@ -504,7 +505,7 @@ export async function updateChannel(
       folderMoved = await (await spaceFolders()).moveChannelFolderVisibility(projectId, { spaceId, slug: row.slug }, 'private');
     } catch (error) {
       logger.warn(`[spaces] the folder of channel ${spaceId} did not move for its conversion to private`, {
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage(error),
       });
       return {
         error: {
@@ -518,7 +519,7 @@ export async function updateChannel(
     if (!folderMoved) return;
     await (await spaceFolders()).moveChannelFolderVisibility(projectId, { spaceId, slug: row.slug! }, 'public').catch((error) =>
       logger.error(`[spaces] the folder of channel ${spaceId} is in /Channels but the channel stayed public`, {
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage(error),
       }),
     );
   };
@@ -539,6 +540,10 @@ export async function updateChannel(
       return next;
     });
     const space = updated ?? row;
+    // The timeline's "Kortix was added by Jay" lines. Best effort; never fails the PATCH.
+    if (patch.agents) {
+      await (await import('./project-space-activity')).recordAgentChanges(spaceId, row.agents ?? [], patch.agents, userId);
+    }
     // A watched channel's feed (`spaces_proactive`): the agents added. Off the request's path.
     if (patch.agents) {
       void import('./space-watch/act')
@@ -557,7 +562,7 @@ export async function updateChannel(
         resourceId: spaceId,
         metadata: { from: row.visibility, to: 'private' },
       }).catch((error: unknown) => {
-        logger.warn('[spaces] conversion audit write failed', { spaceId, error: error instanceof Error ? error.message : String(error) });
+        logger.warn('[spaces] conversion audit write failed', { spaceId, error: errorMessage(error) });
       });
     }
     const changes = converting ? { converted: true as const } : {};
@@ -622,6 +627,32 @@ export async function mayEditSpaceTabs(
 }
 
 /**
+ * Tabs as stored, for a channel or a Space (session group): a link tab's
+ * `embeddable` is kept from the stored tab with the same URL, else probed once
+ * (`probeLinkEmbeddable`, all new URLs at once, 5 s each). A value in the
+ * request is ignored.
+ */
+export async function storedSpaceTabs(
+  previous: ProjectSpaceTabRecord[] | null | undefined,
+  tabs: readonly SpaceTab[],
+  probe: (url: string) => Promise<boolean> = (url) => probeLinkEmbeddable(url, config.FRONTEND_URL),
+): Promise<ProjectSpaceTabRecord[]> {
+  const known = new Map(
+    (previous ?? []).filter((tab) => tab.kind === 'link' && typeof tab.embeddable === 'boolean').map((tab) => [tab.ref, tab.embeddable === true]),
+  );
+  const fresh = [...new Set(tabs.filter((tab) => tab.kind === 'link' && !known.has(tab.ref)).map((tab) => tab.ref))];
+  const probed = await Promise.all(fresh.map(async (url) => [url, await probe(url)] as const));
+  for (const [url, embeddable] of probed) known.set(url, embeddable);
+  return tabs.map((tab) => ({
+    id: tab.id,
+    title: tab.title,
+    kind: tab.kind,
+    ref: tab.ref,
+    ...(tab.kind === 'link' ? { embeddable: known.get(tab.ref) === true } : {}),
+  }));
+}
+
+/**
  * Replace a space's tabs (the whole ordered list). A link tab's `embeddable`
  * is the server's: kept from the stored tab with the same URL, else probed
  * once (`probeLinkEmbeddable`, all new URLs at once, 5 s each). A value in
@@ -633,19 +664,7 @@ export async function setSpaceTabs(
   tabs: readonly SpaceTab[],
   probe: (url: string) => Promise<boolean> = (url) => probeLinkEmbeddable(url, config.FRONTEND_URL),
 ): Promise<SpaceRow | null> {
-  const known = new Map(
-    (space.tabs ?? []).filter((tab) => tab.kind === 'link' && typeof tab.embeddable === 'boolean').map((tab) => [tab.ref, tab.embeddable === true]),
-  );
-  const fresh = [...new Set(tabs.filter((tab) => tab.kind === 'link' && !known.has(tab.ref)).map((tab) => tab.ref))];
-  const probed = await Promise.all(fresh.map(async (url) => [url, await probe(url)] as const));
-  for (const [url, embeddable] of probed) known.set(url, embeddable);
-  const stored = tabs.map((tab) => ({
-    id: tab.id,
-    title: tab.title,
-    kind: tab.kind,
-    ref: tab.ref,
-    ...(tab.kind === 'link' ? { embeddable: known.get(tab.ref) === true } : {}),
-  }));
+  const stored = await storedSpaceTabs(space.tabs, tabs, probe);
   const spaceId = space.spaceId;
   const [row] = await db
     .update(projectSpaces)

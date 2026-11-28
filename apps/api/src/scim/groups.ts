@@ -10,7 +10,7 @@ import { scimError } from '../middleware/scim-auth';
 import { auth, errors, json } from '../openapi';
 import { db } from '../shared/db';
 import { accountMemberRow, accountMembersAmong } from '../iam/membership-read';
-import { accountGroupFullRow, groupMemberUserIds, groupNameInAccountRow, scimGroupRow, scimGroupRowById, scimGroupRows } from '../iam/group-read';
+import { groupMemberUserIds, groupRow, groupRows } from '../iam/group-read';
 import { deleteGroup } from '../repositories/iam';
 import { directoryUserById, directoryGroupIds, saveDirectoryGroups } from './directory-users';
 import { groupChanges, memberValues, InvalidGroupMemberError, type GroupChange } from './group-patch';
@@ -25,6 +25,7 @@ import {
   scimRouter,
   userIdByEmail,
 } from './app';
+import { accountIdParam } from '../shared/route-params';
 
 /**
  * Add SCIM-referenced members to a group. The IdP references each member by the
@@ -264,9 +265,9 @@ async function applyGroupChanges(accountId: string, groupId: string, changes: Gr
 }
 
 async function writeGroup(c: any) {
-  const accountId = c.req.param('accountId');
+  const accountId = accountIdParam(c);
   const groupId = c.req.param('groupId');
-  const [group] = await accountGroupFullRow(accountId, groupId);
+  const [group] = await groupRow(accountId, groupId);
   if (!group) return scimError(c, 404, 'Group not found');
   let changes: GroupChange[];
   try { changes = groupChanges(await c.req.json(), c.req.method === 'PATCH'); }
@@ -297,11 +298,11 @@ export function registerScimGroupsRoutes(): void {
   scimRouter.openapi(
     createRoute({
       method: 'get',
-      path: '/accounts/{accountId}/Groups',
+      path: '/accounts/{workspaceId}/Groups',
       ...auth, tags: ['scim'],
       summary: 'List SCIM Groups (filter by displayName/id/externalId eq)',
       request: {
-        params: z.object({ accountId: z.string() }),
+        params: z.object({ workspaceId: z.string() }),
         query: ScimListQuery,
       },
       responses: {
@@ -310,7 +311,7 @@ export function registerScimGroupsRoutes(): void {
       },
     }),
     async (c: any) => {
-      const accountId = c.req.param('accountId');
+      const accountId = accountIdParam(c);
       const rawFilter = c.req.query('filter');
       // Supplied-but-unsupported filter → 400, not a silent full-list (RFC 7644 §3.4.2.2).
       if (isUnsupportedFilter(rawFilter)) {
@@ -318,7 +319,7 @@ export function registerScimGroupsRoutes(): void {
       }
       const filter = parseFilter(rawFilter);
 
-      const rows = await scimGroupRows(accountId);
+      const rows = await groupRows({ accountId });
 
       let filteredRows = rows;
       if (filter) {
@@ -341,20 +342,20 @@ export function registerScimGroupsRoutes(): void {
   scimRouter.openapi(
     createRoute({
       method: 'get',
-      path: '/accounts/{accountId}/Groups/{groupId}',
+      path: '/accounts/{workspaceId}/Groups/{groupId}',
       ...auth, tags: ['scim'],
       summary: 'Get a SCIM Group',
-      request: { params: z.object({ accountId: z.string(), groupId: z.string() }) },
+      request: { params: z.object({ workspaceId: z.string(), groupId: z.string() }) },
       responses: {
         200: json(ScimResource, 'SCIM Group'),
         ...errors(401, 403, 404),
       },
     }),
     async (c: any) => {
-      const accountId = c.req.param('accountId');
+      const accountId = accountIdParam(c);
       const groupId = c.req.param('groupId');
 
-      const [row] = await scimGroupRow(accountId, groupId);
+      const [row] = await groupRow(accountId, groupId);
       if (!row) return scimError(c, 404, 'Group not found');
 
       return c.json(await buildGroup(accountId, row));
@@ -364,11 +365,11 @@ export function registerScimGroupsRoutes(): void {
   scimRouter.openapi(
     createRoute({
       method: 'post',
-      path: '/accounts/{accountId}/Groups',
+      path: '/accounts/{workspaceId}/Groups',
       ...auth, tags: ['scim'],
       summary: 'Create a SCIM Group',
       request: {
-        params: z.object({ accountId: z.string() }),
+        params: z.object({ workspaceId: z.string() }),
         body: { content: { 'application/json': { schema: ScimResource } } },
       },
       responses: {
@@ -377,7 +378,7 @@ export function registerScimGroupsRoutes(): void {
       },
     }),
     async (c: any) => {
-      const accountId = c.req.param('accountId');
+      const accountId = accountIdParam(c);
       let body: Record<string, unknown>;
       try {
         body = await c.req.json();
@@ -434,7 +435,7 @@ export function registerScimGroupsRoutes(): void {
         after: { name: displayName, external_id: externalId },
       });
 
-      const [row] = await scimGroupRowById(groupId);
+      const [row] = await groupRow(null, groupId);
 
       return c.json(await buildGroup(accountId, row!), 201);
     },
@@ -442,10 +443,10 @@ export function registerScimGroupsRoutes(): void {
 
   for (const method of ['patch', 'put'] as const) {
     scimRouter.openapi(createRoute({
-      method, path: '/accounts/{accountId}/Groups/{groupId}', ...auth, tags: ['scim'],
+      method, path: '/accounts/{workspaceId}/Groups/{groupId}', ...auth, tags: ['scim'],
       summary: method === 'patch' ? 'Patch a SCIM Group' : 'Replace a SCIM Group',
       request: {
-        params: z.object({ accountId: z.string().uuid(), groupId: z.string().uuid() }),
+        params: z.object({ workspaceId: z.string().uuid(), groupId: z.string().uuid() }),
         body: { content: { 'application/json': { schema: ScimResource } } },
       },
       responses: { 200: json(ScimResource, 'SCIM Group'), ...errors(400, 401, 403, 404, 409) },
@@ -455,17 +456,17 @@ export function registerScimGroupsRoutes(): void {
   scimRouter.openapi(
     createRoute({
       method: 'delete',
-      path: '/accounts/{accountId}/Groups/{groupId}',
+      path: '/accounts/{workspaceId}/Groups/{groupId}',
       ...auth, tags: ['scim'],
       summary: 'Delete a SCIM Group',
-      request: { params: z.object({ accountId: z.string(), groupId: z.string() }) },
+      request: { params: z.object({ workspaceId: z.string(), groupId: z.string() }) },
       responses: {
         204: { description: 'No content (deleted / idempotent)' },
         ...errors(401, 403),
       },
     }),
     async (c: any) => {
-      const accountId = c.req.param('accountId');
+      const accountId = accountIdParam(c);
       const groupId = c.req.param('groupId');
 
       // Capture members before the cascade so we can bust their cached roles —
@@ -475,7 +476,7 @@ export function registerScimGroupsRoutes(): void {
       ).map((r) => r.userId);
 
       // Name first, for the audit event: the delete below takes the row with it.
-      const [existing] = await groupNameInAccountRow(accountId, groupId);
+      const [existing] = await groupRow(accountId, groupId);
       if (!existing) return c.body(null, 204);
       await unparkGroupFromInvites(accountId, groupId);
       // `deleteGroup`, not a bare delete: it also drops the group's assignments in

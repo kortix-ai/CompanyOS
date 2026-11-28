@@ -1,4 +1,6 @@
 import { afterEach, expect, mock, test } from 'bun:test';
+import { Window } from 'happy-dom';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { act, create } from 'react-test-renderer';
 
 Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', { value: true, configurable: true });
@@ -41,7 +43,7 @@ for (const succeeds of [true, false]) {
       expect(replacements).toHaveLength(succeeds ? 1 : 0);
       expect(url.searchParams.get('next')).toBe('home');
       expect(url.hash).toBe('#done');
-      expect(JSON.stringify(root.toJSON())).toContain(succeeds ? 'Your password has been changed' : 'Synthetic failure');
+      expect(JSON.stringify(root.toJSON())).toContain(succeeds ? 'Password updated' : 'Synthetic failure');
       expect(JSON.stringify(root.toJSON())).not.toContain('Link expired');
     } finally { await act(async () => root.unmount()); }
   });
@@ -54,4 +56,17 @@ test('a missing code still offers a fresh link', async () => {
   if (!tree) throw new Error('Page did not render');
   try { expect(JSON.stringify(tree.toJSON())).toContain('Link expired'); }
   finally { await act(async () => tree?.unmount()); }
+});
+
+// KRTX-1850: the SSR form is typeable before React hydrates it. A submit in
+// that window is a native one, and a form without `method` submits as GET:
+// the new password lands in the address bar, history and referer logs.
+test('the server-rendered form submits natively as POST, never as GET', () => {
+  url = new URL('http://localhost/auth/reset-password?code=synthetic-code');
+  const { document } = new Window();
+  document.body.innerHTML = renderToStaticMarkup(<ResetPassword />);
+  const form = document.querySelector('form');
+  if (!form) throw new Error('Page rendered no form');
+  expect(form.querySelector('input[name="password"]')).not.toBeNull();
+  expect(form.method).toBe('post');
 });

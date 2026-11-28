@@ -3,8 +3,8 @@
 // A folder the caller may not see answers 404, so a path is never an oracle
 // for someone's private folder.
 
+import { SESSION_GROUPS_DIR } from '@kortix/shared';
 import { logger } from '../lib/logger';
-import { recordDriveCommitAuthor } from '../artifacts/events-store';
 import { createRoute, z } from '@hono/zod-openapi';
 import type { Context } from 'hono';
 import { HTTPException } from 'hono/http-exception';
@@ -58,6 +58,7 @@ import {
   PRIVATE_CHANNELS_DIR,
   type PrivateChannelFolders,
   privateChannelFolderOf,
+  reservedRootInUse,
 } from './folders';
 import {
   type DriveRow,
@@ -65,6 +66,7 @@ import {
   driveSubjectFor,
   driveVolume,
   privateChannelRows,
+  sessionGroupFolderNames,
   enforceProjectMounts,
   ensureProjectDrive,
   getDrive,
@@ -81,7 +83,6 @@ import {
   writeDriveVolume,
 } from './service';
 import { type DriveUpload, openDriveUpload, sealDriveUpload } from './upload-token';
-import { parseVolumeWriteCommit } from './volume-commit';
 import {
   assertDriveWriteFits,
   driveFolderSizes,
@@ -108,8 +109,8 @@ import {
   statVolumeFile,
   writeVolumeFile,
   FILE_CHANGED_MESSAGE,
-  type VolumeCommit,
 } from './volumes';
+import { versionAuthor, versionKind } from './version-labels';
 
 export const MAX_DRIVE_UPLOAD_BYTES = MAX_DRIVE_REQUEST_BYTES;
 /** A block of the block upload, as storage takes it. */
@@ -340,8 +341,8 @@ function structural(path: string, caller: Caller): boolean {
   return (
     path === '/' ||
     path === USERS_DIR ||
-    // `/Channels` holds the tree together only while it holds a private channel's folder.
-    (path === PRIVATE_CHANNELS_DIR && privateFolders(caller).size > 0) ||
+    // `/Channels` and `/Spaces` hold the tree together only while they hold a reserved folder.
+    reservedRootInUse(path, privateFolders(caller)) ||
     personalFolderOf(path) === path ||
     privateChannelFolderOf(path, privateFolders(caller)) === path ||
     path === caller.personalFolder
@@ -413,19 +414,6 @@ const sameVersion = (a: string, b: string) => bareVersion(a) === bareVersion(b);
 
 const baseName = (p: string) => p.split('/').filter(Boolean).pop() ?? '';
 const parentOf = (p: string) => p.slice(0, p.lastIndexOf('/')) || '/';
-
-function versionKind(kind: string): z.infer<typeof DriveVersionSchema>['kind'] {
-  if (kind === 'init' || kind === 'fork') return 'created';
-  if (kind === 'restore') return 'restore';
-  if (kind === 'api' || kind === 'import') return 'edit';
-  return 'sync';
-}
-
-function versionAuthor(commit: VolumeCommit): z.infer<typeof DriveVersionSchema>['author'] {
-  if (commit.author?.kind === 'sandbox' || commit.kind === 'merge' || commit.kind === 'fast') return 'session';
-  if (commit.author?.kind === 'api_key' || commit.author?.kind === 'user') return 'drive';
-  return 'system';
-}
 
 /** The agents a project declares that start sessions (subagents never own one). Best effort. */
 async function projectAgentNames(projectId: string): Promise<string[]> {
@@ -719,6 +707,8 @@ drivesApp.openapi(
     const channelNames = entries.some((e) => privateChannelFolderOf(e.path, privateFolders(caller)) === e.path)
       ? new Map((await privateChannelRows(drive.projectId!)).flatMap((r) => (r.folder && r.slug ? [[r.folder, `#${r.slug}`] as const] : [])))
       : null;
+    // A space's folder is named by its id (`/Spaces/<group_id>`); it lists under the space's name.
+    const spaceNames = path === SESSION_GROUPS_DIR ? await sessionGroupFolderNames(drive.projectId!) : null;
     return c.json({
       access: folderAccess(path, grants, subject),
       entries: entries
@@ -726,6 +716,7 @@ drivesApp.openapi(
         .map((e) => ({
           ...e,
           ...(channelNames?.has(e.path) ? { name: channelNames.get(e.path)! } : {}),
+          ...(spaceNames?.has(e.path) ? { name: spaceNames.get(e.path)! } : {}),
           ...(personNames?.has(e.path) ? { name: personNames.get(e.path)! } : {}),
           access: folderAccess(e.path, grants, subject),
           ...(e.type === 'dir' && sharedPaths.has(e.path) ? { shared: true } : {}),
@@ -818,10 +809,6 @@ drivesApp.openapi(
         writeVolumeFile(volume, path, body, { overwrite: true, ...(ifMatch ? { ifMatch } : {}) }),
       ),
     );
-    await recordDriveCommitAuthor(caller.drive.driveId, written.commit, {
-      userId: caller.userId,
-      sessionId: callerKortixSessionId(c),
-    });
     noteDriveWrite(caller.drive.driveId);
     forgetDriveUsage(caller.drive.platinumVolumeName);
     // The version this write made, as storage answered it: a read afterwards
@@ -974,13 +961,9 @@ drivesApp.openapi(
       const current = await withStorage(() => currentFileVersion(caller.drive, upload.path));
       if (!current || !sameVersion(current, upload.ifMatch)) fail(409, FILE_CHANGED_MESSAGE, 'file_changed');
     }
-    const committed = await withUploadStorage(() =>
+    await withUploadStorage(() =>
       writeDriveVolume(caller.drive, (volume) => commitVolumeUpload(volume, upload.uploadId)),
     );
-    await recordDriveCommitAuthor(caller.drive.driveId, parseVolumeWriteCommit(committed), {
-      userId: caller.userId,
-      sessionId: callerKortixSessionId(c),
-    });
     noteDriveWrite(caller.drive.driveId);
     forgetDriveUsage(caller.drive.platinumVolumeName);
     return c.json({ path: upload.path, size: upload.size });

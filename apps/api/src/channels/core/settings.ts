@@ -36,7 +36,8 @@ export { currentChannelSelection, setChannelAgent, setChannelModel, type Channel
 /** A channel as settings see it: `oneToOne` for a DM or personal chat with the bot. */
 export type SettingsChannel = ChannelCtx & { oneToOne?: boolean };
 
-export type SettingsRefusal = 'unlinked' | 'forbidden' | 'no_binding';
+/** `other_workspace`: the channel's settings belong to another Kortix workspace (its own Slack app here). */
+export type SettingsRefusal = 'unlinked' | 'forbidden' | 'no_binding' | 'other_workspace';
 
 export type SettingsChange<Ok extends object = object, Reason extends string = never> =
   | ({ ok: true } & Ok)
@@ -49,7 +50,13 @@ export async function authorizeChannelSettings(
   opts: { oneToOne?: boolean } = {},
 ): Promise<{ ok: true; userId: string } | { ok: false; reason: 'unlinked' | 'forbidden' }> {
   const action = opts.oneToOne ? PROJECT_ACTIONS.PROJECT_SESSION_START : PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE;
-  const actor = await resolveProjectChatActor(user, projectId, action);
+  let actor = await resolveProjectChatActor(user, projectId, action);
+  // An unlinked Slack person whose confirmed email is a member's is linked
+  // here, with no `/kortix login` (slack/auto-link.ts).
+  if ('reason' in actor && actor.reason === 'unlinked' && user.platform === 'slack') {
+    const { linkSlackPersonByEmail } = await import('../slack/auto-link');
+    if (await linkSlackPersonByEmail(user, projectId)) actor = await resolveProjectChatActor(user, projectId, action);
+  }
   if ('userId' in actor) return { ok: true, userId: actor.userId };
   return { ok: false, reason: actor.reason === 'unlinked' ? 'unlinked' : 'forbidden' };
 }
@@ -58,6 +65,9 @@ export async function authorizeChannelSettings(
 export async function authorizeChannelChange(user: ChatUser, channel: SettingsChannel): Promise<SettingsChange> {
   const selection = await currentChannelSelection(channel);
   if (!selection) return { ok: false, reason: 'no_binding' };
+  // One settings row per channel: a workspace changes only its own row, never
+  // the row of another workspace that runs its own Slack app in this channel.
+  if (selection.foreignRow) return { ok: false, reason: 'other_workspace' };
   return authorizeChannelSettings(user, selection.projectId, channel);
 }
 
@@ -108,7 +118,7 @@ export async function switchChannelProject(
     .where(
       and(
         eq(chatInstalls.platform, platform),
-        eq(chatInstalls.workspaceId, channel.teamId),
+        eq(chatInstalls.platformTeamId, channel.teamId),
         eq(chatInstalls.projectId, projectId),
       ),
     )
@@ -116,9 +126,9 @@ export async function switchChannelProject(
   if (!install) return { ok: false, reason: 'not_installed' };
   await db
     .insert(chatChannelBindings)
-    .values({ platform, workspaceId: channel.teamId, channelId: channel.channelId, projectId, pickerTs: null })
+    .values({ platform, platformTeamId: channel.teamId, channelId: channel.channelId, projectId, pickerTs: null })
     .onConflictDoUpdate({
-      target: [chatChannelBindings.platform, chatChannelBindings.workspaceId, chatChannelBindings.channelId],
+      target: [chatChannelBindings.platform, chatChannelBindings.platformTeamId, chatChannelBindings.channelId],
       set: { projectId, pickerTs: null },
     });
   return { ok: true };
@@ -145,14 +155,14 @@ export async function ensureChatBinding(
   const [install] = await db
     .select({ id: chatInstalls.installId })
     .from(chatInstalls)
-    .where(and(eq(chatInstalls.platform, platform), eq(chatInstalls.workspaceId, settings.teamId), eq(chatInstalls.projectId, projectId)))
+    .where(and(eq(chatInstalls.platform, platform), eq(chatInstalls.platformTeamId, settings.teamId), eq(chatInstalls.projectId, projectId)))
     .limit(1);
   if (!install) return 'not_installed';
   const current = await currentChannelSelection(settings);
   if (opts.keepsOtherProjects && current && current.projectId !== projectId) return 'held';
   const name = label.name ?? (label.lookupName && current?.projectId !== projectId ? await label.lookupName() : null);
-  const values = { platform, workspaceId: settings.teamId, channelId: settings.channelId, projectId, channelName: name, channelType: label.type };
-  const target = [chatChannelBindings.platform, chatChannelBindings.workspaceId, chatChannelBindings.channelId];
+  const values = { platform, platformTeamId: settings.teamId, channelId: settings.channelId, projectId, channelName: name, channelType: label.type };
+  const target = [chatChannelBindings.platform, chatChannelBindings.platformTeamId, chatChannelBindings.channelId];
   if (opts.keepsOtherProjects) {
     // A row another project wrote since the read stays; the read back says whose it is.
     await db.insert(chatChannelBindings).values(values).onConflictDoNothing({ target });
@@ -181,7 +191,7 @@ export async function unbindChannel(user: ChatUser, channel: SettingsChannel): P
     .where(
       and(
         eq(chatChannelBindings.platform, channel.platform ?? 'slack'),
-        eq(chatChannelBindings.workspaceId, channel.teamId),
+        eq(chatChannelBindings.platformTeamId, channel.teamId),
         eq(chatChannelBindings.channelId, channel.channelId),
       ),
     );

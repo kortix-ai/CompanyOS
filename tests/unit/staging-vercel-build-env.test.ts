@@ -1,26 +1,22 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { readWorkflow } from '../src/fixtures/repo';
 
-// Vercel builds bake the runtime config into prerendered pages
-// (apps/web/src/lib/runtime-config-mode.ts). `vercel deploy -e` reaches only the
-// runtime, so every staging value must also reach the build through `-b`, or
+// The Vercel build bakes the runtime config into prerendered pages
+// (apps/web/src/lib/runtime-config-mode.ts). `--env` reaches only the runtime,
+// so every staging value must also reach the build through `--build-env`, or
 // staging bakes the project's generic Preview values.
 describe('staging Vercel deploy', () => {
-  const workflow = readFileSync(
-    resolve(import.meta.dirname, '../../.github/workflows/deploy-staging.yml'),
-    'utf8',
-  );
+  const workflow = readWorkflow('deploy-staging.yml');
   const start = workflow.indexOf('          staging_env=(');
   const end = workflow.indexOf('| tail -n1)"', start);
   const block = workflow.slice(start, end);
 
   it('passes every staging value to both the build and the runtime', () => {
     expect(start).toBeGreaterThan(-1);
-    expect(block).toContain('env_flags+=(-e "$kv" -b "$kv")');
+    expect(block).toContain('env_flags+=(--env "$kv" --build-env "$kv")');
     expect(block).toContain('"${env_flags[@]}"');
     // No bare runtime-only value may bypass the shared list.
-    expect(block).not.toMatch(/^\s+-e \S+=/m);
+    expect(block).not.toMatch(/^\s+(-e|--env) \S+=/m);
   });
 
   it('keeps the values the baked runtime config reads', () => {

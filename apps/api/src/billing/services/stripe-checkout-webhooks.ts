@@ -1,9 +1,10 @@
 import Stripe from 'stripe';
+import { logger } from '../../lib/logger';
 import { wallet } from '../wallet';
-import { applyStripeSync } from './account-write-owner';
+import { applyStripeSync, isClosedBillingAccount } from './account-write-owner';
 import { getCreditAccount } from '../repositories/credit-accounts';
 import { upsertCustomer } from '../repositories/customers';
-import { getTier, paidMonthlyUsd } from './tiers';
+import { getTier, paidMonthlyUsd, planCreditsUsd } from './tiers';
 import { cancelFreeSubscriptionForUpgrade } from './subscriptions';
 import { calculateNextCreditGrant } from './credit-grant-schedule';
 import { AUTO_TOPUP_DEFAULT_AMOUNT, AUTO_TOPUP_DEFAULT_THRESHOLD } from '@kortix/shared';
@@ -16,16 +17,17 @@ export function planKeyFromMetadata(
 }
 
 /**
- * The monthly allowance a plan grants from this subscription: the subscription's
- * own amount on a paid plan (a comped $0 subscription keeps the row's amount),
- * the plan's fixed grant otherwise (free = $2).
+ * The monthly credits (USD) a plan grants from this subscription: on a paid
+ * plan, the subscription's own amount plus its volume bonus (`planCreditsUsd`;
+ * a comped $0 subscription keeps the row's amount); the plan's fixed grant
+ * otherwise (free = $5).
  */
 export function allowanceForSubscription(
   tierKey: string,
   subscription: Stripe.Subscription,
   row?: Parameters<typeof paidMonthlyUsd>[1],
 ): number {
-  return tierKey === 'free' ? getTier('free').monthlyCredits : paidMonthlyUsd(subscription, row);
+  return tierKey === 'free' ? getTier('free').monthlyCredits : planCreditsUsd(paidMonthlyUsd(subscription, row));
 }
 
 /**
@@ -64,6 +66,16 @@ export async function activateSubscriptionForAccount(params: {
 
   const isYearly = commitmentType === 'yearly' || commitmentType === 'yearly_commitment';
   const existingAccount = await getCreditAccount(accountId);
+  if (isClosedBillingAccount(existingAccount)) {
+    logger.info(`[Webhook] activation skipped: ${accountId} is closed (sub=${subscriptionId})`);
+    return;
+  }
+  // Auto top-up turns on when the account moves ONTO this subscription. A
+  // second activation of the same live subscription (checkout and the first
+  // invoice both activate; Stripe redelivers) keeps the customer's own
+  // choice: a replay must never turn back on what they turned off.
+  const switchesOntoSubscription =
+    existingAccount?.stripeSubscriptionId !== subscriptionId || existingAccount?.stripeSubscriptionStatus !== 'active';
   const previousSubscriptionId = previousSubscriptionIdHint
     ?? (
       existingAccount?.tier === 'free' &&
@@ -73,7 +85,9 @@ export async function activateSubscriptionForAccount(params: {
         : null
     );
 
-  const monthlyUsd = allowanceForSubscription(tierKey, subscription, existingAccount);
+  // The amount billed is the plan; the grant adds its volume bonus.
+  const monthlyUsd = tierKey === 'free' ? 0 : paidMonthlyUsd(subscription, existingAccount);
+  const credits = allowanceForSubscription(tierKey, subscription, existingAccount);
 
   // For monthly plans, set next_credit_grant to the period-end so the
   // renewal loop knows when the next grant is due.
@@ -93,8 +107,8 @@ export async function activateSubscriptionForAccount(params: {
       commitmentType: commitmentType === 'yearly_commitment' ? commitmentType : null,
       nextCreditGrant: nextCreditGrantTs,
       lastRenewalPeriodStart: subscription.current_period_start,
-      autoTopupEnabled: true,
-      ...(existingAccount?.autoTopupCustomized ? {} : {
+      ...(switchesOntoSubscription ? { autoTopupEnabled: true } : {}),
+      ...(existingAccount?.autoTopupCustomized || !switchesOntoSubscription ? {} : {
         autoTopupThreshold: String(AUTO_TOPUP_DEFAULT_THRESHOLD),
         autoTopupAmount: String(AUTO_TOPUP_DEFAULT_AMOUNT),
       }),
@@ -105,12 +119,12 @@ export async function activateSubscriptionForAccount(params: {
   // Checkout and the first paid invoice both activate. The keyed grant is the
   // one place that knows which arrived first.
   let firstActivation = true;
-  if (monthlyUsd > 0) {
+  if (credits > 0) {
     const granted = await wallet.grant({
       accountId,
-      amount: monthlyUsd,
+      amount: credits,
       kind: 'tier_grant',
-      description: `${getTier(tierKey).displayName} plan activated: ${Math.round(monthlyUsd * 100)} credits`,
+      description: `${getTier(tierKey).displayName} plan activated: ${Math.round(credits * 100)} credits`,
       expiring: true,
       key: { event: `subscription_activation:${subscriptionId}` },
     });
@@ -131,7 +145,7 @@ export async function activateSubscriptionForAccount(params: {
     await cancelFreeSubscriptionForUpgrade(previousSubscriptionId, accountId);
   }
 
-  console.log(`[Webhook] Subscription activated: ${tierKey} $${monthlyUsd}/mo for ${accountId} (sub=${subscriptionId})`);
+  console.log(`[Webhook] Subscription activated: ${tierKey} $${monthlyUsd}/mo, ${Math.round(credits * 100)} credits for ${accountId} (sub=${subscriptionId})`);
 
   if (firstActivation) {
     captureAccountProductEvent({

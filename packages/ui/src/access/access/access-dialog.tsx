@@ -32,7 +32,7 @@ import { Checkbox } from '../../primitives/checkbox';
 import { ConfirmDialog } from '../../primitives/confirm-dialog';
 import { EntityAvatar } from '../../primitives/entity-avatar';
 import { Field, FieldDescription, FieldLabel } from '../../primitives/field';
-import { InfoBanner } from '../../primitives/info-banner';
+import { Alert as BannerAlert, AlertTitle as BannerAlertTitle, AlertDescription as BannerAlertDescription, AlertActions as BannerAlertActions, AlertMedia as BannerAlertMedia } from '../../primitives/alert';
 import { Calendar } from '../../primitives/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '../../primitives/popover';
 import { triggerVariants } from '../../primitives/trigger-variants';
@@ -47,7 +47,7 @@ import {
   ModalTitle,
 } from '../../primitives/modal';
 import { Skeleton } from '../../primitives/skeleton';
-import { Tabs, TabsListCompact, TabsTriggerCompact } from '../../primitives/tabs';
+import { Tabs, TabsList, TabsTrigger } from '../../primitives/tabs';
 import { errorToast, successToast, warningToast } from '../../primitives/toast';
 import { UserAvatar } from '../../primitives/user-avatar';
 import { PROJECT_ACTIONS } from '../../internal/lib/project-actions';
@@ -1346,15 +1346,15 @@ function PrincipalAccessDialog({
             ) : null}
 
             {scope.kind === 'project' && everyoneSelected ? (
-              <InfoBanner tone="neutral" icon={UsersThreeIcon}>
+              <BannerAlert variant="default" ><BannerAlertMedia><UsersThreeIcon /></BannerAlertMedia><BannerAlertDescription>
                 {tSharing('everyoneRoleNote', { project: scope.projectName })}
-              </InfoBanner>
+              </BannerAlertDescription></BannerAlert>
             ) : null}
 
             {scope.kind === 'project' && showAgentCeilingNote ? (
-              <InfoBanner tone="neutral" icon={RobotIcon} title={tAgents('ceilingNoteTitle')}>
+              <BannerAlert variant="default" ><BannerAlertMedia><RobotIcon /></BannerAlertMedia><BannerAlertTitle>{tAgents('ceilingNoteTitle')}</BannerAlertTitle><BannerAlertDescription>
                 <span data-testid="agent-ceiling-note">{tAgents('ceilingNote')}</span>
-              </InfoBanner>
+              </BannerAlertDescription></BannerAlert>
             ) : null}
 
             {/* 4. Agents (project scope) */}
@@ -1362,16 +1362,11 @@ function PrincipalAccessDialog({
               <Field className="gap-1.5">
                 <FieldLabel>{tI18nComplete.raw('text279b44d2ab4b')}</FieldLabel>
                 {resourceGrantsQuery.isError ? (
-                  <InfoBanner
-                    tone="destructive"
-                    action={
-                      <Button size="sm" variant="outline" onClick={() => void resourceGrantsQuery.refetch()}>
-                        {tCommon('retry')}
-                      </Button>
-                    }
-                  >
+                  <BannerAlert variant="destructive" ><BannerAlertDescription>
                     {resourceGrantsQuery.error.message}
-                  </InfoBanner>
+                  </BannerAlertDescription><BannerAlertActions>{<Button size="sm" variant="outline" onClick={() => void resourceGrantsQuery.refetch()}>
+                        {tCommon('retry')}
+                      </Button>}</BannerAlertActions></BannerAlert>
                 ) : resourceGrantsQuery.isLoading ? (
                   <Skeleton className="h-6 w-full rounded-md" />
                 ) : null}
@@ -1381,14 +1376,14 @@ function PrincipalAccessDialog({
                     setAgents(next === 'all' ? ALL_AGENTS : { mode: 'subset', ids: agents.ids })
                   }
                 >
-                  <TabsListCompact>
-                    <TabsTriggerCompact value="all">
+                  <TabsList size="xs">
+                    <TabsTrigger value="all">
                       {tI18nComplete.raw('text54c32d3e2cfa')}
-                    </TabsTriggerCompact>
-                    <TabsTriggerCompact value="subset">
+                    </TabsTrigger>
+                    <TabsTrigger value="subset">
                       {tI18nComplete.raw('textb080141d6840')}
-                    </TabsTriggerCompact>
-                  </TabsListCompact>
+                    </TabsTrigger>
+                  </TabsList>
                 </Tabs>
                 {agents.mode === 'all' ? (
                   <FieldDescription>
@@ -1433,7 +1428,7 @@ function PrincipalAccessDialog({
 
             {/* 5. Project access (account grant only) */}
             {showAccountAdminBanner ? (
-              <InfoBanner tone="neutral">{tI18nComplete.raw('text65abb6edc2c0')}</InfoBanner>
+              <BannerAlert variant="default" ><BannerAlertDescription>{tI18nComplete.raw('text65abb6edc2c0')}</BannerAlertDescription></BannerAlert>
             ) : showProjectAccessSection ? (
               <ProjectAccessRows
                 accountId={accountId}
@@ -1536,7 +1531,7 @@ function PrincipalAccessDialog({
                   ? scope.projectName
                   : scope.kind === 'group'
                     ? scope.groupName
-                    : (accountName ?? 'this account'),
+                    : (accountName ?? 'this workspace'),
               inherited: inheritedFrom,
             },
             tI18nComplete,
@@ -1599,7 +1594,7 @@ function ScopeLine({
 }) {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <Icon className="text-muted-foreground/70 size-3.5 shrink-0" />
+      <Icon className="text-muted-foreground size-3.5 shrink-0" />
       <span className="text-muted-foreground text-xs font-medium">{label}</span>
       {items.map((name) => (
         <Badge key={name} variant="outline" size="xs" className="font-mono">
@@ -1626,9 +1621,9 @@ export function BlastRadiusPreview({
   const connectors = declares.connectors === 'all' ? [] : declares.connectors;
   const nothingExtra = secrets.length === 0 && connectors.length === 0;
   return (
-    <div className="border-border/60 bg-muted/30 space-y-2 rounded-md border p-3">
+    <div className="border-border bg-muted/30 space-y-2 rounded-md border p-3">
       <div className="flex items-center gap-1.5">
-        <ArrowElbowDownRightIcon className="text-muted-foreground/70 size-3.5 shrink-0" />
+        <ArrowElbowDownRightIcon className="text-muted-foreground size-3.5 shrink-0" />
         <span className="text-foreground text-xs font-medium">
           {tI18nComplete.raw('text4fb37eec9d1d')}
         </span>
@@ -1774,7 +1769,7 @@ function parseDateValue(value: string): Date | undefined {
 
 /** The expiry field: the Kortix `Calendar` in a popover, not the browser's
  *  native date input. Empty reads "Never"; past days can't be picked. */
-function ExpiryPicker({
+export function ExpiryPicker({
   id,
   value,
   onChange,
@@ -1844,7 +1839,7 @@ function ExpiryPicker({
  * blocks a close while a save is in flight; the sheet is the body of the
  * account hub's `useAccountHubSheet`, which owns open and close.
  */
-interface AccessChrome {
+export interface AccessChrome {
   Root: ComponentType<{ open: boolean; onOpenChange: (open: boolean) => void; children?: ReactNode }>;
   Content: ComponentType<{ children?: ReactNode }>;
   Header: ComponentType<{ children?: ReactNode }>;
@@ -1854,7 +1849,7 @@ interface AccessChrome {
   Footer: ComponentType<{ children?: ReactNode }>;
 }
 
-const MODAL_CHROME: AccessChrome = {
+export const MODAL_CHROME: AccessChrome = {
   Root: Modal,
   Content: ({ children }: { children?: ReactNode }) => (
     <ModalContent className="sm:max-w-md">{children}</ModalContent>
@@ -1875,7 +1870,7 @@ const Passthrough = ({ children }: { children?: ReactNode }) => <>{children}</>;
 /** Inside the account hub's sheet: the host draws the title row and the
  *  scrolling body, so this draws only the fields and a footer that sticks to
  *  the bottom of that scroll. */
-const SHEET_CHROME: AccessChrome = {
+export const SHEET_CHROME: AccessChrome = {
   Root: Passthrough,
   // Fills the sheet body's height so `mt-auto` can push the footer to the
   // bottom edge even when the form is short.

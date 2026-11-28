@@ -12,7 +12,7 @@ setDefaultTimeout(30_000);
 
 const CLI_ENTRY = join(resolve(import.meta.dir, '..', '..'), 'src', 'index.ts');
 const PROJECT = 'proj_sets';
-const EX = `/v1/connectors/projects/${PROJECT}/connectors`;
+const EX = `/v1/connectors/workspaces/${PROJECT}/connectors`;
 
 interface Call {
   method: string;
@@ -64,7 +64,7 @@ function startServer(): string {
       if (url.pathname === `${EX}/gmail/policy-sets/outreach/name` && req.method === 'PUT') {
         return Response.json({ ok: true, sync: { synced: 1, errors: [] } });
       }
-      if (url.pathname === `/v1/projects/${PROJECT}/agents/support/scope` && req.method === 'PUT') {
+      if (url.pathname === `/v1/workspaces/${PROJECT}/agents/support/scope` && req.method === 'PUT') {
         const sets = (body as { policy_sets?: Record<string, string | null> }).policy_sets ?? {};
         if (sets.gmail === 'nope') {
           return Response.json(
@@ -83,7 +83,7 @@ function startServer(): string {
           policy_sets: Object.fromEntries(Object.entries(sets).filter(([k, v]) => v !== null && k === 'gmail')),
         });
       }
-      if (url.pathname === `/v1/projects/${PROJECT}/agents/support/config` && req.method === 'GET') {
+      if (url.pathname === `/v1/workspaces/${PROJECT}/agents/support/config` && req.method === 'GET') {
         return Response.json({ agent: 'support', block: { connectors: ['gmail'], policy_sets: { gmail: 'read_only' } } });
       }
       return Response.json({ error: `unhandled ${req.method} ${url.pathname}` }, { status: 500 });
@@ -152,6 +152,15 @@ describe('kortix connectors policy sets + agents scope --policy-set', () => {
     server?.stop(true);
     server = null;
     rmSync(tmp, { recursive: true, force: true });
+  });
+
+  test('named-set replacement removes all duplicates and retains unrelated conditions', async () => {
+    const config = writeConfig(startServer());
+    const retained = { match: 'read_*', action: 'always_run', conditions: [{ arg: 'scope', match: 'synthetic' }] };
+    rules.read_only = [{ match: 'send_*', action: 'block' }, retained, { match: 'send_*', action: 'always_run' }];
+    const r = await runCli(['connectors', 'policy', 'gmail', '--policy-set', 'read_only', 'set', 'send_*', 'ask', '--project', PROJECT], config);
+    expect(r.code).toBe(0);
+    expect(writes()).toEqual([{ method: 'PUT', path: `${EX}/gmail/policies?policy_set=read_only`, body: { policies: [retained, { match: 'send_*', action: 'require_approval' }] } }]);
   });
 
   test('policy <slug> --policy-set <name> set writes that set and keeps other rules', async () => {
@@ -268,7 +277,7 @@ describe('kortix connectors policy sets + agents scope --policy-set', () => {
     expect(r.code).toBe(0);
     expect(r.stdout).toContain('gmail=read_only');
     expect(writes()).toEqual([
-      { method: 'PUT', path: `/v1/projects/${PROJECT}/agents/support/scope`, body: { policy_sets: { gmail: 'read_only', slack: null } } },
+      { method: 'PUT', path: `/v1/workspaces/${PROJECT}/agents/support/scope`, body: { policy_sets: { gmail: 'read_only', slack: null } } },
     ]);
   });
 

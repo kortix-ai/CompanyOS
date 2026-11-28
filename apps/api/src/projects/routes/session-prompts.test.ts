@@ -211,7 +211,7 @@ function predicateOf(predicate: unknown): (r: CommandRow) => boolean {
     if (statuses.length > 0) {
       const wanted = new Set(statuses);
       // `listInboxPrompts`: NOT succeeded, OR forwarded. The forwarded arm is
-      // what keeps a prompt OpenCode already holds on the user's screen.
+      // what keeps a prompt the runtime already holds on the user's screen.
       if (rendered.includes('<>')) {
         return !wanted.has(r.status) || (wantsForwarded && forwarded);
       }
@@ -303,7 +303,7 @@ mock.module('../session-lifecycle', () => ({
       outcome: 'edited',
       row: row({
         idempotencyKey: `prompt:${SESSION_ID}:q_1`,
-        payload: { text: 'say hi', clientMessageId: 'q_1', wireMessageId: WIRE_ID, delivery: 'interrupt', placement: 'transcript' },
+        payload: { text: 'say hi', clientMessageId: 'q_1', wireMessageId: WIRE_ID, delivery: 'steer', remintOnDelivery: true },
         result: { promoted: true },
       }),
     };
@@ -358,7 +358,7 @@ mock.module('../lib/agent-access', () => ({
 }));
 
 // The Stop's first request is the hold, and the hold's background settle can
-// abort OpenCode before the client's own abort leaves the browser. So the hold
+// abort the runtime before the client's own abort leaves the browser. So the hold
 // must stamp the requested stop on the open turn BEFORE the settle starts.
 // Both are recorded into one ordered log.
 const stopLog: unknown[][] = [];
@@ -506,17 +506,19 @@ describe('POST .../prompts', () => {
     });
   });
 
-  test('delivery sets the stored placement; placement alone keeps its meaning (R10)', async () => {
+  test('every row is stored as steer; delivery only picks where an older client draws it', async () => {
     await post({ ...validBody, delivery: 'steer' });
     await post({ ...validBody, client_message_id: 'q_2', delivery: 'interrupt', placement: 'composer' });
     await post({ ...validBody, client_message_id: 'q_3', placement: 'transcript' });
+    await post({ ...validBody, client_message_id: 'q_5', delivery: 'queue' });
     expect(enqueued.map((e) => [e.delivery, e.placement])).toEqual([
       ['steer', 'composer'],
-      ['interrupt', 'transcript'],
-      [undefined, 'transcript'],
+      ['steer', 'transcript'],
+      ['steer', 'transcript'],
+      ['steer', 'composer'],
     ]);
     expect((await post({ ...validBody, client_message_id: 'q_4', delivery: 'now' })).status).toBe(400);
-    expect(enqueued).toHaveLength(3);
+    expect(enqueued).toHaveLength(4);
   });
 
   test('carries the client-minted wire id, the parts and the overrides into the payload', async () => {
@@ -564,7 +566,7 @@ describe('POST .../prompts', () => {
   });
 
   // `kortix sessions send` ≤ 2026-09 minted the HIGH bits of the id clock
-  // (`msg_1a0d…`, ~40 days ahead of every id OpenCode writes). Refusing it
+  // (`msg_1a0d…`, ~40 days ahead of every id a box writes). Refusing it
   // would break every installed CLI; delivering it as-is renders every later
   // turn above it. The server places it instead.
   test('a far-future message_id is accepted and re-placed on delivery', async () => {
@@ -669,8 +671,8 @@ describe('POST .../prompts', () => {
   });
 
   test('rejects a message id OpenCode cannot order', async () => {
-    // A badly-shaped id sorts below the transcript and OpenCode reads the
-    // prompt as already answered — the turn silently never runs.
+    // A badly-shaped id sorts below the transcript and an OpenCode box reads
+    // the prompt as already answered — the turn silently never runs.
     for (const messageId of ['msg_TOOSHORT', 'cm_12', `${WIRE_ID}extra`, 'msg_ZZZZZZZZZZZZAbCdEfGhIjKlMn']) {
       const response = await post({ ...validBody, message_id: messageId });
       expect(response.status).toBe(400);
@@ -718,20 +720,19 @@ describe('POST .../prompts', () => {
     };
     beforeEach(() => {
       loadedProject = {
-        row: { accountId: ACCOUNT_ID, projectId: PROJECT_ID, metadata: { experimental: { notification_center: true } } },
+        row: { accountId: ACCOUNT_ID, projectId: PROJECT_ID, metadata: {} },
         userId: USER_ID,
       };
       visibleSession = { row: { sessionId: SESSION_ID, metadata: {}, createdBy: OTHER_CREATOR } };
     });
 
-    test('with the notification_center flag off, the prompt is accepted and nobody follows', async () => {
-      for (const metadata of [{}, { experimental: { notification_center: false } }]) {
-        loadedProject = { row: { accountId: ACCOUNT_ID, projectId: PROJECT_ID, metadata }, userId: USER_ID };
-        asCredential('supabase', 'jwt');
-        expect((await post({ ...validBody, client_message_id: `off_${enqueued.length}` })).status).toBe(202);
-      }
-      expect(enqueued).toHaveLength(2);
-      expect(autoWatches).toEqual([]);
+    // The flag graduated on 2026-11-06: a stored override changes no follow.
+    test('with a stored notification_center: false override, the prompter still follows', async () => {
+      loadedProject = { row: { accountId: ACCOUNT_ID, projectId: PROJECT_ID, metadata: { experimental: { notification_center: false } } }, userId: USER_ID };
+      asCredential('supabase', 'jwt');
+      expect((await post(validBody)).status).toBe(202);
+      expect(enqueued).toHaveLength(1);
+      expect(autoWatches).toEqual([{ projectId: PROJECT_ID, sessionId: SESSION_ID, userId: USER_ID }]);
     });
 
     test('a browser sign-in and a personal CLI token start following the session', async () => {
@@ -810,7 +811,7 @@ describe('GET .../prompts', () => {
         full_text: 'say hi',
         placement: 'composer',
         // A row from before steering: `queue`, as its placement implies.
-        delivery: 'queue',
+        delivery: 'steer',
         steer_fallback: null,
         attempts: 0,
         runtime_retries: 0,
@@ -878,7 +879,7 @@ describe('GET .../prompts', () => {
 
   test('a FORWARDED row is still listed, as `delivering`', async () => {
     // `succeeded` normally means "gone from the inbox — it IS the transcript".
-    // A forwarded row is the exception: OpenCode has the message and has not
+    // A forwarded row is the exception: the runtime has the message and has not
     // run it yet, so dropping it here is what left the composer with nothing
     // between the send and the turn.
     commandTable = [
@@ -961,7 +962,7 @@ describe('DELETE .../prompts/:promptId', () => {
     expect(await response.json()).toEqual({
       removed: {
         placement: 'composer',
-        delivery: 'queue',
+        delivery: 'steer',
         prompt_id: PROMPT_ID,
         removed_message_ids: [WIRE_ID],
         client_message_id: 'q_1',
@@ -986,7 +987,7 @@ describe('DELETE .../prompts/:promptId', () => {
 
   test('refuses to remove a prompt OpenCode already has', async () => {
     // A forwarded row is `succeeded`, so the delete's status filter never
-    // matches it — but "no row was removed" here is 409, not 404: OpenCode has
+    // matches it — but "no row was removed" here is 409, not 404: the runtime has
     // persisted that user message and is going to answer it.
     commandTable = [
       row({ status: 'succeeded', result: { status: 'forwarded', forwarded_message_id: WIRE_ID } }),
@@ -1055,10 +1056,10 @@ describe('PATCH .../prompts/:promptId', () => {
     expect((await edit({ text: 'x' }, 'not-a-uuid')).status).toBe(400);
   });
 
-  test('"Stop and send": delivery interrupt converts the row and kicks the drain (R10)', async () => {
+  test('"Send now": delivery interrupt promotes the row and kicks the drain', async () => {
     const response = await edit({ delivery: 'interrupt' });
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ delivery: 'interrupt', placement: 'transcript' });
+    expect(await response.json()).toMatchObject({ delivery: 'steer' });
     expect(interrupts).toEqual([PROMPT_ID]);
     expect(edits).toHaveLength(0);
     expect(drains).toEqual([{ idempotencyKey: `prompt:${SESSION_ID}:q_1` }]);
@@ -1107,7 +1108,7 @@ describe('POST .../prompts/:promptId/retry', () => {
     // The DISPLAY marker is cleared — the row is no longer "waiting" — but the
     // DURABLE one survives in the payload. Clearing both is what sent a
     // promoted prompt under the id the client minted before the turn it waited
-    // out: OpenCode orders by id and reads a lower one as already answered.
+    // out: an OpenCode box orders by id and reads a lower one as already answered.
     expect(commandTable[0].result).toEqual({ promoted: true });
     expect(commandTable[0].payload.remintOnDelivery).toBe(true);
     expect(commandTable[0].payload.wireMessageId).toBe(WIRE_ID);
@@ -1120,7 +1121,7 @@ describe('POST .../prompts/:promptId/retry', () => {
   });
 
   test('refuses a FORWARDED row — re-sending it would post the message twice', async () => {
-    // OpenCode already holds this user message. "Send now" on it would deliver
+    // The runtime already holds this user message. "Send now" on it would deliver
     // a second copy under a re-minted id, not hurry the first one along.
     commandTable = [
       row({ status: 'succeeded', result: { status: 'forwarded', forwarded_message_id: WIRE_ID } }),
@@ -1202,7 +1203,7 @@ describe('POST .../prompts/hold', () => {
   });
 
   test('a FORWARDED row is stop-paused by the hold, and re-queued by the release', async () => {
-    // The Stop button's two halves for a prompt OpenCode already has: park it
+    // The Stop button's two halves for a prompt the runtime already has: park it
     // (it stays `succeeded`, so nothing re-delivers it while the user is
     // stopped), then put it back on the queue when the user sends anything.
     commandTable = [
@@ -1230,7 +1231,7 @@ describe('POST .../prompts/hold', () => {
     ];
     expect((await hold({ held: true })).status).toBe(200);
     expect(stopLog).toEqual([
-      ['stamp', SESSION_ID, 'UserStop', { opencodeSessionId: 'ses_root' }, USER_ID],
+      ['stamp', SESSION_ID, 'UserStop', { runtimeSessionId: 'ses_root' }, USER_ID],
       ['settle', SESSION_ID],
     ]);
   });
@@ -1260,7 +1261,7 @@ describe('POST .../prompts/hold', () => {
       turnPrompter = USER_ID;
       commandTable = [row()];
       expect((await hold({ held: true })).status).toBe(200);
-      expect(stopLog[0]).toEqual(['stamp', SESSION_ID, 'UserStop', { opencodeSessionId: null }, USER_ID]);
+      expect(stopLog[0]).toEqual(['stamp', SESSION_ID, 'UserStop', { runtimeSessionId: null }, USER_ID]);
       expect(commandTable[0].result?.held).toBe(true);
     });
 
@@ -1270,7 +1271,7 @@ describe('POST .../prompts/hold', () => {
       visibleSession = { ...visibleSession, canManageLifecycle: true };
       commandTable = [row()];
       expect((await hold({ held: true })).status).toBe(200);
-      expect(stopLog[0]).toEqual(['stamp', SESSION_ID, 'UserStop', { opencodeSessionId: null }, USER_ID]);
+      expect(stopLog[0]).toEqual(['stamp', SESSION_ID, 'UserStop', { runtimeSessionId: null }, USER_ID]);
     });
 
     test('with no running turn a hold only pauses the queue, open to anyone who may send', async () => {
@@ -1298,42 +1299,17 @@ describe('POST .../prompts/hold', () => {
       expect(stopChecks).toEqual([{ callerUserId: null, canManageLifecycle: false }]);
       visibleSession = { ...visibleSession, canManageLifecycle: true };
       expect((await hold({ held: true })).status).toBe(200);
-      expect(stopLog[0]).toEqual(['stamp', SESSION_ID, 'UserStop', { opencodeSessionId: null }, null]);
+      expect(stopLog[0]).toEqual(['stamp', SESSION_ID, 'UserStop', { runtimeSessionId: null }, null]);
     });
   });
 });
 
 // "Stop and send" ends the running turn after its current tool, so it asks
 // what Stop asks. Refused before any write.
-describe('Stop and send on a turn another member prompted', () => {
-  test('PATCH delivery interrupt → 403 not_turn_prompter; nothing is edited or sent', async () => {
+describe('a send into a turn another member prompted', () => {
+  test('PATCH "send now" and POST with any delivery need no stop authority: nothing stops the turn', async () => {
     turnRunning = true;
     turnPrompter = OTHER_MEMBER;
-    const response = await app().request(`${base()}/${PROMPT_ID}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: 'rewritten', delivery: 'interrupt' }),
-    });
-    expect(response.status).toBe(403);
-    expect(await response.json()).toEqual(NOT_TURN_PROMPTER_BODY);
-    expect(edits).toEqual([]);
-    expect(interrupts).toEqual([]);
-    expect(drains).toEqual([]);
-  });
-
-  test('POST delivery interrupt → 403 not_turn_prompter; nothing is queued', async () => {
-    turnRunning = true;
-    turnPrompter = OTHER_MEMBER;
-    const response = await post({ ...validBody, delivery: 'interrupt' });
-    expect(response.status).toBe(403);
-    expect(await response.json()).toEqual(NOT_TURN_PROMPTER_BODY);
-    expect(enqueued).toEqual([]);
-  });
-
-  test('the prompter, the owner or a manager may; a steer or queue send never asks', async () => {
-    turnRunning = true;
-    turnPrompter = USER_ID;
-    expect((await post({ ...validBody, delivery: 'interrupt' })).status).toBe(202);
     const patched = await app().request(`${base()}/${PROMPT_ID}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -1341,21 +1317,12 @@ describe('Stop and send on a turn another member prompted', () => {
     });
     expect(patched.status).toBe(200);
     expect(interrupts).toEqual([PROMPT_ID]);
-    turnPrompter = OTHER_MEMBER;
-    visibleSession = { ...visibleSession, canManageLifecycle: true };
-    expect((await post({ ...validBody, client_message_id: 'q_2', delivery: 'interrupt' })).status).toBe(202);
-    stopChecks = [];
-    visibleSession = { ...visibleSession, canManageLifecycle: false };
-    expect((await post({ ...validBody, client_message_id: 'q_3', delivery: 'steer' })).status).toBe(202);
-    expect((await post({ ...validBody, client_message_id: 'q_4', delivery: 'queue' })).status).toBe(202);
+    for (const [id, delivery] of [['q_2', 'interrupt'], ['q_3', 'steer'], ['q_4', 'queue']] as const) {
+      expect((await post({ ...validBody, client_message_id: id, delivery })).status).toBe(202);
+    }
     expect(stopChecks).toEqual([]);
-  });
-
-  test("an owner's or manager's send carries mayStopAnyTurn; anyone else's does not", async () => {
-    await post(validBody);
-    visibleSession = { ...visibleSession, canManageLifecycle: true };
-    await post({ ...validBody, client_message_id: 'q_2' });
-    expect(enqueued.map((e) => e.mayStopAnyTurn)).toEqual([undefined, true]);
+    expect(enqueued.map((e) => e.delivery)).toEqual(['steer', 'steer', 'steer']);
+    expect(enqueued.map((e) => e.mayStopAnyTurn)).toEqual([undefined, undefined, undefined]);
   });
 });
 
@@ -1442,4 +1409,71 @@ describe("another member's queued prompt", () => {
     expect((await call('DELETE')).status).toBe(200);
     expect(commandTable).toEqual([]);
   });
+});
+
+// KRTX-4437: DELETE, PATCH, retry and hold share one gate — floor 'session',
+// the session-start agent scope and capability, a visible session, no tombstone.
+// Pinned per route so collapsing the four copies into one helper moves nothing.
+describe('the runnable-session gate of DELETE, PATCH, retry and hold', () => {
+  const routes: Array<[string, () => Response | Promise<Response>]> = [
+    ['DELETE', () => app().request(`${base()}/${PROMPT_ID}`, { method: 'DELETE' })],
+    [
+      'PATCH',
+      () =>
+        app().request(`${base()}/${PROMPT_ID}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: 'x' }),
+        }),
+    ],
+    ['retry', () => app().request(`${base()}/${PROMPT_ID}/retry`, { method: 'POST' })],
+    [
+      'hold',
+      () =>
+        app().request(`${base()}/hold`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ held: true }),
+        }),
+    ],
+  ];
+
+  for (const [name, call] of routes) {
+    test(`${name}: loads the project at floor 'session' and asserts session-start`, async () => {
+      commandTable = [row()];
+      await call();
+      expect(loadProjectCalls).toEqual([{ projectId: PROJECT_ID, action: 'session' }]);
+      expect(capabilityCalls).toEqual(['project.session.start']);
+    });
+
+    test(`${name}: 404s an unknown project before any capability check`, async () => {
+      loadedProject = null;
+      const response = await call();
+      expect(response.status).toBe(404);
+      expect(await response.json()).toEqual({ error: 'Not found' });
+      expect(capabilityCalls).toEqual([]);
+    });
+
+    test(`${name}: 404s a session that is not visible, touching no row`, async () => {
+      commandTable = [row()];
+      visibleSession = null;
+      const response = await call();
+      expect(response.status).toBe(404);
+      expect(await response.json()).toEqual({ error: 'Not found' });
+      expect(commandTable).toEqual([row()]);
+      expect(edits).toEqual([]);
+      expect(interrupts).toEqual([]);
+    });
+
+    test(`${name}: 404s a tombstoned session, touching no row`, async () => {
+      commandTable = [row()];
+      visibleSession = { row: { sessionId: SESSION_ID, metadata: { deletedAt: '2026-08-17T00:00:00Z' } } };
+      const response = await call();
+      expect(response.status).toBe(404);
+      expect(await response.json()).toEqual({ error: 'Not found' });
+      expect(commandTable).toEqual([row()]);
+      expect(edits).toEqual([]);
+      expect(interrupts).toEqual([]);
+    });
+  }
 });

@@ -146,3 +146,37 @@ c16b74338b9c53744201aac00694984253a52f0e:apps/api/src/connectors/one-click-mcp.j
 5ff9561db6f034631d87e14e5da9a5e5fdf4d1d3:.gitleaksignore:stripe-access-token:142
 86568ba13c873221ae9bed0257f77d80089df580:.gitleaksignore:stripe-access-token:142
 4aedc2099e18a97b46283e64b4920d5330d34589:apps/api/src/__tests__/integration-held-call-store.test.ts:stripe-access-token:151
+
+# v0.16.0 release PR (2026-11-09). WS-AUTH-10 (tests/src/flows/workspace-auth.flow.ts)
+# mints a workspace key and wraps it in a test Principal: keyPrincipal(...).secret_key,
+# 'WSA10_MINTER'). The flagged value is that Principal's display LABEL (a made-up
+# test constant, single use, asserted by nothing), not a credential; no live
+# wallet, key or token value appears on the line. Reviewed by the release train.
+45da88f99de472f388d7ed35efff89ab973aa22e:tests/src/flows/workspace-auth.flow.ts:generic-api-key:612
+
+# v0.15.3 release PR (2026-11-09). tests/unit/client-resilience.test.ts (#12154)
+# used a synthetic JWT-shaped string (`{"alg":"HS256"}.{"sub":"1"}.abc_sig`,
+# signature literally `abc_sig`) as the body a status-assert redaction test
+# must mask. Not a credential. The test now assembles it at runtime; these
+# are the commits where it was one literal (#12154 on dev, its staging cherry-pick).
+a707e3ec4aaae045708f2d04f70ac907e39be46e:tests/unit/client-resilience.test.ts:generic-api-key:343
+b214b7afb277b75ee9726ab828002b90e49245db:tests/unit/client-resilience.test.ts:generic-api-key:343
+# Synthetic live-mode-shaped key (`sk_live_synthetic_…`) the `kortix plan`
+# black-box test classifies as `prod`. Not a credential. The test now assembles
+# it at runtime; this is the commit where it was one literal (#12644).
+d61aa124384b7232c32c08d17d566e797f142133:apps/cli/src/__tests__/plan.blackbox.test.ts:generic-api-key:15
+
+# apps/api/src/projects/evals/hub.ts holds the Harbor Hub's Supabase
+# PUBLISHABLE key (sb_publishable_…): public and read-only by design, the same
+# value Harbor ships in its own open-source client (src/harbor/auth/constants.py).
+# It reads public eval tasks; it is not a Kortix credential.
+6093ff1aa5ad5338b4aa0af63221a870cf702001:apps/api/src/projects/evals/hub.ts:generic-api-key:22
+# apps/cli/src/__tests__/secrets-browser-plugin.test.ts holds a SYNTHETIC test
+# password ('synthetic-pw-…', with quote and brace characters to test JSON
+# escaping) that a fake API returns to the CLI's agent-browser plugin. It is no
+# credential anywhere.
+248a69bbc5f339dc154a8e75336b2a890efdff02:apps/cli/src/__tests__/secrets-browser-plugin.test.ts:generic-api-key:8
+# Synthetic workspace-cache content keys in parser/poll fixtures, not API credentials.
+# Both historical literals are constructed ws-<content>-<suffix>-<timestamp> values.
+ce4e12f5c6a841944497179430b4b2cd68d1c708:apps/api/src/__tests__/unit-workspace-cache-builder.test.ts:generic-api-key:78
+6805b7b38bf0f174f9c96b9e4bf695c30f39d069:apps/api/src/__tests__/unit-workspace-cache-builder.test.ts:generic-api-key:50

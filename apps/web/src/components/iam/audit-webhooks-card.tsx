@@ -22,7 +22,7 @@ import { Badge } from '@kortix/ui/badge';
 import { Button } from '@kortix/ui/button';
 import { ConfirmDialog } from '@kortix/ui/confirm-dialog';
 import { EntityAvatar } from '@kortix/ui/entity-avatar';
-import { InfoBanner } from '@kortix/ui/info-banner';
+import { Alert as BannerAlert, AlertDescription as BannerAlertDescription, AlertMedia as BannerAlertMedia } from '@kortix/ui/alert';
 import { Input } from '@kortix/ui/input';
 import { Label } from '@kortix/ui/label';
 import Loading from '@kortix/ui/loading';
@@ -169,7 +169,9 @@ export function AuditWebhooksCard({ accountId, canManage }: AuditWebhooksCardPro
             const kebab: KebabItem[] = canManage
               ? [
                   {
-                    label: h.enabled ? 'Disable' : 'Enable',
+                    label: h.enabled
+                      ? tI18nComplete.raw('textb7e3e4aa4257')
+                      : tI18nComplete.raw('text5342e09f2729'),
                     icon: <PowerIcon className="size-3.5 shrink-0" />,
                     onSelect: () => {
                       setTogglingId(h.webhook_id);
@@ -193,7 +195,9 @@ export function AuditWebhooksCard({ accountId, canManage }: AuditWebhooksCardPro
                 badges={
                   <>
                     <Badge variant={h.enabled ? 'success' : 'muted'} size="sm">
-                      {h.enabled ? 'enabled' : 'disabled'}
+                      {h.enabled
+                        ? tI18nComplete.raw('textfb9cf75606b4')
+                        : tI18nComplete.raw('text17eb3c0168d0')}
                     </Badge>
                     {h.action_prefix ? (
                       <Badge
@@ -211,7 +215,9 @@ export function AuditWebhooksCard({ accountId, canManage }: AuditWebhooksCardPro
                   <code key="url" className="font-mono">
                     {h.url}
                   </code>,
-                  `Last delivered ${formatRelative(h.last_delivered_at)}`,
+                  tI18nComplete('texte80e342954ec', {
+                    value0: formatRelative(h.last_delivered_at),
+                  }),
                   ...(h.last_error
                     ? [
                         <span key="error" className="text-kortix-red">
@@ -340,15 +346,15 @@ function CreateAuditWebhookDialog({
                   every real audit event). */}
               {created.test &&
                 (created.test.ok ? (
-                  <InfoBanner tone="success" icon={Check}>
+                  <BannerAlert variant="success" ><BannerAlertMedia><Check /></BannerAlertMedia><BannerAlertDescription>
                     {tI18nComplete.raw('text648e418a5d31')}
-                  </InfoBanner>
+                  </BannerAlertDescription></BannerAlert>
                 ) : (
-                  <InfoBanner tone="warning" icon={AlertTriangle}>
+                  <BannerAlert variant="warning" ><BannerAlertMedia><AlertTriangle /></BannerAlertMedia><BannerAlertDescription>
                     {tI18nComplete.raw('text0bb4b2553043')}
                     {created.test.error ? `: ${created.test.error}` : ''}
                     {tI18nComplete.raw('text4b85caae9864')}
-                  </InfoBanner>
+                  </BannerAlertDescription></BannerAlert>
                 ))}
               <CopyRow
                 label={tI18nComplete.raw('texte7ee22e117a1')}
@@ -440,7 +446,7 @@ function CreateAuditWebhookDialog({
                       className={`rounded-full border px-2 py-0.5 text-xs transition-colors ${
                         actionPrefix === preset.prefix
                           ? 'border-primary bg-primary/[0.08] text-foreground'
-                          : 'border-border/60 text-muted-foreground hover:bg-muted/40'
+                          : 'border-border text-muted-foreground hover:bg-muted/40'
                       }`}
                       disabled={mutation.isPending}
                     >

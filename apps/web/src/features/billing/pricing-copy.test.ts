@@ -1,6 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from '@/i18n/test-source';
+import { CompareTable } from '@/features/marketing/pricing/compare-table';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { join } from 'node:path';
+
+import { PLAN_BONUS_STEPS } from '@kortix/ui/internal/billing/compute-pricing';
 
 import { PRICING_FEATURE_COUNTS, PRICING_PLANS } from './pricing-plans';
 
@@ -67,17 +72,39 @@ describe('pricing copy', () => {
     }
   });
 
+  test('the Free answer states the first-workspace rule from the facts: no workspace cap, no managed models on Free', () => {
+    // Free has no workspace cap: only a person's first workspace gets the
+    // monthly credits (review finding 33). Free has no managed models
+    // (plan-catalog.ts: managedModels false on Free).
+    for (const locale of locales) {
+      expect(catalog(locale).billing.pricing.faq.free.answer).toContain('{freeCredits}');
+    }
+    const answer = english.billing.pricing.faq.free.answer;
+    expect(answer).toContain('on your first workspace');
+    expect(answer).not.toMatch(/\b(1|one) workspace\b/i);
+    expect(answer.replace('Kortix-managed models need Credits', '')).not.toMatch(/managed models/i);
+  });
+
   test('the credit rate is stated as 1 credit = $0.01', () => {
     expect(english.billing.credits.planCard.rate).toContain('1 credit = $0.01');
     expect(english.billing.pricing.faq.credit.answer).toContain('1 credit is $0.01');
   });
 
-  test('the FAQ states the tier range and the one rate, and names no tier most popular', () => {
+  test('the FAQ states the tier range and the volume bonus from compute-pricing, and names no tier most popular', () => {
+    for (const locale of locales) {
+      const answer = catalog(locale).billing.pricing.faq.amounts.answer;
+      for (const token of ['{minUsd}', '{minCredits}', '{maxUsd}', '{maxCredits}', '{firstBonus}', '{firstBonusUsd}', '{topBonus}', '{topBonusUsd}']) {
+        expect(answer).toContain(token);
+      }
+    }
     const answer = english.billing.pricing.faq.amounts.answer;
-    expect(answer).toContain('$50 a month (5,000 credits)');
-    expect(answer).toContain('$50,000 a month (5,000,000 credits)');
     expect(answer).not.toContain('most popular');
-    expect(answer).toContain('100 credits per dollar');
+    expect(answer).toContain('more credits per dollar');
+  });
+
+  test('the Credits card names the top plan bonus that compute-pricing grants', () => {
+    const top = Math.max(...PLAN_BONUS_STEPS.map((step) => step.percent));
+    expect(PRICING_PLANS.find((plan) => plan.id === 'credits')!.features).toContain(`Up to ${top}% bonus credits on bigger tiers`);
   });
 
   test('the FAQ answers what happened to existing plans and to members', () => {
@@ -102,10 +129,36 @@ describe('pricing copy', () => {
     expect(english.billing.pricing.faq.models.answer).toContain('{fee}% platform fee');
   });
 
-  test('the top-up FAQ states the bonus ladder from compute-pricing, not literals', () => {
-    const answer = english.billing.pricing.faq.topup.answer;
-    for (const token of ['{smallestBonus}', '{smallestBonusUsd}', '{largestBonus}', '{largestBonusUsd}']) {
-      expect(answer).toContain(token);
+  // resolve-billing.ts `paysForManagedModels`: the free family never gets managed
+  // models, so the Free card must say what sending needs (KRTX-4494).
+  test('the Free plan states models run on your own key, and managed models are paid', () => {
+    const free = PRICING_PLANS.find((plan) => plan.id === 'free');
+    if (!free) throw new Error('the Free plan card is missing from PRICING_PLANS');
+    const features = free.features.join(' ');
+    expect(features).toContain('Models run on your own API key or ChatGPT subscription');
+    expect(features).toContain('Managed models are on the Credits plan only');
+    expect(features).not.toContain('premium model');
+    expect(english.billing.pricing.faq.free.answer).toContain('Kortix-managed models need Credits');
+  });
+
+  test('the compare table renders managed models off for Free, and names no retired model', () => {
+    const html = renderToStaticMarkup(createElement(CompareTable, { plans: PRICING_PLANS, locale: 'en' }));
+    // The row's three data cells read as the screen-reader marks, in plan order: Free, Credits, Enterprise.
+    const row = html
+      .split('<tr')
+      .find((segment) => segment.includes('Managed models: DeepSeek, GLM'));
+    if (!row) throw new Error('the Managed models row is missing from the rendered compare table');
+    const marks = [...row.matchAll(/>(Included|Not included)</g)].map((m) => m[1]);
+    expect(marks).toEqual(['Not included', 'Included', 'Included']);
+    expect(html).not.toContain('Kimi');
+  });
+
+  test('the mid-month FAQ sends people to a bigger tier: self-serve Credits sells no top-ups (plan-catalog.ts)', () => {
+    expect(english.billing.pricing.faq.topup.answer).toContain('raise your monthly tier');
+    expect(english.billing.pricing.faq.topup.answer).toContain('Enterprise');
+    for (const locale of locales) {
+      expect(catalog(locale).billing.pricing.faq.topup.answer).not.toMatch(/\{(smallest|largest)Bonus/);
     }
+    expect(JSON.stringify(PRICING_PLANS)).not.toMatch(/top up any time/i);
   });
 });

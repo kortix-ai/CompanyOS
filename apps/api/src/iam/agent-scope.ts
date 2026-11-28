@@ -1,4 +1,5 @@
-import { DEPRECATED_KORTIX_PERMISSION_ALIASES } from '@kortix/manifest-schema';
+import { DEPRECATED_KORTIX_PERMISSION_ALIASES, expandKortixPermissionGroup, isKortixPermissionGroup } from '@kortix/manifest-schema';
+import { toLegacyAction } from '@kortix/shared/workspace-actions';
 import { canonicalConnectorAlias } from '../shared/connector-alias';
 /**
  * Agent-session scope enforcement — the `kortix_permissions` half of per-agent
@@ -48,7 +49,7 @@ export {
  * (`canonicalizeGrantActions`, called from projects/agents.ts beside the
  * connector canonicalization). It is a spelling correction on INPUT — NOT a
  * runtime alias table, and NOT a second permission model: after normalization
- * `agentMayPerform` is a plain membership test against the catalog's spelling.
+ * grants contain catalog leaves, including leaves selected by group wildcards.
  */
 const MANIFEST_ACTION_ALIASES = DEPRECATED_KORTIX_PERMISSION_ALIASES;
 
@@ -60,20 +61,26 @@ const MANIFEST_ACTION_ALIASES = DEPRECATED_KORTIX_PERMISSION_ALIASES;
  */
 export function canonicalizeGrantActions(grant: AgentGrant | null): AgentGrant | null {
   if (!grant || grant.permissions === 'all') return grant;
-  const canonical = grant.permissions.flatMap((a) => MANIFEST_ACTION_ALIASES[a] ?? [a]);
+  // A workspace name (`workspace.gitops.push`) resolves to the legacy name the
+  // catalog stores, exactly like a renamed alias.
+  const canonical = grant.permissions.flatMap((a) => isKortixPermissionGroup(a) ? expandKortixPermissionGroup(a) : MANIFEST_ACTION_ALIASES[a] ?? [toLegacyAction(a)]);
   return { ...grant, permissions: [...new Set(canonical)] };
 }
 
 /**
  * True if the agent-session grant permits `action` (or there is no grant).
  *
- * A plain membership test. The grant list is already in the catalog's spelling —
- * see `canonicalizeGrantActions`.
+ * Resolved grants contain catalog leaves. Raw groups are also supported for
+ * callers reading stored or newly parsed grants before normalization.
  */
 export function agentMayPerform(grant: AgentGrant | null, action: string): boolean {
   if (!grant) return true; // no grant = no restriction
   if (grant.permissions === 'all') return true;
-  return grant.permissions.includes(action);
+  // Both sides in the legacy spelling: a grant minted before
+  // `canonicalizeGrantActions` learned the workspace names, or a caller that
+  // asks with a workspace name, still compares like for like.
+  const legacy = toLegacyAction(action);
+  return grant.permissions.some((a) => toLegacyAction(a) === legacy || expandKortixPermissionGroup(a).includes(legacy));
 }
 
 /**

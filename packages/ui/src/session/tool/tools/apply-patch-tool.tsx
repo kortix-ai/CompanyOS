@@ -43,7 +43,7 @@ const PATCH_ICON = {
   edit: PencilSimpleIcon,
 } as const;
 
-/** @deprecated Renders an OpenCode-only tool or todo list in an OpenCode session (pi has none). OpenCode is sunset (2026-10-23): no new code; delete with OpenCode. */
+/** @deprecated Renders an OpenCode-only tool or todo list (pi has none). Only a transcript OpenCode wrote holds one; this keeps it readable. No new code. */
 export function ApplyPatchTool({ call, defaultOpen, forceOpen, locked }: ToolProps) {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const patchTypeStyle = useLocalizedUiCatalog(PATCH_TYPE_STYLE);
@@ -179,7 +179,7 @@ export function ApplyPatchTool({ call, defaultOpen, forceOpen, locked }: ToolPro
                   {hasDiff ? (
                     <ChevronRight
                       className={cn(
-                        'text-muted-foreground/60 size-3.5 shrink-0 transition-transform',
+                        'text-muted-foreground size-3.5 shrink-0 transition-transform',
                         isOpen && 'rotate-90',
                       )}
                     />
@@ -218,7 +218,7 @@ export function ApplyPatchTool({ call, defaultOpen, forceOpen, locked }: ToolPro
                 </button>
 
                 {isOpen && hasDiff && (
-                  <div className="border-border/60 bg-muted/20 mt-1 mb-1 overflow-hidden rounded-sm border">
+                  <div className="border-border bg-muted/20 mt-1 mb-1 overflow-hidden rounded-sm border">
                     {file.before != null && file.after != null ? (
                       <InlineDiffView
                         oldValue={file.before}

@@ -776,3 +776,64 @@ flow('CLI-MODEL-CATALOG', {
     sandbox.dispose();
   }
 });
+
+flow(
+  'CLI-OPS',
+  {
+    domain: 'cli',
+    routes: [
+      'GET /v1/me',
+      'POST /v1/workspaces/:workspaceId/secrets',
+      'GET /v1/workspaces/:workspaceId/secrets',
+      'DELETE /v1/workspaces/:workspaceId/secrets/:name',
+    ],
+  },
+  async (ctx) => {
+    const project = await ctx.fixtures.project();
+    const sandbox = await authenticatedCli(ctx, 'ops');
+    const name = `CLI_OPS_${Date.now()}`;
+    try {
+      await ctx.step('kortix ops finds operations by words; ops describe names a flag per parameter', async () => {
+        const found = sandbox.run(['ops', 'secret', 'set']);
+        const out = await found;
+        requireExit(out, 0, 'kortix ops secret set');
+        if (!out.stdout.includes('secrets.set')) throw new Error(`ops: ${out.stdout.slice(0, 400)}`);
+        const described = await sandbox.run(['ops', 'describe', 'secrets.delete', '--json']);
+        const op = parseJson<{ id: string; method: string; parameters: Array<{ name: string }> }>(described, 'kortix ops describe');
+        if (op.id !== 'secrets.delete' || op.method !== 'DELETE' || !op.parameters.some((p) => p.name === 'name')) throw new Error(`describe: ${JSON.stringify(op)}`);
+      });
+
+      await ctx.step('an operation id is a command: secrets.set with --body writes the secret into --workspace; secrets.list reads it back', async () => {
+        requireExit(
+          await sandbox.run(['secrets.set', '--workspace', project.id, '--body', JSON.stringify({ name, value: 'v1' })]),
+          0,
+          'kortix secrets.set',
+        );
+        const listed = await sandbox.run(['secrets.list', '--workspace', project.id]);
+        requireExit(listed, 0, 'kortix secrets.list');
+        if (!listed.stdout.includes(`"${name}"`)) throw new Error(`secrets.list: ${listed.stdout.slice(0, 400)}`);
+      });
+
+      await ctx.step('a path parameter is a flag (--name), and the operation runs once: secrets.delete → the secret is gone', async () => {
+        requireExit(await sandbox.run(['secrets.delete', '--workspace', project.id, '--name', name]), 0, 'kortix secrets.delete');
+        const listed = await sandbox.run(['secrets.list', '--workspace', project.id]);
+        if (listed.stdout.includes(`"${name}"`)) throw new Error('the secret is still listed');
+      });
+
+      await ctx.step('an operation without a workspace parameter: me.get prints the caller as JSON', async () => {
+        const me = parseJson<{ user_id?: string; id?: string }>(await sandbox.run(['me.get']), 'kortix me.get');
+        if (!me.user_id && !me.id) throw new Error(`me.get: ${JSON.stringify(me).slice(0, 200)}`);
+      });
+
+      await ctx.step('a flag the operation does not take, or a body that is not JSON, exits 2 naming it', async () => {
+        const unknown = await sandbox.run(['secrets.list', '--workspace', project.id, '--nope', 'x']);
+        requireExit(unknown, 2, 'kortix secrets.list --nope');
+        if (!unknown.stderr.includes('--nope')) throw new Error(`unknown flag: ${unknown.stderr.slice(0, 200)}`);
+        const bad = await sandbox.run(['secrets.set', '--workspace', project.id, '--body', '{oops']);
+        requireExit(bad, 2, 'kortix secrets.set --body {oops');
+      });
+    } finally {
+      sandbox.dispose();
+    }
+  },
+);

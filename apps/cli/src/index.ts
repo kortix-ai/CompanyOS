@@ -46,6 +46,7 @@ import { runSandboxes } from './commands/sandboxes.ts';
 import { runSchema } from './commands/schema.ts';
 import { runTemplates } from './commands/templates.ts';
 import { runSecrets } from './commands/secrets.ts';
+import { operationNamed, runOperation, runOps } from './commands/operations.ts';
 import { runSelfHost } from './commands/self-host.ts';
 import { runSessionsChat } from './commands/sessions-chat.ts';
 import { runSessions } from './commands/sessions.ts';
@@ -279,6 +280,7 @@ const COMMAND_HANDLERS: Record<string, RootCommandHandler> = {
   remind: (rest) => runReminders(rest, true),
   connectors: (rest) => runConnectors(rest),
   secrets: (rest) => runSecrets(rest),
+  ops: (rest) => runOps(rest),
   providers: (rest) => runProviders(rest),
   env: (rest) => runEnv(rest),
   gateway: (rest) => runGateway(rest),
@@ -440,6 +442,9 @@ async function main(rawArgv: string[]): Promise<number> {
     }
     return handler(argv.slice(1), argv[0]);
   }
+  // An operation id (`secrets.set`) is a command: generated from the API's own routes.
+  const operation = operationNamed(argv[0]);
+  if (operation) return runOperation(operation, argv.slice(1));
   // Anything else is an unknown command. This must NEVER fall through to a
   // project scaffold — `kortix <new-project-name>` used to, which turned
   // every mistyped subcommand into a freshly scaffolded directory in cwd.
@@ -517,7 +522,8 @@ function printActiveHostNotice(argv: readonly string[]): void {
  *  `kortix whoami --json 2>&1 | jq` both parse. The command's own
  *  diagnostics (auth errors, API failures) always keep their stream. */
 function isMachineOutput(argv: readonly string[]): boolean {
-  return argv.includes('--json');
+  // An operation command (`kortix secrets.set`) always answers JSON.
+  return argv.includes('--json') || operationNamed(argv[0]) !== null;
 }
 
 // Passive, cache-only nudge for subcommands (never touches the network, so it

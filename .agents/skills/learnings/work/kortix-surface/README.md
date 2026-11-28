@@ -87,7 +87,15 @@ has is a connector behind one gateway.
    `run_command` in a session box, where the CLI and the SDK are; an
    in-process code runner in the API is attack surface with no gain.
    Flows `MCP-1/3/4/5`.
-9. The CLI generated from the catalog.
+9. **6, built (generated layer).** Every operation id is a CLI command
+   (`kortix secrets.set --body …`, flags = parameters, workspace from
+   context, JSON out, exit 3 = held for approval); `kortix ops` finds and
+   describes them (`apps/cli/src/commands/operations.ts`). Flow `CLI-OPS`.
+   **Not done: removing hand-written commands.** They add tables, prompts,
+   streaming and file transfer that a JSON command lacks, and dozens of
+   flows drive them; each one is removed only after a parity check of its
+   output against its operation command. Next step: list the hand-written
+   commands that are a single GET or POST with no rendering beyond JSON.
 10. Featured actions replace the `kortix_*` tools; agent-minted keys carry
     the minter's limits; `HUMAN_ONLY` becomes "always ask".
 

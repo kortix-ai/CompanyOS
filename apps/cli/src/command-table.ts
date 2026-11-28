@@ -41,6 +41,11 @@ export const TIERS: readonly CommandTier[] = [
             args: '[get <name>]',
             blurb: 'Learn how to drive Kortix — the platform docs, served live by your host',
           },
+          {
+            name: 'ops',
+            args: '[words…] | describe <id>',
+            blurb: 'Every Kortix API operation by id; run one as `kortix <id> --param value [--body JSON]`',
+          },
         ],
       },
     ],

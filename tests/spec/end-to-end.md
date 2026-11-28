@@ -933,6 +933,7 @@ The first-ship creation cases below apply only when no explicit project, folder 
 `CLI-MODEL-CATALOG` `kortix models ls --project <id>` (KRTX-1539) on a fresh project → `--json` lists the runnable `models` and a `catalog` of unavailable ids, each with `availability` `plan`, `login` or `provider`, and no catalog id among the runnable models; the terminal output names every catalog id under `Unavailable catalog ids`.
 `CLI-SEC` `kortix secrets ls|set|unset` + `kortix env pull|push` → maps to §6 (values write-only).
 `CLI-TRG` `kortix triggers ls|fire|enable|disable|info` → maps to §12.
+`CLI-OPS` Every API operation is a command, by its id. `kortix ops secret set` lists `secrets.set`; `kortix ops describe secrets.delete --json` → `{id, method: DELETE, parameters: [… name …]}`. `kortix secrets.set --workspace <w> --body '{"name":…,"value":…}'` → exit 0 and `kortix secrets.list --workspace <w>` prints it; `kortix secrets.delete --workspace <w> --name <n>` → exit 0 and it is gone; `kortix me.get` prints the caller. An unknown flag (`--nope`) or a non-JSON `--body` → exit 2 naming it.
 
 ---
 

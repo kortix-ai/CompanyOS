@@ -18,9 +18,11 @@ export interface CustomLlmProvider {
    * `output` are the model's token limits, read from the endpoint's `GET /models`
    * on save; absent, the gateway serves a 128k window. `attachment` (reads
    * images) and `reasoning` (takes `reasoning_effort`) come from the same read
-   * or from the switches; absent means false.
+   * or from the switches; absent means false. `reasoning_efforts` lists the
+   * `reasoning_effort` values a reasoning model takes, read from the same
+   * endpoint or given; absent, it serves low/medium/high.
    */
-  models: { id: string; name: string; context?: number; output?: number; attachment?: boolean; reasoning?: boolean }[];
+  models: { id: string; name: string; context?: number; output?: number; attachment?: boolean; reasoning?: boolean; reasoning_efforts?: string[] }[];
   /** The project secret that holds the key: `CUSTOM_<ID>_API_KEY`. */
   secret_name: string;
   /** The project-wide secret exists. The key is optional. */
@@ -34,7 +36,7 @@ export interface CustomLlmProviderInput {
   name: string;
   base_url: string;
   /** Each field overrides what the endpoint's `GET /models` reports; leave it out to use the endpoint's. */
-  models: { id: string; name: string; context?: number; output?: number; attachment?: boolean; reasoning?: boolean }[];
+  models: { id: string; name: string; context?: number; output?: number; attachment?: boolean; reasoning?: boolean; reasoning_efforts?: string[] }[];
 }
 
 /** Every custom provider of the project, legacy key-only rows included (`configured: false`). */

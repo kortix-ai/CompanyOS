@@ -33,6 +33,8 @@ const CustomLlmProviderSchema = z.object({
     attachment: z.boolean().optional(),
     /** Reasons and takes `reasoning_effort`; absent: false. */
     reasoning: z.boolean().optional(),
+    /** The `reasoning_effort` values it takes; absent: low/medium/high. */
+    reasoning_efforts: z.array(z.string()).optional(),
   })),
   secret_name: z.string(),
   has_key: z.boolean(),

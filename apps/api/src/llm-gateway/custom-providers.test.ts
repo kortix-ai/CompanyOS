@@ -99,6 +99,39 @@ describe('custom provider definitions', () => {
     const [saved] = upsertCustomProvider([], 'p', { name: 'P', base_url: 'https://h.example/v1', models: [{ id: 'm', name: 'M', output: 8_000 }] }, detected);
     expect(saved!.models).toEqual([{ id: 'm', name: 'M', context: 1_048_576, output: 8_000 }]);
   });
+
+  test('a model serves the effort levels its endpoint listed, else the standard three', () => {
+    const five = ['low', 'medium', 'high', 'xhigh', 'max'];
+    const catalog = customProviderCatalog([{ ...railway, models: [
+      { id: 'five', name: 'Five', reasoning: true, reasoning_efforts: five },
+      { id: 'stored-junk', name: 'Junk', reasoning: true, reasoning_efforts: ['has space', 7] as never },
+      { id: 'off', name: 'Off', reasoning_efforts: five },
+    ] }]);
+    expect(catalog['railway/five']?.reasoning_options).toEqual([{ type: 'effort', values: five }]);
+    expect(catalog['railway/stored-junk']?.reasoning_options).toEqual([{ type: 'effort', values: ['low', 'medium', 'high'] }]);
+    expect(catalog['railway/off']).not.toHaveProperty('reasoning_options');
+  });
+
+  test('upsert stores detected effort levels; a list in the input wins', () => {
+    const detected = new Map([['m', { reasoning: true, reasoning_efforts: ['low', 'medium', 'high', 'xhigh', 'max'] }], ['n', { reasoning: true, reasoning_efforts: ['low', 'high'] }]]);
+    const [saved] = upsertCustomProvider([], 'p', { name: 'P', base_url: 'https://h.example/v1', models: [
+      { id: 'm', name: 'M' }, { id: 'n', name: 'N', reasoning_efforts: ['minimal', 'low'] },
+    ] }, detected);
+    expect(saved?.models).toEqual([
+      { id: 'm', name: 'M', reasoning: true, reasoning_efforts: ['low', 'medium', 'high', 'xhigh', 'max'] },
+      { id: 'n', name: 'N', reasoning: true, reasoning_efforts: ['minimal', 'low'] },
+    ]);
+  });
+
+  test('input takes 1 to 10 effort labels without whitespace', () => {
+    const parse = (reasoning_efforts: unknown) => CustomLlmProviderInputSchema.safeParse({
+      name: 'P', base_url: 'https://h.example/v1', models: [{ id: 'm', name: 'M', reasoning_efforts }],
+    }).success;
+    expect(parse(['low', 'xhigh', 'max'])).toBe(true);
+    expect(parse([])).toBe(false);
+    expect(parse(['has space'])).toBe(false);
+    expect(parse(Array.from({ length: 11 }, (_, i) => `e${i}`))).toBe(false);
+  });
 });
 
 describe('probeCustomModels', () => {
@@ -144,6 +177,22 @@ describe('probeCustomModels', () => {
     expect(Object.fromEntries(await probeCustomModels('https://h.example/v1', null))).toEqual({
       m: { context: 64, output: 8, attachment: undefined, reasoning: true },
     });
+  });
+  test('reads effort levels from reasoning_efforts, reasoning_levels or supported_reasoning_levels', async () => {
+    const five = ['low', 'medium', 'high', 'xhigh', 'max'];
+    modelsResponse = () => Response.json({ data: [
+      { id: 'efforts', reasoning_efforts: ['low', 'high'], reasoning_levels: five },
+      { id: 'levels', reasoning_levels: five, supported_parameters: ['reasoning'] },
+      { id: 'objects', supported_reasoning_levels: five.map((effort) => ({ effort })) },
+      { id: 'mixed', reasoning_levels: ['low', 'low', { effort: 'max' }, null, 'BAD LABEL', 3] },
+      { id: 'empty', reasoning_levels: [], supported_reasoning_levels: [], context_length: 8_000 },
+    ] });
+    const traits = await probeCustomModels('https://h.example/v1', null);
+    expect(traits.get('efforts')?.reasoning_efforts).toEqual(['low', 'high']);
+    expect(traits.get('levels')).toMatchObject({ reasoning: true, reasoning_efforts: five });
+    expect(traits.get('objects')?.reasoning_efforts).toEqual(five);
+    expect(traits.get('mixed')?.reasoning_efforts).toEqual(['low', 'max']);
+    expect(traits.get('empty')?.reasoning_efforts).toBeUndefined();
   });
   test('a refused, failing or malformed endpoint yields no limits', async () => {
     modelsResponse = () => new Response('no', { status: 401 });

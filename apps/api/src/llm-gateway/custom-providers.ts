@@ -20,8 +20,20 @@ export interface CustomLlmProviderDefinition {
   models: ({ id: string; name: string } & ModelTraits)[];
 }
 
-/** Token limits, image input and reasoning of one model. Absent: unknown. */
-export type ModelTraits = { context?: number; output?: number; attachment?: boolean; reasoning?: boolean };
+/** Token limits, image input, reasoning and its effort levels of one model. Absent: unknown. */
+export type ModelTraits = {
+  context?: number; output?: number; attachment?: boolean; reasoning?: boolean; reasoning_efforts?: string[];
+};
+
+const EFFORT = /^[a-z][a-z0-9_-]{0,31}$/;
+/** The effort labels in `value`, in order, deduplicated; undefined when none. Takes strings or `{ effort }`. */
+function effortList(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const labels = value.map((v) => (typeof v === 'string' ? v : (v as { effort?: unknown } | null)?.effort))
+    .filter((v): v is string => typeof v === 'string' && EFFORT.test(v));
+  const unique = [...new Set(labels)].slice(0, 10);
+  return unique.length ? unique : undefined;
+}
 
 export const CUSTOM_PROVIDERS_METADATA_KEY = 'custom_llm_providers';
 const PROVIDER_ID = /^[a-z0-9][a-z0-9_-]{0,63}$/;
@@ -45,6 +57,8 @@ export const CustomLlmProviderInputSchema = z.object({
     attachment: z.boolean().optional(),
     /** Reasons before it answers (takes `reasoning_effort`). Absent: read from the endpoint, else false. */
     reasoning: z.boolean().optional(),
+    /** The `reasoning_effort` values it takes, e.g. `["low","medium","high","xhigh","max"]`. Absent: read from the endpoint, else low/medium/high. */
+    reasoning_efforts: z.array(z.string().regex(EFFORT)).min(1).max(10).optional(),
   })).min(1).max(50),
 });
 export type CustomLlmProviderInput = z.infer<typeof CustomLlmProviderInputSchema>;
@@ -85,6 +99,7 @@ interface CustomModelWire {
   modalities?: { input?: unknown } | null;
   top_provider?: { context_length?: unknown; max_completion_tokens?: unknown } | null;
   supported_parameters?: unknown;
+  reasoning_efforts?: unknown; reasoning_levels?: unknown; supported_reasoning_levels?: unknown;
 }
 
 /**
@@ -92,7 +107,9 @@ interface CustomModelWire {
  * `context_window` (Morph), `max_model_len` (vLLM), `context_length`
  * (OpenRouter). Output: `max_output_tokens`, `max_completion_tokens`. Images:
  * `architecture.input_modalities` (OpenRouter) or `modalities.input`. Reasoning:
- * `supported_parameters` naming `reasoning`. Empty when the endpoint does not answer.
+ * `supported_parameters` naming `reasoning`. Effort levels: `reasoning_efforts`,
+ * `reasoning_levels` or `supported_reasoning_levels` (strings or `{ effort }`).
+ * Empty when the endpoint does not answer.
  */
 export async function probeCustomModels(baseUrl: string, apiKey: string | null): Promise<Map<string, ModelTraits>> {
   const out = new Map<string, ModelTraits>();
@@ -117,6 +134,8 @@ export async function probeCustomModels(baseUrl: string, apiKey: string | null):
           ?? positive(model.top_provider?.max_completion_tokens),
         attachment: Array.isArray(inputs) ? inputs.includes('image') : undefined,
         reasoning: Array.isArray(params) ? params.some((p: unknown) => p === 'reasoning' || p === 'reasoning_effort') : undefined,
+        reasoning_efforts: effortList(model.reasoning_efforts) ?? effortList(model.reasoning_levels)
+          ?? effortList(model.supported_reasoning_levels),
       };
       if (Object.values(traits).some((v) => v !== undefined)) out.set(model.id, traits);
     }
@@ -141,6 +160,7 @@ export function upsertCustomProvider(
       output: m.output ?? found.output,
       attachment: m.attachment ?? found.attachment,
       reasoning: m.reasoning ?? found.reasoning,
+      reasoning_efforts: m.reasoning_efforts ?? found.reasoning_efforts,
     };
     return { id: modelId, name: m.name, ...Object.fromEntries(Object.entries(traits).filter(([, v]) => v !== undefined)) };
   });
@@ -165,8 +185,11 @@ export function customProviderCatalog(providers: CustomLlmProviderDefinition[]) 
         temperature: true,
         attachment: model.attachment === true,
         reasoning: model.reasoning === true,
-        // The OpenAI `reasoning_effort` levels: the composer's effort control.
-        ...(model.reasoning ? { reasoning_options: [{ type: 'effort', values: ['low', 'medium', 'high'] }] } : {}),
+        // The OpenAI `reasoning_effort` levels: the composer's effort control. The endpoint's own
+        // levels when it listed them (e.g. xhigh/max), else the standard three.
+        ...(model.reasoning
+          ? { reasoning_options: [{ type: 'effort', values: effortList(model.reasoning_efforts) ?? ['low', 'medium', 'high'] }] }
+          : {}),
         // The endpoint's own limits; 128k/16k only when it reports none. pi clamps `max_tokens` to the
         // room left in the window and OpenCode caps one reply at 65,536, so output = context is safe.
         limit: { context: model.context ?? 128_000, output: model.output ?? model.context ?? 16_000 },

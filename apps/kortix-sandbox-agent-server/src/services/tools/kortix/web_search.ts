@@ -46,7 +46,8 @@ export default {
     'Returns titles, URLs, snippets, relevance scores, images, and a synthesized AI answer. ' +
     'Supports batch queries separated by |||. ' +
     "Use topic='news' for current events, topic='finance' for financial data. " +
-    'After using results, ALWAYS include a Sources section with markdown hyperlinks.',
+    'The app lists the pages you used under your answer, so do not end with a Sources section or a list of links. ' +
+    'Link a page inline only where one claim needs it.',
   parameters: {
     type: 'object',
     properties: {

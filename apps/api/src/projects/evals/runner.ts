@@ -784,9 +784,19 @@ async function colleaguesQuiet(ctx: TrialContext, trial: EvalTrialRow, state: Ru
  * as the person reads both. Null when the log holds no reply yet.
  */
 export async function finalReply(sessionId: string): Promise<string | null> {
+  return replyOf(await lastLogPage(sessionId));
+}
+
+type LogPage = { messages?: Array<{ role?: string; blocks?: Array<{ type?: string; text?: unknown }> }> };
+
+/** The last page of the session's log, or null. */
+async function lastLogPage(sessionId: string): Promise<LogPage | null> {
   const page = await readSessionLogPage({ sessionId, threadId: null, beforeSeq: null, limit: 100 }).catch(() => null);
-  if (!page || page === 'unknown_thread') return null;
-  const messages = (page as { messages?: Array<{ role?: string; blocks?: Array<{ type?: string; text?: unknown }> }> }).messages ?? [];
+  return !page || page === 'unknown_thread' ? null : (page as LogPage);
+}
+
+function replyOf(page: LogPage | null): string | null {
+  const messages = page?.messages ?? [];
   const texts: string[] = [];
   for (const message of [...messages].reverse()) {
     if (message.role !== 'assistant') {
@@ -800,16 +810,37 @@ export async function finalReply(sessionId: string): Promise<string | null> {
   return texts.length ? texts.join('\n\n') : null;
 }
 
+/** Under `verifier_file_bytes_max` (1 MiB), the most a trial folder keeps of one log file. */
+const SESSION_LOG_FILE_MAX_BYTES = 900_000;
+
+/** The page as JSON, cut to its newest messages when it is too big to keep. */
+function sessionLogFile(page: LogPage): string {
+  const messages = page.messages ?? [];
+  for (let keep = messages.length; keep > 0; keep = Math.floor(keep / 2)) {
+    const text = JSON.stringify(keep === messages.length ? page : { ...page, messages: messages.slice(-keep), truncated: true }, null, 1);
+    if (new TextEncoder().encode(text).length <= SESSION_LOG_FILE_MAX_BYTES) return text;
+  }
+  return JSON.stringify({ truncated: true, messages: [] });
+}
+
 /**
  * Give the verifier the agent's last reply at `/logs/agent/response.md`
  * (Harbor's agent log folder): a grader of a chat agent checks or judges
- * what the agent answered, not only the files it left.
+ * what the agent answered, not only the files it left. The same page of the
+ * session log goes to `/logs/agent/session-log.json`: a fresh workspace is
+ * deleted with its sessions after the trial, and this copy is what is left
+ * of what the agent did.
  */
 async function writeFinalReply(box: Box, sessionId: string): Promise<void> {
-  const reply = await finalReply(sessionId);
-  if (reply === null) return;
-  await uploadDir(box, '/logs/agent/reply', [{ path: 'response.md', bytes: new TextEncoder().encode(reply) as Uint8Array<ArrayBuffer> }]);
-  await boxExec(box, 'mv -f /logs/agent/reply/response.md /logs/agent/response.md && rmdir /logs/agent/reply');
+  const page = await lastLogPage(sessionId);
+  if (!page) return;
+  const files: Array<{ path: string; bytes: Uint8Array<ArrayBuffer> }> = [];
+  const encode = (text: string) => new TextEncoder().encode(text) as Uint8Array<ArrayBuffer>;
+  const reply = replyOf(page);
+  if (reply !== null) files.push({ path: 'response.md', bytes: encode(reply) });
+  files.push({ path: 'session-log.json', bytes: encode(sessionLogFile(page)) });
+  await uploadDir(box, '/logs/agent/reply', files);
+  await boxExec(box, `${files.map((file) => `mv -f /logs/agent/reply/${file.path} /logs/agent/${file.path}`).join(' && ')} && rmdir /logs/agent/reply`);
 }
 
 /** The agent stopped. Record its failure, then grade when the policy says so. */

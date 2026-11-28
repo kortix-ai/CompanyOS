@@ -157,6 +157,7 @@ function warnOnSharedDbCrosstalk(current: string, reg: Registry): void {
   warn(`${plural(others.length, 'other stack is', 'other stacks are')} live on the SAME shared DB: ${others.join(', ')}`);
   sub('they share one work queue (prompt delivery, session lifecycle, env sync) — whichever API grabs a job pushes ITS KORTIX_URL into the sandbox;');
   sub(`a rotted tunnel over there surfaces HERE as "Cannot connect to API …trycloudflare.com/v1/llm-gateway" on the first prompt.`);
+  sub('the leader jobs (eval trials, schedules, triggers) run in ONE stack, the one holding kortix.worker_leader_lease: a change to them is not tested here;');
   sub(`run one stack at a time (${pc.cyan('pnpm worktree stop <name>')}), or recreate this worktree with ${pc.cyan('--db')} for an isolated database.`);
 }
 

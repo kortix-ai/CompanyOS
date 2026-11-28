@@ -2,6 +2,7 @@
 
 import {
   connectorDerivedState,
+  getDiscoverConnector,
   getSlackInstallation,
   getSlackMode,
   getWorkspaceModelPicker,
@@ -16,7 +17,7 @@ import {
 } from "@kortix/sdk";
 import { contract, FRESHNESS, qk } from "@kortix/sdk/react";
 import { ArrowLeftIcon, ArrowRightIcon, KeyIcon } from "@phosphor-icons/react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
 import { ConnectorBrowse } from "../../customize/connectors/catalog/connector-browse";
@@ -594,6 +595,14 @@ function AppsStep({ projectId, apps, selected, onSelected, setup = false, onNext
   const t = useTranslations("workspaceOnboarding");
   const [search, setSearch] = useState("");
   const catalog = useCatalog(projectId, search, { enabled: !setup });
+  const installedDetails = useQueries({
+    queries: selected.map((entry) => ({
+      queryKey: ["onboarding-installed", projectId, entry.connector.id, apps.connectors],
+      queryFn: () => getDiscoverConnector(projectId, entry.connector.id),
+      enabled: setup && entry.connector.kind !== "composio" && entry.connector.kind !== "kortix",
+      staleTime: 0,
+    })),
+  });
   const selectedKeys = new Set(selected.map((entry) => entry.key));
   const toggle = (entry: CatalogEntry) => onSelected(selectedKeys.has(entry.key)
     ? selected.filter((item) => item.key !== entry.key) : [...selected, entry]);
@@ -653,7 +662,7 @@ function AppsStep({ projectId, apps, selected, onSelected, setup = false, onNext
           emptyTitle={t("apps.noResults")} emptyDescription={t("apps.more")} />
         </div>
       </> : <ul className="flex flex-col gap-3">
-        {selected.map((entry) => {
+        {selected.map((entry, index) => {
           const app = entry.connector.composio ?? entry;
           const managed = entry.connector.kind === "composio";
           const slack = entry.connector.kind === "kortix" && entry.slug === "slack";
@@ -661,7 +670,7 @@ function AppsStep({ projectId, apps, selected, onSelected, setup = false, onNext
             ? connectorState(appConnector(apps.connectors, app)) === "connected"
             : apps.connectors.some((connector) =>
               connector.provider === entry.connector.kind &&
-              entry.connector.installed?.includes(connector.slug) &&
+              (installedDetails[index]?.data?.installed ?? entry.connector.installed)?.includes(connector.slug) &&
               connectorState(connector) === "connected",
             );
           return <AppRow key={entry.key} name={entry.name} meta={entry.description ?? entry.name}

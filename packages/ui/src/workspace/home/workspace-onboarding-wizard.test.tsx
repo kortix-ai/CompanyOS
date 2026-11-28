@@ -41,6 +41,7 @@ const PROJECT = "synthetic-workspace";
 let models: Array<{ enabled: boolean; available: boolean }> = [];
 let connectors: AdminConnector[] = [];
 let extraCatalog: DiscoverConnector[] = [];
+let installedProfiles: string[] | undefined;
 const saveProfile = mock(async (_id: string, profile: OnboardingProfile) =>
   project({ onboarding: profile }),
 );
@@ -69,6 +70,7 @@ mock.module("@kortix/sdk", () => ({
   listDiscoverConnectors: async () => ({ items: [...extraCatalog, ...["GitHub", "Gmail", "Notion", "Figma"].map((name): DiscoverConnector => ({ id: name.toLowerCase(), slug: name.toLowerCase(), name, kind: "composio", description: null, url: null, icon: null, domain: "example.test", categories: [], feeds: [], popularity: null }))], hasMore: false }),
   listDiscoverSections: async () => ({ popular: [], categories: [], sections: [] }),
   listConnectToolkits: async (_id: string, query: { q?: string }) => ({ provider: 'composio', toolkits: query.q === 'Slack' ? [{ slug: 'Slack', name: 'Slack', connected: false, isNoAuth: false, logo: null }] : query.q === 'Figma' ? [{ slug: 'figma', name: 'Figma', connected: false, isNoAuth: false, logo: null }] : [], hasMore: false }),
+  getDiscoverConnector: async () => ({ item: extraCatalog[0], variants: [], installed: installedProfiles ?? extraCatalog[0]?.installed }),
   getSlackInstallation: async () => null,
   getSlackMode: async () => ({
     oauth_available: true,
@@ -117,13 +119,15 @@ const host = document.createElement("div");
 document.body.append(host);
 const root = createRoot(host);
 const onFinished = mock(() => {});
+let renderedClient: QueryClient;
 
 async function render(saved: OnboardingProfile = {}, projectId = PROJECT) {
+  renderedClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   await act(async () =>
     root.render(
       <QueryClientProvider
         client={
-          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+          renderedClient
         }
       >
         <IntlTestProvider
@@ -187,6 +191,7 @@ afterEach(async () => {
   models = [];
   connectors = [];
   extraCatalog = [];
+  installedProfiles = undefined;
   saveProfile.mockClear();
   stamp.mockClear();
   connectApp.mockClear();
@@ -394,3 +399,18 @@ for (const match of ["other-kind", "other-profile", "needs-auth", "connected"] a
     expect(connectApp).not.toHaveBeenCalled();
   });
 }
+
+test("MCP setup refreshes installation identity after a new profile arrives", async () => {
+  extraCatalog = [{ id: "fresh-mcp", slug: "fresh-mcp", name: "Fresh MCP", kind: "mcp", description: null, url: null, icon: null, domain: "example.test", categories: [], feeds: [], popularity: null, installed: [] }];
+  await render({ use_case: "engineering" });
+  await click("Skip for now");
+  await click("Fresh MCP");
+  await click("Continue");
+  expect(text()).not.toContain("Connected");
+  installedProfiles = ["fresh-profile"];
+  connectors = [{ slug: "fresh-profile", name: "Renamed profile", provider: "mcp", status: "active", state: "connected", credentialMode: "shared", authorizationStrategy: "project", sensitive: false, actions: [], authSecret: null, secretSet: true }];
+  await act(async () => { await renderedClient.invalidateQueries(); });
+  for (let attempt = 0; attempt < 20 && !host.querySelector('li [role="status"]'); attempt++) await settle();
+  expect(heading()).toBe("Set up your selected apps");
+  expect(host.querySelector('li [role="status"]')?.textContent).toBe("Connected");
+});

@@ -28,6 +28,7 @@ mock.module('@/lib/icons', () => ({ CheckIcon: none, CopyIcon: none }));
 mock.module('@/lib/session/turn-meta', () => ({ turnDurationMs: () => null, turnEndedAt: () => null }));
 mock.module('@/lib/utils/theme', () => ({ THEME: { light: { mutedForeground: 'gray' }, dark: { mutedForeground: 'gray' } } }));
 mock.module('@/lib/utils/tone', () => ({ useTone: () => 'light' as const }));
+mock.module('./turn-sources', () => ({ TurnSources: none }));
 mock.module('./session-turn-meta', () => ({
   SessionTurnMeta: none,
   TURN_ACTION_HIT_SLOP: {},

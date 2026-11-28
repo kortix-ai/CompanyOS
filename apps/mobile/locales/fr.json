@@ -1200,7 +1200,9 @@
     "archivedView": "Archivées",
     "archivedEmpty": "Les sessions que vous archivez apparaîtront ici.",
     "stoppedBy": "Arrêté par {{name}}",
-    "stopNotAllowed": "Seul le membre qui a lancé cette exécution, le propriétaire de la session ou un gestionnaire de l'espace de travail peut l'arrêter."
+    "stopNotAllowed": "Seul le membre qui a lancé cette exécution, le propriétaire de la session ou un gestionnaire de l'espace de travail peut l'arrêter.",
+    "turnSources_one": "{{count}} source",
+    "turnSources_other": "{{count}} sources"
   },
   "genui": {
     "call": "Appeler",
